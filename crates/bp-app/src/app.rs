@@ -15,6 +15,7 @@ use crate::document::{CursorTarget, OpenDoc};
 use crate::editor::{Editor, EditorAction};
 use crate::format::money;
 use crate::grid::{self, GridAction};
+use crate::reports_ui::ReportTab;
 use crate::theme::palette;
 use crate::{menu, sidebar};
 
@@ -36,6 +37,8 @@ const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE,
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
 const SHORTCUT_RULES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
+const SHORTCUT_CATEGORY_TOTALS: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND, Key::T);
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
@@ -385,6 +388,9 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_RULES)) {
             return self.execute(ctx, Command::Rules);
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CATEGORY_TOTALS)) {
+            return self.execute(ctx, Command::Report(ReportTab::Categories));
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_FILTERS)) {
             return self.execute(ctx, Command::AutoFilters);
         }
@@ -553,6 +559,21 @@ impl BankPerfectApp {
         let Some(doc) = &mut self.doc else { return };
         match command {
             Command::ExportCsv => self.tool = Some(Tool::ExportCsv(crate::tools::CsvForm::new())),
+            Command::ExportXlsx => {
+                let rows = crate::reports_ui::visible_rows(doc);
+                let dir = crate::settings::shared::export_dir(
+                    doc.path.parent().unwrap_or(std::path::Path::new(".")),
+                );
+                let name = doc.current_account().name.clone();
+                if let Some(message) = crate::spreadsheet::save_dialog(&dir, &name, &name, &rows) {
+                    doc.notice = Some(message);
+                }
+            }
+            Command::Report(tab) => {
+                self.tool = Some(Tool::Reports(Box::new(
+                    crate::reports_ui::ReportsForm::new(doc, tab),
+                )))
+            }
             Command::Print => self.tool = Some(Tool::Print(Default::default())),
             Command::Import => {
                 let mut dialog = rfd::FileDialog::new()
@@ -906,6 +927,7 @@ impl BankPerfectApp {
                 "Affichage",
                 "Comptes",
                 "Opérations",
+                "Rapports",
                 "Outils",
                 "Aide",
             ]
@@ -958,7 +980,17 @@ impl BankPerfectApp {
     fn menu_content(&mut self, ui: &mut egui::Ui, index: usize) {
         use Command::*;
         let has_doc = self.doc.is_some();
-        let tools_index = if has_doc { 5 } else { 1 };
+        let tools_index = if has_doc { 6 } else { 1 };
+        if has_doc && index == 5 {
+            menu::begin_with_width(ui, 320.0);
+            self.menu_command(ui, Report(ReportTab::Accounts));
+            self.menu_command(ui, Report(ReportTab::Categories));
+            self.menu_command(ui, Report(ReportTab::Payees));
+            self.menu_command(ui, Report(ReportTab::Statement));
+            menu::separator(ui);
+            self.menu_command(ui, ExportXlsx);
+            return;
+        }
         if index == tools_index + 1 {
             menu::begin(ui);
             self.menu_command(ui, Palette);
@@ -1001,6 +1033,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, Import);
                 self.menu_command(ui, Print);
                 self.menu_command(ui, ExportCsv);
+                self.menu_command(ui, ExportXlsx);
                 self.menu_command(ui, ExportQif);
                 menu::separator(ui);
                 self.menu_command(ui, Protection);

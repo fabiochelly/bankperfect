@@ -7,6 +7,7 @@ use egui_phosphor::regular as icon;
 
 use crate::document::OpenDoc;
 use crate::manage_ui::Tab;
+use crate::reports_ui::ReportTab;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
@@ -19,6 +20,8 @@ pub enum Command {
     SaveCopy,
     DeleteFile,
     ExportCsv,
+    ExportXlsx,
+    Report(ReportTab),
     ExportQif,
     Print,
     Import,
@@ -120,6 +123,11 @@ impl Command {
                 Scheduler,
                 Forecast,
                 Rules,
+                ExportXlsx,
+                Report(ReportTab::Accounts),
+                Report(ReportTab::Categories),
+                Report(ReportTab::Payees),
+                Report(ReportTab::Statement),
                 AutoFilters,
                 SaveFilter,
                 ClearFilters,
@@ -251,6 +259,39 @@ impl Command {
                 None,
                 "tableur excel",
             ),
+            ExportXlsx => info(
+                "Fichier",
+                "Exporter en tableur (.xlsx)…",
+                icon::MICROSOFT_EXCEL_LOGO,
+                None,
+                "excel calc libreoffice classeur lignes affichées",
+            ),
+            Report(tab) => {
+                let (label, glyph, shortcut, keywords) = match tab {
+                    ReportTab::Accounts => {
+                        ("Total des comptes", icon::BANK, None, "soldes tous comptes")
+                    }
+                    ReportTab::Categories => (
+                        "Totaux par catégorie",
+                        icon::TAG,
+                        Some("Ctrl+T"),
+                        "tableau croisé dépenses recettes mois année",
+                    ),
+                    ReportTab::Payees => (
+                        "Totaux par tiers",
+                        icon::ADDRESS_BOOK,
+                        None,
+                        "tableau croisé bénéficiaires",
+                    ),
+                    ReportTab::Statement => (
+                        "Relevé multicompte",
+                        icon::LIST_BULLETS,
+                        None,
+                        "plusieurs comptes ensemble",
+                    ),
+                };
+                info("Rapports", label, glyph, shortcut, keywords)
+            }
             ExportQif => info(
                 "Fichier",
                 "Exporter en QIF…",

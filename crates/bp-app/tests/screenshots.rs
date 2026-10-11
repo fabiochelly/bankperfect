@@ -294,6 +294,30 @@ fn screenshots() {
     });
 }
 
+/// Rapports, graphiques et budgets (lancés seuls pendant la mise au point).
+#[test]
+#[ignore]
+fn report_screenshots() {
+    render("45-totaux-categories", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::T);
+    });
+    render("46-total-comptes", egui::Theme::Light, |h| {
+        h.get_by_label("Rapports").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Total des comptes").click();
+    });
+    render("47-totaux-tiers", egui::Theme::Light, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::T);
+        h.run_steps(3);
+        h.get_by_label("Par tiers").click();
+    });
+    render("48-releve-multicompte", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::T);
+        h.run_steps(3);
+        h.get_by_label("Relevé multicompte").click();
+    });
+}
+
 /// Temps CPU d'une image (passe egui complète, sans rendu GPU), en faisant
 /// défiler la grille, sur le fichier indiqué.
 #[test]

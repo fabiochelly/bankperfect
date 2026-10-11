@@ -48,6 +48,7 @@ pub struct Palette {
     pub menu_bg: Color32,
     /// Élément survolé dans un menu : encore plus sombre.
     pub menu_hover: Color32,
+    pub teal: Color32,
 }
 
 /// Tokyo Night (« night »).
@@ -74,6 +75,7 @@ pub const NIGHT: Palette = Palette {
     violet: Color32::from_rgb(0xbb, 0x9a, 0xf7),
     menu_bg: Color32::from_rgba_premultiplied(0x12, 0x12, 0x18, 0xed),
     menu_hover: Color32::from_rgb(0x0b, 0x0b, 0x10),
+    teal: Color32::from_rgb(0x73, 0xda, 0xca),
 };
 
 /// Tokyo Night Day.
@@ -100,6 +102,7 @@ pub const DAY: Palette = Palette {
     violet: Color32::from_rgb(0x98, 0x54, 0xf1),
     menu_bg: Color32::from_rgba_premultiplied(0xc1, 0xc5, 0xd2, 0xed),
     menu_hover: Color32::from_rgb(0xb4, 0xb9, 0xcd),
+    teal: Color32::from_rgb(0x11, 0x8c, 0x74),
 };
 
 pub fn install(ctx: &egui::Context) {
@@ -286,6 +289,14 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
         state.expansion = 0.0;
     }
     v
+}
+
+/// Couleur d'une famille de catégories, parmi les teintes du thème.
+pub fn category_color(p: &Palette, index: usize) -> Color32 {
+    let colors = [
+        p.accent, p.teal, p.positive, p.violet, p.future, p.warning, p.negative, p.pointed,
+    ];
+    colors[index % colors.len()]
 }
 
 /// Palette du thème courant.

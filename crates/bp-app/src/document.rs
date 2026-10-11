@@ -4,8 +4,6 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use chrono::Datelike;
-
 use bp_core::FileFormat;
 use bp_core::filter::{Filters, SearchIndex};
 use bp_core::format_v6::Protection;
@@ -26,13 +24,19 @@ pub struct OpenDoc {
     pub filters: Filters,
     pub sort: SortColumn,
     pub ascending: bool,
-    pub two_lines: bool,
+    /// Icône et couleur de chaque catégorie (par identifiant).
+    pub category_styles: std::collections::HashMap<u32, crate::category_icons::CategoryStyle>,
+    /// Lignes de la grille affichées à l'écran (positions dans `visible`),
+    /// relevées à chaque image pour Début/Fin et Page préc./suiv.
+    pub on_screen: Option<(usize, usize)>,
     /// Fenêtre de temps de la courbe du solde.
     pub chart_window: ChartWindow,
     /// Opérations sélectionnées (indices dans le compte courant).
     pub selection: BTreeSet<usize>,
     /// Dernière ligne cliquée, pour les sélections avec Maj.
     pub anchor: Option<usize>,
+    /// Extrémité mobile d'une sélection étendue au clavier (Maj).
+    pub cursor: Option<usize>,
     pub scroll_to: Option<usize>,
 
     view: View,
@@ -62,6 +66,23 @@ struct View {
     insights: Insights,
     /// Compte et révision pour lesquels la courbe du solde est à jour.
     series_key: Option<(usize, u64)>,
+}
+
+/// Destination d'un déplacement clavier dans la grille.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CursorTarget {
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    /// Première ligne affichée à l'écran (Début).
+    ScreenTop,
+    /// Dernière ligne affichée à l'écran (Fin).
+    ScreenBottom,
+    /// Début de la liste (Ctrl+Début).
+    First,
+    /// Fin de la liste (Ctrl+Fin).
+    Last,
 }
 
 /// Fenêtre de temps affichée par la courbe du solde.
@@ -106,15 +127,6 @@ impl ChartWindow {
     }
 }
 
-/// Opérations non pointées d'un mois.
-#[derive(Debug, Clone, Copy)]
-pub struct PendingMonth {
-    pub year: i32,
-    pub month: u32,
-    pub total: Amount,
-    pub count: usize,
-}
-
 /// Données des mini-graphiques du tableau de bord.
 #[derive(Default, Clone)]
 pub struct Insights {
@@ -123,8 +135,6 @@ pub struct Insights {
     /// Non pointées, pointées, rapprochées : nombre et somme (tout le compte).
     pub tack_counts: [usize; 3],
     pub tack_sums: [Amount; 3],
-    /// Non pointées par mois, des 6 mois passés aux 2 mois à venir.
-    pub pending_months: Vec<PendingMonth>,
 }
 
 /// Totaux du panneau des soldes.
@@ -156,14 +166,17 @@ impl OpenDoc {
             filters: Filters::default(),
             sort: SortColumn::Date,
             ascending: false,
-            two_lines: false,
+            category_styles: std::collections::HashMap::new(),
+            on_screen: None,
             chart_window: ChartWindow::default(),
             selection: BTreeSet::new(),
             anchor: None,
+            cursor: None,
             scroll_to: None,
             view: View::default(),
             revision: 0,
         };
+        doc.category_styles = crate::category_icons::styles(&doc.document);
         doc.refresh();
         doc
     }
@@ -210,7 +223,7 @@ impl OpenDoc {
                 .into();
             self.view.filters = Some((self.filters.clone(), today));
             self.view.totals = self.compute_totals();
-            self.compute_tack_insights(today);
+            self.compute_tack_insights();
         }
     }
 
@@ -218,24 +231,10 @@ impl OpenDoc {
         &self.view.insights
     }
 
-    /// Répartition du pointage et non pointées par mois (tout le compte, sans
-    /// tenir compte des filtres, pour que les graphiques restent stables).
-    fn compute_tack_insights(&mut self, today: Date) {
+    /// Répartition du pointage (tout le compte, sans tenir compte des filtres,
+    /// pour que le graphique reste stable).
+    fn compute_tack_insights(&mut self) {
         let ops = &self.document.accounts[self.account].operations;
-        let now = today.to_naive();
-        let month_index = |d: chrono::NaiveDate| d.year() * 12 + d.month0() as i32;
-        let first = month_index(now) - 6;
-        let mut months: Vec<PendingMonth> = (0..9)
-            .map(|k| {
-                let m = first + k;
-                PendingMonth {
-                    year: m.div_euclid(12),
-                    month: m.rem_euclid(12) as u32 + 1,
-                    total: Amount::ZERO,
-                    count: 0,
-                }
-            })
-            .collect();
         let mut counts = [0usize; 3];
         let mut sums = [Amount::ZERO; 3];
         for op in ops {
@@ -246,19 +245,10 @@ impl OpenDoc {
             };
             counts[k] += 1;
             sums[k] = sums[k] + op.amount;
-            if k == 0 {
-                let m = month_index(op.date.to_naive()) - first;
-                if (0..9).contains(&m) {
-                    let slot = &mut months[m as usize];
-                    slot.total = slot.total + op.amount;
-                    slot.count += 1;
-                }
-            }
         }
         let insights = &mut self.view.insights;
         insights.tack_counts = counts;
         insights.tack_sums = sums;
-        insights.pending_months = months;
     }
 
     pub fn visible(&self) -> Arc<[usize]> {
@@ -366,6 +356,7 @@ impl OpenDoc {
                     self.selection.clear();
                 }
                 self.selection.extend(&visible[a.min(b)..=a.max(b)]);
+                self.cursor = Some(op);
                 return;
             }
         }
@@ -378,25 +369,50 @@ impl OpenDoc {
             self.selection.insert(op);
         }
         self.anchor = Some(op);
+        self.cursor = Some(op);
     }
 
-    /// Déplace la sélection d'une ligne vers le haut ou le bas.
-    pub fn move_selection(&mut self, delta: isize) {
+    /// Déplacement clavier dans la grille.
+    pub fn move_cursor(&mut self, target: CursorTarget, extend: bool) {
         let visible = Arc::clone(&self.view.visible);
         if visible.is_empty() {
             return;
         }
+        let last = visible.len() - 1;
         let current = self
-            .anchor
-            .and_then(|a| visible.iter().position(|&i| i == a));
-        let pos = match current {
-            Some(p) => (p as isize + delta).clamp(0, visible.len() as isize - 1) as usize,
-            None => 0,
+            .cursor
+            .or(self.anchor)
+            .and_then(|c| visible.iter().position(|&i| i == c));
+        let page = self
+            .on_screen
+            .map_or(10, |(a, b)| b.saturating_sub(a).max(1));
+        let from = current.unwrap_or(0);
+        let pos = match target {
+            CursorTarget::Up => from.saturating_sub(1),
+            CursorTarget::Down => (from + 1).min(last),
+            CursorTarget::PageUp => from.saturating_sub(page),
+            CursorTarget::PageDown => (from + page).min(last),
+            CursorTarget::ScreenTop => self.on_screen.map_or(0, |(a, _)| a.min(last)),
+            CursorTarget::ScreenBottom => self.on_screen.map_or(last, |(_, b)| b.min(last)),
+            CursorTarget::First => 0,
+            CursorTarget::Last => last,
         };
         let op = visible[pos];
-        self.selection.clear();
-        self.selection.insert(op);
-        self.anchor = Some(op);
+        let anchor_pos = self
+            .anchor
+            .and_then(|a| visible.iter().position(|&i| i == a));
+        match (extend, anchor_pos) {
+            (true, Some(a)) => {
+                self.selection.clear();
+                self.selection.extend(&visible[a.min(pos)..=a.max(pos)]);
+            }
+            _ => {
+                self.selection.clear();
+                self.selection.insert(op);
+                self.anchor = Some(op);
+            }
+        }
+        self.cursor = Some(op);
         self.scroll_to = Some(op);
     }
 

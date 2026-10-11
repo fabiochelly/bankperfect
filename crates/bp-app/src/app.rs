@@ -10,7 +10,7 @@ use egui::{Align, Key, KeyboardShortcut, Layout, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::dialogs::{self, Choice, PasswordPrompt, PromptResult};
-use crate::document::OpenDoc;
+use crate::document::{CursorTarget, OpenDoc};
 use crate::editor::{Editor, EditorAction};
 use crate::format::money;
 use crate::grid::{self, GridAction};
@@ -23,7 +23,6 @@ const SHORTCUT_NEXT_ACCOUNT: KeyboardShortcut = KeyboardShortcut::new(Modifiers:
 const SHORTCUT_PREV_ACCOUNT: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::CTRL.plus(Modifiers::SHIFT), Key::Tab);
 const SHORTCUT_HIDE_OLD: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::H);
-const SHORTCUT_TWO_LINES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F4);
 
 /// Action différée en attendant la réponse à « Enregistrer les modifications ? ».
 enum Pending {
@@ -175,19 +174,42 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_HIDE_OLD)) {
             doc.filters.hide_old_lines = !doc.filters.hide_old_lines;
         }
-        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_TWO_LINES)) {
-            doc.two_lines = !doc.two_lines;
-        }
 
         // Raccourcis de la grille, actifs quand aucun champ n'a le focus.
         if ctx.memory(|m| m.focused().is_some()) || self.menus.is_open() {
             return;
         }
         let pressed = |key| ctx.input(|i| i.key_pressed(key));
-        if pressed(Key::ArrowDown) {
-            doc.move_selection(1);
-        } else if pressed(Key::ArrowUp) {
-            doc.move_selection(-1);
+        let (ctrl, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
+        // Déplacements : flèches, pages, Début/Fin (écran), Ctrl+Début/Fin
+        // (liste) ; avec Maj, la sélection s'étend.
+        let target = [
+            (Key::ArrowUp, CursorTarget::Up),
+            (Key::ArrowDown, CursorTarget::Down),
+            (Key::PageUp, CursorTarget::PageUp),
+            (Key::PageDown, CursorTarget::PageDown),
+            (
+                Key::Home,
+                if ctrl {
+                    CursorTarget::First
+                } else {
+                    CursorTarget::ScreenTop
+                },
+            ),
+            (
+                Key::End,
+                if ctrl {
+                    CursorTarget::Last
+                } else {
+                    CursorTarget::ScreenBottom
+                },
+            ),
+        ]
+        .into_iter()
+        .find(|(key, _)| pressed(*key))
+        .map(|(_, target)| target);
+        if let Some(target) = target {
+            doc.move_cursor(target, shift);
         } else if pressed(Key::Space) || pressed(Key::P) {
             doc.cycle_tack();
         } else if pressed(Key::Insert) || pressed(Key::Plus) {
@@ -291,7 +313,6 @@ impl BankPerfectApp {
             }
             2 => {
                 menu::begin(ui);
-                menu::toggle(ui, &mut doc.two_lines, "Affichage sur 2 lignes", Some("F4"));
                 menu::toggle(
                     ui,
                     &mut doc.filters.hide_old_lines,
@@ -372,35 +393,31 @@ impl BankPerfectApp {
         }
     }
 
-    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
+    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         let pal = palette(ui);
         let account = doc.current_account();
         let filtered = doc.filters.is_active();
-        let mut new_operation = false;
-        ui.add_space(12.0);
+        // En-tête compact sur une ligne : nom du compte, banque et IBAN.
+        ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.vertical(|ui| {
-                ui.label(
-                    RichText::new(&account.name)
-                        .size(22.0)
-                        .family(crate::theme::semibold()),
-                );
-                let mut sub = account.bank_name.clone();
-                if !account.iban.trim().is_empty() {
-                    sub = format!("{sub}  ·  {}", account.iban.trim());
-                }
-                ui.label(RichText::new(sub).small().color(pal.muted));
-            });
+            ui.label(
+                RichText::new(&account.name)
+                    .size(18.0)
+                    .family(crate::theme::semibold()),
+            );
+            let mut sub = account.bank_name.clone();
+            if !account.iban.trim().is_empty() {
+                sub = if sub.is_empty() {
+                    account.iban.trim().to_string()
+                } else {
+                    format!("{sub}  ·  {}", account.iban.trim())
+                };
+            }
+            ui.label(RichText::new(sub).small().color(pal.muted));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let button =
-                    crate::theme::primary_button(ui, format!("{}  Nouvelle opération", icon::PLUS));
-                if ui.add(button).on_hover_text("Inser").clicked() {
-                    new_operation = true;
-                }
                 // Dans l'en-tête plutôt qu'en dessous : la grille ne bouge pas
                 // quand un filtre s'active.
                 if filtered {
-                    ui.add_space(12.0);
                     ui.label(
                         RichText::new(format!(
                             "{}  soldes calculés sur les lignes filtrées",
@@ -412,10 +429,9 @@ impl BankPerfectApp {
                 }
             });
         });
-        ui.add_space(12.0);
+        ui.add_space(8.0);
         crate::dashboard::cards(ui, doc);
         ui.add_space(-4.0);
-        new_operation
     }
 
     fn status_bar(ui: &mut egui::Ui, doc: &mut OpenDoc, toast: Option<&str>) {
@@ -423,7 +439,7 @@ impl BankPerfectApp {
         ui.horizontal(|ui| {
             let shown = doc.visible_len();
             let total = doc.total_count();
-            if doc.filters.is_active() {
+            if doc.filters.is_active() || doc.filters.hide_old_lines {
                 ui.label(
                     RichText::new(format!(
                         "{}  {} / {} opérations",
@@ -433,14 +449,7 @@ impl BankPerfectApp {
                     ))
                     .color(pal.pointed),
                 );
-                if ui
-                    .small_button(format!("{}  Effacer les filtres", icon::FUNNEL_X))
-                    .clicked()
-                {
-                    let hide = doc.filters.hide_old_lines;
-                    doc.filters = Default::default();
-                    doc.filters.hide_old_lines = hide;
-                }
+                filter_chips(ui, doc);
             } else {
                 ui.label(format!("{} opérations", crate::format::count(total)));
             }
@@ -757,22 +766,24 @@ impl BankPerfectApp {
 
         doc.refresh();
         let mut grid_action = GridAction::None;
-        let new_operation = egui::Panel::top("balances")
+        egui::Panel::top("balances")
             .frame(
                 egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
             )
-            .show(ui, |ui| Self::balance_strip(ui, doc))
-            .inner;
-        if new_operation {
+            .show(ui, |ui| Self::balance_strip(ui, doc));
+
+        let grid_rect = egui::CentralPanel::default_margins()
+            .show(ui, |ui| {
+                let action = grid::show(ui, doc);
+                if !matches!(action, GridAction::None) {
+                    grid_action = action;
+                }
+            })
+            .response
+            .rect;
+        if self.editor.is_none() && floating_add_button(&ctx, grid_rect) {
             grid_action = GridAction::New;
         }
-
-        egui::CentralPanel::default_margins().show(ui, |ui| {
-            let action = grid::show(ui, doc);
-            if !matches!(action, GridAction::None) {
-                grid_action = action;
-            }
-        });
         match grid_action {
             GridAction::None => {}
             GridAction::Edit(index) => {
@@ -787,6 +798,137 @@ impl BankPerfectApp {
         self.modals(&ctx);
         self.update_title(&ctx);
     }
+}
+
+/// Un badge par filtre actif ; un clic le retire.
+fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+    let f = &doc.filters;
+    let mut chips: Vec<(String, fn(&mut bp_core::filter::Filters))> = Vec::new();
+    if !f.mode.is_empty() {
+        chips.push((format!("Mode : {}", f.mode), |f| f.mode.clear()));
+    }
+    if !f.payee.is_empty() {
+        chips.push((format!("Tiers : {}", f.payee), |f| f.payee.clear()));
+    }
+    if !f.category.is_empty() {
+        chips.push((format!("Catégorie : {}", f.category), |f| {
+            f.category.clear()
+        }));
+    }
+    if !f.amount.is_empty() {
+        chips.push((format!("Montant : {}", f.amount), |f| f.amount.clear()));
+    }
+    if f.tack != bp_core::filter::TackFilter::All {
+        chips.push((
+            format!("Pointage : {}", f.tack.label().to_lowercase()),
+            |f| f.tack = bp_core::filter::TackFilter::All,
+        ));
+    }
+    let period = match (f.date_from, f.date_to) {
+        (Some(a), Some(b)) => Some(format!("Période : du {a} au {b}")),
+        (Some(a), None) => Some(format!("Période : à partir du {a}")),
+        (None, Some(b)) => Some(format!("Période : jusqu'au {b}")),
+        (None, None) => None,
+    };
+    if let Some(period) = period {
+        chips.push((period, |f| {
+            f.date_from = None;
+            f.date_to = None;
+        }));
+    }
+    if f.hide_old_lines {
+        chips.push(("Lignes rapprochées anciennes masquées".into(), |f| {
+            f.hide_old_lines = false
+        }));
+    }
+
+    let pal = palette(ui);
+    let font = egui::TextStyle::Small.resolve(ui.style());
+    let mut remove = None;
+    for (index, (label, _)) in chips.iter().enumerate() {
+        let text = format!("{label}   {}", icon::X);
+        let galley = ui.painter().layout_no_wrap(text, font.clone(), pal.fg);
+        let (rect, response) =
+            ui.allocate_exact_size(galley.size() + egui::vec2(20.0, 8.0), egui::Sense::click());
+        let fill = if response.hovered() {
+            pal.accent.gamma_multiply(0.32)
+        } else {
+            pal.accent.gamma_multiply(0.18)
+        };
+        ui.painter().rect_filled(rect, rect.height() / 2.0, fill);
+        ui.painter()
+            .galley(rect.center() - galley.size() / 2.0, galley, pal.fg);
+        if response.on_hover_text("Retirer ce filtre").clicked() {
+            remove = Some(index);
+        }
+    }
+    if chips.len() > 1 && ui.link(RichText::new("Tout effacer").small()).clicked() {
+        doc.filters = Default::default();
+    }
+    if let Some(index) = remove {
+        (chips[index].1)(&mut doc.filters);
+    }
+}
+
+/// Bouton rond « Nouvelle opération » en bas à droite de la grille : verre
+/// translucide, bordure et icône couleur d'accent, teinté au survol.
+fn floating_add_button(ctx: &egui::Context, grid: egui::Rect) -> bool {
+    const SIZE: f32 = 54.0;
+    let pal = crate::theme::palette_of(ctx);
+    let center = grid.right_bottom() - egui::vec2(SIZE / 2.0 + 44.0, SIZE / 2.0 + 18.0);
+    let rect = egui::Rect::from_center_size(center, egui::vec2(SIZE, SIZE));
+    egui::Area::new(egui::Id::new("floating_add"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(rect.min - egui::vec2(12.0, 12.0))
+        .show(ctx, |ui| {
+            let (outer, _) =
+                ui.allocate_exact_size(egui::vec2(SIZE + 24.0, SIZE + 24.0), egui::Sense::hover());
+            let rect = egui::Rect::from_center_size(outer.center(), egui::vec2(SIZE, SIZE));
+            let response = ui
+                .interact(
+                    rect,
+                    egui::Id::new("floating_add_button"),
+                    egui::Sense::click(),
+                )
+                .on_hover_text("Nouvelle opération (Inser)");
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Nouvelle opération")
+            });
+            let hovered = response.hovered();
+            let shadow = egui::Shadow {
+                offset: [0, 4],
+                blur: 16,
+                spread: 0,
+                color: egui::Color32::from_black_alpha(70),
+            };
+            ui.painter()
+                .add(shadow.as_shape(rect, egui::CornerRadius::same((SIZE / 2.0) as u8)));
+            let glass = pal.menu_bg.gamma_multiply(0.75);
+            let fill = if hovered {
+                pal.accent.gamma_multiply(0.22)
+            } else {
+                pal.accent.gamma_multiply(0.08)
+            };
+            ui.painter().circle_filled(rect.center(), SIZE / 2.0, glass);
+            ui.painter().circle(
+                rect.center(),
+                SIZE / 2.0,
+                fill,
+                egui::Stroke::new(
+                    if hovered { 2.0 } else { 1.5 },
+                    pal.accent.gamma_multiply(if hovered { 1.0 } else { 0.7 }),
+                ),
+            );
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                icon::PLUS,
+                egui::FontId::proportional(26.0),
+                if hovered { pal.fg } else { pal.accent },
+            );
+            response.clicked()
+        })
+        .inner
 }
 
 /// Total de la sélection (BAL-07).

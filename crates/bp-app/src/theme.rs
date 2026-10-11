@@ -465,3 +465,13 @@ pub fn checkbox(
     );
     response
 }
+
+/// Dégradés des deux lettres du symbole : le « b » en bleus, le « p » du
+/// violet à l'orange.
+pub fn logo_b(p: &Palette) -> (Color32, Color32) {
+    (p.teal, p.accent)
+}
+
+pub fn logo_p(p: &Palette) -> (Color32, Color32) {
+    (p.violet, p.future)
+}

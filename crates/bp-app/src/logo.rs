@@ -21,32 +21,43 @@ fn map(rect: Rect, x: f32, y: f32) -> Pos2 {
     rect.center() + egui::vec2((x + skew * y) * scale, y * scale)
 }
 
-/// Dessine le symbole dans `rect`, en dégradé de `from` (haut gauche) à
-/// `to` (bas droite).
-pub fn paint_symbol(painter: &egui::Painter, rect: Rect, from: Color32, to: Color32) {
+/// Dégradé d'une lettre : couleur du haut à gauche, couleur du bas à droite.
+pub type Gradient = (Color32, Color32);
+
+/// Dessine le symbole dans `rect`. Le « b » (boucle et barre de gauche) et
+/// le « p » (boucle droite et barre du centre) ont chacun leur dégradé, pour
+/// qu'on lise deux lettres.
+pub fn paint_symbol(painter: &egui::Painter, rect: Rect, b: Gradient, p: Gradient) {
     let scale = rect.width().min(rect.height()) / EXTENT;
     let width = WIDTH * scale;
-    let gradient = move |p: Pos2| {
-        let t = ((p.x - rect.left()) / rect.width() + (p.y - rect.top()) / rect.height()) / 2.0;
-        from.lerp_to_gamma(to, t.clamp(0.0, 1.0))
+    let shade = move |(from, to): Gradient| {
+        move |pt: Pos2| {
+            let t =
+                ((pt.x - rect.left()) / rect.width() + (pt.y - rect.top()) / rect.height()) / 2.0;
+            from.lerp_to_gamma(to, t.clamp(0.0, 1.0))
+        }
     };
-    let stroke = egui::epaint::PathStroke::new_uv(width, move |_, p| gradient(p));
-
-    let loop_points: Vec<Pos2> = (0..180)
-        .map(|k| {
-            let t = (k as f32 * 2.0).to_radians();
-            let d = 1.0 + t.sin().powi(2);
-            map(rect, A * t.cos() / d, Y_SCALE * A * t.sin() * t.cos() / d)
-        })
-        .collect();
-    painter.add(Shape::closed_line(loop_points, stroke.clone()));
-
-    // Barres du b (vers le haut, au bord de la boucle gauche) et du p (vers
-    // le bas, depuis le croisement), à bouts ronds.
-    for (x, y0, y1) in [(-A, 0.0, -STEM), (0.0, 0.0, STEM)] {
-        let (a, b) = (map(rect, x, y0), map(rect, x, y1));
-        painter.add(Shape::line(vec![a, b], stroke.clone()));
-        painter.circle_filled(b, width / 2.0, gradient(b));
+    let point = |degrees: f32| {
+        let t = degrees.to_radians();
+        let d = 1.0 + t.sin().powi(2);
+        map(rect, A * t.cos() / d, Y_SCALE * A * t.sin() * t.cos() / d)
+    };
+    // Boucle d'une lettre : demi-lemniscate (de -90° à 90° pour la droite,
+    // de 90° à 270° pour la gauche), qui part du croisement et y revient.
+    let half =
+        |from: f32| -> Vec<Pos2> { (0..=90).map(|k| point(from + k as f32 * 2.0)).collect() };
+    let center = map(rect, 0.0, 0.0);
+    for (gradient, loop_start, stem) in [(p, -90.0, (0.0, 0.0, STEM)), (b, 90.0, (-A, 0.0, -STEM))]
+    {
+        let color = shade(gradient);
+        let stroke = egui::epaint::PathStroke::new_uv(width, move |_, pt| color(pt));
+        painter.add(Shape::line(half(loop_start), stroke.clone()));
+        // Coin arrondi au croisement, dans la couleur de la lettre.
+        painter.circle_filled(center, width / 2.0, color(center));
+        let (x, y0, y1) = stem;
+        let (a, end) = (map(rect, x, y0), map(rect, x, y1));
+        painter.add(Shape::line(vec![a, end], stroke));
+        painter.circle_filled(end, width / 2.0, color(end));
     }
 }
 

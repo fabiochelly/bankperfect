@@ -808,7 +808,12 @@ impl BankPerfectApp {
                     egui::Order::Foreground,
                     egui::Id::new("logo"),
                 ));
-                crate::logo::paint_symbol(&painter, rect, pal.accent, pal.violet);
+                crate::logo::paint_symbol(
+                    &painter,
+                    rect,
+                    crate::theme::logo_b(&pal),
+                    crate::theme::logo_p(&pal),
+                );
                 // Mention discrète du nom, à gauche du symbole.
                 painter.text(
                     egui::pos2(rect.left() - 4.0, rect.center().y),
@@ -1297,7 +1302,12 @@ impl BankPerfectApp {
                 ui.vertical_centered(|ui| {
                     let (rect, _) =
                         ui.allocate_exact_size(egui::vec2(96.0, 96.0), egui::Sense::hover());
-                    crate::logo::paint_symbol(ui.painter(), rect, pal.accent, pal.violet);
+                    crate::logo::paint_symbol(
+                        ui.painter(),
+                        rect,
+                        crate::theme::logo_b(&pal),
+                        crate::theme::logo_p(&pal),
+                    );
                     ui.add_space(10.0);
                     ui.label(
                         RichText::new("BankPerfect")

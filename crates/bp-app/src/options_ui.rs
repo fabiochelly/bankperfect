@@ -105,6 +105,17 @@ impl OptionsForm {
         let pal = palette(ui);
         let d = &mut self.draft;
         ui_kit::section(ui, width, icon::PENCIL_SIMPLE, "Saisie", |ui| {
+            ui_kit::segmented(
+                ui,
+                &mut d.entry_at_bottom,
+                &[
+                    (false, icon::SIDEBAR_SIMPLE, "Panneau à droite", pal.accent),
+                    (true, icon::ROWS, "Barre en bas", pal.accent),
+                ],
+                34.0,
+                Some(420.0),
+            );
+            ui.add_space(10.0);
             crate::theme::checkbox(
                 ui,
                 &mut d.autocomplete,

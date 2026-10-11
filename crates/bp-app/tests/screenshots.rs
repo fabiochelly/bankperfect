@@ -349,6 +349,30 @@ fn transfer_screenshots() {
         h.run_steps(2);
         h.key_press(egui::Key::Delete);
     });
+    render("70-menu-exporter", egui::Theme::Dark, |h| {
+        h.get_by_label("Fichier").click();
+        h.run_steps(3);
+        h.get_by_label("Exporter").hover();
+    });
+    let bottom_entry = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.get_by_label("Affichage").click();
+        h.run_steps(3);
+        h.get_by_label("Saisie en bas de la fenêtre").click();
+        h.run_steps(3);
+    };
+    render("71-saisie-bas", egui::Theme::Dark, |h| bottom_entry(h));
+    render_sized(
+        "72-saisie-bas-large",
+        egui::Theme::Light,
+        egui::vec2(1920.0, 1000.0),
+        |h| {
+            bottom_entry(h);
+            h.key_press(egui::Key::ArrowDown);
+            h.key_press(egui::Key::ArrowDown);
+            h.run_steps(2);
+            h.key_press(egui::Key::Enter);
+        },
+    );
     render("69-convertir", egui::Theme::Dark, |h| {
         h.key_press(egui::Key::ArrowDown);
         h.key_press(egui::Key::ArrowDown);

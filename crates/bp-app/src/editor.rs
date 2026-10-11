@@ -32,6 +32,8 @@ pub struct Editor {
     focus_requested: bool,
     /// Le contenu dépasse la hauteur du panneau (barre de défilement).
     overflow: bool,
+    /// Entrée tapée dans le montant de la barre du bas : validation.
+    pending_submit: bool,
 }
 
 pub enum EditorAction {
@@ -58,6 +60,7 @@ impl Editor {
             known_payees: known_payees(document, account),
             focus_requested: true,
             overflow: false,
+            pending_submit: false,
         }
     }
 
@@ -79,7 +82,14 @@ impl Editor {
             known_payees: known_payees(document, account),
             focus_requested: true,
             overflow: false,
+            pending_submit: false,
         }
+    }
+
+    /// Sans prise du focus clavier (barre de saisie permanente du bas).
+    pub fn quiet(mut self) -> Self {
+        self.focus_requested = false;
+        self
     }
 
     /// Saisie en série : la nouvelle opération reprend la date précédente.
@@ -184,40 +194,8 @@ impl Editor {
                                 self.date_keys(&cols[0]);
                             }
 
-                            let before = self.mode.clone();
-                            let (glyph, color) =
-                                crate::grid::mode_style(document, &self.mode, &pal);
                             let width = cols[1].available_width();
-                            egui::ComboBox::from_id_salt("mode")
-                                .selected_text(
-                                    RichText::new(format!("{glyph}  {}", self.mode.label()))
-                                        .color(color),
-                                )
-                                .width(width)
-                                .height(420.0)
-                                .show_ui(&mut cols[1], |ui| {
-                                    for mode in document.mode_list() {
-                                        let (glyph, color) =
-                                            crate::grid::mode_style(document, &mode, &pal);
-                                        let text =
-                                            RichText::new(format!("{glyph}  {}", mode.label()))
-                                                .color(color);
-                                        ui.selectable_value(&mut self.mode, mode, text);
-                                    }
-                                });
-                            if self.mode != before {
-                                self.credit = !mode_is_debit(document, &self.mode);
-                                // Chèque émis sur une nouvelle opération : numéro
-                                // du chèque suivant proposé dans le détail.
-                                if self.target.is_none()
-                                    && self.details.trim().is_empty()
-                                    && self.mode
-                                        == Mode::Standard(bp_core::model::StandardMode::ChequeEmis)
-                                {
-                                    self.details =
-                                        bp_core::edit::next_cheque_number(doc.current_account());
-                                }
-                            }
+                            self.mode_combo(&mut cols[1], doc, width);
                             let height =
                                 cols[0].min_rect().height().max(cols[1].min_rect().height());
                             ui.allocate_space(egui::vec2(2.0 * half + 12.0, height));
@@ -235,7 +213,7 @@ impl Editor {
                         && !self.payee.is_empty()
                         && crate::settings::shared::autocomplete()
                     {
-                        self.payee_suggestions(ui, document);
+                        self.payee_suggestions(ui, document, None);
                     }
                     ui.add_space(14.0);
                     ui.add(
@@ -355,6 +333,237 @@ impl Editor {
                 i.key_pressed(Key::Escape),
                 i.consume_key(egui::Modifiers::NONE, Key::F10),
                 i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
+            )
+        });
+        if load {
+            self.load_payee(doc);
+        }
+        if clear {
+            self.clear(document);
+        }
+        if enter {
+            action = self.validate();
+        } else if escape {
+            action = EditorAction::Close;
+        }
+        action
+    }
+
+    /// Liste des modes de paiement, en couleur ; un chèque émis propose le
+    /// numéro du chèque suivant dans le détail d'une nouvelle opération.
+    fn mode_combo(&mut self, ui: &mut egui::Ui, doc: &OpenDoc, width: f32) {
+        let document = &doc.document;
+        let pal = palette(ui);
+        let before = self.mode.clone();
+        let (glyph, color) = crate::grid::mode_style(document, &self.mode, &pal);
+        egui::ComboBox::from_id_salt("mode")
+            .selected_text(RichText::new(format!("{glyph}  {}", self.mode.label())).color(color))
+            .width(width)
+            .height(420.0)
+            .show_ui(ui, |ui| {
+                for mode in document.mode_list() {
+                    let (glyph, color) = crate::grid::mode_style(document, &mode, &pal);
+                    let text = RichText::new(format!("{glyph}  {}", mode.label())).color(color);
+                    ui.selectable_value(&mut self.mode, mode, text);
+                }
+            });
+        if self.mode != before {
+            self.credit = !mode_is_debit(document, &self.mode);
+            if self.target.is_none()
+                && self.details.trim().is_empty()
+                && self.mode == Mode::Standard(bp_core::model::StandardMode::ChequeEmis)
+            {
+                self.details = bp_core::edit::next_cheque_number(doc.current_account());
+            }
+        }
+    }
+
+    /// Barre de saisie du bas (option) : mêmes champs que le panneau de
+    /// droite, sur une ou deux lignes selon la largeur.
+    pub fn show_bar(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) -> EditorAction {
+        let document = &doc.document;
+        let pal = palette(ui);
+        let mut action = EditorAction::None;
+        let mut focused = false;
+        const GAP: f32 = 8.0;
+        // En-tête : titre, erreur, boutons.
+        ui.add_space(8.0);
+        ui.horizontal(|ui| {
+            let title = if self.target.is_some() {
+                "Modifier l'opération"
+            } else {
+                "Nouvelle opération"
+            };
+            ui.label(RichText::new(title).family(crate::theme::semibold()));
+            ui.label(
+                RichText::new(format!("{}  {}", icon::BANK, doc.current_account().name))
+                    .color(pal.muted),
+            );
+            if let Some(error) = &self.error {
+                ui.add_space(12.0);
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
+            }
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let label = if self.target.is_some() {
+                    "Enregistrer"
+                } else {
+                    "Ajouter"
+                };
+                let save = crate::theme::primary_button(ui, format!("{}  {label}", icon::CHECK))
+                    .min_size(egui::vec2(120.0, 30.0));
+                if ui
+                    .add(save)
+                    .on_hover_text("Entrée (dans le montant) ou Ctrl+Entrée")
+                    .clicked()
+                {
+                    action = self.validate();
+                }
+                let reset = if self.target.is_some() {
+                    "Annuler"
+                } else {
+                    "Effacer"
+                };
+                if ui
+                    .add(egui::Button::new(reset).min_size(egui::vec2(80.0, 30.0)))
+                    .on_hover_text("Échap")
+                    .clicked()
+                {
+                    action = EditorAction::Close;
+                }
+            });
+        });
+        ui.add_space(6.0);
+        let width = ui.available_width();
+        let wide = width >= 1250.0;
+        let (date_w, mode_w, cat_w, sign_w, amount_w, tack_w) =
+            (150.0, 175.0, 210.0, 34.0, 130.0, 112.0);
+        let fixed_row1 = if wide {
+            date_w + mode_w + cat_w + sign_w + amount_w + tack_w + 7.0 * GAP
+        } else {
+            date_w + mode_w + 3.0 * GAP
+        };
+        let text_w = ((width - fixed_row1 - 4.0) / 2.0).max(120.0);
+        let mut payee_rect = None;
+        let mut payee_focus = false;
+        let color = if self.credit {
+            pal.positive
+        } else {
+            pal.negative
+        };
+        let mut fields_a = |ui: &mut egui::Ui, this: &mut Self, focused: &mut bool| {
+            let date = crate::datepicker::date_field(
+                ui,
+                "bar_date",
+                &mut this.date,
+                date_w,
+                crate::datepicker::Placement::Popup,
+            );
+            if this.focus_requested {
+                date.request_focus();
+                this.focus_requested = false;
+            }
+            if date.has_focus() {
+                *focused = true;
+                this.date_keys(ui);
+            }
+            this.mode_combo(ui, doc, mode_w);
+            // Les champs ont 10 points de marge de chaque côté.
+            let payee = ui.add(
+                crate::theme::field(&mut this.payee)
+                    .hint_text("Tiers")
+                    .desired_width(text_w - 20.0),
+            );
+            *focused |= payee.has_focus();
+            payee_focus = payee.has_focus();
+            payee_rect = Some(payee.rect);
+            let details = ui.add(
+                crate::theme::field(&mut this.details)
+                    .hint_text("Détail")
+                    .desired_width(text_w - 20.0),
+            );
+            *focused |= details.has_focus();
+        };
+        let fields_b = |ui: &mut egui::Ui, this: &mut Self, focused: &mut bool| {
+            crate::ui_kit::category_combo(
+                ui,
+                "bar_category",
+                document,
+                &doc.category_styles,
+                &mut this.category,
+                cat_w,
+            );
+            let sign = if this.credit { "+" } else { "−" };
+            if ui
+                .add_sized(
+                    egui::vec2(sign_w, 32.0),
+                    egui::Button::new(RichText::new(sign).size(18.0).color(color)),
+                )
+                .on_hover_text("Dépense ou recette (ou tapez - ou + dans le montant)")
+                .clicked()
+            {
+                this.credit = !this.credit;
+            }
+            let amount = ui.add(
+                crate::theme::field(&mut this.amount)
+                    .text_color(color)
+                    .horizontal_align(egui::Align::Max)
+                    .hint_text("0,00")
+                    .desired_width(amount_w - 20.0),
+            );
+            if amount.changed() {
+                if let Some(rest) = this.amount.strip_prefix('-') {
+                    this.credit = false;
+                    this.amount = rest.to_string();
+                } else if let Some(rest) = this.amount.strip_prefix('+') {
+                    this.credit = true;
+                    this.amount = rest.to_string();
+                }
+            }
+            *focused |= amount.has_focus();
+            if amount.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                *focused = true;
+                this.error = None;
+                this.pending_submit = true;
+            }
+            crate::ui_kit::segmented(
+                ui,
+                &mut this.tack,
+                &[
+                    (Tack::None, icon::CIRCLE_DASHED, "", pal.fg),
+                    (Tack::Pointed, icon::CHECK, "", pal.pointed),
+                    (Tack::Reconciled, icon::CHECKS, "", pal.reconciled),
+                ],
+                32.0,
+                Some(tack_w),
+            );
+        };
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = GAP;
+            fields_a(ui, self, &mut focused);
+            if wide {
+                fields_b(ui, self, &mut focused);
+            }
+        });
+        if !wide {
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = GAP;
+                fields_b(ui, self, &mut focused);
+            });
+        }
+        ui.add_space(8.0);
+        if payee_focus && !self.payee.is_empty() && crate::settings::shared::autocomplete() {
+            self.payee_suggestions(ui, document, payee_rect);
+        }
+        if std::mem::take(&mut self.pending_submit) {
+            action = self.validate();
+        }
+        let (enter, escape, load, clear) = ui.input_mut(|i| {
+            (
+                focused && i.modifiers.command && i.key_pressed(Key::Enter),
+                focused && i.key_pressed(Key::Escape),
+                focused && i.consume_key(egui::Modifiers::NONE, Key::F10),
+                focused && i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
             )
         });
         if load {
@@ -545,7 +754,12 @@ impl Editor {
         self.focus_requested = true;
     }
 
-    fn payee_suggestions(&mut self, ui: &mut egui::Ui, document: &Document) {
+    fn payee_suggestions(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        above: Option<egui::Rect>,
+    ) {
         let needle = bp_core::filter::normalize(&self.payee);
         let needle = needle.trim();
         let memorized: Vec<_> = document
@@ -565,7 +779,36 @@ impl Editor {
         if memorized.is_empty() && used.is_empty() {
             return;
         }
-        egui::Frame::popup(ui.style()).show(ui, |ui| {
+        match above {
+            // Barre du bas : liste flottante au-dessus du champ.
+            Some(anchor) => {
+                egui::Area::new(ui.id().with("payee_suggestions"))
+                    .order(egui::Order::Foreground)
+                    .pivot(egui::Align2::LEFT_BOTTOM)
+                    .fixed_pos(anchor.left_top() - egui::vec2(0.0, 4.0))
+                    .show(ui.ctx(), |ui| {
+                        egui::Frame::popup(ui.style()).show(ui, |ui| {
+                            ui.set_min_width(anchor.width());
+                            self.suggestion_list(ui, document, memorized, used);
+                        });
+                    });
+            }
+            None => {
+                egui::Frame::popup(ui.style()).show(ui, |ui| {
+                    self.suggestion_list(ui, document, memorized, used);
+                });
+            }
+        }
+    }
+
+    fn suggestion_list(
+        &mut self,
+        ui: &mut egui::Ui,
+        document: &Document,
+        memorized: Vec<bp_core::model::Payee>,
+        used: Vec<String>,
+    ) {
+        {
             for p in memorized {
                 let text = format!("{}  {}", icon::ADDRESS_BOOK, p.caption);
                 if ui
@@ -583,7 +826,7 @@ impl Editor {
                     self.payee = name;
                 }
             }
-        });
+        }
     }
 
     fn validate(&mut self) -> EditorAction {

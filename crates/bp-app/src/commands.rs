@@ -43,6 +43,10 @@ pub enum Command {
     ReverseCurrencies,
     Scheduler,
     Forecast,
+    AutoFilters,
+    SaveFilter,
+    ApplyFilter(usize),
+    ClearFilters,
     AddToScheduler,
     ToggleHideOld,
     ToggleTranslucent,
@@ -114,6 +118,9 @@ impl Command {
                 ReverseCurrencies,
                 Scheduler,
                 Forecast,
+                AutoFilters,
+                SaveFilter,
+                ClearFilters,
                 AddToScheduler,
                 NextAccount,
                 PreviousAccount,
@@ -125,6 +132,7 @@ impl Command {
                     .filter(|&&i| !doc.document.accounts[i].disabled)
                     .map(|&i| SelectAccount(i)),
             );
+            list.extend((0..filter_count()).map(ApplyFilter));
             list.extend([
                 Manage(Tab::Accounts),
                 Manage(Tab::Categories),
@@ -440,6 +448,41 @@ impl Command {
                     "prévision futur",
                 )
             }
+            AutoFilters => info(
+                "Affichage",
+                "Filtres prédéfinis…",
+                icon::FUNNEL,
+                Some("F7"),
+                "filtrer période mois enregistrés",
+            ),
+            SaveFilter => info(
+                "Affichage",
+                "Enregistrer le filtre actuel…",
+                icon::FUNNEL_SIMPLE,
+                None,
+                "mémoriser filtre",
+            ),
+            ApplyFilter(i) => {
+                let name = filter_name(i);
+                info(
+                    "Affichage",
+                    &format!("Filtrer : {name}"),
+                    icon::FUNNEL_SIMPLE,
+                    None,
+                    "filtre prédéfini",
+                )
+            }
+            ClearFilters => {
+                let mut i = info(
+                    "Affichage",
+                    "Retirer tous les filtres",
+                    icon::FUNNEL_X,
+                    None,
+                    "effacer réinitialiser",
+                );
+                i.enabled = doc.is_some_and(|d| d.filters.is_active());
+                i
+            }
             Scheduler => info(
                 "Comptes",
                 "Échéancier…",
@@ -726,4 +769,26 @@ pub fn set_clipboard_len(n: usize) {
 
 fn clipboard_len() -> usize {
     CLIPBOARD.load(std::sync::atomic::Ordering::Relaxed)
+}
+
+/// Noms des filtres prédéfinis (tenus à jour par l'application quand la
+/// palette est ouverte).
+static FILTERS: std::sync::Mutex<Vec<String>> = std::sync::Mutex::new(Vec::new());
+
+pub fn set_filter_names(names: Vec<String>) {
+    if let Ok(mut f) = FILTERS.lock() {
+        *f = names;
+    }
+}
+
+fn filter_count() -> usize {
+    FILTERS.lock().map_or(0, |f| f.len())
+}
+
+fn filter_name(index: usize) -> String {
+    FILTERS
+        .lock()
+        .ok()
+        .and_then(|f| f.get(index).cloned())
+        .unwrap_or_default()
 }

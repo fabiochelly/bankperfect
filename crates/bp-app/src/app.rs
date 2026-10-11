@@ -35,6 +35,7 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
 const SHORTCUT_PRINT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::P);
@@ -369,6 +370,9 @@ impl BankPerfectApp {
             ));
         }
 
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_FILTERS)) {
+            return self.execute(ctx, Command::AutoFilters);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SCHEDULER)) {
             return self.execute(ctx, Command::Scheduler);
         }
@@ -674,6 +678,29 @@ impl BankPerfectApp {
                 self.settings.save();
             }
             Command::ReverseCurrencies => self.confirm_reverse = true,
+            Command::AutoFilters => {
+                self.tool = Some(Tool::Filters(Box::new(
+                    crate::filters_ui::FiltersForm::new(doc, false),
+                )));
+            }
+            Command::SaveFilter => {
+                self.tool = Some(Tool::Filters(Box::new(
+                    crate::filters_ui::FiltersForm::new(doc, true),
+                )));
+            }
+            Command::ApplyFilter(i) => {
+                let filters = crate::filters_ui::load(doc);
+                if let Some(name) = filters.names().get(i).map(|s| s.to_string())
+                    && let Some(f) = filters.get(&name)
+                {
+                    crate::filters_ui::apply(doc, f);
+                }
+            }
+            Command::ClearFilters => {
+                let hide = doc.filters.hide_old_lines;
+                doc.filters = Default::default();
+                doc.filters.hide_old_lines = hide;
+            }
             Command::Scheduler => {
                 self.tool = Some(Tool::Scheduler(Box::new(
                     crate::scheduler_ui::SchedulerForm::new(doc, None),
@@ -1020,6 +1047,11 @@ impl BankPerfectApp {
                         doc.set_show_mark_dates(marks);
                     }
                 }
+                menu::separator(ui);
+                self.menu_command(ui, AutoFilters);
+                self.menu_command(ui, SaveFilter);
+                self.menu_command(ui, ClearFilters);
+                menu::separator(ui);
                 let mut panel = self.settings.show_balance_panel;
                 if menu::toggle(ui, &mut panel, "Panneau des soldes", None).clicked() {
                     let ctx = ui.ctx().clone();
@@ -1111,7 +1143,8 @@ impl BankPerfectApp {
         }
     }
 
-    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc, compact: bool) {
+    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc, compact: bool) -> Option<Command> {
+        let mut command = None;
         let pal = palette(ui);
         let filtered = doc.filters.is_active() && !doc.ignore_filter_totals();
         // En-tête compact sur une ligne : nom du compte, banque et IBAN.
@@ -1160,6 +1193,57 @@ impl BankPerfectApp {
             ui.label(RichText::new(sub).small().color(pal.muted));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(4.0);
+                // Filtres prédéfinis : appliquer, enregistrer, gérer.
+                let response = ui.add(
+                    egui::Button::new(
+                        RichText::new(format!("{}  Filtres  {}", icon::FUNNEL, icon::CARET_DOWN))
+                            .small(),
+                    )
+                    .frame(false),
+                );
+                egui::Popup::menu(&response).show(|ui| {
+                    crate::menu::popup_style(ui.style_mut());
+                    crate::menu::begin(ui);
+                    let filters = crate::filters_ui::load(doc);
+                    let names: Vec<String> =
+                        filters.names().iter().map(|s| s.to_string()).collect();
+                    for name in &names {
+                        if crate::menu::item(ui, Some(icon::FUNNEL_SIMPLE), name, None).clicked()
+                            && let Some(f) = filters.get(name)
+                        {
+                            crate::filters_ui::apply(doc, f);
+                        }
+                    }
+                    if !names.is_empty() {
+                        crate::menu::separator(ui);
+                    }
+                    if crate::menu::item_enabled(
+                        ui,
+                        doc.filters.is_active(),
+                        Some(icon::FUNNEL_X),
+                        "Retirer les filtres",
+                        None,
+                    )
+                    .clicked()
+                    {
+                        command = Some(Command::ClearFilters);
+                    }
+                    if crate::menu::item(
+                        ui,
+                        Some(icon::FLOPPY_DISK),
+                        "Enregistrer le filtre actuel…",
+                        None,
+                    )
+                    .clicked()
+                    {
+                        command = Some(Command::SaveFilter);
+                    }
+                    if crate::menu::item(ui, Some(icon::GEAR_SIX), "Gérer les filtres…", Some("F7"))
+                        .clicked()
+                    {
+                        command = Some(Command::AutoFilters);
+                    }
+                });
                 // Dans l'en-tête plutôt qu'en dessous : la grille ne bouge pas
                 // quand un filtre s'active.
                 if filtered {
@@ -1179,6 +1263,7 @@ impl BankPerfectApp {
             crate::dashboard::cards(ui, doc);
         }
         ui.add_space(-4.0);
+        command
     }
 
     fn status_bar(ui: &mut egui::Ui, doc: &mut OpenDoc, toast: Option<&str>) {
@@ -1943,14 +2028,26 @@ impl BankPerfectApp {
             self.toast = Some((notice, now + 4.0));
         }
         crate::commands::set_clipboard_len(self.clipboard.len());
+        if self.command_palette.is_some() {
+            let names = crate::filters_ui::load(doc)
+                .names()
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+            crate::commands::set_filter_names(names);
+        }
         doc.refresh();
         let mut grid_action = GridAction::None;
         let mut deferred = None;
-        egui::Panel::top("balances")
+        let header_command = egui::Panel::top("balances")
             .frame(
                 egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
             )
-            .show(ui, |ui| Self::balance_strip(ui, doc, compact));
+            .show(ui, |ui| Self::balance_strip(ui, doc, compact))
+            .inner;
+        if let Some(command) = header_command {
+            deferred = Some(command);
+        }
 
         egui::CentralPanel::default_margins().show(ui, |ui| {
             let action = grid::show(ui, doc);

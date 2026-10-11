@@ -11,6 +11,7 @@ mod dialogs;
 mod document;
 mod editor;
 mod files_ui;
+mod filters_ui;
 mod format;
 mod grid;
 mod import_ui;

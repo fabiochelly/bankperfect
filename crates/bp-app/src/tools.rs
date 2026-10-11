@@ -13,6 +13,7 @@ use crate::ui_kit;
 
 pub enum Tool {
     NewFile(crate::files_ui::NewFileForm),
+    Filters(Box<crate::filters_ui::FiltersForm>),
     Scheduler(Box<crate::scheduler_ui::SchedulerForm>),
     Forecast(crate::scheduler_ui::ForecastForm),
     Import(Box<crate::import_ui::ImportForm>),
@@ -50,6 +51,7 @@ impl Tool {
                 form.show_standalone(ctx, doc.path.parent().map(std::path::Path::to_path_buf))
             }
             Tool::Manage(form) => form.show(ctx, doc),
+            Tool::Filters(form) => form.show(ctx, doc),
             Tool::Scheduler(form) => form.show(ctx, doc),
             Tool::Forecast(form) => form.show(ctx, doc),
             Tool::Import(form) => form.show(ctx, doc),

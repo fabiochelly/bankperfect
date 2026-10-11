@@ -86,6 +86,16 @@ impl Editor {
         }
     }
 
+    /// Place le curseur dans le champ date (F8).
+    pub fn focus_date(&mut self) {
+        self.focus_requested = true;
+    }
+
+    /// Valide la saisie (Maj+Entrée sur une ligne en cours de modification).
+    pub fn submit(&mut self) -> EditorAction {
+        self.validate()
+    }
+
     /// Sans prise du focus clavier (barre de saisie permanente du bas).
     pub fn quiet(mut self) -> Self {
         self.focus_requested = false;

@@ -39,6 +39,8 @@ pub enum Command {
     Undo,
     Redo,
     NewOperation,
+    FocusEntry,
+    ModifySelected,
     EditOperation,
     Delete,
     CutLines,
@@ -113,6 +115,8 @@ impl Command {
                 Redo,
                 NewOperation,
                 EditOperation,
+                ModifySelected,
+                FocusEntry,
                 Delete,
                 CutLines,
                 CopyLines,
@@ -404,6 +408,24 @@ impl Command {
                     icon::PENCIL_SIMPLE,
                     Some("Entrée"),
                     "éditer ligne",
+                );
+                i.enabled = selection == 1;
+                i
+            }
+            FocusEntry => info(
+                "Édition",
+                "Aller à la saisie",
+                icon::CURSOR_TEXT,
+                Some("F8"),
+                "champ date formulaire saisir",
+            ),
+            ModifySelected => {
+                let mut i = info(
+                    "Édition",
+                    "Modifier la ligne sélectionnée",
+                    icon::PENCIL_SIMPLE_LINE,
+                    Some("Maj+Entrée"),
+                    "éditer enregistrer modification",
                 );
                 i.enabled = selection == 1;
                 i

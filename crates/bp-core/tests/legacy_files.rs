@@ -75,3 +75,22 @@ fn legacy_files_open_and_survive_v6_save() {
         assert_eq!(&reopened.document, doc, "{path:?}");
     }
 }
+
+/// Les données des anciennes fonctionnalités d'Exemple.bp se relisent.
+#[test]
+fn legacy_features_of_sample_file() {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../Exemple.bp");
+    if !path.exists() {
+        return;
+    }
+    let opened = bp_core::file::open(&path, None).expect("Exemple.bp lisible");
+    let d = &opened.document;
+    let p = &bp_core::legacy_pickle::parse_py;
+    let rules = bp_core::autofields::AutoFieldRules::load(d, p).expect("règles");
+    assert_eq!(rules.rules.len(), 5);
+    let annual = bp_core::budget::AnnualBudgets::load(d, p).expect("budgets annuels");
+    assert_eq!(annual.labels().len(), 1);
+    let monthly = bp_core::budget::MonthlyBudget::load(d, p).expect("budget mensuel");
+    assert!(!monthly.entries.is_empty());
+    bp_core::autofilters::AutoFilters::load(d, p).expect("filtres");
+}

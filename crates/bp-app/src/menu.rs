@@ -73,11 +73,7 @@ impl MenuBar {
                     ui.painter().rect_filled(
                         rect,
                         5.0,
-                        if is_open {
-                            pal.selection
-                        } else {
-                            pal.bg_highlight
-                        },
+                        if is_open { pal.menu_hover } else { pal.menu_bg },
                     );
                 }
                 let color = if is_open || response.hovered() {
@@ -122,7 +118,6 @@ impl MenuBar {
             .show(ctx, |ui| {
                 egui::Frame::new()
                     .fill(pal.menu_bg)
-                    .stroke(egui::Stroke::new(1.0, pal.border))
                     .corner_radius(8)
                     .shadow(egui::Shadow {
                         offset: [0, 6],

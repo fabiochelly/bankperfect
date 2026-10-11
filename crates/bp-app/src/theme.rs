@@ -44,7 +44,7 @@ pub struct Palette {
     pub stripe: Color32,
     pub violet: Color32,
     /// Fond des menus et fenêtres flottantes : plus sombre que la fenêtre,
-    /// légèrement transparent (90 % d'opacité).
+    /// légèrement transparent (93 % d'opacité).
     pub menu_bg: Color32,
     /// Élément survolé dans un menu : encore plus sombre.
     pub menu_hover: Color32,
@@ -72,7 +72,7 @@ pub const NIGHT: Palette = Palette {
     reconciled: Color32::from_rgb(0x9e, 0xce, 0x6a),
     stripe: Color32::from_rgb(0x1e, 0x20, 0x30),
     violet: Color32::from_rgb(0xbb, 0x9a, 0xf7),
-    menu_bg: Color32::from_rgba_premultiplied(0x11, 0x11, 0x17, 0xe6),
+    menu_bg: Color32::from_rgba_premultiplied(0x12, 0x12, 0x18, 0xed),
     menu_hover: Color32::from_rgb(0x0b, 0x0b, 0x10),
 };
 
@@ -98,7 +98,7 @@ pub const DAY: Palette = Palette {
     reconciled: Color32::from_rgb(0x38, 0x7a, 0x1f),
     stripe: Color32::from_rgb(0xd9, 0xdb, 0xe3),
     violet: Color32::from_rgb(0x98, 0x54, 0xf1),
-    menu_bg: Color32::from_rgba_premultiplied(0xbc, 0xbf, 0xcc, 0xe6),
+    menu_bg: Color32::from_rgba_premultiplied(0xc1, 0xc5, 0xd2, 0xed),
     menu_hover: Color32::from_rgb(0xb4, 0xb9, 0xcd),
 };
 

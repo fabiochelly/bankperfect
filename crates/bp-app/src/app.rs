@@ -771,7 +771,9 @@ impl BankPerfectApp {
             self.toast = None;
         }
 
-        egui::Panel::top("menu").show(ui, |ui| self.menu_bar(ui));
+        egui::Panel::top("menu")
+            .show_separator_line(false)
+            .show(ui, |ui| self.menu_bar(ui));
 
         if self.doc.is_none() {
             egui::CentralPanel::default_margins().show(ui, |ui| self.welcome(ui));

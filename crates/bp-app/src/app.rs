@@ -30,6 +30,8 @@ const SHORTCUT_REDO_ALT: KeyboardShortcut =
 const SHORTCUT_REPLACE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::R);
 const SHORTCUT_GROUP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::M);
 const SHORTCUT_EXTRA: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F3);
+const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::G);
+const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
 const SHORTCUT_CALC: KeyboardShortcut =
@@ -248,6 +250,16 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_GROUP)) {
             self.tool = Some(crate::tools::Tool::ModifyGroup(
                 crate::tools::GroupForm::new(),
+            ));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_ACCOUNTS)) {
+            self.tool = Some(crate::tools::Tool::Manage(
+                crate::manage_ui::ManageForm::new(doc, crate::manage_ui::Tab::Accounts),
+            ));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_PAYEES)) {
+            self.tool = Some(crate::tools::Tool::Manage(
+                crate::manage_ui::ManageForm::new(doc, crate::manage_ui::Tab::Payees),
             ));
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_EXTRA))
@@ -537,6 +549,39 @@ impl BankPerfectApp {
                 .clicked()
                 {
                     doc.cycle_account(false);
+                }
+                menu::separator(ui);
+                for (tab, label, glyph, shortcut) in [
+                    (
+                        crate::manage_ui::Tab::Accounts,
+                        "Gestion des comptes…",
+                        icon::BANK,
+                        Some("Ctrl+G"),
+                    ),
+                    (
+                        crate::manage_ui::Tab::Categories,
+                        "Catégories…",
+                        icon::TAG,
+                        None,
+                    ),
+                    (
+                        crate::manage_ui::Tab::Payees,
+                        "Tiers…",
+                        icon::ADDRESS_BOOK,
+                        Some("F5"),
+                    ),
+                    (
+                        crate::manage_ui::Tab::Modes,
+                        "Modes de paiement…",
+                        icon::CREDIT_CARD,
+                        None,
+                    ),
+                ] {
+                    if menu::item(ui, Some(glyph), label, shortcut).clicked() {
+                        self.tool = Some(crate::tools::Tool::Manage(
+                            crate::manage_ui::ManageForm::new(doc, tab),
+                        ));
+                    }
                 }
             }
             _ => {

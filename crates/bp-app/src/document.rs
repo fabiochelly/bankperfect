@@ -598,6 +598,25 @@ impl OpenDoc {
         changed
     }
 
+    /// Modifie les référentiels (comptes, catégories, tiers, modes). Comme
+    /// dans l'ancienne version, l'historique d'annulation est vidé.
+    pub fn edit_document<R>(&mut self, edit: impl FnOnce(&mut Document) -> R) -> R {
+        let result = edit(&mut self.document);
+        self.undo.clear();
+        self.redo.clear();
+        if self.account >= self.document.accounts.len() {
+            self.account = self.document.account_order.first().copied().unwrap_or(0);
+        }
+        self.category_styles = crate::category_icons::styles(&self.document);
+        self.selection.clear();
+        self.anchor = None;
+        self.cursor = None;
+        self.view.indexed_account = None;
+        self.view.series_key = None;
+        self.touch();
+        result
+    }
+
     /// Remplace les champs supplémentaires d'une opération.
     pub fn set_extra(&mut self, index: usize, extra: Vec<(String, String)>) {
         if self

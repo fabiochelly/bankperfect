@@ -233,6 +233,11 @@ impl OpenDoc {
 
     /// Met la vue à jour si nécessaire. Appelé à chaque image : ne coûte rien
     /// quand rien n'a changé.
+    /// Numéro de version du contenu, incrémenté à chaque modification.
+    pub fn revision(&self) -> u64 {
+        self.revision
+    }
+
     pub fn refresh(&mut self) {
         let key = (self.account, self.sort, self.ascending, self.revision);
         if self.view.key != Some(key) {

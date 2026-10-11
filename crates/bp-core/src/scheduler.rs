@@ -35,6 +35,9 @@ use crate::{Error, Result};
 pub const FEATURE_KEY: &str = "scheduler.v6";
 /// Clé de l'ancien script (pickle Python 2), relue si la nouvelle est absente.
 pub const LEGACY_KEY: &str = "fabiobpscheduler";
+/// Donnée du tout premier échéancier (même structure), jamais relue
+/// d'office : ses échéances datent souvent de plusieurs années.
+pub const OLDEST_KEY: &str = "echeancier";
 /// Clé d'une version plus ancienne de l'échéancier, jamais relue automatiquement.
 pub const LEGACY_OLD_KEY: &str = "echeancier";
 /// Préfixe ajouté au tiers des opérations insérées (hors transferts).
@@ -1048,6 +1051,21 @@ pub fn schedules_from_legacy(
         }
     }
     (schedules, warnings)
+}
+
+/// Échéances du tout premier échéancier ([`OLDEST_KEY`]), à reprendre sur
+/// demande ; `None` si le fichier n'en contient pas.
+pub fn oldest_schedules(document: &Document) -> Option<(Vec<Schedule>, Vec<String>)> {
+    match legacy_pickle::feature_pickle(document, OLDEST_KEY)? {
+        Ok(value) => {
+            let entries = legacy_pickle::schedule_entries(&value);
+            (!entries.is_empty()).then(|| schedules_from_legacy(document, &entries))
+        }
+        Err(e) => Some((
+            Vec::new(),
+            vec![format!("ancien échéancier illisible : {e}")],
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------

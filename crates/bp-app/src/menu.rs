@@ -219,6 +219,7 @@ fn row(
         Sense::hover()
     };
     let (rect, response) = ui.allocate_exact_size(vec2(width, ITEM_HEIGHT), sense);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, enabled, label));
     let hovered = enabled && response.hovered();
     if hovered {
         ui.painter().rect_filled(rect, 5.0, pal.menu_hover);

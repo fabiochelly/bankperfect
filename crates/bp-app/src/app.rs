@@ -23,6 +23,12 @@ const SHORTCUT_NEXT_ACCOUNT: KeyboardShortcut = KeyboardShortcut::new(Modifiers:
 const SHORTCUT_PREV_ACCOUNT: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::CTRL.plus(Modifiers::SHIFT), Key::Tab);
 const SHORTCUT_HIDE_OLD: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::H);
+const SHORTCUT_UNDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Z);
+const SHORTCUT_REDO: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Y);
+const SHORTCUT_REDO_ALT: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Z);
+const SHORTCUT_REPLACE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::R);
+const SHORTCUT_GROUP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::M);
 
 /// Action différée en attendant la réponse à « Enregistrer les modifications ? ».
 enum Pending {
@@ -38,6 +44,7 @@ pub struct BankPerfectApp {
     show_warnings: bool,
     pending: Option<Pending>,
     confirm_delete: bool,
+    tool: Option<crate::tools::Tool>,
     error: Option<String>,
     toast: Option<(String, f64)>,
     allow_close: bool,
@@ -61,6 +68,7 @@ impl BankPerfectApp {
             show_warnings: false,
             pending: None,
             confirm_delete: false,
+            tool: None,
             error: None,
             toast: None,
             allow_close: false,
@@ -174,6 +182,23 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_HIDE_OLD)) {
             doc.filters.hide_old_lines = !doc.filters.hide_old_lines;
         }
+        if ctx.input_mut(|i| {
+            i.consume_shortcut(&SHORTCUT_REDO_ALT) || i.consume_shortcut(&SHORTCUT_REDO)
+        }) {
+            doc.redo();
+            self.editor = None;
+        } else if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_UNDO)) {
+            doc.undo();
+            self.editor = None;
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_REPLACE)) {
+            self.tool = Some(crate::tools::Tool::Replace(Default::default()));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_GROUP)) {
+            self.tool = Some(crate::tools::Tool::ModifyGroup(
+                crate::tools::GroupForm::new(),
+            ));
+        }
 
         // Raccourcis de la grille, actifs quand aucun champ n'a le focus.
         if ctx.memory(|m| m.focused().is_some()) || self.menus.is_open() {
@@ -270,6 +295,19 @@ impl BankPerfectApp {
             {
                 self.save(now);
             }
+            if self.doc.is_some() {
+                menu::separator(ui);
+                if menu::item(ui, Some(icon::FILE_CSV), "Exporter en CSV…", None).clicked() {
+                    self.tool = Some(crate::tools::Tool::ExportCsv(crate::tools::CsvForm::new()));
+                }
+                if menu::item(ui, Some(icon::EXPORT), "Exporter en QIF…", None).clicked()
+                    && let Some(doc) = &self.doc
+                    && let Some(message) = crate::tools::export_qif(doc)
+                {
+                    let now = ui.input(|i| i.time);
+                    self.toast = Some((message, now + 4.0));
+                }
+            }
             menu::separator(ui);
             if menu::item(ui, Some(icon::SIGN_OUT), "Quitter", None).clicked() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -281,6 +319,39 @@ impl BankPerfectApp {
         match index {
             1 => {
                 menu::begin(ui);
+                let undo = doc
+                    .undo_label()
+                    .map(|l| format!("Annuler {l}"))
+                    .unwrap_or_else(|| "Annuler".into());
+                if menu::item_enabled(
+                    ui,
+                    doc.undo_label().is_some(),
+                    Some(icon::ARROW_U_UP_LEFT),
+                    &undo,
+                    Some("Ctrl+Z"),
+                )
+                .clicked()
+                {
+                    doc.undo();
+                    self.editor = None;
+                }
+                let redo = doc
+                    .redo_label()
+                    .map(|l| format!("Refaire {l}"))
+                    .unwrap_or_else(|| "Refaire".into());
+                if menu::item_enabled(
+                    ui,
+                    doc.redo_label().is_some(),
+                    Some(icon::ARROW_U_UP_RIGHT),
+                    &redo,
+                    Some("Ctrl+Y"),
+                )
+                .clicked()
+                {
+                    doc.redo();
+                    self.editor = None;
+                }
+                menu::separator(ui);
                 if menu::item(ui, Some(icon::PLUS), "Nouvelle opération", Some("Inser")).clicked()
                 {
                     self.editor = Some(Editor::new_operation(&doc.document, doc.account));
@@ -309,6 +380,10 @@ impl BankPerfectApp {
                 .clicked()
                 {
                     self.confirm_delete = true;
+                }
+                menu::separator(ui);
+                if menu::item(ui, Some(icon::SWAP), "Remplacer…", Some("Ctrl+R")).clicked() {
+                    self.tool = Some(crate::tools::Tool::Replace(Default::default()));
                 }
             }
             2 => {
@@ -388,6 +463,20 @@ impl BankPerfectApp {
                 .clicked()
                 {
                     doc.reconcile_all_pointed();
+                }
+                menu::separator(ui);
+                if menu::item_enabled(
+                    ui,
+                    !doc.selection.is_empty(),
+                    Some(icon::PENCIL_SIMPLE_LINE),
+                    "Modifier le groupe…",
+                    Some("Ctrl+M"),
+                )
+                .clicked()
+                {
+                    self.tool = Some(crate::tools::Tool::ModifyGroup(
+                        crate::tools::GroupForm::new(),
+                    ));
                 }
             }
         }
@@ -566,6 +655,16 @@ impl BankPerfectApp {
 
     fn modals(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
+        if let (Some(tool), Some(doc)) = (&mut self.tool, &mut self.doc) {
+            match tool.show(ctx, doc) {
+                crate::tools::Outcome::Keep => {}
+                crate::tools::Outcome::Close => self.tool = None,
+                crate::tools::Outcome::Done(message) => {
+                    self.tool = None;
+                    self.toast = Some((message, now + 4.0));
+                }
+            }
+        }
         if let Some(prompt) = &mut self.prompt {
             match prompt.show(ctx) {
                 PromptResult::Pending => {}
@@ -727,7 +826,8 @@ impl BankPerfectApp {
             || self.pending.is_some()
             || self.confirm_delete
             || self.error.is_some()
-            || self.show_warnings;
+            || self.show_warnings
+            || self.tool.is_some();
         if !modal_open {
             self.handle_shortcuts(&ctx);
         }
@@ -894,17 +994,17 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
 }
 
 /// Bouton rond « Nouvelle opération », à cheval sur la barre de menus en
-/// haut à droite : bleu, croix blanche.
+/// haut à droite : verre bleuté semi-transparent avec reflet, croix blanche.
 fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
-    const SIZE: f32 = 58.0;
-    let center = egui::pos2(content.right() - 52.0, content.top() + 4.0);
+    const SIZE: f32 = 44.0;
+    let center = egui::pos2(content.right() - 46.0, content.top() + 2.0);
     let rect = egui::Rect::from_center_size(center, egui::vec2(SIZE, SIZE));
     egui::Area::new(egui::Id::new("floating_add"))
         .order(egui::Order::Foreground)
-        .fixed_pos(rect.min - egui::vec2(14.0, 14.0))
+        .fixed_pos(rect.min - egui::vec2(12.0, 12.0))
         .show(ctx, |ui| {
             let (outer, _) =
-                ui.allocate_exact_size(egui::vec2(SIZE + 28.0, SIZE + 28.0), egui::Sense::hover());
+                ui.allocate_exact_size(egui::vec2(SIZE + 24.0, SIZE + 24.0), egui::Sense::hover());
             let rect = egui::Rect::from_center_size(outer.center(), egui::vec2(SIZE, SIZE));
             let response = ui
                 .interact(
@@ -917,32 +1017,52 @@ fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
                 egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Nouvelle opération")
             });
             let hovered = response.hovered();
+            let painter = ui.painter();
+            let radius = SIZE / 2.0;
             let shadow = egui::Shadow {
-                offset: [0, 6],
-                blur: 22,
+                offset: [0, 4],
+                blur: 16,
                 spread: 0,
-                color: egui::Color32::from_black_alpha(130),
+                color: egui::Color32::from_black_alpha(90),
             };
-            ui.painter()
-                .add(shadow.as_shape(rect, egui::CornerRadius::same((SIZE / 2.0) as u8)));
-            // Bleu soutenu (contraste suffisant pour la croix blanche), à peine transparent.
-            let blue = egui::Color32::from_rgba_unmultiplied(0x2f, 0x6f, 0xe8, 242);
-            let fill = if hovered {
-                egui::Color32::from_rgb(0x4a, 0x86, 0xf5)
-            } else {
-                blue
-            };
-            ui.painter().circle(
+            painter.add(shadow.as_shape(rect, egui::CornerRadius::same(radius as u8)));
+            // Verre bleuté semi-transparent, plus dense au survol.
+            let alpha = if hovered { 215 } else { 150 };
+            painter.circle_filled(
                 rect.center(),
-                SIZE / 2.0,
-                fill,
-                egui::Stroke::new(1.0, egui::Color32::from_white_alpha(40)),
+                radius,
+                egui::Color32::from_rgba_unmultiplied(0x3b, 0x7b, 0xf0, alpha),
             );
-            ui.painter().text(
+            // Reflet : dégradé blanc sur la moitié haute.
+            let mut mesh = egui::Mesh::default();
+            let steps = 32;
+            let center = rect.center();
+            mesh.colored_vertex(
+                center - egui::vec2(0.0, radius * 0.15),
+                egui::Color32::from_white_alpha(8),
+            );
+            for k in 0..=steps {
+                let a = std::f32::consts::PI + std::f32::consts::PI * k as f32 / steps as f32;
+                let p = center + egui::vec2(a.cos(), a.sin()) * (radius - 1.5);
+                mesh.colored_vertex(p, egui::Color32::from_white_alpha(46));
+            }
+            for k in 1..=steps as u32 {
+                mesh.add_triangle(0, k, k + 1);
+            }
+            painter.add(mesh);
+            painter.circle_stroke(
+                rect.center(),
+                radius - 0.5,
+                egui::Stroke::new(
+                    1.0,
+                    egui::Color32::from_white_alpha(if hovered { 110 } else { 70 }),
+                ),
+            );
+            painter.text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
                 icon::PLUS,
-                egui::FontId::proportional(30.0),
+                egui::FontId::proportional(22.0),
                 egui::Color32::WHITE,
             );
             response.clicked()

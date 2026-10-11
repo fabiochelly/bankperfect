@@ -13,5 +13,6 @@ mod menu;
 mod profiler;
 mod sidebar;
 pub mod theme;
+mod tools;
 
 pub use app::BankPerfectApp;

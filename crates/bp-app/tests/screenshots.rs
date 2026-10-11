@@ -373,6 +373,21 @@ fn transfer_screenshots() {
             h.key_press(egui::Key::Enter);
         },
     );
+    render("73-f8", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::F8);
+    });
+    render("74-maj-entree", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+    });
+    render("75-maj-entree-enregistre", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+        h.run_steps(4);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+    });
     render("69-convertir", egui::Theme::Dark, |h| {
         h.key_press(egui::Key::ArrowDown);
         h.key_press(egui::Key::ArrowDown);

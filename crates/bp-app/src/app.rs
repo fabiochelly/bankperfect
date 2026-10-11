@@ -353,6 +353,12 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CALC)) {
             self.tool = Some(crate::tools::Tool::Calculator(crate::tools::CalcForm::new()));
         }
+        if self.doc.is_some() && ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F8)) {
+            return self.execute(ctx, Command::FocusEntry);
+        }
+        if self.doc.is_some() && ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Enter)) {
+            return self.execute(ctx, Command::ModifySelected);
+        }
         let Some(doc) = &mut self.doc else { return };
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SAVE)) {
             self.save(now);
@@ -673,6 +679,21 @@ impl BankPerfectApp {
             }
             Command::EditOperation => {
                 if let Some(&index) = doc.selection.iter().next() {
+                    self.editor = Some(Editor::edit(&doc.document, doc.account, index));
+                }
+            }
+            Command::FocusEntry => match &mut self.editor {
+                Some(editor) => editor.focus_date(),
+                None => self.editor = Some(Editor::new_operation(&doc.document, doc.account)),
+            },
+            Command::ModifySelected => {
+                if let Some(editor) = self.editor.as_mut().filter(|e| e.target.is_some()) {
+                    // Ligne en cours de modification : enregistrement.
+                    let action = editor.submit();
+                    self.apply_editor_action(action, now);
+                } else if doc.selection.len() == 1
+                    && let Some(&index) = doc.selection.iter().next()
+                {
                     self.editor = Some(Editor::edit(&doc.document, doc.account, index));
                 }
             }
@@ -1167,6 +1188,7 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, NewOperation);
                 self.menu_command(ui, EditOperation);
+                self.menu_command(ui, FocusEntry);
                 menu::separator(ui);
                 self.menu_command(ui, CutLines);
                 self.menu_command(ui, CopyLines);
@@ -2245,6 +2267,9 @@ impl BankPerfectApp {
             || self.confirm_delete
             || self.error.is_some()
             || self.show_warnings
+            || self.confirm_linked_edit.is_some()
+            || self.options.is_some()
+            || self.about
             || self.tool.is_some();
         if !modal_open {
             self.handle_shortcuts(&ctx);

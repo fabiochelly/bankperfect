@@ -470,9 +470,15 @@ pub fn checkbox(
 /// bleus, le « p » en violets, issus des couleurs de l'ancien logo. Les mêmes
 /// dans les deux thèmes.
 pub fn logo_b(_p: &Palette) -> (Color32, Color32) {
-    (Color32::from_rgb(0x7a, 0xa2, 0xf7), Color32::from_rgb(0x5a, 0x7f, 0xe0))
+    (
+        Color32::from_rgb(0x7a, 0xa2, 0xf7),
+        Color32::from_rgb(0x5a, 0x7f, 0xe0),
+    )
 }
 
 pub fn logo_p(_p: &Palette) -> (Color32, Color32) {
-    (Color32::from_rgb(0x8b, 0x6f, 0xd6), Color32::from_rgb(0xbb, 0x9a, 0xf7))
+    (
+        Color32::from_rgb(0x8b, 0x6f, 0xd6),
+        Color32::from_rgb(0xbb, 0x9a, 0xf7),
+    )
 }

@@ -926,7 +926,13 @@ pub fn schedule_from_operation(
     Some(Schedule {
         account: acc.uid.clone(),
         transfer: None,
-        payee: operation.payee.clone(),
+        // Une opération déjà insérée par l'échéancier porte le préfixe
+        // « [auto] » : il est retiré, sinon il serait doublé à l'insertion.
+        payee: operation
+            .payee
+            .strip_prefix(AUTO_PREFIX)
+            .unwrap_or(&operation.payee)
+            .to_string(),
         details: operation.details.clone(),
         mode: operation.mode.clone(),
         category: operation.category,
@@ -2160,5 +2166,14 @@ pub(crate) mod tests {
         assert_eq!(occ.len(), MAX_OCCURRENCES);
         let s = monthly(d(9999, 12, 15), Some(15));
         assert_eq!(s.occurrences(d(9999, 12, 31)).len(), 1);
+    }
+
+    #[test]
+    fn schedule_from_inserted_operation_drops_auto_prefix() {
+        let doc = crate::manage::new_document("Test", Amount::ZERO);
+        let mut op = doc.accounts[0].operations[0].clone();
+        op.payee = format!("{AUTO_PREFIX}Loyer");
+        let schedule = schedule_from_operation(&doc, 0, &op).unwrap();
+        assert_eq!(schedule.payee, "Loyer");
     }
 }

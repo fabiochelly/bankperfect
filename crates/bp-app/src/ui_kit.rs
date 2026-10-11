@@ -296,3 +296,17 @@ pub fn icon_field(
     );
     response
 }
+
+/// Cellule de largeur fixe, texte aligné à gauche (`Min`) ou à droite (`Max`)
+/// et coupé avec « … » s'il déborde.
+pub fn cell(ui: &mut egui::Ui, width: f32, align: egui::Align, text: RichText) {
+    let layout = if align == egui::Align::Max {
+        egui::Layout::right_to_left(egui::Align::Center)
+    } else {
+        egui::Layout::left_to_right(egui::Align::Center)
+    };
+    ui.allocate_ui_with_layout(egui::vec2(width, 22.0), layout, |ui| {
+        ui.set_min_width(width);
+        ui.add(egui::Label::new(text).truncate());
+    });
+}

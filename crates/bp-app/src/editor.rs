@@ -194,12 +194,8 @@ impl Editor {
                                         let (glyph, color) =
                                             crate::grid::mode_style(document, &mode, &pal);
                                         let text =
-                                            RichText::new(format!("{glyph}  {}", mode.label()));
-                                        let text = if mode == self.mode {
-                                            text.color(color)
-                                        } else {
-                                            text
-                                        };
+                                            RichText::new(format!("{glyph}  {}", mode.label()))
+                                                .color(color);
                                         ui.selectable_value(&mut self.mode, mode, text);
                                     }
                                 });
@@ -222,7 +218,7 @@ impl Editor {
                     if response.has_focus() && !self.payee.is_empty() {
                         self.payee_suggestions(ui, document);
                     }
-                    ui.add_space(10.0);
+                    ui.add_space(14.0);
                     ui.add(
                         crate::theme::field(&mut self.details)
                             .hint_text("Note, référence, n° de chèque…")
@@ -264,7 +260,7 @@ impl Editor {
                                 ui.selectable_value(&mut self.category, Some(c.id), text);
                             }
                         });
-                    ui.add_space(10.0);
+                    ui.add_space(14.0);
                     segmented(
                         ui,
                         &mut self.tack,
@@ -356,12 +352,12 @@ impl Editor {
         } else {
             pal.negative
         };
-        let width = outer_width - 2.0 * 16.0 - 2.0;
+        let width = outer_width - 2.0 * 20.0 - 2.0;
         egui::Frame::new()
             .fill(color.gamma_multiply(0.08))
             .stroke(egui::Stroke::new(1.0, color.gamma_multiply(0.35)))
             .corner_radius(14)
-            .inner_margin(egui::Margin::symmetric(16, 12))
+            .inner_margin(egui::Margin::symmetric(20, 16))
             .show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_max_width(width);
@@ -374,7 +370,7 @@ impl Editor {
                     ],
                     28.0,
                 );
-                ui.add_space(4.0);
+                ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     let sign = if self.credit { "+" } else { "−" };
                     ui.label(
@@ -572,12 +568,12 @@ fn section(
             .color(pal.muted),
     );
     ui.add_space(4.0);
-    let width = outer_width - 2.0 * 12.0 - 2.0;
+    let width = outer_width - 2.0 * 18.0 - 2.0;
     egui::Frame::new()
         .fill(pal.bg)
         .stroke(egui::Stroke::new(1.0, pal.border.gamma_multiply(0.6)))
         .corner_radius(12)
-        .inner_margin(egui::Margin::same(12))
+        .inner_margin(egui::Margin::same(18))
         .show(ui, |ui| {
             ui.set_width(width);
             ui.set_max_width(width);

@@ -32,7 +32,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let row_height = if doc.two_lines { 42.0 } else { 30.0 };
     let currency = doc.current_account().currency.clone();
     let scroll_to = doc.scroll_to.take();
-    let visible: Vec<usize> = doc.visible().to_vec();
+    let visible = doc.visible();
     let sort_by_date = doc.sort == SortColumn::Date;
 
     let mut table = TableBuilder::new(ui)
@@ -43,8 +43,18 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         .column(Column::exact(28.0))
         .column(Column::initial(120.0).at_least(110.0))
         .column(Column::initial(104.0).at_least(60.0).clip(true))
-        .column(Column::remainder().at_least(90.0).clip(true).resizable(false))
-        .column(Column::remainder().at_least(70.0).clip(true).resizable(false))
+        .column(
+            Column::remainder()
+                .at_least(90.0)
+                .clip(true)
+                .resizable(false),
+        )
+        .column(
+            Column::remainder()
+                .at_least(70.0)
+                .clip(true)
+                .resizable(false),
+        )
         .column(Column::initial(108.0).at_least(90.0))
         .column(Column::initial(130.0).at_least(104.0))
         .min_scrolled_height(0.0);
@@ -58,10 +68,46 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         .header(66.0, |mut header| {
             header.col(|ui| tack_filter_header(ui, doc));
             header.col(|ui| date_header(ui, doc));
-            header.col(|ui| filter_header(ui, doc, "Mode", SortColumn::Mode, |f| &mut f.mode, "carte, chq…"));
-            header.col(|ui| filter_header(ui, doc, "Tiers", SortColumn::Payee, |f| &mut f.payee, "Filtrer tiers et détail"));
-            header.col(|ui| filter_header(ui, doc, "Catégorie", SortColumn::Category, |f| &mut f.category, "Filtrer"));
-            header.col(|ui| filter_header(ui, doc, "Montant", SortColumn::Amount, |f| &mut f.amount, "<0, -50>50…"));
+            header.col(|ui| {
+                filter_header(
+                    ui,
+                    doc,
+                    "Mode",
+                    SortColumn::Mode,
+                    |f| &mut f.mode,
+                    "carte, chq…",
+                )
+            });
+            header.col(|ui| {
+                filter_header(
+                    ui,
+                    doc,
+                    "Tiers",
+                    SortColumn::Payee,
+                    |f| &mut f.payee,
+                    "Filtrer tiers et détail",
+                )
+            });
+            header.col(|ui| {
+                filter_header(
+                    ui,
+                    doc,
+                    "Catégorie",
+                    SortColumn::Category,
+                    |f| &mut f.category,
+                    "Filtrer",
+                )
+            });
+            header.col(|ui| {
+                filter_header(
+                    ui,
+                    doc,
+                    "Montant",
+                    SortColumn::Amount,
+                    |f| &mut f.amount,
+                    "<0, -50>50…",
+                )
+            });
             header.col(|ui| {
                 ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
                     ui.add_space(SCROLLBAR_GUTTER);
@@ -89,12 +135,18 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         Tack::Pointed => (icon::CHECK, pal.pointed),
                         Tack::Reconciled => (icon::CHECKS, pal.reconciled),
                     };
-                    ui.centered_and_justified(|ui| ui.label(RichText::new(glyph).color(color).size(15.0)));
+                    ui.centered_and_justified(|ui| {
+                        ui.label(RichText::new(glyph).color(color).size(15.0))
+                    });
                 });
                 row.col(|ui| {
                     if op.date > today {
                         let r = ui.max_rect();
-                        ui.painter().vline(r.left() - 3.0, r.y_range(), Stroke::new(2.0, pal.future));
+                        ui.painter().vline(
+                            r.left() - 3.0,
+                            r.y_range(),
+                            Stroke::new(2.0, pal.future),
+                        );
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         ui.label(op.date.to_string());
@@ -120,7 +172,12 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         ui.vertical(|ui| {
                             ui.add_space(2.0);
                             ui.add(egui::Label::new(payee).truncate());
-                            ui.add(egui::Label::new(RichText::new(&op.details).small().color(pal.muted)).truncate());
+                            ui.add(
+                                egui::Label::new(
+                                    RichText::new(&op.details).small().color(pal.muted),
+                                )
+                                .truncate(),
+                            );
                         });
                     } else {
                         let response = ui.add(egui::Label::new(payee).truncate());
@@ -130,12 +187,19 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     }
                 });
                 row.col(|ui| {
-                    let label = op.category.and_then(|id| doc.document.category_label(id)).unwrap_or_default();
+                    let label = op
+                        .category
+                        .and_then(|id| doc.document.category_label(id))
+                        .unwrap_or_default();
                     ui.add(egui::Label::new(RichText::new(label).color(pal.muted)).truncate());
                 });
                 row.col(|ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        let color = if op.amount.is_negative() { pal.negative } else { pal.positive };
+                        let color = if op.amount.is_negative() {
+                            pal.negative
+                        } else {
+                            pal.positive
+                        };
                         ui.label(RichText::new(money(op.amount, &currency)).color(color));
                     });
                 });
@@ -143,7 +207,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         // Place pour la barre de défilement flottante.
                         ui.add_space(SCROLLBAR_GUTTER);
-                        let mut text = RichText::new(money(balance, &currency)).family(crate::theme::semibold());
+                        let mut text = RichText::new(money(balance, &currency))
+                            .family(crate::theme::semibold());
                         if balance.is_negative() {
                             text = text.color(pal.negative);
                         }
@@ -175,10 +240,13 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 response.context_menu(|ui| {
                     crate::menu::popup_style(ui.style_mut());
                     crate::menu::begin(ui);
-                    if crate::menu::item(ui, Some(icon::PENCIL_SIMPLE), "Modifier", Some("Entrée")).clicked() {
+                    if crate::menu::item(ui, Some(icon::PENCIL_SIMPLE), "Modifier", Some("Entrée"))
+                        .clicked()
+                    {
                         action = GridAction::Edit(index);
                     }
-                    if crate::menu::item(ui, Some(icon::CHECK), "Pointer", Some("Espace")).clicked() {
+                    if crate::menu::item(ui, Some(icon::CHECK), "Pointer", Some("Espace")).clicked()
+                    {
                         doc.cycle_tack();
                     }
                 });
@@ -201,7 +269,9 @@ fn filter_header(
         sort_title(ui, doc, title, column);
         let value = field(&mut doc.filters);
         let active = !value.is_empty();
-        let edit = crate::theme::field(value).hint_text(hint).desired_width(f32::INFINITY);
+        let edit = crate::theme::field(value)
+            .hint_text(hint)
+            .desired_width(f32::INFINITY);
         let response = ui.add(edit);
         if active {
             response.clone().highlight();
@@ -212,10 +282,21 @@ fn filter_header(
 fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortColumn) {
     let mut text = RichText::new(title).family(crate::theme::semibold());
     if doc.sort == column {
-        text = RichText::new(format!("{title} {}", if doc.ascending { icon::CARET_UP } else { icon::CARET_DOWN }))
-            .family(crate::theme::semibold());
+        text = RichText::new(format!(
+            "{title} {}",
+            if doc.ascending {
+                icon::CARET_UP
+            } else {
+                icon::CARET_DOWN
+            }
+        ))
+        .family(crate::theme::semibold());
     }
-    if ui.add(egui::Label::new(text).sense(Sense::click())).on_hover_text("Trier").clicked() {
+    if ui
+        .add(egui::Label::new(text).sense(Sense::click()))
+        .on_hover_text("Trier")
+        .clicked()
+    {
         if doc.sort == column {
             doc.ascending = !doc.ascending;
         } else {
@@ -229,57 +310,63 @@ fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         ui.add_space(2.0);
         sort_title(ui, doc, "Date", SortColumn::Date);
         let active = doc.filters.date_from.is_some() || doc.filters.date_to.is_some();
-        let label = if active { format!("{} Période", icon::FUNNEL) } else { format!("{} Période", icon::CALENDAR_BLANK) };
+        let label = if active {
+            format!("{} Période", icon::FUNNEL)
+        } else {
+            format!("{} Période", icon::CALENDAR_BLANK)
+        };
         let button = egui::Button::new(label).selected(active);
         let response = ui.add_sized([ui.available_width(), 34.0], button);
-        egui::Popup::menu(&response).close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside).show(|ui| {
-            ui.set_min_width(220.0);
-            date_bound(ui, "Du", &mut doc.filters.date_from);
-            date_bound(ui, "Au", &mut doc.filters.date_to);
-            ui.horizontal(|ui| {
-                if ui.button("Ce mois").clicked() {
-                    let d = Date::today().to_naive();
-                    let first = Date::from_ymd(d.year(), d.month(), 1);
-                    let next = if d.month() == 12 {
-                        Date::from_ymd(d.year() + 1, 1, 1)
-                    } else {
-                        Date::from_ymd(d.year(), d.month() + 1, 1)
-                    };
-                    doc.filters.date_from = first;
-                    doc.filters.date_to = next.map(|n| Date(n.0 - 1));
-                }
-                if ui.button("Cette année").clicked() {
-                    let y = Date::today().to_naive().year();
-                    doc.filters.date_from = Date::from_ymd(y, 1, 1);
-                    doc.filters.date_to = Date::from_ymd(y, 12, 31);
-                }
-                if ui.button("Effacer").clicked() {
-                    doc.filters.date_from = None;
-                    doc.filters.date_to = None;
-                }
+        egui::Popup::menu(&response)
+            .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+            .show(|ui| {
+                ui.set_width(290.0);
+                date_bound(ui, "Du", &mut doc.filters.date_from);
+                date_bound(ui, "Au", &mut doc.filters.date_to);
+                ui.horizontal(|ui| {
+                    if ui.button("Ce mois").clicked() {
+                        let d = Date::today().to_naive();
+                        let first = Date::from_ymd(d.year(), d.month(), 1);
+                        let next = if d.month() == 12 {
+                            Date::from_ymd(d.year() + 1, 1, 1)
+                        } else {
+                            Date::from_ymd(d.year(), d.month() + 1, 1)
+                        };
+                        doc.filters.date_from = first;
+                        doc.filters.date_to = next.map(|n| Date(n.0 - 1));
+                    }
+                    if ui.button("Cette année").clicked() {
+                        let y = Date::today().to_naive().year();
+                        doc.filters.date_from = Date::from_ymd(y, 1, 1);
+                        doc.filters.date_to = Date::from_ymd(y, 12, 31);
+                    }
+                    if ui.button("Effacer").clicked() {
+                        doc.filters.date_from = None;
+                        doc.filters.date_to = None;
+                    }
+                });
             });
-        });
     });
 }
 
-/// Borne de date : champ texte `jj/mm/aaaa`, appliqué dès qu'il est valide.
+/// Borne de date : champ `jj/mm/aaaa` avec calendrier, appliquée dès qu'elle
+/// est valide. Le texte saisi est conservé tant que la borne ne change pas
+/// par ailleurs (boutons « Ce mois », « Cette année »…).
 fn date_bound(ui: &mut egui::Ui, label: &str, bound: &mut Option<Date>) {
-    ui.horizontal(|ui| {
-        ui.label(format!("{label} :"));
-        let id = ui.id().with(label);
-        let mut text = ui
-            .data_mut(|d| d.get_temp::<String>(id))
-            .unwrap_or_else(|| bound.map(|d| d.to_string()).unwrap_or_default());
-        let response = ui.add(crate::theme::field(&mut text).hint_text("jj/mm/aaaa").desired_width(110.0));
-        if response.changed() {
-            *bound = if text.trim().is_empty() { None } else { Date::parse_fr(&text, Date::today()).or(*bound) };
-        }
-        if response.has_focus() {
-            ui.data_mut(|d| d.insert_temp(id, text));
-        } else {
-            ui.data_mut(|d| d.remove::<String>(id));
-        }
-    });
+    ui.label(RichText::new(label).small().color(palette(ui).muted));
+    let id = ui.id().with(("date_bound", label));
+    let (mut text, last) = ui
+        .data(|d| d.get_temp::<(String, Option<Date>)>(id))
+        .filter(|(_, last)| last == bound)
+        .unwrap_or_else(|| (bound.map(|d| d.to_string()).unwrap_or_default(), *bound));
+    let response = crate::datepicker::date_field(ui, label, &mut text, 266.0, crate::datepicker::Placement::Inline);
+    let mut new_bound = last;
+    if response.changed() {
+        new_bound = if text.trim().is_empty() { None } else { Date::parse_fr(&text, Date::today()).or(last) };
+        *bound = new_bound;
+    }
+    ui.data_mut(|d| d.insert_temp(id, (text, new_bound)));
+    ui.add_space(4.0);
 }
 
 fn tack_filter_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
@@ -287,7 +374,9 @@ fn tack_filter_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         ui.add_space(26.0);
         let active = doc.filters.tack != TackFilter::All;
         let glyph = if active { icon::FUNNEL } else { icon::CHECKS };
-        let response = ui.add(egui::Button::new(glyph).selected(active).frame(active)).on_hover_text("Filtrer par pointage");
+        let response = ui
+            .add(egui::Button::new(glyph).selected(active).frame(active))
+            .on_hover_text("Filtrer par pointage");
         egui::Popup::menu(&response).show(|ui| {
             crate::menu::popup_style(ui.style_mut());
             crate::menu::begin(ui);

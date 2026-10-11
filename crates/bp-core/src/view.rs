@@ -17,13 +17,22 @@ pub enum SortColumn {
 /// Ordre d'affichage des opérations d'un compte (indices dans
 /// `account.operations`). Tri **stable** : l'ancienne version utilisait un
 /// QuickSort instable, l'ordre des égalités variait d'un affichage à l'autre.
-pub fn sorted_order(document: &Document, account: &Account, column: SortColumn, ascending: bool) -> Vec<usize> {
+pub fn sorted_order(
+    document: &Document,
+    account: &Account,
+    column: SortColumn,
+    ascending: bool,
+) -> Vec<usize> {
     let ops = &account.operations;
     let mut order: Vec<usize> = (0..ops.len()).collect();
     let labels: Vec<String> = match column {
         SortColumn::Category => ops
             .iter()
-            .map(|op| op.category.and_then(|id| document.category_label(id)).unwrap_or_default())
+            .map(|op| {
+                op.category
+                    .and_then(|id| document.category_label(id))
+                    .unwrap_or_default()
+            })
             .collect(),
         _ => Vec::new(),
     };
@@ -32,7 +41,11 @@ pub fn sorted_order(document: &Document, account: &Account, column: SortColumn, 
             SortColumn::Category => labels[a].cmp(&labels[b]),
             _ => compare(&ops[a], &ops[b], column),
         };
-        if ascending { ordering } else { ordering.reverse() }
+        if ascending {
+            ordering
+        } else {
+            ordering.reverse()
+        }
     });
     order
 }
@@ -51,7 +64,10 @@ fn compare(a: &Operation, b: &Operation, column: SortColumn) -> Ordering {
             .then_with(by_payee)
             .then_with(by_amount)
             .then_with(by_details),
-        SortColumn::Mode => by_mode().then_with(by_payee).then_with(by_amount).then_with(by_details),
+        SortColumn::Mode => by_mode()
+            .then_with(by_payee)
+            .then_with(by_amount)
+            .then_with(by_details),
         SortColumn::Payee => by_payee().then_with(by_amount).then_with(by_details),
         SortColumn::Amount => by_amount().then_with(by_details),
         SortColumn::Category => Ordering::Equal,
@@ -96,7 +112,10 @@ mod tests {
     #[test]
     fn ventilation_prefix() {
         assert_eq!(payee_without_ventilation("[1/3] Fnac"), " Fnac");
-        assert_eq!(payee_without_ventilation("[longprefix] Fnac"), "[longprefix] Fnac");
+        assert_eq!(
+            payee_without_ventilation("[longprefix] Fnac"),
+            "[longprefix] Fnac"
+        );
         assert_eq!(payee_without_ventilation("[1/3]"), "[1/3]");
     }
 }

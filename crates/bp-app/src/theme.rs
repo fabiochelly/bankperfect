@@ -5,14 +5,15 @@ use std::sync::Arc;
 
 use egui::epaint::text::{FontTweak, VariationCoords};
 use egui::{
-    Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Shadow, Stroke, TextStyle, Theme,
-    ThemePreference, Visuals,
+    Color32, CornerRadius, FontData, FontDefinitions, FontFamily, FontId, Shadow, Stroke,
+    TextStyle, Theme, ThemePreference, Visuals,
 };
 
 const INTER: &[u8] = include_bytes!("../assets/fonts/InterVariable.ttf");
 
 const MEDIUM: &str = "inter-medium";
-const WHEEL_LINE_SPEED: f32 = 180.0;
+/// Défilement par cran de molette, en points (environ 6 lignes de la grille).
+pub const WHEEL_LINE_SPEED: f32 = 180.0;
 /// Largeur de la barre de défilement au survol.
 pub const SCROLLBAR_WIDTH: f32 = 14.0;
 /// Multiplicateur des défilements exprimés en points (molettes sous Wayland).
@@ -42,6 +43,11 @@ pub struct Palette {
     pub reconciled: Color32,
     pub stripe: Color32,
     pub violet: Color32,
+    /// Fond des menus et fenêtres flottantes : plus sombre que la fenêtre,
+    /// légèrement transparent (90 % d'opacité).
+    pub menu_bg: Color32,
+    /// Élément survolé dans un menu : encore plus sombre.
+    pub menu_hover: Color32,
 }
 
 /// Tokyo Night (« night »).
@@ -66,6 +72,8 @@ pub const NIGHT: Palette = Palette {
     reconciled: Color32::from_rgb(0x9e, 0xce, 0x6a),
     stripe: Color32::from_rgb(0x1e, 0x20, 0x30),
     violet: Color32::from_rgb(0xbb, 0x9a, 0xf7),
+    menu_bg: Color32::from_rgba_premultiplied(0x11, 0x11, 0x17, 0xe6),
+    menu_hover: Color32::from_rgb(0x0b, 0x0b, 0x10),
 };
 
 /// Tokyo Night Day.
@@ -90,17 +98,31 @@ pub const DAY: Palette = Palette {
     reconciled: Color32::from_rgb(0x38, 0x7a, 0x1f),
     stripe: Color32::from_rgb(0xd9, 0xdb, 0xe3),
     violet: Color32::from_rgb(0x98, 0x54, 0xf1),
+    menu_bg: Color32::from_rgba_premultiplied(0xbc, 0xbf, 0xcc, 0xe6),
+    menu_hover: Color32::from_rgb(0xb4, 0xb9, 0xcd),
 };
 
 pub fn install(ctx: &egui::Context) {
     ctx.set_fonts(fonts());
     ctx.all_styles_mut(|style| {
         style.text_styles = [
-            (TextStyle::Small, FontId::new(11.5, FontFamily::Proportional)),
+            (
+                TextStyle::Small,
+                FontId::new(11.5, FontFamily::Proportional),
+            ),
             (TextStyle::Body, FontId::new(14.0, FontFamily::Proportional)),
-            (TextStyle::Monospace, FontId::new(13.5, FontFamily::Monospace)),
-            (TextStyle::Button, FontId::new(14.0, FontFamily::Proportional)),
-            (TextStyle::Heading, FontId::new(20.0, FontFamily::Name(SEMIBOLD.into()))),
+            (
+                TextStyle::Monospace,
+                FontId::new(13.5, FontFamily::Monospace),
+            ),
+            (
+                TextStyle::Button,
+                FontId::new(14.0, FontFamily::Proportional),
+            ),
+            (
+                TextStyle::Heading,
+                FontId::new(20.0, FontFamily::Name(SEMIBOLD.into())),
+            ),
         ]
         .into();
         style.spacing.item_spacing = egui::vec2(8.0, 7.0);
@@ -131,9 +153,10 @@ pub fn install(ctx: &egui::Context) {
         // Les libellés ne capturent pas la souris : cliquer sur le texte d'une
         // ligne ou d'un compte sélectionne bien la ligne ou le compte.
         style.interaction.selectable_labels = false;
+        // Réactivité : survols et défilements programmés instantanés.
+        style.animation_time = 0.0;
+        style.scroll_animation = egui::style::ScrollAnimation::none();
     });
-    // Molette : environ 6 lignes de la grille par cran (egui : 40 points).
-    ctx.options_mut(|o| o.input_options.line_scroll_speed = WHEEL_LINE_SPEED);
     ctx.set_visuals_of(Theme::Dark, visuals(&NIGHT, true));
     ctx.set_visuals_of(Theme::Light, visuals(&DAY, false));
     ctx.set_theme(ThemePreference::Dark);
@@ -173,9 +196,15 @@ fn fonts() -> FontDefinitions {
         list.extend(fallbacks.iter().filter(|f| *f != "inter").cloned());
         list
     };
-    fonts.families.insert(FontFamily::Proportional, family("inter"));
-    fonts.families.insert(FontFamily::Name(MEDIUM.into()), family(MEDIUM));
-    fonts.families.insert(FontFamily::Name(SEMIBOLD.into()), family(SEMIBOLD));
+    fonts
+        .families
+        .insert(FontFamily::Proportional, family("inter"));
+    fonts
+        .families
+        .insert(FontFamily::Name(MEDIUM.into()), family(MEDIUM));
+    fonts
+        .families
+        .insert(FontFamily::Name(SEMIBOLD.into()), family(SEMIBOLD));
     fonts
 }
 
@@ -190,14 +219,28 @@ pub fn semibold() -> FontFamily {
 }
 
 fn visuals(p: &Palette, dark: bool) -> Visuals {
-    let mut v = if dark { Visuals::dark() } else { Visuals::light() };
+    let mut v = if dark {
+        Visuals::dark()
+    } else {
+        Visuals::light()
+    };
     v.override_text_color = None;
     v.panel_fill = p.bg;
-    v.window_fill = p.surface;
+    v.window_fill = p.menu_bg;
     v.window_stroke = Stroke::new(1.0, p.border);
     v.window_corner_radius = CornerRadius::same(12);
-    v.window_shadow = Shadow { offset: [0, 8], blur: 24, spread: 0, color: Color32::from_black_alpha(if dark { 110 } else { 40 }) };
-    v.popup_shadow = Shadow { offset: [0, 4], blur: 14, spread: 0, color: Color32::from_black_alpha(if dark { 90 } else { 30 }) };
+    v.window_shadow = Shadow {
+        offset: [0, 8],
+        blur: 24,
+        spread: 0,
+        color: Color32::from_black_alpha(if dark { 110 } else { 40 }),
+    };
+    v.popup_shadow = Shadow {
+        offset: [0, 4],
+        blur: 14,
+        spread: 0,
+        color: Color32::from_black_alpha(if dark { 90 } else { 30 }),
+    };
     v.menu_corner_radius = CornerRadius::same(8);
     v.extreme_bg_color = p.bg_dark;
     v.faint_bg_color = p.stripe;
@@ -232,7 +275,13 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     w.open.weak_bg_fill = p.bg_highlight;
     w.open.bg_stroke = Stroke::new(1.0, p.border);
     w.open.fg_stroke = Stroke::new(1.0, p.fg);
-    for state in [&mut w.noninteractive, &mut w.inactive, &mut w.hovered, &mut w.active, &mut w.open] {
+    for state in [
+        &mut w.noninteractive,
+        &mut w.inactive,
+        &mut w.hovered,
+        &mut w.active,
+        &mut w.open,
+    ] {
         state.corner_radius = radius;
         state.expansion = 0.0;
     }
@@ -246,16 +295,27 @@ pub fn palette(ui: &egui::Ui) -> Palette {
 
 /// Palette du thème courant, hors d'un `Ui`.
 pub fn palette_of(ctx: &egui::Context) -> Palette {
-    if ctx.theme() == Theme::Dark { NIGHT } else { DAY }
+    if ctx.theme() == Theme::Dark {
+        NIGHT
+    } else {
+        DAY
+    }
 }
 
 /// Champ de saisie d'une ligne, plus haut et plus aéré que celui d'egui.
 pub fn field(text: &mut String) -> egui::TextEdit<'_> {
-    egui::TextEdit::singleline(text).margin(egui::Margin::symmetric(10, 8)).vertical_align(egui::Align::Center)
+    egui::TextEdit::singleline(text)
+        .margin(egui::Margin::symmetric(10, 8))
+        .vertical_align(egui::Align::Center)
 }
 
 /// Bouton principal (fond couleur d'accent).
 pub fn primary_button(ui: &egui::Ui, text: impl Into<String>) -> egui::Button<'static> {
     let p = palette(ui);
-    egui::Button::new(egui::RichText::new(text.into()).family(medium()).color(p.on_accent)).fill(p.accent)
+    egui::Button::new(
+        egui::RichText::new(text.into())
+            .family(medium())
+            .color(p.on_accent),
+    )
+    .fill(p.accent)
 }

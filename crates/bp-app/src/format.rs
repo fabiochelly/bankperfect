@@ -30,8 +30,14 @@ mod tests {
 
     #[test]
     fn formats_money() {
-        assert_eq!(money(Amount::from_cents(-123_456), "€"), "-1\u{202f}234,56\u{a0}€");
+        assert_eq!(
+            money(Amount::from_cents(-123_456), "€"),
+            "-1\u{202f}234,56\u{a0}€"
+        );
         assert_eq!(money(Amount::from_cents(5), ""), "0,05");
-        assert_eq!(money(Amount::from_cents(100_000_000), ""), "1\u{202f}000\u{202f}000,00");
+        assert_eq!(
+            money(Amount::from_cents(100_000_000), ""),
+            "1\u{202f}000\u{202f}000,00"
+        );
     }
 }

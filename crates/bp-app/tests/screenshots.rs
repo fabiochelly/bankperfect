@@ -328,6 +328,40 @@ fn tool_screenshots() {
     });
 }
 
+/// Transferts et ventilation.
+#[test]
+#[ignore]
+fn transfer_screenshots() {
+    render("66-transfert", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::T,
+        );
+    });
+    render("67-ventilation", egui::Theme::Light, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press(egui::Key::F6);
+    });
+    render("68-supprimer-transfert", egui::Theme::Dark, |h| {
+        h.get_by_label("Transfert vers le compte Livret").click();
+        h.run_steps(2);
+        h.key_press(egui::Key::Delete);
+    });
+    render("69-convertir", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.key_press(egui::Key::ArrowDown);
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("convertir en transfert".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+    });
+}
+
 /// Encadrés de solde à plusieurs largeurs de fenêtre.
 #[test]
 #[ignore]

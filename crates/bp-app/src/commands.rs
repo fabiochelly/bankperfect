@@ -25,6 +25,10 @@ pub enum Command {
     Report(ReportTab),
     Charts,
     UpdateQuotes,
+    Transfer,
+    ConvertToTransfer,
+    SplitOperation,
+    GoToSister,
     Budget(BudgetTab),
     ExportQif,
     Print,
@@ -136,6 +140,10 @@ impl Command {
                 Report(ReportTab::Statement),
                 Charts,
                 UpdateQuotes,
+                Transfer,
+                ConvertToTransfer,
+                SplitOperation,
+                GoToSister,
                 Budget(BudgetTab::Monthly),
                 Budget(BudgetTab::Annual),
                 AutoFilters,
@@ -587,6 +595,65 @@ impl Command {
                 None,
                 "prévision futur échéances",
             ),
+            Transfer => {
+                let mut i = info(
+                    "Opérations",
+                    "Transfert de compte à compte…",
+                    icon::ARROWS_LEFT_RIGHT,
+                    Some("Ctrl+Maj+T"),
+                    "virement entre comptes épargne",
+                );
+                i.enabled = doc.is_some_and(|d| {
+                    d.document.accounts.iter().filter(|a| !a.disabled).count() > 1
+                });
+                i
+            }
+            ConvertToTransfer => {
+                let mut i = info(
+                    "Opérations",
+                    "Convertir en transfert…",
+                    icon::LINK,
+                    None,
+                    "lier virement autre compte",
+                );
+                i.enabled = selection == 1
+                    && doc.is_some_and(|d| {
+                        d.selection.iter().next().is_some_and(|&k| {
+                            let op = d.operation(k);
+                            bp_core::split::reciprocal_mode(&op.mode).is_some()
+                                && bp_core::split::transfer_direction(&op.payee).is_none()
+                        }) && d.document.accounts.iter().filter(|a| !a.disabled).count() > 1
+                    });
+                i
+            }
+            SplitOperation => {
+                let mut i = info(
+                    "Opérations",
+                    "Ventiler l'opération…",
+                    icon::ARROWS_SPLIT,
+                    Some("F6"),
+                    "répartir plusieurs catégories parts",
+                );
+                i.enabled = selection == 1;
+                i
+            }
+            GoToSister => {
+                let mut i = info(
+                    "Opérations",
+                    "Aller à la ligne liée",
+                    icon::ARROW_SQUARE_OUT,
+                    None,
+                    "transfert sœur autre compte",
+                );
+                i.enabled = selection == 1
+                    && doc.is_some_and(|d| {
+                        d.selection
+                            .iter()
+                            .next()
+                            .is_some_and(|&k| d.sister_of(k).is_some())
+                    });
+                i
+            }
             AddToScheduler => {
                 let mut i = info(
                     "Opérations",

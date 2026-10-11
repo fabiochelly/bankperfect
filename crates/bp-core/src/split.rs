@@ -472,6 +472,56 @@ pub fn find_sister(document: &Document, account: usize, line: usize) -> Option<L
         .map(|i| (sister_account, i))
 }
 
+/// Recopie dans la ligne sœur `sister` la date, le détail, la catégorie et
+/// le montant de la ligne `from` (« Les 2 lignes » à la modification d'un
+/// transfert) : la sœur garde son signe, positif si elle valait zéro.
+pub fn copy_to_sister(document: &mut Document, from: LinePosition, sister: LinePosition) -> bool {
+    let Some(source) = document
+        .accounts
+        .get(from.0)
+        .and_then(|a| a.operations.get(from.1))
+        .cloned()
+    else {
+        return false;
+    };
+    let Some(target) = document
+        .accounts
+        .get_mut(sister.0)
+        .and_then(|a| a.operations.get_mut(sister.1))
+    else {
+        return false;
+    };
+    target.date = source.date;
+    target.details = source.details;
+    target.category = source.category;
+    let magnitude = source.amount.0.abs();
+    target.amount = Amount(if target.amount.0 < 0 {
+        -magnitude
+    } else {
+        magnitude
+    });
+    true
+}
+
+/// Délie une ligne de transfert dont la sœur est supprimée seule :
+/// « Transfert » devient « Virement » dans le tiers (toutes les occurrences,
+/// casse ignorée), comme dans l'original, et les liens sont retirés.
+pub fn unlink_transfer(op: &mut Operation) {
+    const WORD: &str = "transfert";
+    let lower = op.payee.to_ascii_lowercase();
+    let mut payee = String::with_capacity(op.payee.len());
+    let mut rest = 0;
+    for (start, _) in lower.match_indices(WORD) {
+        payee.push_str(&op.payee[rest..start]);
+        payee.push_str("Virement");
+        rest = start + WORD.len();
+    }
+    payee.push_str(&op.payee[rest..]);
+    op.payee = payee;
+    set_extra(op, SISTER_ACCOUNT_KEY, "");
+    set_extra(op, SISTER_LINE_KEY, "");
+}
+
 /// Le montant d'une ligne respecte-t-il le sens de son mode ? (utile pour
 /// vérifier une conversion : un prélèvement positif est un remboursement).
 pub fn amount_matches_mode(document: &Document, op: &Operation) -> bool {
@@ -542,6 +592,48 @@ mod tests {
         )
         .unwrap();
         assert_eq!(doc.accounts[0].operations[1].payee, "[1/2] Fnac");
+    }
+
+    #[test]
+    fn linked_lines_follow_or_unlink() {
+        let mut doc = sample();
+        let request = TransferRequest {
+            date: Date(45010),
+            kind: TransferKind::Transfer,
+            details: "Épargne".into(),
+            category: None,
+            amount: Amount::from_cents(10_000),
+            from: 0,
+            to: 1,
+        };
+        let lines = create_transfer(&mut doc, &request).unwrap();
+        // Modification de la ligne débitée, recopiée dans la sœur.
+        {
+            let op = &mut doc.accounts[lines.first.0].operations[lines.first.1];
+            op.amount = Amount::from_cents(-25_000);
+            op.details = "Livret".into();
+            op.date = Date(45020);
+        }
+        assert!(copy_to_sister(&mut doc, lines.first, lines.second));
+        let sister = &doc.accounts[lines.second.0].operations[lines.second.1];
+        assert_eq!(
+            sister.amount,
+            Amount::from_cents(25_000),
+            "signe de la sœur conservé"
+        );
+        assert_eq!(
+            (sister.details.as_str(), sister.date),
+            ("Livret", Date(45020))
+        );
+        // Suppression d'une seule ligne : l'autre est déliée.
+        let mut op = doc.accounts[lines.second.0].operations[lines.second.1].clone();
+        unlink_transfer(&mut op);
+        assert!(op.payee.starts_with("Virement depuis le compte "));
+        assert_eq!(op.extra(SISTER_LINE_KEY), None);
+        let mut odd = op.clone();
+        odd.payee = "TRANSFERT Été transfert".into();
+        unlink_transfer(&mut odd);
+        assert_eq!(odd.payee, "Virement Été Virement");
     }
 
     #[test]

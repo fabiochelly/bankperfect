@@ -194,6 +194,7 @@ pub fn recovery_key(ctx: &egui::Context, phrase: &str) -> bool {
     close
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Choice {
     Pending,
     Yes,

@@ -45,6 +45,9 @@ const SHORTCUT_CHARTS: KeyboardShortcut =
 const SHORTCUT_BUDGET: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
 const SHORTCUT_CURRENCIES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::D);
 const SHORTCUT_LOAN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::L);
+const SHORTCUT_TRANSFER: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::T);
+const SHORTCUT_SPLIT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F6);
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
@@ -80,6 +83,8 @@ pub struct BankPerfectApp {
     show_warnings: bool,
     pending: Option<Pending>,
     confirm_delete: bool,
+    /// Modification d'une ligne de transfert en attente : quelles lignes ?
+    confirm_linked_edit: Option<(usize, bp_core::model::Operation)>,
     /// Fichier de comptes à mettre à la corbeille (confirmation).
     confirm_trash: Option<PathBuf>,
     /// Presse-papiers interne des lignes (survit au changement de compte et
@@ -142,6 +147,7 @@ impl BankPerfectApp {
             show_warnings: false,
             pending: None,
             confirm_delete: false,
+            confirm_linked_edit: None,
             confirm_trash: None,
             clipboard: Vec::new(),
             confirm_payee: None,
@@ -391,6 +397,12 @@ impl BankPerfectApp {
             self.tool = Some(crate::tools::Tool::Manage(
                 crate::manage_ui::ManageForm::new(doc, crate::manage_ui::Tab::Payees),
             ));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_TRANSFER)) {
+            return self.execute(ctx, Command::Transfer);
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SPLIT)) {
+            return self.execute(ctx, Command::SplitOperation);
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_EXTRA))
             && let Some(&index) = doc.selection.iter().next()
@@ -810,6 +822,34 @@ impl BankPerfectApp {
             Command::ReconcileAll => doc.reconcile_all_pointed(),
             Command::ModifyGroup => {
                 self.tool = Some(Tool::ModifyGroup(crate::tools::GroupForm::new()))
+            }
+            Command::Transfer => {
+                self.tool = Some(Tool::Transfer(Box::new(
+                    crate::transfer_ui::TransferForm::new(doc),
+                )))
+            }
+            Command::ConvertToTransfer => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    self.tool = Some(Tool::Convert(crate::transfer_ui::ConvertForm::new(
+                        doc, index,
+                    )));
+                }
+            }
+            Command::SplitOperation => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    if doc.locked && doc.operation(index).tack == Tack::Reconciled {
+                        self.toast = Some((LOCKED_MESSAGE.into(), ctx.input(|i| i.time) + 4.0));
+                    } else {
+                        self.tool = Some(Tool::Split(Box::new(
+                            crate::transfer_ui::SplitForm::new(doc, index),
+                        )));
+                    }
+                }
+            }
+            Command::GoToSister => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    doc.go_to_sister(index);
+                }
             }
             Command::ExtraFields => {
                 if let Some(&index) = doc.selection.iter().next() {
@@ -1238,6 +1278,12 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, ModifyGroup);
                 self.menu_command(ui, ExtraFields);
+                self.menu_command(ui, SplitOperation);
+                menu::separator(ui);
+                self.menu_command(ui, Transfer);
+                self.menu_command(ui, ConvertToTransfer);
+                self.menu_command(ui, GoToSister);
+                menu::separator(ui);
                 self.menu_command(ui, Rules);
                 self.menu_command(ui, AddToPayees);
                 self.menu_command(ui, AddToScheduler);
@@ -1524,6 +1570,8 @@ impl BankPerfectApp {
                     doc.locked && target.is_some_and(|i| doc.operation(i).tack == Tack::Reconciled);
                 if locked {
                     self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                } else if let Some(index) = target.filter(|&i| doc.sister_of(i).is_some()) {
+                    self.confirm_linked_edit = Some((index, op));
                 } else {
                     let date = op.date.to_string();
                     doc.upsert_operation(target, op);
@@ -1741,7 +1789,68 @@ impl BankPerfectApp {
         {
             self.show_warnings = false;
         }
+        if let Some((index, _)) = &self.confirm_linked_edit
+            && let Some(doc) = &mut self.doc
+        {
+            let index = *index;
+            match dialogs::confirm(
+                ctx,
+                "linked_edit",
+                icon::ARROWS_LEFT_RIGHT,
+                "Ligne liée",
+                "La ligne modifiée est un transfert lié à une ligne d'un autre compte. Quelles lignes faut-il modifier ? La date, le détail, la catégorie et le montant seront recopiés dans l'autre ligne.",
+                "Les 2 lignes",
+                Some("Uniquement cette ligne"),
+                false,
+            ) {
+                Choice::Pending => {}
+                choice @ (Choice::Yes | Choice::No) => {
+                    if let Some((_, op)) = self.confirm_linked_edit.take() {
+                        doc.update_linked(index, op, choice == Choice::Yes);
+                    }
+                    self.editor = None;
+                }
+                Choice::Cancel => self.confirm_linked_edit = None,
+            }
+        }
+        let linked_delete = self.confirm_delete
+            && self.doc.as_ref().is_some_and(|d| {
+                d.selection.len() == 1
+                    && d.selection
+                        .iter()
+                        .next()
+                        .is_some_and(|&i| d.sister_of(i).is_some())
+            });
+        if linked_delete
+            && let Some(doc) = &mut self.doc
+            && let Some(&index) = doc.selection.iter().next()
+        {
+            match dialogs::confirm(
+                ctx,
+                "delete_linked",
+                icon::TRASH,
+                "Supprimer",
+                "La ligne sélectionnée est un transfert lié à une ligne d'un autre compte. Faut-il supprimer les 2 lignes ? Sinon, l'autre ligne devient un simple virement.",
+                "Les 2 lignes",
+                Some("Uniquement celle-ci"),
+                true,
+            ) {
+                Choice::Pending => {}
+                Choice::Yes => {
+                    doc.delete_linked(index, true);
+                    self.editor = None;
+                    self.confirm_delete = false;
+                }
+                Choice::No => {
+                    doc.delete_linked(index, false);
+                    self.editor = None;
+                    self.confirm_delete = false;
+                }
+                Choice::Cancel => self.confirm_delete = false,
+            }
+        }
         if self.confirm_delete
+            && !linked_delete
             && let Some(doc) = &mut self.doc
         {
             let n = doc.selection.len();

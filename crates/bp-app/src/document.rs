@@ -88,7 +88,6 @@ struct View {
     series_key: Option<(usize, u64)>,
 }
 
-/// Nombre d'actions annulables conservées (`MaxUndo` de l'ancienne version).
 
 /// État d'un compte avant une action, pour Annuler/Refaire.
 struct UndoEntry {

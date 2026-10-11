@@ -11,7 +11,13 @@ use crate::manage_ui::Tab;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Command {
     Open,
+    OpenRecent(usize),
+    NewFile,
+    CloseFile,
     Save,
+    SaveAs,
+    SaveCopy,
+    DeleteFile,
     ExportCsv,
     ExportQif,
     Protection,
@@ -53,10 +59,14 @@ impl Command {
     /// Commandes proposées, dans l'ordre des menus.
     pub fn all(doc: Option<&OpenDoc>) -> Vec<Command> {
         use Command::*;
-        let mut list = vec![Open];
+        let mut list = vec![NewFile, Open];
+        list.extend((0..recent_count()).map(OpenRecent));
         if let Some(doc) = doc {
             list.extend([
                 Save,
+                SaveAs,
+                SaveCopy,
+                CloseFile,
                 ExportCsv,
                 ExportQif,
                 Protection,
@@ -90,6 +100,7 @@ impl Command {
             ]);
         }
         list.extend([
+            DeleteFile,
             Notes,
             Calculator,
             Theme(ThemePreference::Dark),
@@ -114,6 +125,51 @@ impl Command {
             enabled: true,
         };
         let mut result = match self {
+            OpenRecent(i) => {
+                let name = recent_name(i);
+                info(
+                    "Fichier",
+                    &format!("Rouvrir {name}"),
+                    icon::CLOCK,
+                    None,
+                    "récent dernier",
+                )
+            }
+            NewFile => info(
+                "Fichier",
+                "Nouveau fichier de comptes…",
+                icon::FILE_PLUS,
+                Some("Ctrl+N"),
+                "créer groupe",
+            ),
+            CloseFile => info(
+                "Fichier",
+                "Fermer le fichier",
+                icon::X_SQUARE,
+                Some("Ctrl+W"),
+                "",
+            ),
+            SaveAs => info(
+                "Fichier",
+                "Enregistrer sous…",
+                icon::FLOPPY_DISK_BACK,
+                Some("F12"),
+                "copie renommer",
+            ),
+            SaveCopy => info(
+                "Fichier",
+                "Enregistrer une copie…",
+                icon::USB,
+                None,
+                "disque externe clé usb sauvegarde",
+            ),
+            DeleteFile => info(
+                "Fichier",
+                "Supprimer un fichier de comptes…",
+                icon::TRASH_SIMPLE,
+                None,
+                "corbeille effacer",
+            ),
             Open => info(
                 "Fichier",
                 "Ouvrir un fichier…",
@@ -397,4 +453,31 @@ impl Command {
         }
         result
     }
+}
+
+/// Fichiers récents (copie des réglages, tenue à jour par l'application).
+static RECENT: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
+
+pub fn set_recent(files: &[std::path::PathBuf]) {
+    if let Ok(mut recent) = RECENT.lock()
+        && recent.as_slice() != files
+    {
+        *recent = files.to_vec();
+    }
+}
+
+fn recent_count() -> usize {
+    RECENT.lock().map_or(0, |r| r.len().min(5))
+}
+
+fn recent_name(index: usize) -> String {
+    RECENT
+        .lock()
+        .ok()
+        .and_then(|r| {
+            r.get(index)
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+        })
+        .unwrap_or_default()
 }

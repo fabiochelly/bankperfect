@@ -35,6 +35,9 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
+const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F12);
+const SHORTCUT_CLOSE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 const SHORTCUT_PALETTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
 const SHORTCUT_PALETTE_ALT: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::P);
@@ -44,6 +47,8 @@ const SHORTCUT_CALC: KeyboardShortcut =
 /// Action différée en attendant la réponse à « Enregistrer les modifications ? ».
 enum Pending {
     Open(Option<PathBuf>),
+    NewFile,
+    Close,
     Quit,
 }
 
@@ -55,11 +60,15 @@ pub struct BankPerfectApp {
     show_warnings: bool,
     pending: Option<Pending>,
     confirm_delete: bool,
+    /// Fichier de comptes à mettre à la corbeille (confirmation).
+    confirm_trash: Option<PathBuf>,
     tool: Option<crate::tools::Tool>,
     command_palette: Option<crate::command_palette::CommandPalette>,
     /// Commandes lancées récemment, la plus récente en premier.
     recent_commands: Vec<Command>,
     error: Option<String>,
+    /// Fichier illisible (corrompu) : proposer ses sauvegardes.
+    unreadable: Option<(PathBuf, String)>,
     toast: Option<(String, f64)>,
     allow_close: bool,
     title: String,
@@ -102,10 +111,12 @@ impl BankPerfectApp {
             show_warnings: false,
             pending: None,
             confirm_delete: false,
+            confirm_trash: None,
             tool: None,
             command_palette: None,
             recent_commands: Vec::new(),
             error: None,
+            unreadable: None,
             toast: None,
             allow_close: false,
             title: String::new(),
@@ -143,6 +154,14 @@ impl BankPerfectApp {
                     self.open_path(path);
                 }
             }
+            Pending::NewFile => {
+                self.tool = Some(crate::tools::Tool::NewFile(Default::default()));
+            }
+            Pending::Close => {
+                self.doc = None;
+                self.editor = None;
+                self.tool = None;
+            }
             Pending::Quit => self.allow_close = true,
         }
     }
@@ -165,7 +184,7 @@ impl BankPerfectApp {
                 })
             }
             Ok(false) => self.finish_open(path, &data, Unlock::None),
-            Err(e) => self.error = Some(format!("{} : {e}", path.display())),
+            Err(e) => self.unreadable = Some((path, e.to_string())),
         }
     }
 
@@ -192,7 +211,7 @@ impl BankPerfectApp {
             }
             Err(e) => {
                 self.prompt = None;
-                self.error = Some(format!("{} : {e}", path.display()));
+                self.unreadable = Some((path, e.to_string()));
             }
         }
     }
@@ -230,6 +249,15 @@ impl BankPerfectApp {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPEN)) {
             self.request(Pending::Open(None));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_NEW)) {
+            return self.execute(ctx, Command::NewFile);
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SAVE_AS)) {
+            return self.execute(ctx, Command::SaveAs);
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CLOSE)) {
+            return self.execute(ctx, Command::CloseFile);
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_NOTES)) {
             self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
@@ -346,6 +374,14 @@ impl BankPerfectApp {
         }
         match command {
             Command::Open => return self.request(Pending::Open(None)),
+            Command::OpenRecent(i) => {
+                if let Some(path) = self.settings.recent_files.get(i).cloned() {
+                    self.request(Pending::Open(Some(path)));
+                }
+                return;
+            }
+            Command::NewFile => return self.request(Pending::NewFile),
+            Command::DeleteFile => return self.delete_file(),
             Command::Quit => return ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             Command::Notes => return self.tool = Some(Tool::Notes(crate::tools::NotesForm::new())),
             Command::Calculator => {
@@ -373,6 +409,9 @@ impl BankPerfectApp {
                 return;
             }
             Command::Save => return self.save(now),
+            Command::SaveAs => return self.save_as(now),
+            Command::SaveCopy => return self.save_copy(now),
+            Command::CloseFile => return self.request(Pending::Close),
             _ => {}
         }
         let Some(doc) = &mut self.doc else { return };
@@ -386,6 +425,7 @@ impl BankPerfectApp {
             Command::Protection => self.tool = Some(Tool::Protection(Default::default())),
             Command::Backups => {
                 self.tool = Some(Tool::Backups(crate::tools::BackupsForm::new(
+                    doc.path.clone(),
                     self.settings.backup_dir(),
                     self.settings.backup_keep,
                 )));
@@ -437,6 +477,12 @@ impl BankPerfectApp {
             | Command::Palette
             | Command::Theme(_)
             | Command::ToggleTranslucent
+            | Command::OpenRecent(_)
+            | Command::NewFile
+            | Command::DeleteFile
+            | Command::SaveAs
+            | Command::SaveCopy
+            | Command::CloseFile
             | Command::Save => {}
         }
     }
@@ -456,6 +502,96 @@ impl BankPerfectApp {
             let ctx = ui.ctx().clone();
             self.execute(&ctx, command);
         }
+    }
+
+    /// Enregistrer sous (F12) : le fichier enregistré devient le fichier courant.
+    fn save_as(&mut self, now: f64) {
+        let Some(doc) = &mut self.doc else { return };
+        let Some(mut path) = rfd::FileDialog::new()
+            .set_title("Enregistrer le fichier de comptes sous…")
+            .set_directory(doc.path.parent().unwrap_or(Path::new(".")))
+            .set_file_name(doc.file_name())
+            .add_filter("Comptes BankPerfect", &["bp"])
+            .save_file()
+        else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("bp");
+        }
+        // L'original v5 est gardé à côté de l'ancien emplacement.
+        if doc.format == FileFormat::V5
+            && let Err(e) = backup_v5_original(&doc.path)
+        {
+            self.error = Some(format!("Copie de l'original impossible : {e}"));
+            return;
+        }
+        doc.format = FileFormat::V6;
+        doc.path = path.clone();
+        self.save(now);
+        self.settings.remember(&path);
+    }
+
+    /// Enregistre une copie (clé USB, disque externe…) sans changer de
+    /// fichier courant : `<nom>_AAAAMMJJ.bp` dans le dossier choisi.
+    fn save_copy(&mut self, now: f64) {
+        let Some(doc) = &mut self.doc else { return };
+        let Some(folder) = rfd::FileDialog::new()
+            .set_title("Dossier où enregistrer une copie")
+            .pick_folder()
+        else {
+            return;
+        };
+        let stem = doc
+            .path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let target = folder.join(format!(
+            "{stem}_{}.bp",
+            chrono::Local::now().format("%Y%m%d")
+        ));
+        let result = ensure_protection(doc).and_then(|recovery| {
+            let bytes =
+                file::to_bytes(&doc.document, doc.protection.as_ref().expect("protection"))?;
+            bp_core::format_v6::write_atomic(&target, &bytes)?;
+            Ok(recovery)
+        });
+        match result {
+            Ok(recovery) => {
+                if recovery.is_some() {
+                    self.recovery_phrase = recovery;
+                }
+                self.toast = Some((
+                    format!("Copie enregistrée : {}", target.display()),
+                    now + 5.0,
+                ));
+            }
+            Err(e) => self.error = Some(format!("Copie impossible : {e}")),
+        }
+    }
+
+    /// Supprimer un fichier de comptes : il part à la corbeille du système.
+    fn delete_file(&mut self) {
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("Fichier de comptes à mettre à la corbeille")
+            .add_filter("Comptes BankPerfect", &["bp"]);
+        if let Some(dir) = self
+            .doc
+            .as_ref()
+            .and_then(|d| d.path.parent().map(Path::to_path_buf))
+        {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(path) = dialog.pick_file() else {
+            return;
+        };
+        let same = |a: &Path, b: &Path| a.canonicalize().ok() == b.canonicalize().ok();
+        if self.doc.as_ref().is_some_and(|d| same(&d.path, &path)) {
+            self.error = Some("Ce fichier est actuellement ouvert : fermez-le d'abord.".into());
+            return;
+        }
+        self.confirm_trash = Some(path);
     }
 
     fn update_title(&mut self, ctx: &egui::Context) {
@@ -520,16 +656,44 @@ impl BankPerfectApp {
         let tools_index = if has_doc { 5 } else { 1 };
         if index == 0 {
             menu::begin(ui);
+            self.menu_command(ui, NewFile);
             self.menu_command(ui, Open);
+            let recent: Vec<String> = self
+                .settings
+                .recent_files
+                .iter()
+                .take(5)
+                .map(|p| {
+                    p.file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                })
+                .collect();
+            if !recent.is_empty() {
+                menu::separator(ui);
+                menu::heading(ui, "Fichiers récents");
+                for (i, name) in recent.iter().enumerate() {
+                    if menu::item(ui, Some(icon::CLOCK), name, None).clicked() {
+                        let ctx = ui.ctx().clone();
+                        self.execute(&ctx, OpenRecent(i));
+                    }
+                }
+            }
+            menu::separator(ui);
             self.menu_command(ui, Save);
             if has_doc {
+                self.menu_command(ui, SaveAs);
+                self.menu_command(ui, SaveCopy);
                 menu::separator(ui);
                 self.menu_command(ui, ExportCsv);
                 self.menu_command(ui, ExportQif);
                 menu::separator(ui);
                 self.menu_command(ui, Protection);
                 self.menu_command(ui, Backups);
+                menu::separator(ui);
+                self.menu_command(ui, CloseFile);
             }
+            self.menu_command(ui, DeleteFile);
             menu::separator(ui);
             self.menu_command(ui, Quit);
             return;
@@ -876,6 +1040,16 @@ impl BankPerfectApp {
             let result = match (&mut self.doc, tool) {
                 (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),
                 (_, crate::tools::Tool::Calculator(form)) => Some(form.show_standalone(ctx)),
+                (doc, crate::tools::Tool::NewFile(form)) => Some(
+                    form.show_standalone(
+                        ctx,
+                        doc.as_ref()
+                            .and_then(|d| d.path.parent().map(Path::to_path_buf)),
+                    ),
+                ),
+                (doc, crate::tools::Tool::Backups(form)) => {
+                    Some(form.show_standalone(ctx, doc.as_ref().is_some_and(|d| d.dirty)))
+                }
                 (Some(doc), tool) => Some(tool.show(ctx, doc)),
                 (None, _) => None,
             };
@@ -967,6 +1141,84 @@ impl BankPerfectApp {
                     self.confirm_delete = false;
                 }
                 Choice::No | Choice::Cancel => self.confirm_delete = false,
+            }
+        }
+        if let Some(path) = self.confirm_trash.clone() {
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let message = format!(
+                "Mettre « {name} » à la corbeille ? Vous pourrez le récupérer depuis la corbeille du système."
+            );
+            match dialogs::confirm(
+                ctx,
+                "trash",
+                icon::TRASH,
+                "Supprimer un fichier de comptes",
+                &message,
+                "Mettre à la corbeille",
+                None,
+                true,
+            ) {
+                Choice::Pending => {}
+                Choice::Yes => {
+                    self.confirm_trash = None;
+                    match trash::delete(&path) {
+                        Ok(()) => {
+                            self.settings.recent_files.retain(|f| f != &path);
+                            self.settings.save();
+                            self.toast = Some((format!("{name} mis à la corbeille"), now + 4.0));
+                        }
+                        Err(e) => self.error = Some(format!("Suppression impossible : {e}")),
+                    }
+                }
+                Choice::No | Choice::Cancel => self.confirm_trash = None,
+            }
+        }
+        if let Some((path, reason)) = self.unreadable.clone() {
+            let backups = bp_core::backup::list(&path, &self.settings.backup_dir());
+            let name = path
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let mut close = false;
+            dialogs::modal(ctx, "unreadable").show(ctx, |ui| {
+                ui.set_width(520.0);
+                let pal = palette(ui);
+                dialogs::header(ui, icon::WARNING, pal.negative, "Fichier illisible");
+                ui.label(
+                    RichText::new(format!("« {name} » ne peut pas être ouvert : il semble endommagé."))
+                        .color(pal.fg_dark),
+                );
+                ui.label(RichText::new(reason).small().color(pal.muted));
+                if !backups.is_empty() {
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(format!(
+                            "{} sauvegarde(s) de ce fichier sont disponibles ; la plus récente date du {}.",
+                            backups.len(),
+                            chrono::DateTime::<chrono::Local>::from(backups[0].modified).format("%d/%m/%Y à %H:%M")
+                        ))
+                        .color(pal.fg_dark),
+                    );
+                }
+                dialogs::footer(ui, |ui| {
+                    if !backups.is_empty() && dialogs::primary(ui, "Voir les sauvegardes", true).clicked() {
+                        self.tool = Some(crate::tools::Tool::Backups(crate::tools::BackupsForm::new(
+                            path.clone(),
+                            self.settings.backup_dir(),
+                            self.settings.backup_keep,
+                        )));
+                        close = true;
+                    }
+                    if dialogs::button(ui, "Fermer").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                        close = true;
+                    }
+                });
+            });
+            if close {
+                self.unreadable = None;
             }
         }
         if self.pending.is_some() {
@@ -1102,6 +1354,7 @@ impl BankPerfectApp {
         if !modal_open {
             self.handle_shortcuts(&ctx);
         }
+        crate::commands::set_recent(&self.settings.recent_files);
         let now = ctx.input(|i| i.time);
         if self.toast.as_ref().is_some_and(|(_, until)| now > *until) {
             self.toast = None;
@@ -1402,6 +1655,23 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
 /// l'original est conservé à côté (`<nom>_v5.bp0`) et, s'il avait un mot de
 /// passe, le fichier est chiffré avec : la clé de secours est renvoyée.
 fn save_document(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
+    let recovery = ensure_protection(doc)?;
+    if doc.format == FileFormat::V5 {
+        backup_v5_original(&doc.path)?;
+    }
+    file::save(
+        &doc.path,
+        &doc.document,
+        doc.protection.as_ref().expect("protection choisie"),
+    )?;
+    doc.format = FileFormat::V6;
+    doc.dirty = false;
+    Ok(recovery)
+}
+
+/// Choisit la protection v6 au premier enregistrement : chiffrée avec le mot
+/// de passe du fichier v5 s'il en avait un (la clé de secours est renvoyée).
+fn ensure_protection(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
     let mut recovery = None;
     if doc.protection.is_none() {
         let protection = match &doc.legacy_password {
@@ -1414,16 +1684,6 @@ fn save_document(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
         };
         doc.protection = Some(protection);
     }
-    if doc.format == FileFormat::V5 {
-        backup_v5_original(&doc.path)?;
-    }
-    file::save(
-        &doc.path,
-        &doc.document,
-        doc.protection.as_ref().expect("protection choisie"),
-    )?;
-    doc.format = FileFormat::V6;
-    doc.dirty = false;
     Ok(recovery)
 }
 

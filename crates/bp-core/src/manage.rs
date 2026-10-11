@@ -430,6 +430,40 @@ pub fn delete_mode(document: &mut Document, index: usize, replacement: Mode) -> 
     changed
 }
 
+/// Catégories d'un nouveau fichier (celles de l'ancienne version) ; un
+/// retrait de cinq espaces marque une sous-catégorie.
+const DEFAULT_CATEGORIES: &str = "Alimentation;     Epicerie;     Restaurant;Loisirs;     Sorties Spectacles;     Sports;     Hifi Vidéo;     Téléphonie;Habillement;Habitation;     EDF;     Téléphone;     Loyer;     Equipement;     Rangement/Déco;     Abonnements;     Assurance;Santé;     Médecine;     Pharmacie;Transport;     Essence;     Assurance;     Equipement/Réparations;     Public;     Parking;     Péage;Remboursements;     Rbt santé;     Autres;Salaire;     Paye;     Revenus annexes";
+
+/// Nouveau fichier de comptes : un compte « Courant » avec son solde
+/// initial et les catégories par défaut.
+pub fn new_document(name: &str, initial: Amount) -> Document {
+    let categories = DEFAULT_CATEGORIES
+        .split(';')
+        .filter(|c| !c.trim().is_empty())
+        .enumerate()
+        .map(|(id, c)| Category {
+            id: id as u32,
+            name: c.trim().to_string(),
+            is_child: c.starts_with(' '),
+        })
+        .collect();
+    let mut document = Document {
+        group_name: clean(name),
+        guid: crate::v5_text::new_file_guid(),
+        user_name: String::new(),
+        custom_modes: Vec::new(),
+        accounts: Vec::new(),
+        account_order: Vec::new(),
+        default_account: 0,
+        categories,
+        payees: Vec::new(),
+        feature_data: Vec::new(),
+        unknown_header: Vec::new(),
+    };
+    add_account(&mut document, "Courant", initial);
+    document
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -603,6 +637,22 @@ mod tests {
         assert_eq!(
             doc.accounts[0].operations[1].mode,
             Mode::Standard(StandardMode::Carte)
+        );
+    }
+
+    #[test]
+    fn new_document_has_default_categories_and_account() {
+        let doc = new_document("Famille", Amount::parse("150").unwrap());
+        assert_eq!(doc.group_name, "Famille");
+        assert_eq!(doc.accounts.len(), 1);
+        assert_eq!(doc.accounts[0].name, "Courant");
+        assert_eq!(doc.accounts[0].balance(), Amount::parse("150").unwrap());
+        assert_eq!(doc.account_order, vec![0]);
+        assert_eq!(doc.categories.len(), 33);
+        assert!(!doc.categories[0].is_child && doc.categories[1].is_child);
+        assert_eq!(
+            doc.category_label(1).as_deref(),
+            Some("Alimentation > Epicerie")
         );
     }
 }

@@ -35,6 +35,7 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
 const SHORTCUT_PRINT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::P);
 const SHORTCUT_OPTIONS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
 const SHORTCUT_NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
@@ -347,6 +348,9 @@ impl BankPerfectApp {
             ));
         }
 
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_IMPORT)) {
+            return self.execute(ctx, Command::Import);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_PRINT)) {
             return self.execute(ctx, Command::Print);
         }
@@ -507,6 +511,27 @@ impl BankPerfectApp {
         match command {
             Command::ExportCsv => self.tool = Some(Tool::ExportCsv(crate::tools::CsvForm::new())),
             Command::Print => self.tool = Some(Tool::Print(Default::default())),
+            Command::Import => {
+                let mut dialog = rfd::FileDialog::new()
+                    .set_title("Fichier d'opérations à importer")
+                    .add_filter(
+                        "Relevés bancaires",
+                        &["ofx", "qfx", "qif", "csv", "tsv", "txt"],
+                    );
+                if let Some(dir) = &self.settings.export_dir {
+                    dialog = dialog.set_directory(dir);
+                }
+                // BP_IMPORT_FILE : fichier imposé (captures d'écran automatiques).
+                let path = std::env::var_os("BP_IMPORT_FILE")
+                    .map(PathBuf::from)
+                    .or_else(|| dialog.pick_file());
+                if let Some(path) = path {
+                    match crate::import_ui::ImportForm::new(path) {
+                        Ok(form) => self.tool = Some(Tool::Import(Box::new(form))),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+            }
             Command::ExportQif => {
                 if let Some(message) = crate::tools::export_qif(doc) {
                     self.toast = Some((message, now + 4.0));
@@ -876,6 +901,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, SaveAs);
                 self.menu_command(ui, SaveCopy);
                 menu::separator(ui);
+                self.menu_command(ui, Import);
                 self.menu_command(ui, Print);
                 self.menu_command(ui, ExportCsv);
                 self.menu_command(ui, ExportQif);

@@ -13,6 +13,7 @@ use crate::ui_kit;
 
 pub enum Tool {
     NewFile(crate::files_ui::NewFileForm),
+    Import(Box<crate::import_ui::ImportForm>),
     Print(PrintForm),
     MarkDate(MarkDateForm),
     Manage(crate::manage_ui::ManageForm),
@@ -45,6 +46,7 @@ impl Tool {
                 form.show_standalone(ctx, doc.path.parent().map(std::path::Path::to_path_buf))
             }
             Tool::Manage(form) => form.show(ctx, doc),
+            Tool::Import(form) => form.show(ctx, doc),
             Tool::Print(form) => form.show(ctx, doc),
             Tool::MarkDate(form) => form.show(ctx, doc),
             Tool::Protection(form) => form.show(ctx, doc),

@@ -627,6 +627,42 @@ impl OpenDoc {
         self.touch();
     }
 
+    /// Ajoute des opérations importées à un compte (annulable) ; les lignes
+    /// importées du compte courant sont sélectionnées.
+    pub fn import_into(&mut self, account: usize, operations: Vec<Operation>) -> usize {
+        if operations.is_empty() {
+            return 0;
+        }
+        self.undo.push(UndoEntry {
+            label: "import".into(),
+            account,
+            operations: self.document.accounts[account].operations.clone(),
+        });
+        while self.undo.len() > self.max_undo.max(1) {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+        let first = self.document.next_operation_uid();
+        let target = &mut self.document.accounts[account].operations;
+        let start = target.len();
+        for (uid, mut op) in (first..).zip(operations) {
+            op.uid = uid;
+            target.push(op);
+        }
+        let added: Vec<usize> = (start..target.len()).collect();
+        let n = added.len();
+        self.view.indexed_account = None;
+        self.view.series_key = None;
+        self.touch();
+        if account == self.account {
+            self.refresh();
+            self.selection = added.iter().copied().collect();
+            self.anchor = added.first().copied();
+            self.scroll_to = added.first().copied();
+        }
+        n
+    }
+
     /// Copie des opérations sélectionnées (presse-papiers interne).
     pub fn copy_selection(&self) -> Vec<Operation> {
         let ops = &self.current_account().operations;

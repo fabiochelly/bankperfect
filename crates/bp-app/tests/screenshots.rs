@@ -237,6 +237,20 @@ fn screenshots() {
         h.run_steps(3);
         h.get_by_label("À propos de BankPerfect").click();
     });
+    let samples = std::env::var("BP_IMPORT_SAMPLES").ok();
+    if let Some(dir) = samples {
+        for (name, file, theme) in [
+            ("35-import-csv", "releve.csv", egui::Theme::Dark),
+            ("36-import-ofx", "releve.ofx", egui::Theme::Dark),
+            ("37-import-qif", "releve.qif", egui::Theme::Light),
+        ] {
+            unsafe { std::env::set_var("BP_IMPORT_FILE", format!("{dir}/{file}")) };
+            render(name, theme, |h| {
+                h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::I);
+            });
+        }
+        unsafe { std::env::remove_var("BP_IMPORT_FILE") };
+    }
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

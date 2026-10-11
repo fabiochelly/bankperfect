@@ -13,6 +13,7 @@ mod editor;
 mod files_ui;
 mod format;
 mod grid;
+mod import_ui;
 pub mod logo;
 mod manage_ui;
 mod menu;

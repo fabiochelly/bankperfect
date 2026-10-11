@@ -1,0 +1,9 @@
+[workspace]
+resolver = "3"
+members = ["crates/bp-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "Proprietary"
+authors = ["Fabio Chelly <fabio@chelly.net>"]

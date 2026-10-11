@@ -9,6 +9,6 @@ NestedInstallerFiles:
 Installers:
   - Architecture: x64
     InstallerUrl: https://github.com/fabiochelly/bankperfect/releases/download/v9.0.0/bankperfect-9.0.0-windows-x86_64.zip
-    InstallerSha256: '@SHA256_WINDOWS@'
+    InstallerSha256: '6d1eb0c467f5795d6270d3225284e881e90b4dcb837de306bc1a1819c4ccb85e'
 ManifestType: installer
 ManifestVersion: 1.6.0

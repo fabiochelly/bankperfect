@@ -500,8 +500,8 @@ impl BankPerfectApp {
                             .color(pal.fg_dark),
                     );
                     let (rect, _) =
-                        ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
-                    crate::logo::paint(ui.painter(), rect);
+                        ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
+                    crate::logo::paint_symbol(ui.painter(), rect, pal.accent, pal.violet);
                 });
                 opened
             })

@@ -12,7 +12,7 @@ fn main() -> eframe::Result {
             .with_min_inner_size([800.0, 500.0]),
         // Une seule image en attente de présentation : latence minimale.
         wgpu_options: eframe::WgpuConfiguration {
-            surface: eframe::SurfaceConfig::LOW_LATENCY,
+            surface: eframe::SurfaceConfig { present_mode: present_mode(), ..eframe::SurfaceConfig::LOW_LATENCY },
             ..Default::default()
         },
         ..Default::default()
@@ -25,4 +25,18 @@ fn main() -> eframe::Result {
             Ok(Box::new(bankperfect::BankPerfectApp::new(initial_file)))
         }),
     )
+}
+
+/// Mode de présentation, réglable par `BP_PRESENT` (fifo, mailbox,
+/// immediate, auto) pour comparer la latence. Par défaut : synchronisé
+/// sur l'écran, sans déchirure.
+fn present_mode() -> eframe::wgpu::PresentMode {
+    use eframe::wgpu::PresentMode;
+    match std::env::var("BP_PRESENT").unwrap_or_default().to_lowercase().as_str() {
+        "fifo" => PresentMode::Fifo,
+        "mailbox" => PresentMode::Mailbox,
+        "immediate" => PresentMode::Immediate,
+        "novsync" => PresentMode::AutoNoVsync,
+        _ => PresentMode::AutoVsync,
+    }
 }

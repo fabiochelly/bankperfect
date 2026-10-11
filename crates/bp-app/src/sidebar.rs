@@ -34,7 +34,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         if !account.counts_as_virtual() {
             total = total + balance;
         }
-        if account_row(ui, account, balance, i == doc.account, &pal).clicked() {
+        if account_row(ui, account, balance, i == doc.account, &pal) {
             clicked = Some(i);
         }
     }
@@ -50,9 +50,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
             .show(ui, |ui| {
                 for i in disabled {
                     let account = &doc.document.accounts[i];
-                    if account_row(ui, account, doc.account_balance(i), i == doc.account, &pal)
-                        .clicked()
-                    {
+                    if account_row(ui, account, doc.account_balance(i), i == doc.account, &pal) {
                         clicked = Some(i);
                     }
                 }
@@ -97,7 +95,7 @@ fn account_row(
     balance: Amount,
     selected: bool,
     pal: &crate::theme::Palette,
-) -> egui::Response {
+) -> bool {
     let height = 34.0;
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::click());
@@ -137,7 +135,10 @@ fn account_row(
             ui.add(egui::Label::new(name).truncate());
         });
     });
-    response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban))
+    // Sélection dès l'appui, comme une liste native.
+    let pressed = response.hovered() && ui.input(|i| i.pointer.primary_pressed());
+    response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban));
+    pressed
 }
 
 fn protection_badge(ui: &mut egui::Ui, doc: &OpenDoc) {

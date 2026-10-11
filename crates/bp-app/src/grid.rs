@@ -223,16 +223,17 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     egui::Painter::new(response.ctx.clone(), response.layer_id, rect.expand(1.0))
                         .hline(rect.x_range(), rect.top(), Stroke::new(1.0, pal.month_rule));
                 }
-                let modifiers = response.ctx.input(|i| i.modifiers);
-                if tack_resp.clicked() {
+                // Sélection dès l'appui, comme les listes natives (egui attend
+                // le relâchement pour `clicked`).
+                let (modifiers, pressed) = response.ctx.input(|i| (i.modifiers, i.pointer.primary_pressed()));
+                if tack_resp.hovered() && pressed {
                     if !doc.selection.contains(&index) {
                         doc.click_row(index, false, false);
                     }
                     doc.cycle_tack();
                 } else if response.double_clicked() {
-                    doc.click_row(index, false, false);
                     action = GridAction::Edit(index);
-                } else if response.clicked() {
+                } else if response.hovered() && pressed {
                     doc.click_row(index, modifiers.command, modifiers.shift);
                 } else if response.secondary_clicked() && !doc.selection.contains(&index) {
                     doc.click_row(index, false, false);

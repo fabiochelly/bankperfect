@@ -5,7 +5,7 @@
 //! session laissée ouverte ne suffise pas à changer la protection.
 
 use bp_core::format_v6::{Protection, Unlock};
-use egui::{Id, Key, Modal, RichText};
+use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::document::OpenDoc;
@@ -32,13 +32,10 @@ impl ProtectionForm {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let protected = is_protected(doc);
-        Modal::new(Id::new("tool_protection")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_protection").show(ctx, |ui| {
             let pal = palette(ui);
-            ui.set_width(460.0);
-            ui.label(
-                RichText::new(format!("{}  Protection du fichier", icon::SHIELD_CHECK)).heading(),
-            );
-            ui.add_space(8.0);
+            ui.set_width(500.0);
+            crate::dialogs::header(ui, icon::SHIELD_CHECK, pal.accent, "Protection du fichier");
             let (glyph, status, color) = if protected {
                 (
                     icon::LOCK_SIMPLE,
@@ -110,30 +107,32 @@ impl ProtectionForm {
                 ui.add_space(4.0);
                 ui.label(RichText::new(error).color(pal.negative));
             }
-            ui.add_space(12.0);
-            ui.horizontal(|ui| {
+            crate::dialogs::footer(ui, |ui| {
                 let label = if protected {
                     "Changer le mot de passe"
                 } else {
                     "Protéger"
                 };
-                if ui.add(crate::theme::primary_button(ui, label)).clicked() {
+                if crate::dialogs::primary(ui, label, true).clicked() {
                     action = Some(Action::SetPassword);
                 }
-                if protected {
-                    if ui.button("Nouvelle clé de secours").clicked() {
-                        action = Some(Action::NewRecoveryKey);
-                    }
-                    if ui
-                        .button(RichText::new("Retirer").color(pal.negative))
-                        .on_hover_text("Retirer le mot de passe")
-                        .clicked()
-                    {
-                        action = Some(Action::RemovePassword);
-                    }
-                }
-                if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, "Fermer").clicked()
+                    || ui.input(|i| i.key_pressed(Key::Escape))
+                {
                     outcome = Outcome::Close;
+                }
+                if protected {
+                    ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                        if crate::dialogs::button(ui, "Nouvelle clé de secours").clicked() {
+                            action = Some(Action::NewRecoveryKey);
+                        }
+                        if crate::dialogs::button(ui, RichText::new("Retirer").color(pal.negative))
+                            .on_hover_text("Retirer le mot de passe")
+                            .clicked()
+                        {
+                            action = Some(Action::RemovePassword);
+                        }
+                    });
                 }
             });
             if let Some(action) = action {

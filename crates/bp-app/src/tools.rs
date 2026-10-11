@@ -3,7 +3,7 @@
 use bp_core::edit::GroupEdit;
 use bp_core::export::{CsvField, CsvOptions};
 use bp_core::model::{Amount, Date, Mode, Tack};
-use egui::{Id, Key, Modal, RichText};
+use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::document::OpenDoc;
@@ -50,22 +50,18 @@ impl Tool {
 }
 
 fn title(ui: &mut egui::Ui, glyph: &str, text: &str) {
-    ui.label(RichText::new(format!("{glyph}  {text}")).heading());
-    ui.add_space(8.0);
+    let color = palette(ui).accent;
+    crate::dialogs::header(ui, glyph, color, text);
 }
 
 /// Boutons Valider / Annuler ; Entrée valide, Échap annule.
 fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool) -> Option<bool> {
-    ui.add_space(12.0);
     let mut result = None;
-    ui.horizontal(|ui| {
-        if ui
-            .add_enabled(enabled, crate::theme::primary_button(ui, ok))
-            .clicked()
-        {
+    crate::dialogs::footer(ui, |ui| {
+        if crate::dialogs::primary(ui, ok, enabled).clicked() {
             result = Some(true);
         }
-        if ui.button("Annuler").clicked() {
+        if crate::dialogs::button(ui, "Annuler").clicked() {
             result = Some(false);
         }
     });
@@ -89,7 +85,7 @@ pub struct ReplaceForm {
 impl ReplaceForm {
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
-        Modal::new(Id::new("tool_replace")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_replace").show(ctx, |ui| {
             ui.set_width(420.0);
             title(ui, icon::SWAP, "Remplacer");
             ui.label(
@@ -165,7 +161,7 @@ impl GroupForm {
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let lines = doc.selected_visible().len();
-        Modal::new(Id::new("tool_group")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_group").show(ctx, |ui| {
             ui.set_width(480.0);
             title(
                 ui,
@@ -185,7 +181,7 @@ impl GroupForm {
                 .num_columns(2)
                 .spacing([12.0, 10.0])
                 .show(ui, |ui| {
-                    ui.checkbox(&mut self.date.0, "Date");
+                    crate::theme::checkbox(ui, &mut self.date.0, "Date");
                     ui.add_enabled_ui(self.date.0, |ui| {
                         crate::datepicker::date_field(
                             ui,
@@ -197,7 +193,7 @@ impl GroupForm {
                     });
                     ui.end_row();
 
-                    ui.checkbox(&mut self.mode.0, "Mode");
+                    crate::theme::checkbox(ui, &mut self.mode.0, "Mode");
                     ui.add_enabled_ui(self.mode.0, |ui| {
                         egui::ComboBox::from_id_salt("group_mode")
                             .selected_text(self.mode.1.label().to_string())
@@ -211,21 +207,21 @@ impl GroupForm {
                     });
                     ui.end_row();
 
-                    ui.checkbox(&mut self.payee.0, "Tiers");
+                    crate::theme::checkbox(ui, &mut self.payee.0, "Tiers");
                     ui.add_enabled(
                         self.payee.0,
                         crate::theme::field(&mut self.payee.1).desired_width(260.0),
                     );
                     ui.end_row();
 
-                    ui.checkbox(&mut self.details.0, "Détail");
+                    crate::theme::checkbox(ui, &mut self.details.0, "Détail");
                     ui.add_enabled(
                         self.details.0,
                         crate::theme::field(&mut self.details.1).desired_width(260.0),
                     );
                     ui.end_row();
 
-                    ui.checkbox(&mut self.category.0, "Catégorie");
+                    crate::theme::checkbox(ui, &mut self.category.0, "Catégorie");
                     ui.add_enabled_ui(self.category.0, |ui| {
                         let selected = self
                             .category
@@ -250,7 +246,7 @@ impl GroupForm {
                     });
                     ui.end_row();
 
-                    ui.checkbox(&mut self.amount.0, "Montant");
+                    crate::theme::checkbox(ui, &mut self.amount.0, "Montant");
                     ui.add_enabled(
                         self.amount.0,
                         crate::theme::field(&mut self.amount.1)
@@ -259,7 +255,7 @@ impl GroupForm {
                     );
                     ui.end_row();
 
-                    ui.checkbox(&mut self.tack.0, "Pointage");
+                    crate::theme::checkbox(ui, &mut self.tack.0, "Pointage");
                     ui.add_enabled_ui(self.tack.0, |ui| {
                         ui.horizontal(|ui| {
                             ui.selectable_value(&mut self.tack.1, Tack::None, "Non pointée");
@@ -369,7 +365,7 @@ impl CsvForm {
 
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
-        Modal::new(Id::new("tool_csv")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_csv").show(ctx, |ui| {
             ui.set_width(560.0);
             title(ui, icon::FILE_CSV, "Exporter vers un fichier CSV");
             ui.columns(2, |cols| {
@@ -379,7 +375,7 @@ impl CsvForm {
                 let count = self.fields.len();
                 for (i, (field, on)) in self.fields.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
-                        ui.checkbox(on, field.label());
+                        crate::theme::checkbox(ui, on, field.label());
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add_enabled(
@@ -412,17 +408,23 @@ impl CsvForm {
                             ui.selectable_value(&mut self.separator, i, *label);
                         }
                     });
-                ui.checkbox(
+                crate::theme::checkbox(
+                    ui,
                     &mut self.all_accounts,
                     "Exporter tous les comptes (un fichier par compte)",
                 );
-                ui.checkbox(&mut self.header, "Inclure la ligne d'en-tête");
-                ui.checkbox(
+                crate::theme::checkbox(ui, &mut self.header, "Inclure la ligne d'en-tête");
+                crate::theme::checkbox(
+                    ui,
                     &mut self.cheque_as_mode,
                     "Remplacer « Chq XXX » par « Chèque émis »",
                 );
                 ui.horizontal(|ui| {
-                    ui.checkbox(&mut self.group, "Grouper catégorie et sous-catégorie");
+                    crate::theme::checkbox(
+                        ui,
+                        &mut self.group,
+                        "Grouper catégorie et sous-catégorie",
+                    );
                     ui.add_enabled(
                         self.group,
                         egui::TextEdit::singleline(&mut self.group_separator).desired_width(40.0),
@@ -560,7 +562,7 @@ impl BackupsForm {
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let backups = bp_core::backup::list(&doc.path, &self.dir);
-        Modal::new(Id::new("tool_backups")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_backups").show(ctx, |ui| {
             ui.set_width(560.0);
             title(ui, icon::CLOCK_COUNTER_CLOCKWISE, "Sauvegardes");
             let pal = palette(ui);
@@ -651,7 +653,7 @@ impl ExtraForm {
         let mut outcome = Outcome::Keep;
         let op = doc.current_account().operations.get(self.index).cloned();
         let Some(op) = op else { return Outcome::Close };
-        Modal::new(Id::new("tool_extra")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_extra").show(ctx, |ui| {
             ui.set_width(520.0);
             title(ui, icon::LIST_PLUS, "Champs supplémentaires");
             let pal = palette(ui);
@@ -781,7 +783,7 @@ impl NotesForm {
     /// Les notes ne dépendent d'aucun fichier ouvert.
     pub fn show_standalone(&mut self, ctx: &egui::Context) -> Outcome {
         let mut outcome = Outcome::Keep;
-        Modal::new(Id::new("tool_notes")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_notes").show(ctx, |ui| {
             ui.set_width(680.0);
             title(
                 ui,
@@ -864,7 +866,8 @@ impl NotesForm {
                                         .desired_rows(12)
                                         .desired_width(f32::INFINITY),
                                 );
-                                ui.checkbox(
+                                crate::theme::checkbox(
+                                    ui,
                                     &mut note.show_on_open,
                                     "Afficher à l'ouverture d'un fichier",
                                 );
@@ -976,7 +979,7 @@ impl CalcForm {
 
     pub fn show_standalone(&mut self, ctx: &egui::Context) -> Outcome {
         let mut outcome = Outcome::Keep;
-        Modal::new(Id::new("tool_calc")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_calc").show(ctx, |ui| {
             ui.set_width(560.0);
             title(ui, icon::CALCULATOR, "Calculatrice");
             let pal = palette(ui);

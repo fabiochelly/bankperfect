@@ -882,7 +882,16 @@ impl BankPerfectApp {
             } else {
                 format!("Supprimer les {n} opérations sélectionnées ?")
             };
-            match dialogs::confirm(ctx, "delete", "Supprimer", &message, "Supprimer", None) {
+            match dialogs::confirm(
+                ctx,
+                "delete",
+                icon::TRASH,
+                "Supprimer",
+                &message,
+                "Supprimer",
+                None,
+                true,
+            ) {
                 Choice::Pending => {}
                 Choice::Yes => {
                     doc.delete_selection();
@@ -893,13 +902,19 @@ impl BankPerfectApp {
             }
         }
         if self.pending.is_some() {
+            let name = self.doc.as_ref().map(|d| d.file_name()).unwrap_or_default();
+            let message = format!(
+                "« {name} » contient des modifications non enregistrées. Voulez-vous les enregistrer avant de continuer ?"
+            );
             match dialogs::confirm(
                 ctx,
                 "unsaved",
-                "Modifications non enregistrées",
-                "Voulez-vous enregistrer les modifications avant de continuer ?",
+                icon::FLOPPY_DISK,
+                "Enregistrer les modifications ?",
+                &message,
                 "Enregistrer",
                 Some("Ne pas enregistrer"),
+                false,
             ) {
                 Choice::Pending => {}
                 Choice::Yes => {

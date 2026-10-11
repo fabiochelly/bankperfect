@@ -7,6 +7,85 @@ use egui_phosphor::regular as icon;
 
 use crate::theme::palette;
 
+/// Fenêtre modale au cadre aéré, commune à toute l'application.
+pub fn modal(ctx: &egui::Context, id: &str) -> Modal {
+    let pal = crate::theme::palette_of(ctx);
+    let frame = egui::Frame::new()
+        .fill(pal.menu_bg)
+        .stroke(egui::Stroke::new(1.0, pal.border))
+        .corner_radius(14)
+        .inner_margin(egui::Margin::same(24))
+        .shadow(egui::Shadow {
+            offset: [0, 12],
+            blur: 40,
+            spread: 0,
+            color: egui::Color32::from_black_alpha(110),
+        });
+    Modal::new(Id::new(id)).frame(frame)
+}
+
+/// En-tête de fenêtre : icône dans une pastille teintée et titre.
+pub fn header(ui: &mut egui::Ui, glyph: &str, color: egui::Color32, title: &str) {
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(36.0, 36.0), egui::Sense::hover());
+        ui.painter()
+            .rect_filled(rect, 10.0, color.gamma_multiply(0.16));
+        ui.painter().text(
+            rect.center(),
+            egui::Align2::CENTER_CENTER,
+            glyph,
+            egui::FontId::proportional(19.0),
+            color,
+        );
+        ui.add_space(6.0);
+        ui.label(
+            RichText::new(title)
+                .size(18.0)
+                .family(crate::theme::semibold()),
+        );
+    });
+    ui.add_space(14.0);
+}
+
+/// Pied de fenêtre : de l'espace, puis les boutons alignés à droite. Le
+/// contenu est disposé de droite à gauche (bouton principal en premier).
+pub fn footer<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    ui.add_space(22.0);
+    ui.allocate_ui_with_layout(
+        egui::vec2(ui.available_width(), 36.0),
+        egui::Layout::right_to_left(egui::Align::Center),
+        |ui| {
+            ui.spacing_mut().item_spacing.x = 10.0;
+            add(ui)
+        },
+    )
+    .inner
+}
+
+/// Bouton de pied de fenêtre (taille commune).
+pub fn button(ui: &mut egui::Ui, text: impl Into<egui::WidgetText>) -> egui::Response {
+    ui.add(egui::Button::new(text).min_size(egui::vec2(100.0, 36.0)))
+}
+
+/// Bouton principal de pied de fenêtre.
+pub fn primary(ui: &mut egui::Ui, text: &str, enabled: bool) -> egui::Response {
+    let button = crate::theme::primary_button(ui, text).min_size(egui::vec2(110.0, 36.0));
+    ui.add_enabled(enabled, button)
+}
+
+/// Bouton principal rouge (action destructrice).
+pub fn danger(ui: &mut egui::Ui, text: &str) -> egui::Response {
+    let pal = palette(ui);
+    let button = egui::Button::new(
+        RichText::new(text)
+            .family(crate::theme::medium())
+            .color(egui::Color32::WHITE),
+    )
+    .fill(pal.negative)
+    .min_size(egui::vec2(110.0, 36.0));
+    ui.add(button)
+}
+
 /// Demande du mot de passe (ou de la clé de secours) à l'ouverture.
 pub struct PasswordPrompt {
     pub path: PathBuf,
@@ -25,16 +104,20 @@ pub enum PromptResult {
 impl PasswordPrompt {
     pub fn show(&mut self, ctx: &egui::Context) -> PromptResult {
         let mut result = PromptResult::Pending;
-        Modal::new(Id::new("password")).show(ctx, |ui| {
-            ui.set_width(420.0);
-            ui.label(RichText::new(format!("{}  Fichier protégé", icon::LOCK_SIMPLE)).heading());
+        modal(ctx, "password").show(ctx, |ui| {
+            ui.set_width(440.0);
+            let pal = palette(ui);
+            header(ui, icon::LOCK_SIMPLE, pal.accent, "Fichier protégé");
             ui.label(
-                self.path
-                    .file_name()
-                    .map(|n| n.to_string_lossy().into_owned())
-                    .unwrap_or_default(),
+                RichText::new(
+                    self.path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default(),
+                )
+                .color(pal.muted),
             );
-            ui.add_space(8.0);
+            ui.add_space(10.0);
             let response = if self.use_recovery_key {
                 ui.label("Clé de secours (24 mots) :");
                 ui.add(
@@ -66,14 +149,13 @@ impl PasswordPrompt {
                     self.error = None;
                 }
             }
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                if ui.button("Ouvrir").clicked()
+            footer(ui, |ui| {
+                if primary(ui, "Ouvrir", true).clicked()
                     || (!self.use_recovery_key && ui.input(|i| i.key_pressed(Key::Enter)))
                 {
                     result = PromptResult::Submit;
                 }
-                if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     result = PromptResult::Cancel;
                 }
             });
@@ -85,10 +167,9 @@ impl PasswordPrompt {
 /// Affiche la clé de secours générée au premier enregistrement chiffré.
 pub fn recovery_key(ctx: &egui::Context, phrase: &str) -> bool {
     let mut close = false;
-    Modal::new(Id::new("recovery")).show(ctx, |ui| {
-        ui.set_width(520.0);
-        ui.label(RichText::new(format!("{}  Votre clé de secours", icon::SHIELD_CHECK)).heading());
-        ui.add_space(6.0);
+    modal(ctx, "recovery").show(ctx, |ui| {
+        ui.set_width(540.0);
+        header(ui, icon::SHIELD_CHECK, palette(ui).positive, "Votre clé de secours");
         ui.label("Votre fichier est maintenant chiffré. Si vous oubliez votre mot de passe, cette clé est le seul moyen de le rouvrir. Notez-la ou imprimez-la, et rangez-la en lieu sûr : elle ne sera plus jamais affichée.");
         ui.add_space(10.0);
         egui::Frame::group(ui.style()).show(ui, |ui| {
@@ -101,13 +182,12 @@ pub fn recovery_key(ctx: &egui::Context, phrase: &str) -> bool {
                 }
             });
         });
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            if ui.button(format!("{}  Copier", icon::COPY)).clicked() {
-                ui.ctx().copy_text(phrase.to_string());
-            }
-            if ui.button("J'ai noté ma clé").clicked() {
+        footer(ui, |ui| {
+            if primary(ui, "J'ai noté ma clé", true).clicked() {
                 close = true;
+            }
+            if button(ui, format!("{}  Copier", icon::COPY)).clicked() {
+                ui.ctx().copy_text(phrase.to_string());
             }
         });
     });
@@ -121,36 +201,49 @@ pub enum Choice {
     Cancel,
 }
 
-/// Question à trois réponses (Oui / Non / Annuler).
+/// Question à trois réponses (Oui / Non / Annuler). `danger` : le bouton
+/// principal est rouge (suppression).
+#[allow(clippy::too_many_arguments)]
 pub fn confirm(
     ctx: &egui::Context,
     id: &str,
+    glyph: &str,
     title: &str,
     message: &str,
     yes: &str,
     no: Option<&str>,
+    danger_action: bool,
 ) -> Choice {
     let mut choice = Choice::Pending;
-    Modal::new(Id::new(id)).show(ctx, |ui| {
-        ui.set_width(420.0);
-        ui.label(RichText::new(title).heading());
-        ui.add_space(6.0);
-        ui.label(message);
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            if ui
-                .button(RichText::new(yes).family(crate::theme::semibold()))
-                .clicked()
-            {
+    modal(ctx, id).show(ctx, |ui| {
+        ui.set_width(460.0);
+        let pal = palette(ui);
+        let color = if danger_action {
+            pal.negative
+        } else {
+            pal.warning
+        };
+        header(ui, glyph, color, title);
+        ui.label(RichText::new(message).color(pal.fg_dark));
+        footer(ui, |ui| {
+            let yes_clicked = if danger_action {
+                danger(ui, yes).clicked()
+            } else {
+                primary(ui, yes, true).clicked()
+            };
+            if yes_clicked || ui.input(|i| i.key_pressed(Key::Enter)) {
                 choice = Choice::Yes;
             }
-            if let Some(no) = no
-                && ui.button(no).clicked()
-            {
-                choice = Choice::No;
-            }
-            if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+            if button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                 choice = Choice::Cancel;
+            }
+            if let Some(no) = no {
+                // « Ne pas enregistrer » à l'écart, à gauche.
+                ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                    if button(ui, RichText::new(no).color(pal.negative)).clicked() {
+                        choice = Choice::No;
+                    }
+                });
             }
         });
     });
@@ -160,17 +253,18 @@ pub fn confirm(
 /// Message d'erreur avec un seul bouton.
 pub fn alert(ctx: &egui::Context, title: &str, message: &str) -> bool {
     let mut close = false;
-    Modal::new(Id::new("alert")).show(ctx, |ui| {
-        ui.set_width(420.0);
-        ui.label(RichText::new(format!("{}  {title}", icon::WARNING)).heading());
-        ui.add_space(6.0);
-        ui.label(message);
-        ui.add_space(10.0);
-        if ui.button("OK").clicked()
-            || ui.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Enter))
-        {
-            close = true;
-        }
+    modal(ctx, "alert").show(ctx, |ui| {
+        ui.set_width(460.0);
+        let pal = palette(ui);
+        header(ui, icon::WARNING, pal.negative, title);
+        ui.label(RichText::new(message).color(pal.fg_dark));
+        footer(ui, |ui| {
+            if primary(ui, "OK", true).clicked()
+                || ui.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Enter))
+            {
+                close = true;
+            }
+        });
     });
     close
 }
@@ -178,16 +272,14 @@ pub fn alert(ctx: &egui::Context, title: &str, message: &str) -> bool {
 /// Liste des anomalies corrigées à l'ouverture.
 pub fn warnings(ctx: &egui::Context, warnings: &[String]) -> bool {
     let mut close = false;
-    Modal::new(Id::new("warnings")).show(ctx, |ui| {
-        ui.set_width(520.0);
-        ui.label(
-            RichText::new(format!(
-                "{}  Anomalies corrigées à l'ouverture",
-                icon::WARNING
-            ))
-            .heading(),
+    modal(ctx, "warnings").show(ctx, |ui| {
+        ui.set_width(540.0);
+        header(
+            ui,
+            icon::WARNING,
+            palette(ui).warning,
+            "Anomalies corrigées à l'ouverture",
         );
-        ui.add_space(6.0);
         egui::ScrollArea::vertical()
             .max_height(300.0)
             .show(ui, |ui| {
@@ -195,10 +287,11 @@ pub fn warnings(ctx: &egui::Context, warnings: &[String]) -> bool {
                     ui.label(format!("• {w}"));
                 }
             });
-        ui.add_space(8.0);
-        if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-            close = true;
-        }
+        footer(ui, |ui| {
+            if primary(ui, "Fermer", true).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                close = true;
+            }
+        });
     });
     close
 }

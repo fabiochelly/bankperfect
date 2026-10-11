@@ -472,7 +472,27 @@ impl BankPerfectApp {
         } else {
             &["Fichier", "Outils"]
         };
-        if let Some((index, anchor)) = self.menus.titles(ui, titles) {
+        let opened = ui
+            .horizontal(|ui| {
+                let opened = self.menus.titles(ui, titles);
+                // Nom et logo du logiciel, à droite de la barre de menus.
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_space(10.0);
+                    let pal = palette(ui);
+                    ui.label(
+                        RichText::new("BankPerfect")
+                            .size(15.0)
+                            .family(crate::theme::semibold())
+                            .color(pal.fg_dark),
+                    );
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(22.0, 22.0), egui::Sense::hover());
+                    crate::logo::paint(ui.painter(), rect);
+                });
+                opened
+            })
+            .inner;
+        if let Some((index, anchor)) = opened {
             let ctx = ui.ctx().clone();
             let mut menus = std::mem::take(&mut self.menus);
             menus.popup(&ctx, index, anchor, |ui| self.menu_content(ui, index));
@@ -608,8 +628,7 @@ impl BankPerfectApp {
             }
             ui.label(RichText::new(sub).small().color(pal.muted));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                // Place pour le bouton + qui flotte au-dessus, à cheval sur les menus.
-                ui.add_space(64.0);
+                ui.add_space(4.0);
                 // Dans l'en-tête plutôt qu'en dessous : la grille ne bouge pas
                 // quand un filtre s'active.
                 if filtered {
@@ -652,7 +671,7 @@ impl BankPerfectApp {
             selection_summary(ui, doc);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.label(
-                    RichText::new("BankPerfect · Enregistré")
+                    RichText::new("Enregistré")
                         .small()
                         .color(pal.muted),
                 );
@@ -1191,11 +1210,13 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     }
 }
 
-/// Bouton rond « Nouvelle opération », à cheval sur la barre de menus en
-/// haut à droite : effet givré plat, sombre et semi-transparent, croix blanche.
+/// Bouton rond « Nouvelle opération », flottant en bas à droite de la
+/// grille : effet givré plat, sombre et semi-transparent, croix blanche.
 fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
-    const SIZE: f32 = 44.0;
-    let center = egui::pos2(content.right() - 46.0, content.top() + 2.0);
+    const SIZE: f32 = 54.0;
+    // En bas à droite de la grille, au-dessus des lignes (bouton flottant),
+    // à côté de la barre de défilement.
+    let center = egui::pos2(content.right() - 62.0, content.bottom() - 52.0);
     let rect = egui::Rect::from_center_size(center, egui::vec2(SIZE, SIZE));
     egui::Area::new(egui::Id::new("floating_add"))
         .order(egui::Order::Foreground)
@@ -1220,16 +1241,16 @@ fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
             // Givre plat : disque sombre translucide, voile clair uniforme et
             // liseré fin, sans reflet ni relief.
             let shadow = egui::Shadow {
-                offset: [0, 2],
-                blur: 12,
+                offset: [0, 6],
+                blur: 22,
                 spread: 0,
-                color: egui::Color32::from_black_alpha(45),
+                color: egui::Color32::from_black_alpha(90),
             };
             painter.add(shadow.as_shape(rect, egui::CornerRadius::same(radius as u8)));
             painter.circle_filled(
                 rect.center(),
                 radius,
-                egui::Color32::from_rgba_unmultiplied(0x16, 0x17, 0x20, 165),
+                egui::Color32::from_rgba_unmultiplied(0x16, 0x17, 0x20, 228),
             );
             painter.circle_filled(
                 rect.center(),
@@ -1248,7 +1269,7 @@ fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
                 icon::PLUS,
-                egui::FontId::proportional(22.0),
+                egui::FontId::proportional(25.0),
                 egui::Color32::WHITE,
             );
             response.clicked()

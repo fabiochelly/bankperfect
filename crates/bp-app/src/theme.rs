@@ -466,12 +466,13 @@ pub fn checkbox(
     response
 }
 
-/// Dégradés des deux lettres du symbole : le « b » en bleus, le « p » du
-/// violet à l'orange.
-pub fn logo_b(p: &Palette) -> (Color32, Color32) {
-    (p.teal, p.accent)
+/// Dégradés des deux lettres du symbole (proposition « A1 ») : le « b » en
+/// bleus, le « p » en violets, issus des couleurs de l'ancien logo. Les mêmes
+/// dans les deux thèmes.
+pub fn logo_b(_p: &Palette) -> (Color32, Color32) {
+    (Color32::from_rgb(0x7a, 0xa2, 0xf7), Color32::from_rgb(0x5a, 0x7f, 0xe0))
 }
 
-pub fn logo_p(p: &Palette) -> (Color32, Color32) {
-    (p.violet, p.future)
+pub fn logo_p(_p: &Palette) -> (Color32, Color32) {
+    (Color32::from_rgb(0x8b, 0x6f, 0xd6), Color32::from_rgb(0xbb, 0x9a, 0xf7))
 }

@@ -1377,13 +1377,17 @@ impl Value {
             Value::None | Value::Global { .. } | Value::Object { .. } => PyValue::None,
             Value::Bool(b) => PyValue::Bool(*b),
             Value::Int(i) => PyValue::Int(*i),
-            Value::BigInt(text) => text.parse().map_or_else(|_| PyValue::Str(text.clone()), PyValue::Int),
+            Value::BigInt(text) => text
+                .parse()
+                .map_or_else(|_| PyValue::Str(text.clone()), PyValue::Int),
             Value::Float(f) => PyValue::Float(*f),
             Value::Str(s) | Value::Unicode(s) => PyValue::Str(s.clone()),
             Value::Bytes(b) => PyValue::Str(encoding_rs::WINDOWS_1252.decode(b).0.into_owned()),
             Value::List(items) => PyValue::List(items.iter().map(Value::to_py).collect()),
             Value::Tuple(items) => PyValue::Tuple(items.iter().map(Value::to_py).collect()),
-            Value::Dict(pairs) => PyValue::Dict(pairs.iter().map(|(k, v)| (k.to_py(), v.to_py())).collect()),
+            Value::Dict(pairs) => {
+                PyValue::Dict(pairs.iter().map(|(k, v)| (k.to_py(), v.to_py())).collect())
+            }
         }
     }
 }

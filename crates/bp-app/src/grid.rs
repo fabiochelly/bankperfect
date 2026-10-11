@@ -140,11 +140,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 row.set_selected(doc.selection.contains(&index));
 
                 let new_month = sort_by_date && pos > 0 && {
-                    let date_of = |o: &bp_core::model::Operation| {
-                        if show_mark { o.mark_date } else { o.date }
-                    };
-                    let prev = date_of(doc.operation(visible[pos - 1])).to_naive();
-                    let cur = date_of(&op).to_naive();
+                    let prev = doc.operation(visible[pos - 1]).date.to_naive();
+                    let cur = op.date.to_naive();
                     (prev.year(), prev.month()) != (cur.year(), cur.month())
                 };
 
@@ -170,12 +167,24 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         // Marge avant le séparateur de colonne.
                         ui.add_space(14.0);
-                        if show_mark {
-                            ui.label(
-                                RichText::new(crate::settings::shared::date(op.mark_date))
-                                    .color(pal.pointed),
-                            )
-                            .on_hover_text(format!("Opération du {}", op.date));
+                        if show_mark && op.tack != Tack::None {
+                            // Date de pointage en petit, sous la date de l'opération.
+                            ui.vertical(|ui| {
+                                ui.spacing_mut().item_spacing.y = 0.0;
+                                ui.with_layout(Layout::top_down(Align::Max), |ui| {
+                                    ui.label(crate::settings::shared::date(op.date));
+                                    ui.label(
+                                        RichText::new(format!(
+                                            "{} {}",
+                                            icon::CHECK,
+                                            crate::settings::shared::date(op.mark_date)
+                                        ))
+                                        .size(11.5)
+                                        .color(pal.future),
+                                    )
+                                    .on_hover_text("Date de pointage");
+                                });
+                            });
                         } else {
                             ui.label(crate::settings::shared::date(op.date));
                         }
@@ -483,11 +492,7 @@ fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortCol
 fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     ui.vertical(|ui| {
         ui.add_space(2.0);
-        if doc.show_mark_dates {
-            sort_title(ui, doc, "Pointage", SortColumn::MarkDate);
-        } else {
-            sort_title(ui, doc, "Date", SortColumn::Date);
-        }
+        sort_title(ui, doc, "Date", SortColumn::Date);
         let active = doc.filters.date_from.is_some() || doc.filters.date_to.is_some();
         let label = if active {
             format!("{} Période", icon::FUNNEL)

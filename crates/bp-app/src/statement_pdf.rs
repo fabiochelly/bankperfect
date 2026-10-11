@@ -362,14 +362,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
         // En-tête du tableau.
         let header_y = y + 4.5;
         let header = |text: &str, x: f32| p.text(text, 8.0, x, header_y, true, muted);
-        header(
-            if doc.show_mark_dates {
-                "Pointage"
-            } else {
-                "Date"
-            },
-            col_date,
-        );
+        header("Date", col_date);
         header("Mode", col_mode);
         header("Tiers", col_payee);
         header("Catégorie", col_cat);
@@ -390,11 +383,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
                 p.rect(left, y, right - left, row_h, stripe);
             }
             let base = y + if options.details { 4.2 } else { 4.4 };
-            let date = if doc.show_mark_dates {
-                op.mark_date
-            } else {
-                op.date
-            };
+            let date = op.date;
             p.text(
                 &crate::settings::shared::date(date),
                 8.0,

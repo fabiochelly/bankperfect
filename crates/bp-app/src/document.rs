@@ -561,15 +561,12 @@ impl OpenDoc {
         self.touch_tacks();
     }
 
-    /// Affiche (ou non) les dates de pointage dans la colonne Date ; le tri
-    /// par date suit.
+    /// Affiche (ou non) la date de pointage sous la date des lignes pointées.
     pub fn set_show_mark_dates(&mut self, on: bool) {
         self.show_mark_dates = on;
-        self.sort = match (self.sort, on) {
-            (SortColumn::Date, true) => SortColumn::MarkDate,
-            (SortColumn::MarkDate, false) => SortColumn::Date,
-            (other, _) => other,
-        };
+        if self.sort == SortColumn::MarkDate {
+            self.sort = SortColumn::Date;
+        }
     }
 
     /// Rapprocher toutes les lignes pointées affichées (MARK-03).

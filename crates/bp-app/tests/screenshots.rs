@@ -275,6 +275,9 @@ fn screenshots() {
         h.run_steps(3);
         h.get_by_label_contains("Solde prévisionnel").click();
     });
+    render("41-dates-pointage", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::F11);
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

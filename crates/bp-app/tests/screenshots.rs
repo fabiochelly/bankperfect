@@ -88,7 +88,8 @@ fn screenshots() {
         h.run_steps(2);
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::M);
         h.run_steps(2);
-        h.get_by_label(&format!("{}  Tiers", egui_phosphor::regular::USER)).click();
+        h.get_by_label(&format!("{}  Tiers", egui_phosphor::regular::USER))
+            .click();
     });
     render("11-champs", egui::Theme::Dark, |h| {
         h.key_press(egui::Key::ArrowDown);
@@ -119,8 +120,7 @@ fn screenshots() {
     render("15-gestion-categories", egui::Theme::Dark, |h| {
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::G);
         h.run_steps(2);
-        h.get_by_label(&format!("{}  Catégories", egui_phosphor::regular::TAG))
-            .click();
+        h.get_by_label("Catégories").click();
         h.run_steps(2);
         h.query_all_by_label_contains("Alimentation")
             .last()

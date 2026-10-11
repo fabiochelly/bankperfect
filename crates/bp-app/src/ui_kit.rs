@@ -87,7 +87,7 @@ pub fn row<R>(
             egui::Align2::LEFT_CENTER,
             label,
             egui::FontId::new(14.0, crate::theme::medium()),
-            pal.fg_dark,
+            pal.fg,
         );
         content(ui)
     })
@@ -178,7 +178,7 @@ pub fn mode_combo(
     let (glyph, color) = crate::grid::mode_style(document, mode, &pal);
     egui::ComboBox::from_id_salt(id)
         .selected_text(RichText::new(format!("{glyph}  {}", mode.label())).color(color))
-        .width(width)
+        .width(width - ui.spacing().button_padding.x)
         .height(420.0)
         .show_ui(ui, |ui| {
             for m in document.mode_list() {
@@ -212,7 +212,7 @@ pub fn category_combo(
     };
     egui::ComboBox::from_id_salt(id)
         .selected_text(selected)
-        .width(width)
+        .width(width - ui.spacing().button_padding.x)
         .height(420.0)
         .show_ui(ui, |ui| {
             ui.selectable_value(category, None, "Aucune catégorie");

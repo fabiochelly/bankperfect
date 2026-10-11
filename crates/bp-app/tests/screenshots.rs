@@ -20,7 +20,7 @@ fn render(name: &str, theme: egui::Theme, setup: impl FnOnce(&mut Harness<'_, ba
         });
     harness.run_steps(4);
     setup(&mut harness);
-    harness.run_steps(4);
+    harness.run_steps(20);
     let image = harness.render().expect("rendu");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots");
     std::fs::create_dir_all(&dir).unwrap();
@@ -32,5 +32,39 @@ fn render(name: &str, theme: egui::Theme, setup: impl FnOnce(&mut Harness<'_, ba
 fn screenshots() {
     render("01-clair", egui::Theme::Light, |_| {});
     render("02-sombre", egui::Theme::Dark, |_| {});
-    render("03-saisie", egui::Theme::Light, |h| h.get_by_label_contains("Nouvelle opération").click());
+    render("03-saisie", egui::Theme::Dark, |h| h.get_by_label_contains("Nouvelle opération").click());
+    render("04-menu", egui::Theme::Dark, |h| h.get_by_label("Édition").click());
+    render("05-menu-survol", egui::Theme::Dark, |h| {
+        h.get_by_label("Édition").click();
+        h.run_steps(3);
+        h.get_by_label("Affichage").hover();
+    });
+}
+
+/// Temps CPU d'une image (passe egui complète, sans rendu GPU), en faisant
+/// défiler la grille, sur le fichier indiqué.
+#[test]
+#[ignore]
+fn frame_time() {
+    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    let mut harness = Harness::builder()
+        .with_size(egui::vec2(1440.0, 900.0))
+        .build_eframe(|cc| {
+            bankperfect::theme::install(&cc.egui_ctx);
+            bankperfect::BankPerfectApp::new(Some(file))
+        });
+    harness.run_steps(5);
+    let frames = 300;
+    let start = std::time::Instant::now();
+    for i in 0..frames {
+        harness.event(egui::Event::MouseWheel {
+            unit: egui::MouseWheelUnit::Line,
+            delta: egui::vec2(0.0, if i % 100 < 50 { -1.0 } else { 1.0 }),
+            phase: egui::TouchPhase::Move,
+            modifiers: egui::Modifiers::NONE,
+        });
+        harness.step();
+    }
+    let per_frame = start.elapsed() / frames;
+    println!("temps CPU par image (défilement) : {per_frame:.2?}");
 }

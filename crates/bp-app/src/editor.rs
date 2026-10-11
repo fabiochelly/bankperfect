@@ -261,7 +261,7 @@ impl Editor {
                             }
                         });
                     ui.add_space(14.0);
-                    segmented(
+                    crate::ui_kit::segmented(
                         ui,
                         &mut self.tack,
                         &[
@@ -270,6 +270,7 @@ impl Editor {
                             (Tack::Reconciled, icon::CHECKS, "Rapprochée", pal.reconciled),
                         ],
                         32.0,
+                        None,
                     );
                 });
 
@@ -361,7 +362,7 @@ impl Editor {
             .show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_max_width(width);
-                segmented(
+                crate::ui_kit::segmented(
                     ui,
                     &mut self.credit,
                     &[
@@ -369,6 +370,7 @@ impl Editor {
                         (true, icon::ARROW_DOWN_LEFT, "Recette", pal.positive),
                     ],
                     28.0,
+                    None,
                 );
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -580,56 +582,4 @@ fn section(
             content(ui);
         });
     ui.add_space(12.0);
-}
-
-/// Contrôle segmenté : choix de même largeur, l'option active teintée de sa
-/// couleur.
-fn segmented<T: PartialEq + Copy>(
-    ui: &mut egui::Ui,
-    value: &mut T,
-    options: &[(T, &str, &str, egui::Color32)],
-    height: f32,
-) {
-    let pal = palette(ui);
-    let width = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
-    ui.painter()
-        .rect_filled(rect, height / 2.0 - 4.0, pal.bg_dark);
-    let segment = (rect.width() - 6.0) / options.len() as f32;
-    for (k, &(option, glyph, label, color)) in options.iter().enumerate() {
-        let r = egui::Rect::from_min_size(
-            rect.min + egui::vec2(3.0 + k as f32 * segment, 3.0),
-            egui::vec2(segment, height - 6.0),
-        );
-        let response = ui
-            .interact(r, ui.id().with(("segment", label)), egui::Sense::click())
-            .on_hover_cursor(egui::CursorIcon::PointingHand);
-        let active = *value == option;
-        response.widget_info(|| {
-            egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, label)
-        });
-        if active {
-            ui.painter()
-                .rect_filled(r, r.height() / 2.0 - 3.0, color.gamma_multiply(0.22));
-        } else if response.hovered() {
-            ui.painter()
-                .rect_filled(r, r.height() / 2.0 - 3.0, pal.bg_highlight);
-        }
-        let text_color = if active { color } else { pal.fg_dark };
-        let family = if active {
-            crate::theme::semibold()
-        } else {
-            crate::theme::medium()
-        };
-        ui.painter().text(
-            r.center(),
-            egui::Align2::CENTER_CENTER,
-            format!("{glyph}  {label}"),
-            egui::FontId::new(13.0, family),
-            text_color,
-        );
-        if response.clicked() {
-            *value = option;
-        }
-    }
 }

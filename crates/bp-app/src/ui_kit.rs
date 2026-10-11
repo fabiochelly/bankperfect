@@ -123,16 +123,28 @@ pub fn segmented<T: PartialEq + Copy>(
             egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), active, label)
         });
         let enabled = ui.is_enabled();
+        let radius = r.height() / 2.0 - 3.0;
         if active {
-            let fill = if enabled {
-                color.gamma_multiply(0.22)
+            let (fill, border) = if enabled {
+                (color.gamma_multiply(0.22), color.gamma_multiply(0.7))
             } else {
-                pal.bg_highlight
+                (pal.bg_highlight, pal.border)
             };
-            ui.painter().rect_filled(r, r.height() / 2.0 - 3.0, fill);
+            ui.painter().rect(
+                r,
+                radius,
+                fill,
+                egui::Stroke::new(1.0, border),
+                egui::StrokeKind::Inside,
+            );
         } else if response.hovered() && enabled {
-            ui.painter()
-                .rect_filled(r, r.height() / 2.0 - 3.0, pal.bg_highlight);
+            ui.painter().rect(
+                r,
+                radius,
+                pal.bg_highlight,
+                egui::Stroke::new(1.0, pal.border),
+                egui::StrokeKind::Inside,
+            );
         }
         let text_color = match (enabled, active) {
             (false, _) => pal.muted,

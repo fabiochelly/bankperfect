@@ -192,6 +192,16 @@ fn screenshots() {
         egui::vec2(700.0, 850.0),
         |_| {},
     );
+    for (name, theme) in [
+        ("26-vitre-sombre", egui::Theme::Dark),
+        ("27-vitre-clair", egui::Theme::Light),
+    ] {
+        render(name, theme, |h| {
+            bankperfect::theme::set_surface_transparent(true);
+            bankperfect::theme::set_translucent(&h.ctx, true);
+        });
+    }
+    bankperfect::theme::set_surface_transparent(false);
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

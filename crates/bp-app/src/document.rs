@@ -85,7 +85,8 @@ struct View {
     account_balances: Vec<Amount>,
     insights: Insights,
     /// Compte et révision pour lesquels la courbe du solde est à jour.
-    series_key: Option<(usize, u64)>,
+    /// Compte, version, empreinte de l'échéancier et date du jour.
+    series_key: Option<(usize, u64, u64, Date)>,
 }
 
 /// État d'un compte avant une action, pour Annuler/Refaire.
@@ -254,14 +255,21 @@ impl OpenDoc {
             }
             self.view.account_balances =
                 self.document.accounts.iter().map(|a| a.balance()).collect();
-            if self.view.series_key != Some((self.account, self.revision)) {
-                self.view.insights.series = balance_series(account);
-                self.view.series_key = Some((self.account, self.revision));
-            }
             self.view.key = Some(key);
             self.view.filters = None;
         }
         let today = Date::today();
+        // Courbe du solde, prolongée par les échéances à venir.
+        let series_key = (
+            self.account,
+            self.revision,
+            schedules_fingerprint(&self.document),
+            today,
+        );
+        if self.view.series_key != Some(series_key) {
+            self.view.insights.series = balance_series(&self.document, self.account, today);
+            self.view.series_key = Some(series_key);
+        }
         if self.view.filters.as_ref() != Some(&(self.filters.clone(), today)) {
             let account = &self.document.accounts[self.account];
             self.view.visible = self
@@ -930,12 +938,53 @@ impl OpenDoc {
 }
 
 /// Solde en fin de journée pour chaque jour ayant au moins une opération.
-fn balance_series(account: &bp_core::model::Account) -> Arc<[(Date, Amount)]> {
-    let mut by_date: Vec<(Date, Amount)> = account
+/// Horizon des échéances ajoutées à la courbe du solde (jours).
+const SCHEDULE_HORIZON_DAYS: i32 = 92;
+
+/// Empreinte des données de l'échéancier, pour recalculer la courbe quand
+/// une échéance change.
+fn schedules_fingerprint(document: &bp_core::model::Document) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for key in [
+        bp_core::scheduler::FEATURE_KEY,
+        bp_core::scheduler::LEGACY_KEY,
+    ] {
+        bp_core::legacy_pickle::feature_bytes(document, key).hash(&mut hasher);
+    }
+    hasher.finish()
+}
+
+/// Solde en fin de journée, date par date, du compte `account`, prolongé
+/// par les occurrences des échéances des trois prochains mois (celles en
+/// retard comptées demain).
+fn balance_series(
+    document: &bp_core::model::Document,
+    account: usize,
+    today: Date,
+) -> Arc<[(Date, Amount)]> {
+    let Some(acc) = document.accounts.get(account) else {
+        return Arc::from([]);
+    };
+    let mut by_date: Vec<(Date, Amount)> = acc
         .operations
         .iter()
         .map(|op| (op.date, op.amount))
         .collect();
+    if let Ok(loaded) = bp_core::scheduler::load(document)
+        && !loaded.schedules.is_empty()
+    {
+        let last = by_date.iter().map(|(d, _)| *d).max().unwrap_or(today);
+        let until = Date((today.0 + SCHEDULE_HORIZON_DAYS).max(last.0));
+        by_date.extend(
+            bp_core::scheduler::forecast(document, &loaded.schedules, account, until, today, false)
+                .into_iter()
+                .filter(|l| l.kind == bp_core::scheduler::ForecastKind::Schedule)
+                // Échéances en retard : attendues dès demain, comme dans le
+                // solde prévisionnel.
+                .map(|l| (l.date.max(Date(today.0 + 1)), l.amount)),
+        );
+    }
     by_date.sort_unstable_by_key(|(d, _)| *d);
     let mut series: Vec<(Date, Amount)> = Vec::new();
     let mut balance = Amount::ZERO;

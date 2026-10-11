@@ -1,2 +1,6 @@
 target/
 .claude/
+# Fichiers de comptes : jamais dans le dépôt (données personnelles).
+*.bp
+*.bp0
+*.bp[0-9]

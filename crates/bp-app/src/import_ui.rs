@@ -108,6 +108,9 @@ pub struct ImportForm {
     reparse: bool,
     /// Les doublons sont à recalculer.
     recheck: bool,
+    /// Opérations fournies déjà lues (synchronisation bancaire) : libellé de
+    /// la source, rien à relire.
+    source: Option<String>,
 }
 
 impl ImportForm {
@@ -146,6 +149,7 @@ impl ImportForm {
             show_rejected: false,
             reparse: true,
             recheck: true,
+            source: None,
             data,
         };
         match format {
@@ -205,7 +209,42 @@ impl ImportForm {
         self.csv_fields.resize(n, CsvField::Ignore);
     }
 
+    /// Aperçu d'opérations déjà lues (synchronisation bancaire), avec le
+    /// compte de destination de chaque compte importé.
+    pub fn from_parsed(source: String, parsed: ParsedImport, targets: Vec<Option<usize>>) -> Self {
+        Self {
+            path: PathBuf::new(),
+            data: Vec::new(),
+            format: ImportFormat::Ofx,
+            qif: QifOptions::default(),
+            qif_letters: Vec::new(),
+            qif_samples: Vec::new(),
+            csv: CsvConfig::default(),
+            csv_text: String::new(),
+            csv_preview: Vec::new(),
+            csv_fields: Vec::new(),
+            parsed: Ok(parsed),
+            targets,
+            shown: 0,
+            statuses: Vec::new(),
+            include: Vec::new(),
+            default_tack: Tack::None,
+            create_categories: true,
+            store_fitid: true,
+            tolerance: 0,
+            match_mode: true,
+            show_rejected: false,
+            reparse: false,
+            recheck: true,
+            source: Some(source),
+        }
+    }
+
     fn parse(&mut self, doc: &OpenDoc) {
+        if self.source.is_some() {
+            self.recheck = true;
+            return;
+        }
         self.parsed = match self.format {
             ImportFormat::Qif => {
                 import::qif::parse(&self.data, &self.qif).map_err(|e| e.to_string())
@@ -291,6 +330,7 @@ impl ImportForm {
             ui.set_height(height);
             let pal = palette(ui);
             let format_label = match self.format {
+                _ if self.source.is_some() => "Banque",
                 ImportFormat::Qif => "QIF",
                 ImportFormat::Ofx => "OFX",
                 ImportFormat::Csv => "CSV",
@@ -309,15 +349,13 @@ impl ImportForm {
                     },
                 );
                 ui_kit::pill(ui, format_label, pal.accent);
-                ui.label(
-                    RichText::new(
-                        self.path
-                            .file_name()
-                            .map(|n| n.to_string_lossy().into_owned())
-                            .unwrap_or_default(),
-                    )
-                    .color(pal.fg_dark),
-                );
+                let name = self.source.clone().unwrap_or_else(|| {
+                    self.path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default()
+                });
+                ui.label(RichText::new(name).color(pal.fg_dark));
             });
             ui.add_space(14.0);
             let body = height - 36.0 - 14.0 - 130.0;

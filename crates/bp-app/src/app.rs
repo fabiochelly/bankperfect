@@ -618,6 +618,11 @@ impl BankPerfectApp {
                     doc, tab,
                 ))))
             }
+            Command::BankSync => {
+                self.tool = Some(Tool::BankSync(Box::new(
+                    crate::bank_sync_ui::BankSyncForm::new(doc),
+                )))
+            }
             Command::UpdateQuotes => {
                 self.tool = Some(Tool::Quotes(Box::new(crate::quotes_ui::QuotesForm::new(
                     doc,
@@ -1147,6 +1152,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, SaveCopy);
                 menu::separator(ui);
                 self.menu_command(ui, Import);
+                self.menu_command(ui, BankSync);
                 menu::submenu(ui, Some(icon::EXPORT), "Exporter", |ui| {
                     self.menu_command(ui, ExportXlsx);
                     self.menu_command(ui, ExportCsv);

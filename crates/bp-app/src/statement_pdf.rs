@@ -129,8 +129,9 @@ impl Painter<'_> {
         });
     }
 
-    /// Symbole BankPerfect (infini et barres du « bp ») dans un carré.
-    fn symbol(&self, x: f32, y: f32, size: f32, color: [u8; 3]) {
+    /// Symbole BankPerfect (infini et barres du « bp ») dans un carré, le
+    /// « b » et le « p » chacun dans sa couleur.
+    fn symbol(&self, x: f32, y: f32, size: f32, b: [u8; 3], p: [u8; 3]) {
         let scale = size / 440.0;
         let skew = (-12.0f32).to_radians().tan();
         let map = |px: f32, py: f32| {
@@ -139,23 +140,24 @@ impl Painter<'_> {
                 Mm(PAGE_H - (y + size / 2.0 + py * scale)),
             )
         };
-        self.layer.set_outline_color(rgb(color));
+        let point = |deg: f32| {
+            let t = deg.to_radians();
+            let d = 1.0 + t.sin().powi(2);
+            map(150.0 * t.cos() / d, 1.4 * 150.0 * t.sin() * t.cos() / d)
+        };
         self.layer.set_outline_thickness(40.0 * scale * 2.835);
-        let loop_points = (0..=120)
-            .map(|k| {
-                let t = (k as f32 * 3.0).to_radians();
-                let d = 1.0 + t.sin().powi(2);
-                (
-                    map(150.0 * t.cos() / d, 1.4 * 150.0 * t.sin() * t.cos() / d),
-                    false,
-                )
-            })
-            .collect();
-        self.layer.add_line(Line {
-            points: loop_points,
-            is_closed: true,
-        });
-        for (px, y0, y1) in [(-150.0, 0.0, -190.0), (0.0, 0.0, 190.0)] {
+        for (color, start, (px, y0, y1)) in [
+            (p, -90.0, (0.0, 0.0, 190.0)),
+            (b, 90.0, (-150.0, 0.0, -190.0)),
+        ] {
+            self.layer.set_outline_color(rgb(color));
+            let points = (0..=60)
+                .map(|k| (point(start + k as f32 * 3.0), false))
+                .collect();
+            self.layer.add_line(Line {
+                points,
+                is_closed: false,
+            });
             self.layer.add_line(Line {
                 points: vec![(map(px, y0), false), (map(px, y1), false)],
                 is_closed: false,
@@ -271,7 +273,12 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
         let mut y = MARGIN;
         if page == 0 {
             // En-tête : symbole, nom du compte, banque, fichier, date.
-            p.symbol(left, y, 14.0, accent);
+            let (logo_b, logo_p) = if bw {
+                (ink, muted)
+            } else {
+                ([0x2a, 0xa1, 0x98], [0x8e, 0x6b, 0xd8])
+            };
+            p.symbol(left, y, 14.0, logo_b, logo_p);
             p.text(&account.name, 16.0, left + 18.0, y + 6.5, true, ink);
             let mut sub = account.bank_name.clone();
             if !account.iban.trim().is_empty() {

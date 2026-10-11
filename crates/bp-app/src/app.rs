@@ -393,8 +393,7 @@ impl BankPerfectApp {
         }
     }
 
-    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
-        let mut new_operation = false;
+    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         let pal = palette(ui);
         let account = doc.current_account();
         let filtered = doc.filters.is_active();
@@ -416,10 +415,8 @@ impl BankPerfectApp {
             }
             ui.label(RichText::new(sub).small().color(pal.muted));
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                if round_add_button(ui) {
-                    new_operation = true;
-                }
-                ui.add_space(8.0);
+                // Place pour le bouton + qui flotte au-dessus, à cheval sur les menus.
+                ui.add_space(64.0);
                 // Dans l'en-tête plutôt qu'en dessous : la grille ne bouge pas
                 // quand un filtre s'active.
                 if filtered {
@@ -437,7 +434,6 @@ impl BankPerfectApp {
         ui.add_space(8.0);
         crate::dashboard::cards(ui, doc);
         ui.add_space(-4.0);
-        new_operation
     }
 
     fn status_bar(ui: &mut egui::Ui, doc: &mut OpenDoc, toast: Option<&str>) {
@@ -772,12 +768,11 @@ impl BankPerfectApp {
 
         doc.refresh();
         let mut grid_action = GridAction::None;
-        let new_operation = egui::Panel::top("balances")
+        egui::Panel::top("balances")
             .frame(
                 egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
             )
-            .show(ui, |ui| Self::balance_strip(ui, doc))
-            .inner;
+            .show(ui, |ui| Self::balance_strip(ui, doc));
 
         egui::CentralPanel::default_margins().show(ui, |ui| {
             let action = grid::show(ui, doc);
@@ -785,7 +780,7 @@ impl BankPerfectApp {
                 grid_action = action;
             }
         });
-        if new_operation {
+        if self.editor.is_none() && floating_add_button(&ctx, content_rect) {
             grid_action = GridAction::New;
         }
         match grid_action {
@@ -877,44 +872,61 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     }
 }
 
-/// Bouton rond « Nouvelle opération » dans l'en-tête : presque opaque,
-/// bordure et icône couleur d'accent, teinté au survol.
-fn round_add_button(ui: &mut egui::Ui) -> bool {
-    const SIZE: f32 = 40.0;
-    let pal = palette(ui);
-    let (rect, response) = ui.allocate_exact_size(egui::vec2(SIZE, SIZE), egui::Sense::click());
-    let response = response.on_hover_text("Nouvelle opération (Inser)");
-    response.widget_info(|| {
-        egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Nouvelle opération")
-    });
-    let hovered = response.hovered();
-    let shadow = egui::Shadow {
-        offset: [0, 3],
-        blur: 12,
-        spread: 0,
-        color: egui::Color32::from_black_alpha(60),
-    };
-    ui.painter()
-        .add(shadow.as_shape(rect, egui::CornerRadius::same((SIZE / 2.0) as u8)));
-    let fill = if hovered {
-        pal.accent.lerp_to_gamma(pal.surface, 0.55)
-    } else {
-        pal.accent.lerp_to_gamma(pal.surface, 0.82)
-    };
-    ui.painter().circle(
-        rect.center(),
-        SIZE / 2.0,
-        fill,
-        egui::Stroke::new(1.5, pal.accent),
-    );
-    ui.painter().text(
-        rect.center(),
-        egui::Align2::CENTER_CENTER,
-        icon::PLUS,
-        egui::FontId::proportional(22.0),
-        if hovered { pal.fg } else { pal.accent },
-    );
-    response.clicked()
+/// Bouton rond « Nouvelle opération », à cheval sur la barre de menus en
+/// haut à droite : bleu, croix blanche.
+fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
+    const SIZE: f32 = 58.0;
+    let center = egui::pos2(content.right() - 52.0, content.top() + 4.0);
+    let rect = egui::Rect::from_center_size(center, egui::vec2(SIZE, SIZE));
+    egui::Area::new(egui::Id::new("floating_add"))
+        .order(egui::Order::Foreground)
+        .fixed_pos(rect.min - egui::vec2(14.0, 14.0))
+        .show(ctx, |ui| {
+            let (outer, _) =
+                ui.allocate_exact_size(egui::vec2(SIZE + 28.0, SIZE + 28.0), egui::Sense::hover());
+            let rect = egui::Rect::from_center_size(outer.center(), egui::vec2(SIZE, SIZE));
+            let response = ui
+                .interact(
+                    rect,
+                    egui::Id::new("floating_add_button"),
+                    egui::Sense::click(),
+                )
+                .on_hover_text("Nouvelle opération (Inser)");
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Nouvelle opération")
+            });
+            let hovered = response.hovered();
+            let shadow = egui::Shadow {
+                offset: [0, 6],
+                blur: 22,
+                spread: 0,
+                color: egui::Color32::from_black_alpha(130),
+            };
+            ui.painter()
+                .add(shadow.as_shape(rect, egui::CornerRadius::same((SIZE / 2.0) as u8)));
+            // Bleu soutenu (contraste suffisant pour la croix blanche), à peine transparent.
+            let blue = egui::Color32::from_rgba_unmultiplied(0x2f, 0x6f, 0xe8, 242);
+            let fill = if hovered {
+                egui::Color32::from_rgb(0x4a, 0x86, 0xf5)
+            } else {
+                blue
+            };
+            ui.painter().circle(
+                rect.center(),
+                SIZE / 2.0,
+                fill,
+                egui::Stroke::new(1.0, egui::Color32::from_white_alpha(40)),
+            );
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                icon::PLUS,
+                egui::FontId::proportional(30.0),
+                egui::Color32::WHITE,
+            );
+            response.clicked()
+        })
+        .inner
 }
 
 /// Total de la sélection (BAL-07).

@@ -1,122 +1,428 @@
-//! Tableau de bord : cartes de synthèse avec mini-graphiques interactifs.
+//! Bandeau des soldes : « Pointé + À venir = Solde final ».
 //!
-//! - Solde : courbe du solde dans le temps ; glisser sélectionne une période
-//!   (filtre de dates), un clic simple efface la période.
-//! - Pointage : pointé et rapproché, barre à trois zones ; un clic sur une zone
-//!   filtre la grille sur cet état.
-//! - À venir : non pointées par mois ; un clic sur un mois filtre ce mois.
+//! Trois chiffres seulement, reliés par leur relation, lisibles d'un coup
+//! d'œil. Chacun porte son contexte (barre rapproché/pointé, nombre
+//! d'opérations, variation et courbe du solde) et filtre la grille au clic.
+//! La courbe du solde montre le prévisionnel en pointillés après aujourd'hui ;
+//! glisser dessus sélectionne une période.
+
+use std::f32::consts::TAU;
 
 use bp_core::filter::TackFilter;
 use bp_core::model::{Amount, Date};
-use chrono::Datelike;
-use egui::{Align2, Color32, CornerRadius, FontId, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
+use egui::{Align2, Color32, FontId, Pos2, Rect, Sense, Stroke, Ui, pos2, vec2};
 use egui_phosphor::regular as icon;
 
 use crate::document::{ChartWindow, OpenDoc};
-use crate::format::money;
+use crate::format::{money, money_compact};
 use crate::theme::{Palette, palette};
 
-const CARD_HEIGHT: f32 = 120.0;
-const CARD_MIN_WIDTH: f32 = 300.0;
-const GAP: f32 = 18.0;
+const STRIP_HEIGHT: f32 = 98.0;
+const OPERATOR_WIDTH: f32 = 34.0;
+/// Durée de l'animation des montants quand les données changent.
+const COUNT_UP_SECONDS: f64 = 0.28;
 
 pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) {
     let available = ui.available_width();
-    let columns = (((available + GAP) / (CARD_MIN_WIDTH + GAP)).floor() as usize).clamp(1, 3);
-    let width = (available - GAP * (columns - 1) as f32) / columns as f32;
-    let cards: [fn(&mut Ui, Rect, &mut OpenDoc); 3] = [balance_card, tack_card, weekly_card];
-    for row in cards.chunks(columns) {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = GAP;
-            for card in row {
-                let (rect, _) = ui.allocate_exact_size(vec2(width, CARD_HEIGHT), Sense::hover());
-                card(ui, rect, doc);
-            }
-        });
-        ui.add_space(GAP);
-    }
-}
-
-/// Fond de carte, liseré coloré, pastille et titre. Renvoie la zone de contenu
-/// et la zone libre à droite du titre.
-fn card_frame(ui: &Ui, rect: Rect, color: Color32, glyph: &str, title: &str) -> (Rect, Rect) {
+    let (strip, _) = ui.allocate_exact_size(vec2(available, STRIP_HEIGHT), Sense::hover());
+    let solde_width = (available * 0.46)
+        .clamp(320.0, 760.0)
+        .min(available - 2.0 * OPERATOR_WIDTH - 2.0 * 180.0);
+    let small_width = (available - solde_width - 2.0 * OPERATOR_WIDTH) / 2.0;
+    let pointed = Rect::from_min_size(strip.min, vec2(small_width, STRIP_HEIGHT));
+    let pending = Rect::from_min_size(
+        pos2(pointed.right() + OPERATOR_WIDTH, strip.top()),
+        vec2(small_width, STRIP_HEIGHT),
+    );
+    let solde = Rect::from_min_max(
+        pos2(pending.right() + OPERATOR_WIDTH, strip.top()),
+        strip.max,
+    );
     let pal = palette(ui);
-    let painter = ui.painter();
-    painter.rect(
-        rect,
-        12.0,
-        pal.surface,
-        Stroke::new(1.0, pal.border),
-        egui::StrokeKind::Inside,
-    );
-    painter.rect_filled(
-        Rect::from_min_size(rect.min, vec2(4.0, rect.height())),
-        CornerRadius {
-            nw: 12,
-            sw: 12,
-            ne: 0,
-            se: 0,
-        },
-        color,
-    );
-    let badge = Rect::from_min_size(
-        pos2(rect.left() + 18.0, rect.top() + 14.0),
-        vec2(26.0, 26.0),
-    );
-    painter.rect_filled(badge, 7.0, color.gamma_multiply(0.18));
-    painter.text(
-        badge.center(),
-        Align2::CENTER_CENTER,
-        glyph,
-        FontId::proportional(15.0),
-        color,
-    );
-    let title_galley = painter.layout_no_wrap(
-        title.to_string(),
-        FontId::new(13.0, crate::theme::medium()),
-        pal.muted,
-    );
-    let title_pos = pos2(
-        badge.right() + 10.0,
-        badge.center().y - title_galley.size().y / 2.0,
-    );
-    let title_right = title_pos.x + title_galley.size().x;
-    painter.galley(title_pos, title_galley, pal.muted);
-    let header_right = Rect::from_min_max(
-        pos2(title_right + 12.0, badge.top()),
-        pos2(rect.right() - 14.0, badge.bottom()),
-    );
-    let content = Rect::from_min_max(
-        pos2(rect.left() + 18.0, badge.bottom() + 8.0),
-        pos2(rect.right() - 16.0, rect.bottom() - 12.0),
-    );
-    (content, header_right)
+    for (x, sign) in [(pointed.right(), "+"), (pending.right(), "=")] {
+        ui.painter().text(
+            pos2(x + OPERATOR_WIDTH / 2.0, strip.center().y),
+            Align2::CENTER_CENTER,
+            sign,
+            FontId::new(26.0, egui::FontFamily::Proportional),
+            pal.muted.gamma_multiply(0.8),
+        );
+    }
+    pointed_tile(ui, pointed, doc);
+    pending_tile(ui, pending, doc);
+    balance_tile(ui, solde, doc);
+    ui.add_space(14.0);
 }
 
-fn value_text(ui: &Ui, pos: Pos2, amount: Amount, currency: &str, size: f32) -> Rect {
+/// Fond d'une tuile ; `hero` ajoute un halo et une bordure d'accent.
+fn tile(ui: &Ui, rect: Rect, color: Color32, hero: bool) {
+    let pal = palette(ui);
+    let stroke = if hero {
+        Stroke::new(1.0, color.gamma_multiply(0.45))
+    } else {
+        Stroke::new(1.0, pal.border)
+    };
+    ui.painter()
+        .rect(rect, 14.0, pal.surface, stroke, egui::StrokeKind::Inside);
+    let glow = ui.painter_at(rect.shrink(1.0));
+    let (radius, strength) = if hero {
+        (rect.height() * 2.2, 0.20)
+    } else {
+        (rect.height() * 1.4, 0.10)
+    };
+    radial_glow(
+        &glow,
+        rect.left_top() + vec2(28.0, 20.0),
+        radius,
+        color.gamma_multiply(strength),
+    );
+    ui.painter().hline(
+        rect.x_range().shrink(14.0),
+        rect.top() + 0.5,
+        Stroke::new(1.0, Color32::from_white_alpha(14)),
+    );
+}
+
+/// Libellé de tuile avec son icône colorée ; renvoie la position sous le libellé.
+fn tile_label(ui: &Ui, pos: Pos2, glyph: &str, text: &str, color: Color32) -> f32 {
+    let pal = palette(ui);
+    let icon_rect = ui.painter().text(
+        pos,
+        Align2::LEFT_TOP,
+        glyph,
+        FontId::proportional(14.0),
+        color,
+    );
+    let label = ui.painter().text(
+        pos2(icon_rect.right() + 6.0, pos.y),
+        Align2::LEFT_TOP,
+        text,
+        FontId::new(12.5, crate::theme::medium()),
+        pal.fg_dark,
+    );
+    label.bottom().max(icon_rect.bottom())
+}
+
+fn tile_value(
+    ui: &Ui,
+    pos: Pos2,
+    amount: Amount,
+    currency: &str,
+    size: f32,
+    max_width: f32,
+) -> Rect {
     let pal = palette(ui);
     let color = if amount.is_negative() {
         pal.negative
     } else {
         pal.fg
     };
-    ui.painter().text(
-        pos,
-        Align2::LEFT_TOP,
-        money(amount, currency),
-        FontId::new(size, crate::theme::semibold()),
-        color,
-    )
+    let full = money(amount, currency);
+    let font = FontId::new(size, crate::theme::semibold());
+    let galley = ui.painter().layout_no_wrap(full, font.clone(), color);
+    // Trop large : montant abrégé plutôt que tronqué.
+    let galley = if galley.size().x > max_width {
+        ui.painter()
+            .layout_no_wrap(money_compact(amount, currency), font, color)
+    } else {
+        galley
+    };
+    let rect = Rect::from_min_size(pos, galley.size());
+    ui.painter().galley(pos, galley, color);
+    rect
 }
 
-// ─────────────────────────────── Solde ───────────────────────────────
+// ─────────────────────────────── Pointé ───────────────────────────────
 
-fn balance_card(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
+fn pointed_tile(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
     let pal = palette(ui);
-    let (content, header) = card_frame(ui, rect, pal.accent, icon::WALLET, "Solde");
+    tile(ui, rect, pal.pointed, false);
     let currency = doc.current_account().currency.clone();
+    let totals = doc.totals();
+    let insights = doc.insights().clone();
+    let inner = rect.shrink2(vec2(16.0, 12.0));
+    let y = tile_label(ui, inner.left_top(), icon::CHECKS, "Pointé", pal.pointed);
+    let shown = animated(ui, ui.id().with("pointed_value"), totals.pointed);
+    let value = tile_value(
+        ui,
+        pos2(inner.left(), y + 4.0),
+        shown,
+        &currency,
+        23.0,
+        inner.width(),
+    );
 
-    // Choix de la fenêtre de temps, à droite du titre.
+    // Barre rapproché / pointé (en nombre d'opérations), cliquable.
+    let bar = Rect::from_min_size(
+        pos2(inner.left(), value.bottom() + 8.0),
+        vec2(inner.width(), 6.0),
+    );
+    let reconciled = insights.tack_counts[2];
+    let pointed_only = insights.tack_counts[1];
+    let total = (reconciled + pointed_only).max(1);
+    let split = bar.left() + bar.width() * reconciled as f32 / total as f32;
+    let zones = [
+        (
+            Rect::from_min_max(bar.min, pos2(split, bar.bottom())),
+            TackFilter::Reconciled,
+            pal.reconciled,
+            "rapprochées",
+            reconciled,
+            insights.tack_sums[2],
+        ),
+        (
+            Rect::from_min_max(pos2(split, bar.top()), bar.max),
+            TackFilter::Pointed,
+            pal.pointed,
+            "pointées (non rapprochées)",
+            pointed_only,
+            insights.tack_sums[1],
+        ),
+    ];
+    ui.painter().rect_filled(bar, 3.0, pal.bg_highlight);
+    for (k, (zone, filter, color, label, count, sum)) in zones.into_iter().enumerate() {
+        if zone.width() <= 0.0 {
+            continue;
+        }
+        let response = ui.interact(
+            zone.expand2(vec2(0.0, 6.0)),
+            ui.id().with(("pointed_zone", k)),
+            Sense::click(),
+        );
+        let active = doc.filters.tack == filter;
+        let dimmed = doc.filters.tack != TackFilter::All && !active;
+        let fill = if dimmed {
+            color.gamma_multiply(0.3)
+        } else if response.hovered() {
+            color
+        } else {
+            color.gamma_multiply(0.85)
+        };
+        ui.painter().rect_filled(zone, 3.0, fill);
+        if response.clicked() {
+            doc.filters.tack = if active { TackFilter::All } else { filter };
+        }
+        response.on_hover_text(format!(
+            "{} {label}\n{}\nCliquer pour filtrer",
+            crate::format::count(count),
+            money(sum, &currency)
+        ));
+    }
+    let detail = match totals.last_reconciled {
+        Some(date) => format!(
+            "dont {} rapproché au {date}",
+            money_compact(totals.reconciled, &currency)
+        ),
+        None => "aucun rapprochement".into(),
+    };
+    ui.painter().text(
+        pos2(inner.left(), bar.bottom() + 5.0),
+        Align2::LEFT_TOP,
+        detail,
+        FontId::proportional(11.0),
+        pal.muted,
+    );
+}
+
+// ─────────────────────────────── À venir ───────────────────────────────
+
+fn pending_tile(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
+    let pal = palette(ui);
+    let active = doc.filters.tack == TackFilter::NotPointed;
+    let response = ui.interact(rect, ui.id().with("pending_tile"), Sense::click());
+    tile(ui, rect, pal.future, active);
+    if response.hovered() {
+        ui.painter().rect_stroke(
+            rect,
+            14.0,
+            Stroke::new(1.0, pal.future.gamma_multiply(0.6)),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let currency = doc.current_account().currency.clone();
+    let totals = doc.totals();
+    let inner = rect.shrink2(vec2(16.0, 12.0));
+    let y = tile_label(ui, inner.left_top(), icon::CLOCK, "À venir", pal.future);
+    let shown = animated(ui, ui.id().with("pending_value"), totals.pending);
+    let value = tile_value(
+        ui,
+        pos2(inner.left(), y + 4.0),
+        shown,
+        &currency,
+        23.0,
+        inner.width(),
+    );
+    let count = match totals.pending_count {
+        0 => "aucune opération à pointer".to_string(),
+        1 => "1 opération non pointée".to_string(),
+        n => format!("{} opérations non pointées", crate::format::count(n)),
+    };
+    ui.painter().text(
+        pos2(inner.left(), value.bottom() + 8.0),
+        Align2::LEFT_TOP,
+        count,
+        FontId::proportional(11.5),
+        pal.fg_dark,
+    );
+    let hint = if active {
+        "Cliquer pour tout afficher"
+    } else {
+        "Cliquer pour n'afficher que les opérations non pointées"
+    };
+    let response = response.on_hover_text(hint);
+    if response.clicked() {
+        doc.filters.tack = if active {
+            TackFilter::All
+        } else {
+            TackFilter::NotPointed
+        };
+    }
+}
+
+// ─────────────────────────────── Solde final ───────────────────────────────
+
+fn balance_tile(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
+    let pal = palette(ui);
+    tile(ui, rect, pal.accent, true);
+    let currency = doc.current_account().currency.clone();
+    let inner = rect.shrink2(vec2(16.0, 12.0));
+    let y = tile_label(
+        ui,
+        inner.left_top(),
+        icon::WALLET,
+        "Solde final",
+        pal.accent,
+    );
+    let chips = Rect::from_min_max(
+        pos2(inner.center().x, inner.top() - 4.0),
+        pos2(inner.right(), inner.top() + 18.0),
+    );
+    window_chips(ui, chips, doc, &pal);
+
+    let totals = doc.totals();
+    let shown = animated(ui, ui.id().with("balance_value"), totals.balance);
+    let value = tile_value(
+        ui,
+        pos2(inner.left(), y + 4.0),
+        shown,
+        &currency,
+        27.0,
+        inner.width() * 0.5,
+    );
+
+    let series = doc.insights().series.clone();
+    let Some((start, end)) = window_dates(&series, doc.chart_window) else {
+        return;
+    };
+    let today = Date::today().min(end);
+    let before = balance_at(&series, start);
+    let delta = balance_at(&series, today) + -before;
+    let percent = (before.0 != 0).then(|| delta.0 as f64 / before.0.unsigned_abs() as f64 * 100.0);
+    let label = match doc.chart_window {
+        ChartWindow::Month => "sur 1 mois",
+        ChartWindow::SixMonths => "sur 6 mois",
+        ChartWindow::Year => "sur 1 an",
+        ChartWindow::FiveYears => "sur 5 ans",
+        ChartWindow::All => "depuis l'origine",
+    };
+    let badge = delta_badge(
+        ui,
+        pos2(inner.left(), value.bottom() + 6.0),
+        delta,
+        percent,
+        &currency,
+        label,
+    );
+
+    let chart_left = value.right().max(badge.right()) + 20.0;
+    let chart = Rect::from_min_max(pos2(chart_left, inner.top() + 24.0), inner.right_bottom());
+    if chart.width() > 80.0 {
+        balance_chart(ui, chart, doc, &series, start, end, &currency, &pal);
+    }
+}
+
+/// Disque dégradé (opaque au centre, transparent au bord).
+fn radial_glow(painter: &egui::Painter, center: Pos2, radius: f32, color: Color32) {
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(center, color);
+    let steps = 48;
+    for i in 0..=steps {
+        let a = TAU * i as f32 / steps as f32;
+        mesh.colored_vertex(
+            center + vec2(a.cos(), a.sin()) * radius,
+            Color32::TRANSPARENT,
+        );
+    }
+    for i in 1..=steps as u32 {
+        mesh.add_triangle(0, i, i + 1);
+    }
+    painter.add(mesh);
+}
+
+/// Pastille de variation : flèche, montant (et pourcentage), couleur selon le
+/// signe. Dessinée à partir de `pos` (coin haut gauche) ; renvoie son rectangle.
+fn delta_badge(
+    ui: &Ui,
+    pos: Pos2,
+    delta: Amount,
+    percent: Option<f64>,
+    currency: &str,
+    suffix: &str,
+) -> Rect {
+    let pal = palette(ui);
+    let (glyph, color) = if delta.is_negative() {
+        (icon::TREND_DOWN, pal.negative)
+    } else {
+        (icon::TREND_UP, pal.positive)
+    };
+    let sign = if delta.is_negative() { "" } else { "+" };
+    let mut text = format!("{glyph} {sign}{}", money_compact(delta, currency));
+    if let Some(p) = percent.filter(|p| p.is_finite()) {
+        text.push_str(&format!("  {sign}{p:.1} %").replace('.', ","));
+    }
+    if !suffix.is_empty() {
+        text.push_str("  ");
+        text.push_str(suffix);
+    }
+    let galley =
+        ui.painter()
+            .layout_no_wrap(text, FontId::new(11.5, crate::theme::medium()), color);
+    let rect = Rect::from_min_size(pos, galley.size() + vec2(14.0, 6.0));
+    ui.painter()
+        .rect_filled(rect, rect.height() / 2.0, color.gamma_multiply(0.15));
+    ui.painter()
+        .galley(rect.min + vec2(7.0, 3.0), galley, color);
+    rect
+}
+
+/// Montant animé : quand la valeur change, il « défile » vers la nouvelle
+/// valeur en ~0,3 s, sans bloquer l'interface.
+fn animated(ui: &Ui, id: egui::Id, target: Amount) -> Amount {
+    let now = ui.input(|i| i.time);
+    let (from, to, start) = ui
+        .data(|d| d.get_temp::<(i64, i64, f64)>(id))
+        .unwrap_or((target.0, target.0, 0.0));
+    let (from, start) = if to != target.0 {
+        // Nouvelle cible : on repart de la valeur actuellement affichée.
+        let t = ((now - start) / COUNT_UP_SECONDS).clamp(0.0, 1.0);
+        ((from as f64 + (to - from) as f64 * ease(t)) as i64, now)
+    } else {
+        (from, start)
+    };
+    ui.data_mut(|d| d.insert_temp(id, (from, target.0, start)));
+    let t = ((now - start) / COUNT_UP_SECONDS).clamp(0.0, 1.0);
+    if t < 1.0 {
+        ui.ctx().request_repaint();
+    }
+    Amount((from as f64 + (target.0 - from) as f64 * ease(t)).round() as i64)
+}
+
+fn ease(t: f64) -> f64 {
+    1.0 - (1.0 - t).powi(3)
+}
+
+/// Boutons de période (1M, 6M, 1A, 5A, Tout), alignés à droite du titre.
+fn window_chips(ui: &mut Ui, header: Rect, doc: &mut OpenDoc, pal: &Palette) {
     let mut x = header.right();
     for window in ChartWindow::ALL.iter().rev() {
         let galley = ui.painter().layout_no_wrap(
@@ -136,132 +442,30 @@ fn balance_card(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
         );
         let selected = doc.chart_window == *window;
         if selected || response.hovered() {
-            ui.painter().rect_filled(
-                chip,
-                6.0,
-                if selected {
-                    pal.selection
-                } else {
-                    pal.bg_highlight
-                },
-            );
+            let fill = if selected {
+                pal.accent.gamma_multiply(0.22)
+            } else {
+                pal.bg_highlight
+            };
+            ui.painter().rect_filled(chip, 6.0, fill);
         }
-        let color = if selected { pal.fg } else { pal.muted };
+        let color = if selected { pal.accent } else { pal.muted };
         ui.painter()
             .galley(chip.center() - galley.size() / 2.0, galley, color);
         if response.clicked() {
             doc.chart_window = *window;
         }
     }
-
-    let totals = doc.totals();
-    let value = value_text(ui, content.left_top(), totals.balance, &currency, 24.0);
-
-    // Décomposition en tout petit : rapproché + pointé + à venir = solde.
-    let small = FontId::new(11.0, egui::FontFamily::Proportional);
-    let pointed_only = totals.pointed + -totals.reconciled;
-    let mut job = egui::text::LayoutJob::default();
-    let mut part = |text: String, color: Color32| {
-        job.append(
-            &text,
-            0.0,
-            egui::TextFormat {
-                font_id: small.clone(),
-                color,
-                ..Default::default()
-            },
-        );
-    };
-    part(
-        format!("{} rapproché", money(totals.reconciled, &currency)),
-        pal.reconciled,
-    );
-    part("  +  ".into(), pal.muted);
-    part(
-        format!("{} pointé", money(pointed_only, &currency)),
-        pal.pointed,
-    );
-    part("  +  ".into(), pal.muted);
-    part(
-        format!("{} à venir", money(totals.pending, &currency)),
-        pal.future,
-    );
-    let mut equation = ui.painter().layout_job(job);
-    if equation.size().x > content.width() {
-        // Trop long : montants abrégés (k€, M€).
-        let mut job = egui::text::LayoutJob::default();
-        let mut part = |text: String, color: Color32| {
-            job.append(
-                &text,
-                0.0,
-                egui::TextFormat {
-                    font_id: small.clone(),
-                    color,
-                    ..Default::default()
-                },
-            );
-        };
-        let short = |a: Amount| crate::format::money_compact(a, &currency);
-        part(
-            format!("{} rapproché", short(totals.reconciled)),
-            pal.reconciled,
-        );
-        part(" + ".into(), pal.muted);
-        part(format!("{} pointé", short(pointed_only)), pal.pointed);
-        part(" + ".into(), pal.muted);
-        part(format!("{} à venir", short(totals.pending)), pal.future);
-        equation = ui.painter().layout_job(job);
-    }
-    let equation_pos = pos2(content.left(), content.bottom() - equation.size().y);
-    let equation_rect = Rect::from_min_size(equation_pos, equation.size());
-    ui.painter()
-        .with_clip_rect(content)
-        .galley(equation_pos, equation, pal.muted);
-    ui.interact(equation_rect, ui.id().with("equation"), Sense::hover())
-        .on_hover_text(format!(
-            "Rapproché : {}\nPointé (non rapproché) : {}\nÀ venir (non pointé) : {}\n= Solde : {}",
-            money(totals.reconciled, &currency),
-            money(pointed_only, &currency),
-            money(totals.pending, &currency),
-            money(totals.balance, &currency),
-        ));
-
-    let series = doc.insights().series.clone();
-    let chart = Rect::from_min_max(
-        pos2(value.right() + 28.0, content.top() + 2.0),
-        pos2(content.right(), equation_rect.top() - 6.0),
-    );
-    let window = window_dates(&series, doc.chart_window);
-
-    // Variation sur la fenêtre affichée, sous le montant.
-    if let Some((start, end)) = window {
-        let delta = balance_at(&series, end) + -balance_at(&series, start);
-        let (glyph, color) = if delta.is_negative() {
-            (icon::TREND_DOWN, pal.negative)
-        } else {
-            (icon::TREND_UP, pal.positive)
-        };
-        let sign = if delta.is_negative() { "" } else { "+" };
-        ui.painter().text(
-            pos2(value.left(), value.bottom() + 2.0),
-            Align2::LEFT_TOP,
-            format!("{glyph} {sign}{}", money(delta, &currency)),
-            egui::TextStyle::Small.resolve(ui.style()),
-            color,
-        );
-        if chart.width() > 60.0 {
-            balance_chart(ui, chart, doc, &series, start, end, &currency, &pal);
-        }
-    }
 }
 
-/// Dates de début et de fin de la fenêtre affichée.
+/// Dates de début et de fin de la fenêtre affichée (la fin inclut les
+/// opérations futures : solde prévisionnel).
 fn window_dates(series: &[(Date, Amount)], window: ChartWindow) -> Option<(Date, Date)> {
     let first = series.first()?.0;
     let last = series.last()?.0;
     let end = last.max(Date::today());
     let start = match window.days() {
-        Some(days) => Date((end.0 - days).max(first.0 - 1)),
+        Some(days) => Date((Date::today().0 - days).max(first.0 - 1)),
         None => Date(first.0 - 1),
     };
     Some((start, end))
@@ -290,11 +494,12 @@ fn balance_chart(
 ) {
     let span = (end.0 - start.0).max(1) as f32;
     let samples = (rect.width() / 2.0).max(2.0) as usize;
-    let values: Vec<f64> = (0..samples)
-        .map(|i| {
-            let date = Date(start.0 + (span * i as f32 / (samples - 1) as f32).round() as i32);
-            balance_at(series, date).as_f64()
-        })
+    let dates: Vec<Date> = (0..samples)
+        .map(|i| Date(start.0 + (span * i as f32 / (samples - 1) as f32).round() as i32))
+        .collect();
+    let values: Vec<f64> = dates
+        .iter()
+        .map(|d| balance_at(series, *d).as_f64())
         .collect();
     let (mut lo, mut hi) = values
         .iter()
@@ -303,7 +508,7 @@ fn balance_chart(
         lo -= 1.0;
         hi += 1.0;
     }
-    let pad = (hi - lo) * 0.08;
+    let pad = (hi - lo) * 0.12;
     let (lo, hi) = (lo - pad, hi + pad);
     let x_of = |i: usize| rect.left() + rect.width() * i as f32 / (samples - 1) as f32;
     let y_of = |v: f64| rect.bottom() - ((v - lo) / (hi - lo)) as f32 * rect.height();
@@ -312,7 +517,9 @@ fn balance_chart(
     let date_of_x = |x: f32| {
         Date(start.0 + (((x - rect.left()) / rect.width()).clamp(0.0, 1.0) * span).round() as i32)
     };
-    let painter = ui.painter_at(rect.expand(2.0));
+    let painter = ui.painter_at(rect.expand2(vec2(4.0, 6.0)));
+    let today = Date::today();
+    let split = dates.iter().position(|d| *d > today).unwrap_or(samples);
 
     // Période filtrée.
     let (from, to) = (doc.filters.date_from, doc.filters.date_to);
@@ -322,7 +529,7 @@ fn balance_chart(
         painter.rect_filled(
             Rect::from_x_y_ranges(a..=b, rect.y_range()),
             4.0,
-            pal.accent.gamma_multiply(0.14),
+            pal.accent.gamma_multiply(0.12),
         );
     }
 
@@ -337,18 +544,18 @@ fn balance_chart(
         ));
     }
 
-    // Aire en dégradé sous la courbe, puis la courbe.
     let points: Vec<Pos2> = values
         .iter()
         .enumerate()
         .map(|(i, &v)| pos2(x_of(i), y_of(v)))
         .collect();
+
+    // Aire en dégradé (plus pâle dans le futur).
     let mut mesh = egui::Mesh::default();
-    let top = pal.accent.gamma_multiply(0.32);
-    let bottom = pal.accent.gamma_multiply(0.0);
-    for p in &points {
-        mesh.colored_vertex(*p, top);
-        mesh.colored_vertex(pos2(p.x, rect.bottom()), bottom);
+    for (i, p) in points.iter().enumerate() {
+        let strength = if i < split { 0.30 } else { 0.12 };
+        mesh.colored_vertex(*p, pal.accent.gamma_multiply(strength));
+        mesh.colored_vertex(pos2(p.x, rect.bottom()), pal.accent.gamma_multiply(0.0));
     }
     for i in 0..points.len().saturating_sub(1) as u32 {
         let k = i * 2;
@@ -356,20 +563,30 @@ fn balance_chart(
         mesh.add_triangle(k + 1, k + 3, k + 2);
     }
     painter.add(mesh);
-    painter.add(egui::Shape::line(
-        points.clone(),
-        Stroke::new(2.0, pal.accent),
-    ));
 
-    // Aujourd'hui.
-    let today = Date::today();
-    if today > start && today < end {
-        let x = x_of_date(today);
-        painter.vline(
-            x,
-            rect.y_range(),
-            Stroke::new(1.0, pal.future.gamma_multiply(0.6)),
-        );
+    // Courbe passée : halo puis trait ; courbe future (prévisionnel) en pointillés.
+    let past: Vec<Pos2> = points[..split.min(points.len())].to_vec();
+    if past.len() > 1 {
+        painter.add(egui::Shape::line(
+            past.clone(),
+            Stroke::new(7.0, pal.accent.gamma_multiply(0.12)),
+        ));
+        painter.add(egui::Shape::line(
+            past.clone(),
+            Stroke::new(2.0, pal.accent),
+        ));
+    }
+    if split < points.len() {
+        let future: Vec<Pos2> = points[split.saturating_sub(1)..].to_vec();
+        painter.add(egui::Shape::dashed_line(
+            &future,
+            Stroke::new(2.0, pal.accent.gamma_multiply(0.7)),
+            5.0,
+            4.0,
+        ));
+        if let Some(last) = past.last() {
+            painter.circle(*last, 3.5, pal.surface, Stroke::new(2.0, pal.accent));
+        }
     }
 
     // Interaction : survol (valeur), glisser (période), clic (effacer).
@@ -396,9 +613,8 @@ fn balance_chart(
         if response.drag_stopped() {
             ui.data_mut(|d| d.remove::<f32>(drag_id));
             if (p.x - x0).abs() > 4.0 {
-                let (a, b) = (date_of_x(x0.min(p.x)), date_of_x(x0.max(p.x)));
-                doc.filters.date_from = Some(a);
-                doc.filters.date_to = Some(b);
+                doc.filters.date_from = Some(date_of_x(x0.min(p.x)));
+                doc.filters.date_to = Some(date_of_x(x0.max(p.x)));
             }
         }
     }
@@ -414,275 +630,28 @@ fn balance_chart(
         painter.vline(
             x,
             rect.y_range(),
-            Stroke::new(1.0, pal.fg.gamma_multiply(0.35)),
+            Stroke::new(1.0, pal.fg.gamma_multiply(0.3)),
         );
-        painter.circle(pos2(x, y), 4.0, pal.accent, Stroke::new(2.0, pal.surface));
-        let text = format!("{date}  ·  {}", money(value, currency));
-        let font = egui::TextStyle::Small.resolve(ui.style());
-        let galley = ui.painter().layout_no_wrap(text, font, pal.fg);
+        painter.circle(pos2(x, y), 4.5, pal.accent, Stroke::new(2.0, pal.surface));
+        let future = if date > today {
+            "  · prévisionnel"
+        } else {
+            ""
+        };
+        let text = format!("{date}  ·  {}{future}", money(value, currency));
+        let galley =
+            ui.painter()
+                .layout_no_wrap(text, egui::TextStyle::Small.resolve(ui.style()), pal.fg);
         let mut tip = Rect::from_min_size(
-            pos2(x + 8.0, rect.top() - 2.0),
-            galley.size() + vec2(12.0, 6.0),
+            pos2(x + 10.0, rect.top() - 4.0),
+            galley.size() + vec2(14.0, 8.0),
         );
         if tip.right() > rect.right() {
-            tip = tip.translate(vec2(-(tip.width() + 16.0), 0.0));
+            tip = tip.translate(vec2(-(tip.width() + 20.0), 0.0));
         }
-        ui.painter().rect_filled(tip, 5.0, pal.menu_bg);
+        ui.painter().rect_filled(tip, 6.0, pal.menu_bg);
         ui.painter()
-            .galley(tip.min + vec2(6.0, 3.0), galley, pal.fg);
+            .galley(tip.min + vec2(7.0, 4.0), galley, pal.fg);
         response.on_hover_cursor(egui::CursorIcon::Crosshair);
-    }
-}
-
-// ────────────────────────────── Pointage ─────────────────────────────
-
-fn tack_card(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
-    let pal = palette(ui);
-    let (content, header) = card_frame(ui, rect, pal.pointed, icon::CHECKS, "Pointage");
-    let currency = doc.current_account().currency.clone();
-    let totals = doc.totals();
-    let insights = doc.insights().clone();
-    let small = egui::TextStyle::Small.resolve(ui.style());
-
-    if let Some(date) = totals.last_reconciled {
-        ui.painter().text(
-            header.right_center(),
-            Align2::RIGHT_CENTER,
-            format!("rapproché au {date}"),
-            small.clone(),
-            pal.muted,
-        );
-    }
-
-    // Barre à trois zones, proportionnelle au nombre d'opérations.
-    let bar = Rect::from_min_size(
-        pos2(content.left(), content.top() + 6.0),
-        vec2(content.width(), 14.0),
-    );
-    let zones = [
-        (TackFilter::NotPointed, pal.future, "non pointées"),
-        (TackFilter::Pointed, pal.pointed, "pointées"),
-        (TackFilter::Reconciled, pal.reconciled, "rapprochées"),
-    ];
-    let total: usize = insights.tack_counts.iter().sum::<usize>().max(1);
-    ui.painter().rect_filled(bar, 7.0, pal.bg_highlight);
-    let mut x = bar.left();
-    let shown: Vec<usize> = (0..3).filter(|&k| insights.tack_counts[k] > 0).collect();
-    for (pos, &k) in shown.iter().enumerate() {
-        let (filter, color, label) = zones[k];
-        let w = (bar.width() * insights.tack_counts[k] as f32 / total as f32).max(4.0);
-        let zone = Rect::from_min_max(
-            pos2(x, bar.top()),
-            pos2((x + w).min(bar.right()), bar.bottom()),
-        );
-        x += w;
-        let first = pos == 0;
-        let last = pos + 1 == shown.len();
-        let radius = CornerRadius {
-            nw: if first { 7 } else { 0 },
-            sw: if first { 7 } else { 0 },
-            ne: if last { 7 } else { 0 },
-            se: if last { 7 } else { 0 },
-        };
-        let response = ui.interact(
-            zone.expand2(vec2(0.0, 6.0)),
-            ui.id().with(("tack_zone", k)),
-            Sense::click(),
-        );
-        let active = doc.filters.tack == filter;
-        let dimmed = doc.filters.tack != TackFilter::All && !active;
-        let fill = if dimmed {
-            color.gamma_multiply(0.3)
-        } else if response.hovered() {
-            color
-        } else {
-            color.gamma_multiply(0.85)
-        };
-        ui.painter().rect_filled(zone, radius, fill);
-        if response.clicked() {
-            doc.filters.tack = if active { TackFilter::All } else { filter };
-        }
-        response.on_hover_text(format!(
-            "{} {label}\n{}\nCliquer pour filtrer",
-            crate::format::count(insights.tack_counts[k]),
-            money(insights.tack_sums[k], &currency)
-        ));
-    }
-
-    // Légende cliquable en trois colonnes égales ; la part de chaque état
-    // est dans l'info-bulle.
-    let column = content.width() / 3.0;
-    let ly = bar.bottom() + 22.0;
-    for (k, (filter, color, label)) in zones.iter().enumerate() {
-        let lx = content.left() + column * k as f32;
-        let item = Rect::from_min_size(pos2(lx, ly - 10.0), vec2(column - 6.0, 20.0));
-        let response = ui.interact(item, ui.id().with(("tack_legend", k)), Sense::click());
-        let active = doc.filters.tack == *filter;
-        ui.painter().circle_filled(pos2(lx + 4.0, ly), 4.0, *color);
-        let text_color = if active || response.hovered() {
-            pal.fg
-        } else {
-            pal.muted
-        };
-        let text = format!("{} {label}", crate::format::count(insights.tack_counts[k]));
-        let galley = ui
-            .painter()
-            .layout(text, small.clone(), text_color, f32::INFINITY);
-        ui.painter()
-            .with_clip_rect(item.shrink2(vec2(0.0, -2.0)))
-            .galley(
-                pos2(lx + 12.0, ly - galley.size().y / 2.0),
-                galley,
-                text_color,
-            );
-        let percent = 100.0 * insights.tack_counts[k] as f32 / total as f32;
-        let share = if percent > 0.0 && percent < 1.0 {
-            "moins de 1 %".to_string()
-        } else {
-            format!("{percent:.0} %")
-        };
-        if response
-            .on_hover_text(format!("{share} des opérations\nCliquer pour filtrer"))
-            .clicked()
-        {
-            doc.filters.tack = if active { TackFilter::All } else { *filter };
-        }
-    }
-}
-
-// ───────────────────────── Semaine par semaine ─────────────────────────
-
-/// Variation du solde semaine par semaine (lundi → dimanche), jusqu'à la
-/// semaine en cours. Un clic sur une barre filtre la semaine.
-fn weekly_card(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
-    let pal = palette(ui);
-    let (content, header) =
-        card_frame(ui, rect, pal.violet, icon::CHART_BAR, "Semaine par semaine");
-    let currency = doc.current_account().currency.clone();
-    let series = doc.insights().series.clone();
-    let small = egui::TextStyle::Small.resolve(ui.style());
-
-    // Nombre de semaines selon la place : une barre tous les 14 px environ.
-    let weeks = ((content.width() * 0.6 / 14.0) as usize).clamp(6, 26);
-    let today = Date::today().to_naive();
-    let this_monday = today - chrono::Days::new(today.weekday().num_days_from_monday() as u64);
-    let data: Vec<(Date, Date, Amount)> = (0..weeks)
-        .rev()
-        .map(|k| {
-            let monday = Date::from_naive(this_monday - chrono::Days::new(7 * k as u64));
-            let sunday = Date(monday.0 + 6);
-            let delta = balance_at(&series, sunday) + -balance_at(&series, Date(monday.0 - 1));
-            (monday, sunday, delta)
-        })
-        .collect();
-    let current = data.last().map_or(Amount::ZERO, |w| w.2);
-    let average = Amount(data.iter().map(|w| w.2.0).sum::<i64>() / weeks.max(1) as i64);
-
-    let sign = |a: Amount| if a.is_negative() { "" } else { "+" };
-    ui.painter().text(
-        header.right_center(),
-        Align2::RIGHT_CENTER,
-        format!(
-            "moyenne {}{} / sem.",
-            sign(average),
-            crate::format::money_compact(average, &currency)
-        ),
-        small.clone(),
-        pal.muted,
-    );
-    let color = if current.is_negative() {
-        pal.negative
-    } else {
-        pal.positive
-    };
-    let value = ui.painter().text(
-        content.left_top(),
-        Align2::LEFT_TOP,
-        format!("{}{}", sign(current), money(current, &currency)),
-        FontId::new(24.0, crate::theme::semibold()),
-        color,
-    );
-    ui.painter().text(
-        pos2(value.left(), value.bottom() + 2.0),
-        Align2::LEFT_TOP,
-        "cette semaine",
-        small.clone(),
-        pal.muted,
-    );
-
-    // Barres de part et d'autre d'une ligne zéro.
-    let chart = Rect::from_min_max(
-        pos2(value.right() + 28.0, content.top() + 2.0),
-        content.right_bottom(),
-    );
-    if chart.width() < 60.0 {
-        return;
-    }
-    let max = data
-        .iter()
-        .map(|w| w.2.0.unsigned_abs())
-        .max()
-        .unwrap_or(0)
-        .max(1) as f32;
-    let has_negative = data.iter().any(|w| w.2.is_negative());
-    let has_positive = data.iter().any(|w| !w.2.is_negative());
-    let zero_y = match (has_positive, has_negative) {
-        (true, true) => chart.center().y,
-        (false, true) => chart.top(),
-        _ => chart.bottom(),
-    };
-    let up_room = zero_y - chart.top();
-    let down_room = chart.bottom() - zero_y;
-    ui.painter()
-        .hline(chart.x_range(), zero_y, Stroke::new(1.0, pal.border));
-    let slot = chart.width() / data.len() as f32;
-    for (i, (monday, sunday, delta)) in data.iter().enumerate() {
-        let x0 = chart.left() + slot * i as f32;
-        let column = Rect::from_min_max(pos2(x0, chart.top()), pos2(x0 + slot, chart.bottom()));
-        let response = ui.interact(column, ui.id().with(("week", i)), Sense::click());
-        let active = doc.filters.date_from == Some(*monday) && doc.filters.date_to == Some(*sunday);
-        let ratio = delta.0.unsigned_abs() as f32 / max;
-        let (top, bottom) = if delta.is_negative() {
-            (zero_y, zero_y + down_room * ratio)
-        } else {
-            (zero_y - up_room * ratio, zero_y)
-        };
-        let bar = Rect::from_min_max(
-            pos2(x0 + slot * 0.18, top.min(bottom - 1.0)),
-            pos2(x0 + slot * 0.82, bottom.max(top + 1.0)),
-        );
-        let base = if delta.is_negative() {
-            pal.negative
-        } else {
-            pal.positive
-        };
-        let current_week = i + 1 == data.len();
-        let fill = if active || response.hovered() || current_week {
-            base
-        } else {
-            base.gamma_multiply(0.6)
-        };
-        if response.hovered() {
-            ui.painter().rect_filled(
-                column.shrink2(vec2(1.0, 0.0)),
-                4.0,
-                pal.bg_highlight.gamma_multiply(0.6),
-            );
-        }
-        ui.painter().rect_filled(bar, 2.0, fill);
-        if response.clicked() {
-            if active {
-                doc.filters.date_from = None;
-                doc.filters.date_to = None;
-            } else {
-                doc.filters.date_from = Some(*monday);
-                doc.filters.date_to = Some(*sunday);
-            }
-        }
-        response.on_hover_text(format!(
-            "Semaine du {monday} au {sunday}\n{}{}\nCliquer pour filtrer",
-            sign(*delta),
-            money(*delta, &currency)
-        ));
     }
 }

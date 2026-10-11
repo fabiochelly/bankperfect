@@ -12,7 +12,7 @@ use crate::document::OpenDoc;
 use crate::theme::palette;
 use crate::tools::Outcome;
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
     Accounts,
     Categories,

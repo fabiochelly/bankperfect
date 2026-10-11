@@ -9,6 +9,7 @@ use bp_core::model::{Amount, Tack};
 use egui::{Align, Key, KeyboardShortcut, Layout, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 
+use crate::commands::Command;
 use crate::dialogs::{self, Choice, PasswordPrompt, PromptResult};
 use crate::document::{CursorTarget, OpenDoc};
 use crate::editor::{Editor, EditorAction};
@@ -34,6 +35,9 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_PALETTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
+const SHORTCUT_PALETTE_ALT: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::P);
 const SHORTCUT_CALC: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::C);
 
@@ -52,6 +56,9 @@ pub struct BankPerfectApp {
     pending: Option<Pending>,
     confirm_delete: bool,
     tool: Option<crate::tools::Tool>,
+    command_palette: Option<crate::command_palette::CommandPalette>,
+    /// Commandes lancées récemment, la plus récente en premier.
+    recent_commands: Vec<Command>,
     error: Option<String>,
     toast: Option<(String, f64)>,
     allow_close: bool,
@@ -96,6 +103,8 @@ impl BankPerfectApp {
             pending: None,
             confirm_delete: false,
             tool: None,
+            command_palette: None,
+            recent_commands: Vec::new(),
             error: None,
             toast: None,
             allow_close: false,
@@ -211,6 +220,14 @@ impl BankPerfectApp {
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
+        if ctx.input_mut(|i| {
+            i.consume_shortcut(&SHORTCUT_PALETTE)
+                || i.consume_shortcut(&SHORTCUT_PALETTE_ALT)
+                || i.consume_key(Modifiers::NONE, Key::F1)
+        }) {
+            self.execute(ctx, Command::Palette);
+            return;
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPEN)) {
             self.request(Pending::Open(None));
         }
@@ -318,6 +335,115 @@ impl BankPerfectApp {
         }
     }
 
+    /// Exécute une commande (menus, palette).
+    fn execute(&mut self, ctx: &egui::Context, command: Command) {
+        use crate::tools::Tool;
+        let now = ctx.input(|i| i.time);
+        if command != Command::Palette {
+            self.recent_commands.retain(|&c| c != command);
+            self.recent_commands.insert(0, command);
+            self.recent_commands.truncate(5);
+        }
+        match command {
+            Command::Open => return self.request(Pending::Open(None)),
+            Command::Quit => return ctx.send_viewport_cmd(egui::ViewportCommand::Close),
+            Command::Notes => return self.tool = Some(Tool::Notes(crate::tools::NotesForm::new())),
+            Command::Calculator => {
+                return self.tool = Some(Tool::Calculator(crate::tools::CalcForm::new()));
+            }
+            Command::Palette => {
+                self.menus = menu::MenuBar::default();
+                return self.command_palette = Some(Default::default());
+            }
+            Command::Theme(preference) => {
+                ctx.set_theme(preference);
+                return self.settings.set_theme(preference);
+            }
+            Command::Save => return self.save(now),
+            _ => {}
+        }
+        let Some(doc) = &mut self.doc else { return };
+        match command {
+            Command::ExportCsv => self.tool = Some(Tool::ExportCsv(crate::tools::CsvForm::new())),
+            Command::ExportQif => {
+                if let Some(message) = crate::tools::export_qif(doc) {
+                    self.toast = Some((message, now + 4.0));
+                }
+            }
+            Command::Protection => self.tool = Some(Tool::Protection(Default::default())),
+            Command::Backups => {
+                self.tool = Some(Tool::Backups(crate::tools::BackupsForm::new(
+                    self.settings.backup_dir(),
+                    self.settings.backup_keep,
+                )));
+            }
+            Command::Undo => {
+                doc.undo();
+                self.editor = None;
+            }
+            Command::Redo => {
+                doc.redo();
+                self.editor = None;
+            }
+            Command::NewOperation => {
+                self.editor = Some(Editor::new_operation(&doc.document, doc.account));
+            }
+            Command::EditOperation => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    self.editor = Some(Editor::edit(&doc.document, doc.account, index));
+                }
+            }
+            Command::Delete => self.confirm_delete = !doc.selection.is_empty(),
+            Command::Replace => self.tool = Some(Tool::Replace(Default::default())),
+            Command::ToggleHideOld => doc.filters.hide_old_lines = !doc.filters.hide_old_lines,
+            Command::NextAccount | Command::PreviousAccount => {
+                doc.cycle_account(command == Command::NextAccount);
+                self.editor = None;
+            }
+            Command::SelectAccount(i) => {
+                doc.select_account(i);
+                self.editor = None;
+            }
+            Command::Manage(tab) => {
+                self.tool = Some(Tool::Manage(crate::manage_ui::ManageForm::new(doc, tab)));
+            }
+            Command::Tack => doc.cycle_tack(),
+            Command::ReconcileAll => doc.reconcile_all_pointed(),
+            Command::ModifyGroup => {
+                self.tool = Some(Tool::ModifyGroup(crate::tools::GroupForm::new()))
+            }
+            Command::ExtraFields => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    self.tool = Some(Tool::ExtraValues(crate::tools::ExtraForm::new(doc, index)));
+                }
+            }
+            Command::Open
+            | Command::Quit
+            | Command::Notes
+            | Command::Calculator
+            | Command::Palette
+            | Command::Theme(_)
+            | Command::Save => {}
+        }
+    }
+
+    /// Entrée de menu tirée du registre des commandes.
+    fn menu_command(&mut self, ui: &mut egui::Ui, command: Command) {
+        let info = command.info(self.doc.as_ref());
+        if menu::item_enabled(
+            ui,
+            info.enabled,
+            Some(info.icon),
+            &info.label,
+            info.shortcut,
+        )
+        .clicked()
+        {
+            let ctx = ui.ctx().clone();
+            self.execute(&ctx, command);
+        }
+    }
+
     fn update_title(&mut self, ctx: &egui::Context) {
         let title = match &self.doc {
             Some(doc) => format!(
@@ -355,159 +481,56 @@ impl BankPerfectApp {
     }
 
     fn menu_content(&mut self, ui: &mut egui::Ui, index: usize) {
-        let now = ui.input(|i| i.time);
+        use Command::*;
+        let has_doc = self.doc.is_some();
+        let tools_index = if has_doc { 5 } else { 1 };
         if index == 0 {
             menu::begin(ui);
-            if menu::item(ui, Some(icon::FOLDER_OPEN), "Ouvrir…", Some("Ctrl+O")).clicked() {
-                self.request(Pending::Open(None));
-            }
-            if menu::item_enabled(
-                ui,
-                self.doc.is_some(),
-                Some(icon::FLOPPY_DISK),
-                "Enregistrer",
-                Some("Ctrl+S"),
-            )
-            .clicked()
-            {
-                self.save(now);
-            }
-            if self.doc.is_some() {
+            self.menu_command(ui, Open);
+            self.menu_command(ui, Save);
+            if has_doc {
                 menu::separator(ui);
-                if menu::item(ui, Some(icon::FILE_CSV), "Exporter en CSV…", None).clicked() {
-                    self.tool = Some(crate::tools::Tool::ExportCsv(crate::tools::CsvForm::new()));
-                }
-                if menu::item(ui, Some(icon::EXPORT), "Exporter en QIF…", None).clicked()
-                    && let Some(doc) = &self.doc
-                    && let Some(message) = crate::tools::export_qif(doc)
-                {
-                    let now = ui.input(|i| i.time);
-                    self.toast = Some((message, now + 4.0));
-                }
-            }
-            if self.doc.is_some()
-                && menu::item(ui, Some(icon::SHIELD_CHECK), "Protection…", None).clicked()
-            {
-                self.tool = Some(crate::tools::Tool::Protection(Default::default()));
-            }
-            if self.doc.is_some()
-                && menu::item(
-                    ui,
-                    Some(icon::CLOCK_COUNTER_CLOCKWISE),
-                    "Sauvegardes…",
-                    None,
-                )
-                .clicked()
-            {
-                self.tool = Some(crate::tools::Tool::Backups(crate::tools::BackupsForm::new(
-                    self.settings.backup_dir(),
-                    self.settings.backup_keep,
-                )));
+                self.menu_command(ui, ExportCsv);
+                self.menu_command(ui, ExportQif);
+                menu::separator(ui);
+                self.menu_command(ui, Protection);
+                self.menu_command(ui, Backups);
             }
             menu::separator(ui);
-            if menu::item(ui, Some(icon::SIGN_OUT), "Quitter", None).clicked() {
-                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-            }
-
+            self.menu_command(ui, Quit);
             return;
         }
-        let tools_index = if self.doc.is_some() { 5 } else { 1 };
         if index == tools_index {
             menu::begin(ui);
-            if menu::item(ui, Some(icon::NOTE), "Notes", Some("Ctrl+Maj+N")).clicked() {
-                self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
-            }
-            if menu::item(
-                ui,
-                Some(icon::CALCULATOR),
-                "Calculatrice",
-                Some("Ctrl+Maj+C"),
-            )
-            .clicked()
-            {
-                self.tool = Some(crate::tools::Tool::Calculator(crate::tools::CalcForm::new()));
-            }
+            self.menu_command(ui, Palette);
+            menu::separator(ui);
+            self.menu_command(ui, Notes);
+            self.menu_command(ui, Calculator);
             return;
         }
-        let Some(doc) = &mut self.doc else { return };
         match index {
             1 => {
                 menu::begin(ui);
-                let undo = doc
-                    .undo_label()
-                    .map(|l| format!("Annuler {l}"))
-                    .unwrap_or_else(|| "Annuler".into());
-                if menu::item_enabled(
-                    ui,
-                    doc.undo_label().is_some(),
-                    Some(icon::ARROW_U_UP_LEFT),
-                    &undo,
-                    Some("Ctrl+Z"),
-                )
-                .clicked()
-                {
-                    doc.undo();
-                    self.editor = None;
-                }
-                let redo = doc
-                    .redo_label()
-                    .map(|l| format!("Refaire {l}"))
-                    .unwrap_or_else(|| "Refaire".into());
-                if menu::item_enabled(
-                    ui,
-                    doc.redo_label().is_some(),
-                    Some(icon::ARROW_U_UP_RIGHT),
-                    &redo,
-                    Some("Ctrl+Y"),
-                )
-                .clicked()
-                {
-                    doc.redo();
-                    self.editor = None;
-                }
+                self.menu_command(ui, Undo);
+                self.menu_command(ui, Redo);
                 menu::separator(ui);
-                if menu::item(ui, Some(icon::PLUS), "Nouvelle opération", Some("Inser")).clicked()
-                {
-                    self.editor = Some(Editor::new_operation(&doc.document, doc.account));
-                }
-                let single = doc.selection.iter().next().copied();
-                if menu::item_enabled(
-                    ui,
-                    single.is_some(),
-                    Some(icon::PENCIL_SIMPLE),
-                    "Modifier l'opération",
-                    Some("Entrée"),
-                )
-                .clicked()
-                    && let Some(index) = single
-                {
-                    self.editor = Some(Editor::edit(&doc.document, doc.account, index));
-                }
+                self.menu_command(ui, NewOperation);
+                self.menu_command(ui, EditOperation);
                 menu::separator(ui);
-                if menu::item_enabled(
-                    ui,
-                    !doc.selection.is_empty(),
-                    Some(icon::TRASH),
-                    "Supprimer",
-                    Some("Suppr"),
-                )
-                .clicked()
-                {
-                    self.confirm_delete = true;
-                }
+                self.menu_command(ui, Delete);
                 menu::separator(ui);
-                if menu::item(ui, Some(icon::SWAP), "Remplacer…", Some("Ctrl+R")).clicked() {
-                    self.tool = Some(crate::tools::Tool::Replace(Default::default()));
-                }
+                self.menu_command(ui, Replace);
             }
             2 => {
                 menu::begin(ui);
-                menu::toggle(
-                    ui,
-                    &mut doc.filters.hide_old_lines,
-                    "Cacher les lignes inutiles",
-                    Some("Ctrl+H"),
-                );
+                if let Some(doc) = &mut self.doc {
+                    menu::toggle(
+                        ui,
+                        &mut doc.filters.hide_old_lines,
+                        "Cacher les lignes inutiles",
+                        Some("Ctrl+H"),
+                    );
+                }
                 menu::separator(ui);
                 menu::heading(ui, "Thème");
                 let current = ui.ctx().options(|o| o.theme_preference);
@@ -517,129 +540,48 @@ impl BankPerfectApp {
                     (egui::ThemePreference::System, "Suivre le système"),
                 ] {
                     if menu::choice(ui, current == preference, label).clicked() {
-                        ui.ctx().set_theme(preference);
-                        self.settings.set_theme(preference);
+                        let ctx = ui.ctx().clone();
+                        self.execute(&ctx, Theme(preference));
                     }
                 }
             }
             3 => {
                 menu::begin(ui);
-                for &i in &doc.document.account_order.clone() {
-                    let account = &doc.document.accounts[i];
-                    if account.disabled {
-                        continue;
-                    }
-                    if menu::choice(ui, i == doc.account, &account.name).clicked() {
-                        doc.select_account(i);
-                        self.editor = None;
+                let Some(doc) = &self.doc else { return };
+                let accounts: Vec<(usize, String)> = doc
+                    .document
+                    .account_order
+                    .iter()
+                    .filter(|&&i| !doc.document.accounts[i].disabled)
+                    .map(|&i| (i, doc.document.accounts[i].name.clone()))
+                    .collect();
+                let current = doc.account;
+                for (i, name) in accounts {
+                    if menu::choice(ui, i == current, &name).clicked() {
+                        let ctx = ui.ctx().clone();
+                        self.execute(&ctx, SelectAccount(i));
                     }
                 }
                 menu::separator(ui);
-                if menu::item(
-                    ui,
-                    Some(icon::ARROW_RIGHT),
-                    "Compte suivant",
-                    Some("Ctrl+Tab"),
-                )
-                .clicked()
-                {
-                    doc.cycle_account(true);
-                }
-                if menu::item(
-                    ui,
-                    Some(icon::ARROW_LEFT),
-                    "Compte précédent",
-                    Some("Ctrl+Maj+Tab"),
-                )
-                .clicked()
-                {
-                    doc.cycle_account(false);
-                }
+                self.menu_command(ui, NextAccount);
+                self.menu_command(ui, PreviousAccount);
                 menu::separator(ui);
-                for (tab, label, glyph, shortcut) in [
-                    (
-                        crate::manage_ui::Tab::Accounts,
-                        "Gestion des comptes…",
-                        icon::BANK,
-                        Some("Ctrl+G"),
-                    ),
-                    (
-                        crate::manage_ui::Tab::Categories,
-                        "Catégories…",
-                        icon::TAG,
-                        None,
-                    ),
-                    (
-                        crate::manage_ui::Tab::Payees,
-                        "Tiers…",
-                        icon::ADDRESS_BOOK,
-                        Some("F5"),
-                    ),
-                    (
-                        crate::manage_ui::Tab::Modes,
-                        "Modes de paiement…",
-                        icon::CREDIT_CARD,
-                        None,
-                    ),
+                for tab in [
+                    crate::manage_ui::Tab::Accounts,
+                    crate::manage_ui::Tab::Categories,
+                    crate::manage_ui::Tab::Payees,
+                    crate::manage_ui::Tab::Modes,
                 ] {
-                    if menu::item(ui, Some(glyph), label, shortcut).clicked() {
-                        self.tool = Some(crate::tools::Tool::Manage(
-                            crate::manage_ui::ManageForm::new(doc, tab),
-                        ));
-                    }
+                    self.menu_command(ui, Manage(tab));
                 }
             }
             _ => {
                 menu::begin_with_width(ui, 340.0);
-                if menu::item_enabled(
-                    ui,
-                    !doc.selection.is_empty(),
-                    Some(icon::CHECK),
-                    "Pointer",
-                    Some("Espace"),
-                )
-                .clicked()
-                {
-                    doc.cycle_tack();
-                }
-                if menu::item(
-                    ui,
-                    Some(icon::CHECKS),
-                    "Rapprocher toutes les lignes pointées",
-                    None,
-                )
-                .clicked()
-                {
-                    doc.reconcile_all_pointed();
-                }
+                self.menu_command(ui, Tack);
+                self.menu_command(ui, ReconcileAll);
                 menu::separator(ui);
-                if menu::item_enabled(
-                    ui,
-                    !doc.selection.is_empty(),
-                    Some(icon::PENCIL_SIMPLE_LINE),
-                    "Modifier le groupe…",
-                    Some("Ctrl+M"),
-                )
-                .clicked()
-                {
-                    self.tool = Some(crate::tools::Tool::ModifyGroup(
-                        crate::tools::GroupForm::new(),
-                    ));
-                }
-                if menu::item_enabled(
-                    ui,
-                    doc.selection.len() == 1,
-                    Some(icon::LIST_PLUS),
-                    "Champs supplémentaires…",
-                    Some("F3"),
-                )
-                .clicked()
-                    && let Some(&index) = doc.selection.iter().next()
-                {
-                    self.tool = Some(crate::tools::Tool::ExtraValues(
-                        crate::tools::ExtraForm::new(doc, index),
-                    ));
-                }
+                self.menu_command(ui, ModifyGroup);
+                self.menu_command(ui, ExtraFields);
             }
         }
     }
@@ -851,6 +793,17 @@ impl BankPerfectApp {
 
     fn modals(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
+        if let Some(palette) = &mut self.command_palette {
+            use crate::command_palette::PaletteResult;
+            match palette.show(ctx, self.doc.as_ref(), &self.recent_commands) {
+                PaletteResult::Keep => {}
+                PaletteResult::Close => self.command_palette = None,
+                PaletteResult::Run(command) => {
+                    self.command_palette = None;
+                    self.execute(ctx, command);
+                }
+            }
+        }
         if let Some(tool) = &mut self.tool {
             let result = match (&mut self.doc, tool) {
                 (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),

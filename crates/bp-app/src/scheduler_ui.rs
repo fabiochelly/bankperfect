@@ -27,6 +27,8 @@ pub struct SchedulerForm {
     message: Option<String>,
     warnings: Vec<String>,
     confirm_delete: bool,
+    /// Nombre d'échéances du tout premier échéancier, reprenables.
+    oldest: usize,
 }
 
 /// Index réel du compte d'uid donné.
@@ -51,6 +53,7 @@ impl SchedulerForm {
             message: None,
             warnings,
             confirm_delete: false,
+            oldest: scheduler::oldest_schedules(&doc.document).map_or(0, |(s, _)| s.len()),
         };
         let first = select.or((!form.schedules.is_empty()).then_some(0));
         form.select(first);
@@ -590,6 +593,31 @@ impl SchedulerForm {
                 self.message = Some(summary);
             }
         });
+        if self.oldest > 0 {
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "{}  Ce fichier contient aussi {} échéance(s) du tout premier échéancier.",
+                        icon::CLOCK_COUNTER_CLOCKWISE,
+                        self.oldest
+                    ))
+                    .color(pal.muted),
+                );
+                if ui.link("Les reprendre").clicked()
+                    && let Some((old, warnings)) = scheduler::oldest_schedules(&doc.document)
+                {
+                    let n = old.len();
+                    self.schedules.extend(old);
+                    self.save(doc);
+                    self.warnings.extend(warnings);
+                    self.oldest = 0;
+                    self.message = Some(format!(
+                        "{n} ancienne(s) échéance(s) reprise(s) : vérifiez leur prochaine date avant d'insérer."
+                    ));
+                    self.select(Some(self.schedules.len() - n));
+                }
+            });
+        }
         if let Some(message) = &self.message {
             ui.label(RichText::new(format!("{}  {message}", icon::INFO)).color(pal.accent));
         }

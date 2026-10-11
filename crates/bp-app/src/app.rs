@@ -53,13 +53,27 @@ pub struct BankPerfectApp {
     drawer_opened_at: f64,
     menus: menu::MenuBar,
     profiler: crate::profiler::Profiler,
+    settings: crate::settings::Settings,
+    /// Le thème des réglages reste à appliquer (première image).
+    theme_pending: bool,
 }
 
 const DRAWER_WIDTH: f32 = 420.0;
 const DRAWER_SLIDE_SECONDS: f64 = 0.15;
 
 impl BankPerfectApp {
+    /// Application avec les réglages enregistrés de l'utilisateur.
     pub fn new(initial_file: Option<PathBuf>) -> Self {
+        let mut app = Self::with_settings(initial_file, crate::settings::Settings::load());
+        app.theme_pending = true;
+        app
+    }
+
+    /// Application avec des réglages donnés (tests : thème laissé tel quel).
+    pub fn with_settings(
+        initial_file: Option<PathBuf>,
+        settings: crate::settings::Settings,
+    ) -> Self {
         let mut app = Self {
             doc: None,
             editor: None,
@@ -77,6 +91,8 @@ impl BankPerfectApp {
             drawer_opened_at: 0.0,
             menus: menu::MenuBar::default(),
             profiler: crate::profiler::Profiler::from_env(),
+            settings,
+            theme_pending: false,
         };
         if let Some(path) = initial_file {
             app.open_path(path);
@@ -134,6 +150,7 @@ impl BankPerfectApp {
         match file::open_bytes(data, unlock) {
             Ok(opened) => {
                 self.show_warnings = !opened.warnings.is_empty();
+                self.settings.remember(&path);
                 self.doc = Some(OpenDoc::new(path, opened));
                 self.editor = None;
                 self.prompt = None;
@@ -153,6 +170,16 @@ impl BankPerfectApp {
 
     fn save(&mut self, now: f64) {
         let Some(doc) = &mut self.doc else { return };
+        if let Err(e) = bp_core::backup::backup_before_save(
+            &doc.path,
+            &self.settings.backup_dir(),
+            self.settings.backup_keep,
+        ) {
+            self.error = Some(format!(
+                "Sauvegarde .bp0 impossible : {e}. Fichier non enregistré."
+            ));
+            return;
+        }
         match save_document(doc) {
             Ok(recovery) => {
                 self.recovery_phrase = recovery;
@@ -308,6 +335,20 @@ impl BankPerfectApp {
                     self.toast = Some((message, now + 4.0));
                 }
             }
+            if self.doc.is_some()
+                && menu::item(
+                    ui,
+                    Some(icon::CLOCK_COUNTER_CLOCKWISE),
+                    "Sauvegardes…",
+                    None,
+                )
+                .clicked()
+            {
+                self.tool = Some(crate::tools::Tool::Backups(crate::tools::BackupsForm::new(
+                    self.settings.backup_dir(),
+                    self.settings.backup_keep,
+                )));
+            }
             menu::separator(ui);
             if menu::item(ui, Some(icon::SIGN_OUT), "Quitter", None).clicked() {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
@@ -404,6 +445,7 @@ impl BankPerfectApp {
                 ] {
                     if menu::choice(ui, current == preference, label).clicked() {
                         ui.ctx().set_theme(preference);
+                        self.settings.set_theme(preference);
                     }
                 }
             }
@@ -585,6 +627,39 @@ impl BankPerfectApp {
             ui.label(
                 RichText::new("ou déposez un fichier .bp dans la fenêtre").color(palette(ui).muted),
             );
+            let recent: Vec<PathBuf> = self
+                .settings
+                .recent_files
+                .iter()
+                .filter(|p| p.exists())
+                .cloned()
+                .collect();
+            if !recent.is_empty() {
+                ui.add_space(28.0);
+                ui.label(
+                    RichText::new("FICHIERS RÉCENTS")
+                        .small()
+                        .family(crate::theme::medium())
+                        .color(palette(ui).muted),
+                );
+                ui.add_space(4.0);
+                for path in recent {
+                    let name = path
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                        .unwrap_or_default();
+                    let folder = path
+                        .parent()
+                        .map(|p| p.display().to_string())
+                        .unwrap_or_default();
+                    let button =
+                        egui::Button::new(RichText::new(format!("{}  {name}", icon::FILE)))
+                            .frame(false);
+                    if ui.add(button).on_hover_text(&folder).clicked() {
+                        self.request(Pending::Open(Some(path)));
+                    }
+                }
+            }
         });
     }
 
@@ -661,6 +736,12 @@ impl BankPerfectApp {
                 crate::tools::Outcome::Close => self.tool = None,
                 crate::tools::Outcome::Done(message) => {
                     self.tool = None;
+                    self.toast = Some((message, now + 4.0));
+                }
+                crate::tools::Outcome::Reopen(path, message) => {
+                    self.tool = None;
+                    doc.dirty = false;
+                    self.open_path(path);
                     self.toast = Some((message, now + 4.0));
                 }
             }
@@ -799,6 +880,9 @@ impl eframe::App for BankPerfectApp {
 impl BankPerfectApp {
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        if std::mem::take(&mut self.theme_pending) {
+            ctx.set_theme(self.settings.theme_preference());
+        }
         crate::theme::adapt_to_display(&ctx);
 
         if let Some(path) = ctx.input(|i| {

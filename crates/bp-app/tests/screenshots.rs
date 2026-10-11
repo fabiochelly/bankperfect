@@ -23,7 +23,7 @@ fn render(
         .wgpu()
         .build_eframe(|cc| {
             bankperfect::theme::install(&cc.egui_ctx);
-            bankperfect::BankPerfectApp::new(Some(file))
+            bankperfect::BankPerfectApp::with_settings(Some(file), Default::default())
         });
     harness.run_steps(4);
     setup(&mut harness);
@@ -102,7 +102,7 @@ fn frame_time() {
         .with_size(egui::vec2(1440.0, 900.0))
         .build_eframe(|cc| {
             bankperfect::theme::install(&cc.egui_ctx);
-            bankperfect::BankPerfectApp::new(Some(file))
+            bankperfect::BankPerfectApp::with_settings(Some(file), Default::default())
         });
     harness.run_steps(5);
     let frames = 300;
@@ -133,7 +133,7 @@ fn robustness() {
     ] {
         let mut harness = Harness::builder().with_size(size).build_eframe(|cc| {
             bankperfect::theme::install(&cc.egui_ctx);
-            bankperfect::BankPerfectApp::new(Some(file.clone()))
+            bankperfect::BankPerfectApp::with_settings(Some(file.clone()), Default::default())
         });
         harness.run_steps(3);
         for i in 0..60 {

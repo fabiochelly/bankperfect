@@ -43,6 +43,7 @@ const SHORTCUT_CATEGORY_TOTALS: KeyboardShortcut =
 const SHORTCUT_CHARTS: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::G);
 const SHORTCUT_BUDGET: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
+const SHORTCUT_LOAN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::L);
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
@@ -336,6 +337,9 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_NOTES)) {
             self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_LOAN)) {
+            return self.execute(ctx, Command::Loan);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CALC)) {
             self.tool = Some(crate::tools::Tool::Calculator(crate::tools::CalcForm::new()));
         }
@@ -538,6 +542,9 @@ impl BankPerfectApp {
             Command::Notes => return self.tool = Some(Tool::Notes(crate::tools::NotesForm::new())),
             Command::Calculator => {
                 return self.tool = Some(Tool::Calculator(crate::tools::CalcForm::new()));
+            }
+            Command::Loan => {
+                return self.tool = Some(Tool::Loan(Box::new(crate::loan_ui::LoanForm::new())));
             }
             Command::Palette => {
                 self.menus = menu::MenuBar::default();
@@ -799,6 +806,7 @@ impl BankPerfectApp {
             | Command::Quit
             | Command::Notes
             | Command::Calculator
+            | Command::Loan
             | Command::Palette
             | Command::Theme(_)
             | Command::ToggleTranslucent
@@ -1075,6 +1083,7 @@ impl BankPerfectApp {
             menu::separator(ui);
             self.menu_command(ui, Notes);
             self.menu_command(ui, Calculator);
+            self.menu_command(ui, Loan);
             if has_doc {
                 menu::separator(ui);
                 self.menu_command(ui, ReverseCurrencies);
@@ -1636,6 +1645,7 @@ impl BankPerfectApp {
             let result = match (&mut self.doc, tool) {
                 (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),
                 (_, crate::tools::Tool::Calculator(form)) => Some(form.show_standalone(ctx)),
+                (_, crate::tools::Tool::Loan(form)) => Some(form.show_standalone(ctx)),
                 (doc, crate::tools::Tool::NewFile(form)) => Some(form.show_standalone(
                     ctx,
                     self.settings.files_dir.clone().or_else(|| {

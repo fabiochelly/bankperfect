@@ -15,6 +15,7 @@ BankPerfect 9 est la réécriture complète en Rust du logiciel BankPerfect (Del
 - **Rapports et graphiques** : totaux par catégorie et par tiers, relevé multicompte, graphiques en anneau, barres et courbes, export vers un tableur (`.xlsx`).
 - **Budgets** : budget mensuel par catégorie et tableaux de budget annuel.
 - **Outils** : simulateur de crédit, convertisseur de devises (cours de la BCE), cotations des titres, calculatrice, notes, palette de commandes (Ctrl+K).
+- **Thèmes** : 19 thèmes sombres et clairs (Tokyo Night, Catppuccin, Dracula, Nord, Gruvbox, Rosé Pine, One Dark, Everforest, Kanagawa, Solarized…), dont « BankPerfect classic » aux couleurs de l'ancienne version, avec un mode qui suit le système.
 - **Sécurité** : fichiers chiffrés (XChaCha20-Poly1305, mot de passe dérivé par Argon2id) avec clé de secours de 24 mots, sauvegardes automatiques.
 
 | Saisie | Graphiques |

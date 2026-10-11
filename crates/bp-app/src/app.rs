@@ -581,6 +581,36 @@ impl BankPerfectApp {
                 ctx.set_theme(preference);
                 return self.settings.set_theme(preference);
             }
+            Command::UseTheme(id) => {
+                let Some(theme) = crate::theme::by_id(id) else {
+                    return;
+                };
+                if theme.dark {
+                    self.settings.dark_theme = id.into();
+                } else {
+                    self.settings.light_theme = id.into();
+                }
+                crate::theme::select(ctx, &self.settings.dark_theme, &self.settings.light_theme);
+                // Le thème choisi s'affiche, sauf s'il l'est déjà en suivant
+                // le système.
+                let mode = if theme.dark {
+                    egui::ThemePreference::Dark
+                } else {
+                    egui::ThemePreference::Light
+                };
+                let shown = ctx.theme()
+                    == if theme.dark {
+                        egui::Theme::Dark
+                    } else {
+                        egui::Theme::Light
+                    };
+                let follows_system =
+                    ctx.options(|o| o.theme_preference) == egui::ThemePreference::System;
+                if !(follows_system && shown) {
+                    ctx.set_theme(mode);
+                }
+                return self.settings.set_theme(ctx.options(|o| o.theme_preference));
+            }
             Command::ToggleTranslucent => {
                 let on = !self.settings.translucent();
                 self.settings.translucent = Some(on);
@@ -890,6 +920,7 @@ impl BankPerfectApp {
             | Command::Currencies
             | Command::Palette
             | Command::Theme(_)
+            | Command::UseTheme(_)
             | Command::ToggleTranslucent
             | Command::OpenRecent(_)
             | Command::Options
@@ -1255,13 +1286,39 @@ impl BankPerfectApp {
                 menu::heading(ui, "Thème");
                 let current = ui.ctx().options(|o| o.theme_preference);
                 for (preference, label) in [
-                    (egui::ThemePreference::Dark, "Tokyo Night"),
-                    (egui::ThemePreference::Light, "Tokyo Night Day"),
+                    (egui::ThemePreference::Dark, "Sombre"),
+                    (egui::ThemePreference::Light, "Clair"),
                     (egui::ThemePreference::System, "Suivre le système"),
                 ] {
                     if menu::choice(ui, current == preference, label).clicked() {
                         let ctx = ui.ctx().clone();
                         self.execute(&ctx, Theme(preference));
+                    }
+                }
+                for (dark, label) in [(true, "Thèmes sombres"), (false, "Thèmes clairs")] {
+                    let selected = if dark {
+                        self.settings.dark_theme.clone()
+                    } else {
+                        self.settings.light_theme.clone()
+                    };
+                    let glyph = if dark { icon::MOON } else { icon::SUN };
+                    let mut chosen = None;
+                    menu::submenu(ui, Some(glyph), label, |ui| {
+                        for theme in crate::theme::THEMES.iter().filter(|t| t.dark == dark) {
+                            if menu::choice(
+                                ui,
+                                crate::theme::find(&selected, dark).id == theme.id,
+                                theme.name,
+                            )
+                            .clicked()
+                            {
+                                chosen = Some(theme.id);
+                            }
+                        }
+                    });
+                    if let Some(id) = chosen {
+                        let ctx = ui.ctx().clone();
+                        self.execute(&ctx, UseTheme(id));
                     }
                 }
                 menu::separator(ui);
@@ -1676,12 +1733,26 @@ impl BankPerfectApp {
             use crate::options_ui::OptionsOutcome;
             match options.show(ctx) {
                 OptionsOutcome::Keep => {}
-                OptionsOutcome::Cancel => self.options = None,
+                OptionsOutcome::Cancel => {
+                    self.options = None;
+                    // Annule l'aperçu des thèmes.
+                    crate::theme::select(
+                        ctx,
+                        &self.settings.dark_theme,
+                        &self.settings.light_theme,
+                    );
+                    ctx.set_theme(self.settings.theme_preference());
+                }
                 OptionsOutcome::Apply(settings, theme) => {
                     self.options = None;
                     let translucent_before = self.settings.translucent();
                     self.settings = *settings;
                     self.settings.save();
+                    crate::theme::select(
+                        ctx,
+                        &self.settings.dark_theme,
+                        &self.settings.light_theme,
+                    );
                     ctx.set_theme(theme);
                     self.settings.set_theme(theme);
                     if self.settings.translucent() != translucent_before {
@@ -2223,6 +2294,7 @@ impl BankPerfectApp {
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         if std::mem::take(&mut self.theme_pending) {
+            crate::theme::select(&ctx, &self.settings.dark_theme, &self.settings.light_theme);
             ctx.set_theme(self.settings.theme_preference());
         }
         crate::theme::adapt_to_display(&ctx);

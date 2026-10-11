@@ -12,6 +12,10 @@ const MAX_RECENT: usize = 10;
 pub struct Settings {
     /// « sombre », « clair » ou « système ».
     pub theme: String,
+    /// Thème utilisé en mode sombre (identifiant, voir `theme::THEMES`).
+    pub dark_theme: String,
+    /// Thème utilisé en mode clair.
+    pub light_theme: String,
     /// Dossier des sauvegardes `.bp0` (défaut : dossier de données du système).
     pub backup_dir: Option<PathBuf>,
     /// Nombre de sauvegardes gardées par fichier.
@@ -63,6 +67,8 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             theme: "sombre".into(),
+            dark_theme: crate::theme::DEFAULT_DARK.into(),
+            light_theme: crate::theme::DEFAULT_LIGHT.into(),
             backup_dir: None,
             backup_keep: bp_core::backup::DEFAULT_KEEP,
             recent_files: Vec::new(),

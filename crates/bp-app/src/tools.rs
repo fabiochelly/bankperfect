@@ -3,11 +3,13 @@
 use bp_core::edit::GroupEdit;
 use bp_core::export::{CsvField, CsvOptions};
 use bp_core::model::{Amount, Date, Mode, Tack};
-use egui::{Key, RichText};
+use egui::text::{LayoutJob, TextFormat};
+use egui::{Color32, Key, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::document::OpenDoc;
 use crate::theme::palette;
+use crate::ui_kit;
 
 pub enum Tool {
     Manage(crate::manage_ui::ManageForm),
@@ -82,42 +84,108 @@ pub struct ReplaceForm {
     replacement: String,
 }
 
+/// Texte avec les occurrences de `find` mises en valeur.
+fn highlighted(text: &str, find: &str, base: TextFormat, mark: TextFormat) -> LayoutJob {
+    let mut job = LayoutJob::default();
+    if find.is_empty() {
+        job.append(text, 0.0, base);
+        return job;
+    }
+    let mut rest = text;
+    while let Some(pos) = rest.find(find) {
+        job.append(&rest[..pos], 0.0, base.clone());
+        job.append(&rest[pos..pos + find.len()], 0.0, mark.clone());
+        rest = &rest[pos + find.len()..];
+    }
+    job.append(rest, 0.0, base);
+    job
+}
+
 impl ReplaceForm {
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
+        let width = ui_kit::dialog_width(ctx, 0.45, 600.0, 720.0);
         crate::dialogs::modal(ctx, "tool_replace").show(ctx, |ui| {
-            ui.set_width(420.0);
+            ui.set_width(width);
+            let pal = palette(ui);
             title(ui, icon::SWAP, "Remplacer");
-            ui.label(
-                RichText::new(
-                    "Dans le tiers et le détail des lignes affichées (respecte la casse).",
-                )
-                .small()
-                .color(palette(ui).muted),
+            ui_kit::subtitle(
+                ui,
+                "Remplace un texte dans le tiers et le détail des lignes affichées. La casse est respectée.",
             );
-            ui.add_space(8.0);
-            egui::Grid::new("replace")
-                .num_columns(2)
-                .spacing([10.0, 10.0])
-                .show(ui, |ui| {
-                    ui.label("Rechercher");
-                    let find = ui.add(crate::theme::field(&mut self.find).desired_width(280.0));
-                    if find.ctx.memory(|m| m.focused().is_none()) {
-                        find.request_focus();
+            ui_kit::section(ui, width, icon::TEXT_AA, "Texte", |ui| {
+                let field_width = ui.available_width();
+                let find = ui_kit::icon_field(
+                    ui,
+                    icon::MAGNIFYING_GLASS,
+                    &mut self.find,
+                    "Texte à rechercher",
+                    field_width,
+                );
+                if find.ctx.memory(|m| m.focused().is_none()) {
+                    find.request_focus();
+                }
+                ui.add_space(10.0);
+                ui_kit::icon_field(
+                    ui,
+                    icon::ARROW_BEND_DOWN_RIGHT,
+                    &mut self.replacement,
+                    "Remplacer par (vide pour effacer)",
+                    field_width,
+                );
+            });
+
+            let account = doc.current_account();
+            let visible = doc.visible();
+            let count = bp_core::edit::count_matches(account, &visible, &self.find);
+            let examples: Vec<&bp_core::model::Operation> = if self.find.is_empty() {
+                Vec::new()
+            } else {
+                visible
+                    .iter()
+                    .map(|&i| &account.operations[i])
+                    .filter(|op| op.payee.contains(&self.find) || op.details.contains(&self.find))
+                    .take(4)
+                    .collect()
+            };
+            ui_kit::caption(ui, icon::EYE, "Aperçu");
+            ui_kit::card(ui, width, |ui| {
+                ui.horizontal(|ui| {
+                    if self.find.is_empty() {
+                        ui.label(RichText::new("Tapez le texte à rechercher.").color(pal.muted));
+                    } else if count == 0 {
+                        ui_kit::pill(ui, "Aucune occurrence", pal.muted);
+                    } else {
+                        let text = if count == 1 {
+                            "1 occurrence".to_string()
+                        } else {
+                            format!("{count} occurrences")
+                        };
+                        ui_kit::pill(ui, &text, pal.accent);
                     }
-                    ui.end_row();
-                    ui.label("Remplacer par");
-                    ui.add(crate::theme::field(&mut self.replacement).desired_width(280.0));
-                    ui.end_row();
                 });
-            let count =
-                bp_core::edit::count_matches(doc.current_account(), &doc.visible(), &self.find);
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(format!("{count} occurrence(s) trouvée(s)"))
-                    .small()
-                    .color(palette(ui).muted),
-            );
+                if !examples.is_empty() {
+                    ui.add_space(10.0);
+                    let font = egui::FontId::new(13.5, crate::theme::medium());
+                    let base = TextFormat::simple(font.clone(), pal.fg_dark);
+                    let mut removed = TextFormat::simple(font.clone(), pal.negative);
+                    removed.background = pal.negative.gamma_multiply(0.15);
+                    removed.strikethrough = egui::Stroke::new(1.0, pal.negative);
+                    let mut added = TextFormat::simple(font.clone(), pal.positive);
+                    added.background = pal.positive.gamma_multiply(0.15);
+                    for op in examples {
+                        let text = if op.payee.contains(&self.find) { &op.payee } else { &op.details };
+                        let after = text.replace(&self.find, &self.replacement);
+                        ui.horizontal(|ui| {
+                            ui.label(RichText::new(op.date.to_string()).color(pal.muted).size(12.5));
+                            ui.add_space(6.0);
+                            ui.label(highlighted(text, &self.find, base.clone(), removed.clone()));
+                            ui.label(RichText::new(icon::ARROW_RIGHT).color(pal.muted));
+                            ui.label(highlighted(&after, &self.replacement, base.clone(), added.clone()));
+                        });
+                    }
+                }
+            });
             match buttons(ui, &format!("{}  Remplacer", icon::SWAP), count > 0) {
                 Some(true) => {
                     let n = doc.replace_in_visible(&self.find, &self.replacement);
@@ -144,6 +212,45 @@ pub struct GroupForm {
     error: Option<String>,
 }
 
+/// Ligne « case à cocher + champ » de la modification de groupe ; le champ
+/// n'est actif que si la case est cochée, et la ligne est alors teintée.
+fn toggle_row(
+    ui: &mut egui::Ui,
+    enabled: &mut bool,
+    label: &str,
+    glyph: &str,
+    field: impl FnOnce(&mut egui::Ui, f32),
+) {
+    let pal = palette(ui);
+    let full = ui.available_width();
+    let frame = egui::Frame::new()
+        .fill(if *enabled {
+            pal.accent.gamma_multiply(0.07)
+        } else {
+            Color32::TRANSPARENT
+        })
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(10, 6));
+    frame.show(ui, |ui| {
+        ui.set_width(full - 20.0);
+        ui.horizontal(|ui| {
+            ui.set_min_height(38.0);
+            let label_width = 160.0;
+            ui.allocate_ui_with_layout(
+                egui::vec2(label_width, 38.0),
+                egui::Layout::left_to_right(egui::Align::Center),
+                |ui| {
+                    ui.set_min_width(label_width);
+                    crate::theme::checkbox(ui, enabled, format!("{glyph}  {label}"));
+                },
+            );
+            let field_width = ui.available_width();
+            ui.add_enabled_ui(*enabled, |ui| field(ui, field_width));
+        });
+    });
+    ui.add_space(4.0);
+}
+
 impl GroupForm {
     pub fn new() -> Self {
         Self {
@@ -161,112 +268,118 @@ impl GroupForm {
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let lines = doc.selected_visible().len();
+        let width = ui_kit::dialog_width(ctx, 0.5, 640.0, 780.0);
         crate::dialogs::modal(ctx, "tool_group").show(ctx, |ui| {
-            ui.set_width(480.0);
+            ui.set_width(width);
+            let pal = palette(ui);
             title(
                 ui,
                 icon::PENCIL_SIMPLE_LINE,
                 "Modifier le groupe d'opérations",
             );
-            ui.label(
-                RichText::new(format!(
-                    "{lines} ligne(s) sélectionnée(s). Cochez les champs à modifier."
-                ))
-                .small()
-                .color(palette(ui).muted),
-            );
-            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let text = if lines == 1 {
+                    "1 ligne sélectionnée".to_string()
+                } else {
+                    format!("{lines} lignes sélectionnées")
+                };
+                ui_kit::pill(ui, &text, pal.accent);
+                ui.label(
+                    RichText::new("Cochez les champs à modifier ; les autres restent inchangés.")
+                        .color(pal.fg_dark),
+                );
+            });
+            ui.add_space(16.0);
             let document = &doc.document;
-            egui::Grid::new("group")
-                .num_columns(2)
-                .spacing([12.0, 10.0])
-                .show(ui, |ui| {
-                    crate::theme::checkbox(ui, &mut self.date.0, "Date");
-                    ui.add_enabled_ui(self.date.0, |ui| {
-                        crate::datepicker::date_field(
-                            ui,
-                            "group_date",
-                            &mut self.date.1,
-                            200.0,
-                            crate::datepicker::Placement::Popup,
-                        )
-                    });
-                    ui.end_row();
-
-                    crate::theme::checkbox(ui, &mut self.mode.0, "Mode");
-                    ui.add_enabled_ui(self.mode.0, |ui| {
-                        egui::ComboBox::from_id_salt("group_mode")
-                            .selected_text(self.mode.1.label().to_string())
-                            .width(260.0)
-                            .show_ui(ui, |ui| {
-                                for mode in document.mode_list() {
-                                    let label = mode.label().to_string();
-                                    ui.selectable_value(&mut self.mode.1, mode, label);
-                                }
-                            });
-                    });
-                    ui.end_row();
-
-                    crate::theme::checkbox(ui, &mut self.payee.0, "Tiers");
-                    ui.add_enabled(
-                        self.payee.0,
-                        crate::theme::field(&mut self.payee.1).desired_width(260.0),
+            let styles = &doc.category_styles;
+            ui_kit::section(
+                ui,
+                width,
+                icon::SLIDERS_HORIZONTAL,
+                "Champs à modifier",
+                |ui| {
+                    toggle_row(
+                        ui,
+                        &mut self.date.0,
+                        "Date",
+                        icon::CALENDAR_BLANK,
+                        |ui, w| {
+                            crate::datepicker::date_field(
+                                ui,
+                                "group_date",
+                                &mut self.date.1,
+                                w.min(240.0),
+                                crate::datepicker::Placement::Popup,
+                            );
+                        },
                     );
-                    ui.end_row();
-
-                    crate::theme::checkbox(ui, &mut self.details.0, "Détail");
-                    ui.add_enabled(
-                        self.details.0,
-                        crate::theme::field(&mut self.details.1).desired_width(260.0),
-                    );
-                    ui.end_row();
-
-                    crate::theme::checkbox(ui, &mut self.category.0, "Catégorie");
-                    ui.add_enabled_ui(self.category.0, |ui| {
-                        let selected = self
-                            .category
-                            .1
-                            .and_then(|id| document.category_label(id))
-                            .unwrap_or_else(|| "(aucune)".into());
-                        egui::ComboBox::from_id_salt("group_category")
-                            .selected_text(selected)
-                            .width(260.0)
-                            .height(360.0)
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut self.category.1, None, "(aucune)");
-                                for c in &document.categories {
-                                    let label = if c.is_child {
-                                        format!("      {}", c.name)
-                                    } else {
-                                        c.name.clone()
-                                    };
-                                    ui.selectable_value(&mut self.category.1, Some(c.id), label);
-                                }
-                            });
+                    toggle_row(ui, &mut self.mode.0, "Mode", icon::CREDIT_CARD, |ui, w| {
+                        ui_kit::mode_combo(ui, "group_mode", document, &mut self.mode.1, w);
                     });
-                    ui.end_row();
-
-                    crate::theme::checkbox(ui, &mut self.amount.0, "Montant");
-                    ui.add_enabled(
-                        self.amount.0,
-                        crate::theme::field(&mut self.amount.1)
-                            .hint_text("signe selon le mode")
-                            .desired_width(160.0),
-                    );
-                    ui.end_row();
-
-                    crate::theme::checkbox(ui, &mut self.tack.0, "Pointage");
-                    ui.add_enabled_ui(self.tack.0, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.selectable_value(&mut self.tack.1, Tack::None, "Non pointée");
-                            ui.selectable_value(&mut self.tack.1, Tack::Pointed, "Pointée");
-                            ui.selectable_value(&mut self.tack.1, Tack::Reconciled, "Rapprochée");
-                        });
+                    toggle_row(ui, &mut self.payee.0, "Tiers", icon::USER, |ui, w| {
+                        ui.add(crate::theme::field(&mut self.payee.1).desired_width(w));
                     });
-                    ui.end_row();
-                });
+                    toggle_row(
+                        ui,
+                        &mut self.details.0,
+                        "Détail",
+                        icon::NOTE_PENCIL,
+                        |ui, w| {
+                            ui.add(crate::theme::field(&mut self.details.1).desired_width(w));
+                        },
+                    );
+                    toggle_row(
+                        ui,
+                        &mut self.category.0,
+                        "Catégorie",
+                        icon::TAG,
+                        |ui, w| {
+                            ui_kit::category_combo(
+                                ui,
+                                "group_category",
+                                document,
+                                styles,
+                                &mut self.category.1,
+                                w,
+                            );
+                        },
+                    );
+                    toggle_row(
+                        ui,
+                        &mut self.amount.0,
+                        "Montant",
+                        icon::CURRENCY_EUR,
+                        |ui, w| {
+                            ui.add(
+                                crate::theme::field(&mut self.amount.1)
+                                    .hint_text("0,00 — signe selon le mode")
+                                    .desired_width(w.min(240.0)),
+                            );
+                        },
+                    );
+                    toggle_row(
+                        ui,
+                        &mut self.tack.0,
+                        "Pointage",
+                        icon::CHECK_CIRCLE,
+                        |ui, w| {
+                            ui_kit::segmented(
+                                ui,
+                                &mut self.tack.1,
+                                &[
+                                    (Tack::None, icon::CIRCLE_DASHED, "À pointer", pal.fg),
+                                    (Tack::Pointed, icon::CHECK, "Pointée", pal.pointed),
+                                    (Tack::Reconciled, icon::CHECKS, "Rapprochée", pal.reconciled),
+                                ],
+                                34.0,
+                                Some(w),
+                            );
+                        },
+                    );
+                },
+            );
             if let Some(error) = &self.error {
-                ui.label(RichText::new(error).color(palette(ui).negative));
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
             let any = self.date.0
                 || self.mode.0
@@ -328,8 +441,8 @@ pub struct CsvForm {
 }
 
 const SEPARATORS: [(char, &str); 3] = [
-    (';', "Point-virgule (;)"),
-    (',', "Virgule (,)"),
+    (';', "Point-virgule"),
+    (',', "Virgule"),
     ('\t', "Tabulation"),
 ];
 
@@ -365,89 +478,134 @@ impl CsvForm {
 
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
+        let width = ui_kit::dialog_width(ctx, 0.7, 800.0, 1100.0);
         crate::dialogs::modal(ctx, "tool_csv").show(ctx, |ui| {
-            ui.set_width(560.0);
+            ui.set_width(width);
+            let pal = palette(ui);
             title(ui, icon::FILE_CSV, "Exporter vers un fichier CSV");
-            ui.columns(2, |cols| {
-                let ui = &mut cols[0];
-                ui.label(RichText::new("Colonnes (dans l'ordre)").family(crate::theme::medium()));
-                let mut swap = None;
-                let count = self.fields.len();
-                for (i, (field, on)) in self.fields.iter_mut().enumerate() {
-                    ui.horizontal(|ui| {
-                        crate::theme::checkbox(ui, on, field.label());
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui
-                                .add_enabled(
-                                    i + 1 < count,
-                                    egui::Button::new(icon::ARROW_DOWN).frame(false),
-                                )
-                                .clicked()
-                            {
-                                swap = Some((i, i + 1));
-                            }
-                            if ui
-                                .add_enabled(i > 0, egui::Button::new(icon::ARROW_UP).frame(false))
-                                .clicked()
-                            {
-                                swap = Some((i - 1, i));
-                            }
-                        });
-                    });
-                }
-                if let Some((a, b)) = swap {
-                    self.fields.swap(a, b);
-                }
-
-                let ui = &mut cols[1];
-                ui.label(RichText::new("Options").family(crate::theme::medium()));
-                egui::ComboBox::from_label("Séparateur")
-                    .selected_text(SEPARATORS[self.separator].1)
-                    .show_ui(ui, |ui| {
-                        for (i, (_, label)) in SEPARATORS.iter().enumerate() {
-                            ui.selectable_value(&mut self.separator, i, *label);
+            ui_kit::subtitle(
+                ui,
+                "Fichier lisible par Excel, LibreOffice ou Numbers. Choisissez les colonnes, leur ordre et le format.",
+            );
+            let gap = 18.0;
+            let left = (width - gap) * 0.38;
+            let right = width - gap - left;
+            ui.horizontal_top(|ui| {
+                ui.spacing_mut().item_spacing.x = gap;
+                ui.vertical(|ui| {
+                    ui.set_width(left);
+                    ui_kit::section(ui, left, icon::COLUMNS, "Colonnes, dans l'ordre", |ui| {
+                        let mut swap = None;
+                        let count = self.fields.len();
+                        for (i, (field, on)) in self.fields.iter_mut().enumerate() {
+                            ui.horizontal(|ui| {
+                                ui.set_min_height(30.0);
+                                crate::theme::checkbox(ui, on, field.label());
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    let down = egui::Button::new(RichText::new(icon::CARET_DOWN).color(pal.muted)).frame(false);
+                                    if ui.add_enabled(i + 1 < count, down).on_hover_text("Descendre").clicked() {
+                                        swap = Some((i, i + 1));
+                                    }
+                                    let up = egui::Button::new(RichText::new(icon::CARET_UP).color(pal.muted)).frame(false);
+                                    if ui.add_enabled(i > 0, up).on_hover_text("Monter").clicked() {
+                                        swap = Some((i - 1, i));
+                                    }
+                                });
+                            });
+                        }
+                        if let Some((a, b)) = swap {
+                            self.fields.swap(a, b);
                         }
                     });
-                crate::theme::checkbox(
-                    ui,
-                    &mut self.all_accounts,
-                    "Exporter tous les comptes (un fichier par compte)",
-                );
-                crate::theme::checkbox(ui, &mut self.header, "Inclure la ligne d'en-tête");
-                crate::theme::checkbox(
-                    ui,
-                    &mut self.cheque_as_mode,
-                    "Remplacer « Chq XXX » par « Chèque émis »",
-                );
-                ui.horizontal(|ui| {
-                    crate::theme::checkbox(
-                        ui,
-                        &mut self.group,
-                        "Grouper catégorie et sous-catégorie",
-                    );
-                    ui.add_enabled(
-                        self.group,
-                        egui::TextEdit::singleline(&mut self.group_separator).desired_width(40.0),
-                    );
                 });
-                ui.label("Symboles de pointage (non / pointée / rapprochée) :");
-                ui.horizontal(|ui| {
-                    for symbol in &mut self.tack_symbols {
-                        ui.add(egui::TextEdit::singleline(symbol).desired_width(32.0));
-                    }
+                ui.vertical(|ui| {
+                    ui.set_width(right);
+                    ui_kit::section(ui, right, icon::STACK, "Contenu", |ui| {
+                        ui_kit::segmented(
+                            ui,
+                            &mut self.all_accounts,
+                            &[
+                                (false, icon::FUNNEL, "Lignes affichées", pal.accent),
+                                (true, icon::BANK, "Tous les comptes", pal.accent),
+                            ],
+                            34.0,
+                            None,
+                        );
+                        ui.add_space(8.0);
+                        ui.label(
+                            RichText::new(if self.all_accounts {
+                                "Toutes les opérations de chaque compte, un fichier par compte."
+                            } else {
+                                "Les lignes affichées du compte courant, filtres appliqués."
+                            })
+                            .color(pal.muted),
+                        );
+                    });
+                    ui_kit::section(ui, right, icon::GEAR_SIX, "Format", |ui| {
+                        let label_width = 170.0;
+                        ui_kit::row(ui, "Séparateur", label_width, |ui| {
+                            let w = ui.available_width();
+                            ui_kit::segmented(
+                                ui,
+                                &mut self.separator,
+                                &[
+                                    (0, "", SEPARATORS[0].1, pal.accent),
+                                    (1, "", SEPARATORS[1].1, pal.accent),
+                                    (2, "", SEPARATORS[2].1, pal.accent),
+                                ],
+                                32.0,
+                                Some(w),
+                            );
+                        });
+                        ui.add_space(6.0);
+                        ui_kit::row(ui, "Symboles de pointage", label_width, |ui| {
+                            for (symbol, hint) in self.tack_symbols.iter_mut().zip(["non", "pointée", "rapprochée"]) {
+                                ui.add(crate::theme::field(symbol).desired_width(46.0).horizontal_align(egui::Align::Center))
+                                    .on_hover_text(hint);
+                            }
+                            ui.label(RichText::new("non · pointée · rapprochée").color(pal.muted).size(12.5));
+                        });
+                        ui.add_space(10.0);
+                        crate::theme::checkbox(ui, &mut self.header, "Inclure la ligne d'en-tête");
+                        ui.add_space(6.0);
+                        crate::theme::checkbox(ui, &mut self.cheque_as_mode, "Remplacer « Chq XXX » par « Chèque émis »");
+                        ui.add_space(6.0);
+                        ui.horizontal(|ui| {
+                            crate::theme::checkbox(ui, &mut self.group, "Catégorie et sous-catégorie dans une colonne, séparées par");
+                            ui.add_enabled(self.group, crate::theme::field(&mut self.group_separator).desired_width(50.0));
+                        });
+                    });
                 });
-                ui.label(
-                    RichText::new(if self.all_accounts {
-                        "Toutes les opérations de chaque compte."
-                    } else {
-                        "Seules les lignes affichées du compte courant (filtres appliqués)."
-                    })
-                    .small()
-                    .color(palette(ui).muted),
-                );
+            });
+
+            // Aperçu : les premières lignes du fichier.
+            let options = self.options();
+            let account = doc.current_account();
+            let visible = doc.visible();
+            let sample: Vec<usize> = visible.iter().take(4).copied().collect();
+            let text = if options.fields.is_empty() {
+                String::new()
+            } else {
+                bp_core::export::csv(&doc.document, account, &sample, &options)
+            };
+            ui_kit::section(ui, width, icon::EYE, "Aperçu", |ui| {
+                if text.is_empty() {
+                    ui.label(RichText::new("Aucune colonne choisie.").color(pal.muted));
+                } else {
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        for line in text.lines().take(5) {
+                            ui.label(
+                                RichText::new(line.replace('\t', "   ⇥   "))
+                                    .monospace()
+                                    .size(12.5)
+                                    .color(pal.fg_dark),
+                            );
+                        }
+                    });
+                }
             });
             let any = self.fields.iter().any(|(_, on)| *on);
-            match buttons(ui, &format!("{}  Exporter", icon::EXPORT), any) {
+            match buttons(ui, &format!("{}  Exporter…", icon::EXPORT), any) {
                 Some(true) => {
                     if let Some(message) = self.export(doc) {
                         outcome = Outcome::Done(message);
@@ -549,6 +707,20 @@ pub struct BackupsForm {
     error: Option<String>,
 }
 
+/// « il y a 5 min », « il y a 3 h », « il y a 2 jours ».
+fn ago(time: std::time::SystemTime) -> String {
+    let seconds = std::time::SystemTime::now()
+        .duration_since(time)
+        .map_or(0, |d| d.as_secs());
+    match seconds {
+        0..60 => "à l'instant".into(),
+        60..3600 => format!("il y a {} min", seconds / 60),
+        3600..86_400 => format!("il y a {} h", seconds / 3600),
+        86_400..172_800 => "hier".into(),
+        _ => format!("il y a {} jours", seconds / 86_400),
+    }
+}
+
 impl BackupsForm {
     pub fn new(dir: std::path::PathBuf, keep: usize) -> Self {
         Self {
@@ -562,61 +734,123 @@ impl BackupsForm {
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let backups = bp_core::backup::list(&doc.path, &self.dir);
+        let width = ui_kit::dialog_width(ctx, 0.5, 640.0, 780.0);
         crate::dialogs::modal(ctx, "tool_backups").show(ctx, |ui| {
-            ui.set_width(560.0);
-            title(ui, icon::CLOCK_COUNTER_CLOCKWISE, "Sauvegardes");
+            ui.set_width(width);
             let pal = palette(ui);
-            ui.label(RichText::new(format!("Dossier : {}", self.dir.display())).small().color(pal.muted));
-            ui.label(
-                RichText::new(format!("Une sauvegarde est créée à chaque enregistrement ; les {} plus récentes sont gardées.", self.keep))
-                    .small()
-                    .color(pal.muted),
+            title(ui, icon::CLOCK_COUNTER_CLOCKWISE, "Sauvegardes");
+            ui_kit::subtitle(
+                ui,
+                format!(
+                    "Une copie du fichier est faite avant chaque enregistrement ; les {} plus récentes sont gardées.",
+                    self.keep
+                ),
             );
-            ui.add_space(8.0);
-            if backups.is_empty() {
-                ui.label("Aucune sauvegarde pour ce fichier pour l'instant.");
-            }
-            egui::ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
-                for backup in &backups {
-                    ui.horizontal(|ui| {
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(icon::FOLDER).color(pal.muted));
+                ui.label(RichText::new(self.dir.display().to_string()).color(pal.muted).size(12.5));
+            });
+            ui.add_space(12.0);
+            ui_kit::caption(ui, icon::LIST, &format!("{} sauvegarde(s)", backups.len()));
+            ui_kit::card(ui, width, |ui| {
+                if backups.is_empty() {
+                    ui.add_space(20.0);
+                    ui.vertical_centered(|ui| {
+                        ui.label(RichText::new(icon::CLOCK_COUNTER_CLOCKWISE).size(32.0).color(pal.muted));
+                        ui.add_space(6.0);
+                        ui.label(RichText::new("Aucune sauvegarde pour ce fichier pour l'instant.").color(pal.muted));
+                    });
+                    ui.add_space(20.0);
+                    return;
+                }
+                egui::ScrollArea::vertical().max_height(ui_kit::dialog_height(ui.ctx(), 0.45)).show(ui, |ui| {
+                    for (k, backup) in backups.iter().enumerate() {
                         let when: chrono::DateTime<chrono::Local> = backup.modified.into();
-                        ui.label(RichText::new(icon::FILE).color(pal.muted));
-                        ui.label(when.format("%d/%m/%Y à %H:%M:%S").to_string());
-                        ui.label(RichText::new(format!("{} Ko", backup.size.div_ceil(1024))).small().color(pal.muted));
-                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.button(format!("{}  Restaurer", icon::ARROW_COUNTER_CLOCKWISE)).clicked() {
-                                self.confirm = Some(backup.path.clone());
+                        let selected = self.confirm.as_ref() == Some(&backup.path);
+                        let frame = egui::Frame::new()
+                            .fill(if selected { pal.accent.gamma_multiply(0.08) } else { Color32::TRANSPARENT })
+                            .corner_radius(10)
+                            .inner_margin(egui::Margin::symmetric(10, 8));
+                        frame.show(ui, |ui| {
+                            ui.set_width(ui.available_width());
+                            ui.horizontal(|ui| {
+                                let (rect, _) = ui.allocate_exact_size(egui::vec2(34.0, 34.0), egui::Sense::hover());
+                                ui.painter().rect_filled(rect, 9.0, pal.accent.gamma_multiply(0.14));
+                                ui.painter().text(
+                                    rect.center(),
+                                    egui::Align2::CENTER_CENTER,
+                                    icon::FILE,
+                                    egui::FontId::proportional(17.0),
+                                    pal.accent,
+                                );
+                                ui.add_space(4.0);
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.label(
+                                            RichText::new(when.format("%d/%m/%Y à %H:%M").to_string())
+                                                .family(crate::theme::semibold()),
+                                        );
+                                        if k == 0 {
+                                            ui_kit::pill(ui, "la plus récente", pal.positive);
+                                        }
+                                    });
+                                    ui.label(
+                                        RichText::new(format!("{} · {} Ko", ago(backup.modified), backup.size.div_ceil(1024)))
+                                            .color(pal.muted)
+                                            .size(12.5),
+                                    );
+                                });
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    if crate::dialogs::button(ui, format!("{}  Restaurer", icon::ARROW_COUNTER_CLOCKWISE)).clicked() {
+                                        self.confirm = Some(backup.path.clone());
+                                    }
+                                });
+                            });
+                        });
+                    }
+                });
+            });
+            if let Some(error) = &self.error {
+                ui.add_space(8.0);
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
+            }
+            if let Some(path) = self.confirm.clone() {
+                ui.add_space(14.0);
+                let unsaved = if doc.dirty { " Les modifications non enregistrées seront perdues." } else { "" };
+                egui::Frame::new()
+                    .fill(pal.warning.gamma_multiply(0.10))
+                    .stroke(egui::Stroke::new(1.0, pal.warning.gamma_multiply(0.4)))
+                    .corner_radius(12)
+                    .inner_margin(egui::Margin::same(16))
+                    .show(ui, |ui| {
+                        ui.set_width(width - 34.0);
+                        ui.label(
+                            RichText::new(format!(
+                                "{}  Restaurer cette sauvegarde ? La version actuelle sera elle-même sauvegardée.{unsaved}",
+                                icon::WARNING
+                            ))
+                            .color(pal.warning),
+                        );
+                        crate::dialogs::footer(ui, |ui| {
+                            if crate::dialogs::primary(ui, "Restaurer", true).clicked() {
+                                match bp_core::backup::restore(&path, &doc.path, &self.dir, self.keep) {
+                                    Ok(()) => outcome = Outcome::Reopen(doc.path.clone(), "Sauvegarde restaurée".into()),
+                                    Err(e) => self.error = Some(format!("Restauration impossible : {e}")),
+                                }
+                            }
+                            if crate::dialogs::button(ui, "Annuler").clicked() {
+                                self.confirm = None;
                             }
                         });
                     });
+            }
+            crate::dialogs::footer(ui, |ui| {
+                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                    || (self.confirm.is_none() && ui.input(|i| i.key_pressed(Key::Escape)))
+                {
+                    outcome = Outcome::Close;
                 }
             });
-            if let Some(error) = &self.error {
-                ui.label(RichText::new(error).color(pal.negative));
-            }
-            if let Some(path) = self.confirm.clone() {
-                ui.add_space(8.0);
-                let unsaved = if doc.dirty { " Les modifications non enregistrées seront perdues." } else { "" };
-                ui.label(
-                    RichText::new(format!("Restaurer cette sauvegarde ? La version actuelle du fichier sera elle-même sauvegardée.{unsaved}"))
-                        .color(pal.warning),
-                );
-                ui.horizontal(|ui| {
-                    if ui.add(crate::theme::primary_button(ui, "Restaurer")).clicked() {
-                        match bp_core::backup::restore(&path, &doc.path, &self.dir, self.keep) {
-                            Ok(()) => outcome = Outcome::Reopen(doc.path.clone(), "Sauvegarde restaurée".into()),
-                            Err(e) => self.error = Some(format!("Restauration impossible : {e}")),
-                        }
-                    }
-                    if ui.button("Non").clicked() {
-                        self.confirm = None;
-                    }
-                });
-            }
-            ui.add_space(10.0);
-            if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
-                outcome = Outcome::Close;
-            }
         });
         outcome
     }
@@ -653,56 +887,92 @@ impl ExtraForm {
         let mut outcome = Outcome::Keep;
         let op = doc.current_account().operations.get(self.index).cloned();
         let Some(op) = op else { return Outcome::Close };
+        let currency = doc.current_account().currency.clone();
+        let width = ui_kit::dialog_width(ctx, 0.45, 600.0, 720.0);
         crate::dialogs::modal(ctx, "tool_extra").show(ctx, |ui| {
-            ui.set_width(520.0);
-            title(ui, icon::LIST_PLUS, "Champs supplémentaires");
+            ui.set_width(width);
             let pal = palette(ui);
-            ui.label(
-                RichText::new(format!("{} · {} · ligne {}", op.date, op.payee, op.uid))
-                    .small()
-                    .color(pal.muted),
-            );
-            ui.add_space(8.0);
-            let mut remove = None;
-            for (i, (key, value)) in self.entries.iter_mut().enumerate() {
-                let internal = is_internal(key);
-                ui.horizontal(|ui| {
-                    let color = if internal { pal.muted } else { pal.fg };
-                    ui.add_sized(
-                        [130.0, 32.0],
-                        egui::Label::new(RichText::new(key.as_str()).color(color)).truncate(),
-                    );
-                    ui.add_enabled_ui(!internal, |ui| {
-                        ui.add_sized([300.0, 32.0], crate::theme::field(value))
-                    });
-                    if !internal
-                        && ui
-                            .button(icon::TRASH)
-                            .on_hover_text("Supprimer ce champ")
-                            .clicked()
-                    {
-                        remove = Some(i);
-                    }
-                });
-            }
+            title(ui, icon::LIST_PLUS, "Champs supplémentaires");
+            // L'opération concernée.
             ui.horizontal(|ui| {
-                ui.add_sized(
-                    [130.0, 32.0],
-                    crate::theme::field(&mut self.new_key).hint_text("nouveau nom"),
-                );
-                ui.add_sized(
-                    [300.0, 32.0],
-                    crate::theme::field(&mut self.new_value).hint_text("valeur"),
-                );
-                if ui.button(icon::PLUS).on_hover_text("Ajouter").clicked() {
-                    self.add();
+                ui.label(RichText::new(op.date.to_string()).color(pal.muted));
+                ui.label(RichText::new(&op.payee).family(crate::theme::semibold()));
+                let color = if op.amount.is_negative() {
+                    pal.negative
+                } else {
+                    pal.positive
+                };
+                ui_kit::pill(ui, &crate::format::money(op.amount, &currency), color);
+            });
+            ui.add_space(16.0);
+            let label_width = 170.0;
+            let mut remove = None;
+            ui_kit::section(ui, width, icon::LIST_BULLETS, "Champs", |ui| {
+                if self.entries.is_empty() {
+                    ui.label(
+                        RichText::new("Aucun champ supplémentaire pour cette opération.")
+                            .color(pal.muted),
+                    );
+                }
+                for (i, (key, value)) in self.entries.iter_mut().enumerate() {
+                    let internal = is_internal(key);
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(38.0);
+                        let shown = if internal {
+                            format!("{}  {key}", icon::LOCK_SIMPLE)
+                        } else {
+                            key.clone()
+                        };
+                        ui.add_sized(
+                            [label_width, 36.0],
+                            egui::Label::new(RichText::new(shown).color(if internal {
+                                pal.muted
+                            } else {
+                                pal.fg_dark
+                            }))
+                            .truncate(),
+                        );
+                        let w = ui.available_width() - if internal { 0.0 } else { 44.0 };
+                        ui.add_enabled(!internal, crate::theme::field(value).desired_width(w));
+                        if !internal
+                            && ui
+                                .add(
+                                    egui::Button::new(
+                                        RichText::new(icon::TRASH).color(pal.negative),
+                                    )
+                                    .frame(false),
+                                )
+                                .on_hover_text("Supprimer ce champ")
+                                .clicked()
+                        {
+                            remove = Some(i);
+                        }
+                    });
                 }
             });
             if let Some(i) = remove {
                 self.entries.remove(i);
             }
+            ui_kit::section(ui, width, icon::PLUS_CIRCLE, "Ajouter un champ", |ui| {
+                ui.horizontal(|ui| {
+                    ui.add(
+                        crate::theme::field(&mut self.new_key)
+                            .hint_text("Nom")
+                            .desired_width(label_width - 8.0),
+                    );
+                    let w = ui.available_width() - 110.0;
+                    ui.add(
+                        crate::theme::field(&mut self.new_value)
+                            .hint_text("Valeur")
+                            .desired_width(w),
+                    );
+                    if crate::dialogs::button(ui, format!("{}  Ajouter", icon::PLUS)).clicked() {
+                        self.add();
+                    }
+                });
+            });
             if let Some(error) = &self.error {
-                ui.label(RichText::new(error).color(pal.negative));
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
             match buttons(ui, &format!("{}  Enregistrer", icon::CHECK), true) {
                 Some(true) => {

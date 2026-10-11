@@ -37,14 +37,22 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let visible = doc.visible();
     let sort_by_date = doc.sort == SortColumn::Date;
 
+    // Fenêtre étroite : colonnes plus compactes (disposition mémorisée à part).
+    let narrow = ui.available_width() < 760.0;
+    let (date_w, mode_w, amount_w, balance_w) = if narrow {
+        (100.0, 92.0, 96.0, 108.0)
+    } else {
+        (120.0, 136.0, 108.0, 130.0)
+    };
     let mut table = TableBuilder::new(ui)
+        .id_salt(("grid", narrow))
         .striped(true)
         .resizable(true)
         .sense(Sense::click())
         .cell_layout(Layout::left_to_right(Align::Center))
         .column(Column::exact(28.0))
-        .column(Column::initial(120.0).at_least(110.0))
-        .column(Column::initial(136.0).at_least(70.0).clip(true))
+        .column(Column::initial(date_w).at_least(96.0))
+        .column(Column::initial(mode_w).at_least(44.0).clip(true))
         .column(
             Column::remainder()
                 .at_least(90.0)
@@ -57,8 +65,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 .clip(true)
                 .resizable(false),
         )
-        .column(Column::initial(108.0).at_least(90.0))
-        .column(Column::initial(130.0).at_least(104.0))
+        .column(Column::initial(amount_w).at_least(86.0))
+        .column(Column::initial(balance_w).at_least(96.0))
         .min_scrolled_height(0.0);
     if let Some(op) = scroll_to
         && let Some(row) = visible.iter().position(|&i| i == op)
@@ -328,23 +336,36 @@ fn pill(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32, top_s
         if top_space > 0.0 {
             ui.add_space(top_space);
         }
-        let font = egui::TextStyle::Small.resolve(ui.style());
-        let galley = ui.painter().layout_no_wrap(
-            format!("{glyph}  {label}"),
-            egui::FontId::new(12.5, font.family),
-            color,
-        );
-        let size = egui::vec2((galley.size().x + 16.0).min(ui.available_width()), 22.0);
-        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        let family = egui::TextStyle::Small.resolve(ui.style()).family;
+        let font = egui::FontId::new(12.5, family);
+        let available = ui.available_width();
+        // Libellé coupé avec « … » ; icône seule si la colonne est trop étroite.
+        let text = if available < 64.0 {
+            glyph.to_string()
+        } else {
+            format!("{glyph}  {label}")
+        };
+        let mut job = egui::text::LayoutJob::simple_singleline(text, font, color);
+        job.wrap = egui::text::TextWrapping {
+            max_width: (available - 16.0).max(12.0),
+            max_rows: 1,
+            break_anywhere: true,
+            overflow_character: Some('…'),
+        };
+        let galley = ui.painter().layout_job(job);
+        let size = egui::vec2((galley.size().x + 16.0).min(available), 22.0);
+        let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
         ui.painter()
             .rect_filled(rect, 11.0, color.gamma_multiply(0.16));
-        ui.painter()
-            .with_clip_rect(rect.shrink2(egui::vec2(8.0, 0.0)))
-            .galley(
-                egui::pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
-                galley,
-                color,
-            );
+        let elided = galley.elided;
+        ui.painter().galley(
+            egui::pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
+            galley,
+            color,
+        );
+        if elided || available < 64.0 {
+            response.on_hover_text(label);
+        }
     });
 }
 

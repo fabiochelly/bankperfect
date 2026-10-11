@@ -84,6 +84,7 @@ fn block_text(
     id: &str,
     currency: &str,
     lines: &[(String, Color32)],
+    max_width: f32,
 ) -> f32 {
     let pal = palette(ui);
     let head = ui.painter().text(
@@ -93,45 +94,83 @@ fn block_text(
         FontId::proportional(13.0),
         color,
     );
-    let title = ui.painter().text(
-        pos2(head.right() + 6.0, rect.top()),
-        Align2::LEFT_TOP,
+    let title_galley = truncated(
+        ui,
         label,
         FontId::new(12.0, crate::theme::medium()),
         pal.muted,
+        max_width - (head.right() - rect.left()) - 6.0,
     );
+    let title = Rect::from_min_size(pos2(head.right() + 6.0, rect.top()), title_galley.size());
+    ui.painter().galley(title.min, title_galley, pal.muted);
     let shown = animated(ui, ui.id().with(id), value);
     let value_color = if value.is_negative() {
         pal.negative
     } else {
         pal.fg
     };
-    let font = FontId::new(24.0, crate::theme::semibold());
-    let max = rect.width() * 0.55;
-    let mut galley = ui
-        .painter()
-        .layout_no_wrap(money(shown, currency), font.clone(), value_color);
-    if galley.size().x > max {
-        galley = ui
-            .painter()
-            .layout_no_wrap(money_compact(shown, currency), font, value_color);
+    // Montant complet, sinon abrégé (k€, M€), sinon en plus petit.
+    let mut galley = ui.painter().layout_no_wrap(
+        money(shown, currency),
+        FontId::new(24.0, crate::theme::semibold()),
+        value_color,
+    );
+    for size in [24.0, 20.0, 17.0] {
+        if galley.size().x <= max_width {
+            break;
+        }
+        galley = ui.painter().layout_no_wrap(
+            money_compact(shown, currency),
+            FontId::new(size, crate::theme::semibold()),
+            value_color,
+        );
     }
     let value_pos = pos2(rect.left(), title.bottom() + 4.0);
     let mut width = galley.size().x.max(title.right() - rect.left());
     let mut y = value_pos.y + galley.size().y + 3.0;
     ui.painter().galley(value_pos, galley, value_color);
     for (text, color) in lines {
-        let line = ui.painter().text(
-            pos2(rect.left(), y),
-            Align2::LEFT_TOP,
-            text,
-            FontId::proportional(11.5),
-            *color,
-        );
-        width = width.max(line.width());
-        y = line.bottom() + 1.0;
+        if y + 13.0 > rect.bottom() + 4.0 {
+            break;
+        }
+        let galley = truncated(ui, text, FontId::proportional(11.5), *color, max_width);
+        let size = galley.size();
+        ui.painter().galley(pos2(rect.left(), y), galley, *color);
+        width = width.max(size.x);
+        y += size.y + 1.0;
     }
-    width
+    width.min(max_width)
+}
+
+/// Texte sur une ligne, coupé avec « … » au-delà de `max_width`.
+fn truncated(
+    ui: &Ui,
+    text: &str,
+    font: FontId,
+    color: Color32,
+    max_width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(text.to_string(), font, color);
+    job.wrap = egui::text::TextWrapping {
+        max_width: max_width.max(10.0),
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    ui.painter().layout_job(job)
+}
+
+/// Largeur en dessous de laquelle le mini-graphique d'un bloc est masqué.
+const CHART_MIN_BLOCK: f32 = 330.0;
+
+/// Largeur laissée au texte : un peu plus de la moitié si le graphique est
+/// affiché, tout le bloc sinon.
+fn text_width(rect: Rect) -> f32 {
+    if rect.width() >= CHART_MIN_BLOCK {
+        rect.width() * 0.56
+    } else {
+        rect.width()
+    }
 }
 
 /// Texte de tendance : flèche, variation abrégée et pourcentage.
@@ -215,8 +254,11 @@ fn pointed_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
         "pointed_value",
         &currency,
         &lines,
+        text_width(rect),
     );
-    if let Some((start, end)) = window {
+    if let Some((start, end)) = window
+        && rect.width() >= CHART_MIN_BLOCK
+    {
         let chart = chart_rect(rect, used);
         if chart.width() > 60.0 {
             balance_chart(
@@ -268,11 +310,12 @@ fn pending_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
         "pending_value",
         &currency,
         &lines,
+        text_width(rect),
     );
 
     // Barres par semaine : 8 passées, celle en cours, 4 à venir.
     let chart = chart_rect(rect, used);
-    if chart.width() < 60.0 {
+    if rect.width() < CHART_MIN_BLOCK || chart.width() < 60.0 {
         return;
     }
     let weeks = &insights.pending_weeks;
@@ -350,7 +393,9 @@ fn balance_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
         pos2(rect.center().x, rect.top() - 3.0),
         pos2(rect.right(), rect.top() + 17.0),
     );
-    window_chips(ui, chips, doc, &pal);
+    if rect.width() >= CHART_MIN_BLOCK {
+        window_chips(ui, chips, doc, &pal);
+    }
     let mut lines = Vec::new();
     if let Some((start, end)) = window {
         let today = Date::today().min(end);
@@ -382,8 +427,11 @@ fn balance_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
         "balance_value",
         &currency,
         &lines,
+        text_width(rect),
     );
-    if let Some((start, end)) = window {
+    if let Some((start, end)) = window
+        && rect.width() >= CHART_MIN_BLOCK
+    {
         let chart = Rect::from_min_max(
             pos2(rect.left() + used + 20.0, rect.top() + 22.0),
             rect.right_bottom(),

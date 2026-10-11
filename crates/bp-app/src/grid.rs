@@ -286,8 +286,18 @@ fn mode_badge(
     op: &bp_core::model::Operation,
     pal: &crate::theme::Palette,
 ) {
+    let (glyph, color) = mode_style(&doc.document, &op.mode, pal);
+    pill(ui, glyph, &op.mode_label(), color, 9.0);
+}
+
+/// Icône et couleur d'un mode de paiement.
+pub fn mode_style(
+    document: &bp_core::model::Document,
+    mode: &bp_core::model::Mode,
+    pal: &crate::theme::Palette,
+) -> (&'static str, egui::Color32) {
     use bp_core::model::{Mode, StandardMode as S};
-    let (glyph, color) = match &op.mode {
+    match mode {
         Mode::Standard(m) => match m {
             S::Carte => (icon::CREDIT_CARD, pal.accent),
             S::RetraitDab => (icon::MONEY, pal.future),
@@ -301,8 +311,7 @@ fn mode_badge(
             S::Titre => (icon::CHART_LINE_UP, pal.positive),
         },
         Mode::Custom(name) => {
-            let debit = doc
-                .document
+            let debit = document
                 .custom_modes
                 .iter()
                 .find(|m| &m.name == name)
@@ -310,8 +319,7 @@ fn mode_badge(
             let glyph = crate::category_icons::icon_for(name).unwrap_or(icon::TAG);
             (glyph, if debit { pal.future } else { pal.positive })
         }
-    };
-    pill(ui, glyph, &op.mode_label(), color, 9.0);
+    }
 }
 
 /// Badge arrondi teinté : icône et libellé dans la couleur donnée.

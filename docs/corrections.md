@@ -39,9 +39,19 @@ inventaires de `docs/inventaire/`.
 | C29 | Transfert de compte à compte : traces de débogage (`print`) ; date par défaut faussée par `to_delphi_date` en Python 3. | Supprimées ; la date est une `Date`. | 04 §7 transfer |
 | C30 | Ventilation : les parts étaient recréées non pointées, en fin de compte, sans les champs supplémentaires ; reventiler une part cumulait les préfixes (« [1/2] [1/3] … ») ; montants en flottants arrondis à 2 décimales. | Les parts gardent le pointage, la place de la ligne d'origine et ses champs supplémentaires (sauf les liens de transfert) ; préfixe non cumulé ; somme vérifiée exactement en dix-millièmes. | 04 §2.6 ventilate |
 | C31 | Saisie multiple : total affiché sans le signe imposé par le mode ; « Virement reçu » tapé en entier devenait « Virement émis » ; modes personnalisés ignorés ; montant absent en mode rapide pris pour 0 ; date illisible remplacée par la date du jour sans prévenir ; abréviation dont le texte contient `=` tronquée ; numéro de chèque dupliqué quand le détail finissait par `n°NNN`. | Total signé ; un libellé complet de mode (standard ou personnalisé) est reconnu tel quel ; montant absent ou date illisible = ligne invalide (en rouge) ; texte d'abréviation conservé entier ; numéro de chèque ajouté seulement s'il manque (`ch123`/`chq 123` reconnus). | 04 §2.6 multiple_input |
+| C32 | Échéancier : le choix « Les lignes qui ne s'insèrent pas automatiquement » testait la clé inexistante `auto_insert` et ne sélectionnait jamais rien. | Sélectionne les échéances sans insertion automatique. | 04 §2.5, §7 |
+| C33 | Échéancier : une échéance mensuelle tombant un dernier jour de mois passait définitivement en fin de mois (le 30/04 donnait 31/05, 30/06, 31/07… ; le 28/02 donnait 31/03). « Ajouter à l'échéancier » sur une opération du 28/02 créait ainsi une échéance au 31/03. | Le jour du mois voulu est mémorisé (`anchor_day`) : le 30 reste le 30, le 31 reste en fin de mois. Une ancienne échéance déjà en fin de mois garde ce comportement. | 04 §2.5 |
+| C34 | Échéance annuelle au 29/02 : date invalide 29/02 les années non bissextiles, ligne refusée. | Insérée le 28/02, et de nouveau le 29/02 les années bissextiles. | 04 §2.5 |
+| C35 | Intervalle nul ou négatif : boucle sans fin (application manuelle, prévisionnel), échéance ignorée sans message à l'ouverture. | Échéance refusée avec le motif « intervalle nul ». | 04 §2.5 |
+| C36 | Les échéances désignaient leur compte par sa position : supprimer ou insérer un compte reportait les échéances sur un autre compte. | Le compte est désigné par son identifiant (`uid`) ; une échéance dont le compte a disparu est refusée. | 04 §2.5 |
+| C37 | À l'ouverture, une échéance dont le compte dépassait le dernier compte était ignorée sans message (seuls les index négatifs étaient signalés). | Refusée et signalée (« compte inexistant »). | 04 §2.5 |
+| C38 | Les deux lignes d'un transfert inséré par l'échéancier n'étaient pas liées. | Liées par `#sisterAccUid` / `#sisterLineUid`, comme le script Transfert. | 04 §2.5, §2.6 |
+| C39 | Prévisionnel : les transferts reçus d'un autre compte (échéance portée par le compte lié) étaient ignorés. | Comptés avec le montant de la ligne réciproque. | 04 §2.3 |
+| C40 | Prévisionnel : les opérations non pointées postérieures à la date choisie étaient comptées quand même. | Seules les opérations jusqu'à la date choisie sont comptées. | 04 §2.3 |
+| C41 | Prévisionnel : dates des échéances sans le report week-end/férié ; plantage (division par zéro) si tous les soldes étaient nuls. | Report appliqué comme à l'insertion ; barre de progression à 0. | 04 §2.3 |
 
 ## À faire (fonctionnalités pas encore portées)
 
 - Un détail contenant `m=` imposait le mode de paiement.
 - Compteur des sauvegardes `.bp0` commun à tous les fichiers, 20 emplacements fixes (le manuel annonce 30, paramétrables).
-- Bugs des scripts relevés dans `docs/inventaire/04-scripts.md` restant à porter (`{count-1}` non remplacé, filtre `auto_insert` de l'échéancier…).
+- Bugs des scripts relevés dans `docs/inventaire/04-scripts.md` restant à porter (`{count-1}` non remplacé…).

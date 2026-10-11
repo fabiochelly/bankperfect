@@ -53,6 +53,9 @@ pub enum Command {
     Notes,
     Calculator,
     Palette,
+    Options,
+    About,
+    Help,
 }
 
 pub struct Info {
@@ -127,6 +130,9 @@ impl Command {
             Theme(ThemePreference::Light),
             Theme(ThemePreference::System),
             ToggleTranslucent,
+            Options,
+            Help,
+            About,
             Quit,
         ]);
         list
@@ -582,6 +588,27 @@ impl Command {
                 Some("Ctrl+Maj+C"),
                 "calcul",
             ),
+            Options => info(
+                "Outils",
+                "Options…",
+                icon::SLIDERS,
+                Some("Ctrl+,"),
+                "préférences réglages paramètres",
+            ),
+            About => info(
+                "Aide",
+                "À propos de BankPerfect",
+                icon::INFO,
+                None,
+                "version licence",
+            ),
+            Help => info(
+                "Aide",
+                "Aide en ligne",
+                icon::QUESTION,
+                None,
+                "manuel documentation",
+            ),
             Palette => info(
                 "Outils",
                 "Palette de commandes",
@@ -593,7 +620,18 @@ impl Command {
         if !has_doc
             && !matches!(
                 self,
-                Open | Quit | Notes | Calculator | Theme(_) | ToggleTranslucent | Palette
+                Open | OpenRecent(_)
+                    | NewFile
+                    | DeleteFile
+                    | Quit
+                    | Notes
+                    | Calculator
+                    | Theme(_)
+                    | ToggleTranslucent
+                    | Palette
+                    | Options
+                    | About
+                    | Help
             )
         {
             result.enabled = false;

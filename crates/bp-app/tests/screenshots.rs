@@ -219,6 +219,24 @@ fn screenshots() {
     unsafe { std::env::set_var("BP_SCREENSHOT_OVERRIDE", &corrupt) };
     render("30-fichier-illisible", egui::Theme::Dark, |_| {});
     unsafe { std::env::remove_var("BP_SCREENSHOT_OVERRIDE") };
+    render("31-options", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Comma);
+    });
+    render("32-options-fichiers", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Comma);
+        h.run_steps(2);
+        h.query_all_by_label("Fichiers").last().unwrap().click();
+    });
+    render("33-options-affichage", egui::Theme::Light, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Comma);
+        h.run_steps(2);
+        h.query_all_by_label("Affichage").last().unwrap().click();
+    });
+    render("34-a-propos", egui::Theme::Dark, |h| {
+        h.get_by_label("Aide").click();
+        h.run_steps(3);
+        h.get_by_label("À propos de BankPerfect").click();
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

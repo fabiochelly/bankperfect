@@ -17,6 +17,7 @@ pub mod logo;
 mod manage_ui;
 mod menu;
 mod notes;
+mod options_ui;
 mod profiler;
 mod protection_ui;
 mod settings;

@@ -28,6 +28,9 @@ pub enum Error {
 
     #[error("erreur cryptographique : {0}")]
     Crypto(String),
+
+    #[error("donnée « {key} » illisible : {message}")]
+    InvalidFeatureData { key: String, message: String },
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

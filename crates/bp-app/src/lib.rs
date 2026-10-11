@@ -1,6 +1,7 @@
 //! BankPerfect — interface graphique (egui).
 
 mod app;
+mod category_icons;
 mod dashboard;
 mod datepicker;
 mod dialogs;

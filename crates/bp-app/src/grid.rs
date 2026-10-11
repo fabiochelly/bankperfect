@@ -29,7 +29,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let pal = palette(ui);
     let mut action = GridAction::None;
     let today = Date::today();
-    let row_height = if doc.two_lines { 42.0 } else { 30.0 };
+    // Affichage sur 2 lignes : tiers et détail, catégorie et sa famille.
+    let row_height = 46.0;
     let currency = doc.current_account().currency.clone();
     let scroll_to = doc.scroll_to.take();
     let visible = doc.visible();
@@ -64,6 +65,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         table = table.scroll_to_row(row, None);
     }
 
+    let mut first_drawn = usize::MAX;
+    let mut last_drawn = 0;
     table
         .header(66.0, |mut header| {
             header.col(|ui| tack_filter_header(ui, doc));
@@ -118,6 +121,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         .body(|body| {
             body.rows(row_height, visible.len(), |mut row| {
                 let pos = row.index();
+                first_drawn = first_drawn.min(pos);
+                last_drawn = last_drawn.max(pos);
                 let index = visible[pos];
                 let op = doc.operation(index).clone();
                 let balance = doc.balance_of(index);
@@ -168,7 +173,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     if let Some(glyph) = glyph {
                         ui.label(RichText::new(glyph).color(pal.muted));
                     }
-                    if doc.two_lines && !op.details.is_empty() {
+                    if !op.details.is_empty() {
                         ui.vertical(|ui| {
                             ui.add_space(2.0);
                             ui.add(egui::Label::new(payee).truncate());
@@ -186,13 +191,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         }
                     }
                 });
-                row.col(|ui| {
-                    let label = op
-                        .category
-                        .and_then(|id| doc.document.category_label(id))
-                        .unwrap_or_default();
-                    ui.add(egui::Label::new(RichText::new(label).color(pal.muted)).truncate());
-                });
+                row.col(|ui| category_badge(ui, doc, op.category, &pal));
                 row.col(|ui| {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let color = if op.amount.is_negative() {
@@ -255,7 +254,67 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 });
             });
         });
+    // Lignes entièrement visibles (les rangées extrêmes sont souvent coupées).
+    doc.on_screen = (first_drawn <= last_drawn).then(|| {
+        let first = if first_drawn > 0 { first_drawn + 1 } else { 0 };
+        let last = if last_drawn + 1 < visible.len() {
+            last_drawn.saturating_sub(1)
+        } else {
+            last_drawn
+        };
+        (first.min(last), last)
+    });
     action
+}
+
+/// Catégorie dans un badge coloré avec son icône ; la famille (catégorie
+/// parente) en petit dessous.
+fn category_badge(
+    ui: &mut egui::Ui,
+    doc: &OpenDoc,
+    category: Option<u32>,
+    pal: &crate::theme::Palette,
+) {
+    let Some(id) = category else { return };
+    let Some(cat) = doc.document.category(id) else {
+        return;
+    };
+    let style = doc.category_styles.get(&id).copied();
+    let color = style.map_or(pal.muted, |s| crate::theme::category_color(pal, s.color));
+    let glyph = style.map_or(icon::TAG, |s| s.icon);
+    let parent = if cat.is_child {
+        doc.document
+            .category_label(id)
+            .and_then(|label| label.split(" > ").next().map(str::to_string))
+    } else {
+        None
+    };
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing.y = 1.0;
+        if parent.is_none() {
+            ui.add_space(9.0);
+        }
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let text = format!("{glyph}  {}", cat.name);
+        let galley =
+            ui.painter()
+                .layout_no_wrap(text, egui::FontId::new(12.5, font.family.clone()), color);
+        let max_width = ui.available_width();
+        let size = egui::vec2((galley.size().x + 16.0).min(max_width), 22.0);
+        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        ui.painter()
+            .rect_filled(rect, 11.0, color.gamma_multiply(0.16));
+        ui.painter()
+            .with_clip_rect(rect.shrink2(egui::vec2(8.0, 0.0)))
+            .galley(
+                egui::pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
+                galley,
+                color,
+            );
+        if let Some(parent) = parent {
+            ui.add(egui::Label::new(RichText::new(parent).small().color(pal.muted)).truncate());
+        }
+    });
 }
 
 /// En-tête de colonne : titre cliquable (tri) + champ de filtre.

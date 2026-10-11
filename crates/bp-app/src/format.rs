@@ -24,6 +24,27 @@ pub fn money(amount: Amount, currency: &str) -> String {
     }
 }
 
+/// Montant abrégé pour les espaces restreints : `2,34 M€`, `52,6 k€`, sinon
+/// le montant complet.
+pub fn money_compact(amount: Amount, currency: &str) -> String {
+    let value = amount.as_f64();
+    let unit = |suffix: &str| {
+        if currency.is_empty() {
+            suffix.to_string()
+        } else {
+            format!("{suffix}{currency}")
+        }
+    };
+    let text = if value.abs() >= 1_000_000.0 {
+        format!("{:.2}\u{a0}{}", value / 1_000_000.0, unit("M"))
+    } else if value.abs() >= 10_000.0 {
+        format!("{:.1}\u{a0}{}", value / 1_000.0, unit("k"))
+    } else {
+        return money(amount, currency);
+    };
+    text.replace('.', ",")
+}
+
 /// Nombre entier avec espace fine insécable entre les milliers : `159 037`.
 pub fn count(n: usize) -> String {
     let digits = n.to_string();
@@ -40,6 +61,22 @@ pub fn count(n: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_compact_money() {
+        assert_eq!(
+            money_compact(Amount::from_cents(234_100_000), "€"),
+            "2,34\u{a0}M€"
+        );
+        assert_eq!(
+            money_compact(Amount::from_cents(-5_262_734), "€"),
+            "-52,6\u{a0}k€"
+        );
+        assert_eq!(
+            money_compact(Amount::from_cents(857_907), "€"),
+            "8\u{202f}579,07\u{a0}€"
+        );
+    }
 
     #[test]
     fn formats_count() {

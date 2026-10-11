@@ -58,14 +58,14 @@ fn screenshots() {
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        h.event(egui::Event::PointerMoved(egui::pos2(360.0, 250.0)));
-        h.event(press(egui::pos2(360.0, 250.0), true));
+        h.event(egui::Event::PointerMoved(egui::pos2(520.0, 165.0)));
+        h.event(press(egui::pos2(520.0, 165.0), true));
         h.run_steps(2);
-        for x in (370..=560).step_by(10) {
-            h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 250.0)));
+        for x in (530..=610).step_by(10) {
+            h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 165.0)));
             h.run_steps(1);
         }
-        h.event(press(egui::pos2(560.0, 250.0), false));
+        h.event(press(egui::pos2(610.0, 165.0), false));
     });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
@@ -100,4 +100,49 @@ fn frame_time() {
     }
     let per_frame = start.elapsed() / frames;
     println!("temps CPU par image (défilement) : {per_frame:.2?}");
+}
+
+/// Robustesse : tailles de fenêtre, défilement, tiroir de saisie, navigation
+/// clavier. Ne doit jamais paniquer (à lancer aussi en mode debug).
+#[test]
+#[ignore]
+fn robustness() {
+    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    for size in [
+        egui::vec2(1440.0, 900.0),
+        egui::vec2(800.0, 500.0),
+        egui::vec2(1024.0, 640.0),
+    ] {
+        let mut harness = Harness::builder().with_size(size).build_eframe(|cc| {
+            bankperfect::theme::install(&cc.egui_ctx);
+            bankperfect::BankPerfectApp::new(Some(file.clone()))
+        });
+        harness.run_steps(3);
+        for i in 0..60 {
+            harness.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Line,
+                delta: egui::vec2(0.0, if i < 40 { -3.0 } else { 5.0 }),
+                phase: egui::TouchPhase::Move,
+                modifiers: egui::Modifiers::NONE,
+            });
+            harness.step();
+        }
+        for key in [
+            egui::Key::ArrowDown,
+            egui::Key::End,
+            egui::Key::PageDown,
+            egui::Key::Home,
+        ] {
+            harness.key_press(key);
+            harness.run_steps(2);
+        }
+        harness.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::End);
+        harness.run_steps(2);
+        harness.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::PageUp);
+        harness.run_steps(2);
+        harness.key_press(egui::Key::Insert);
+        harness.run_steps(20);
+        harness.key_press(egui::Key::Escape);
+        harness.run_steps(3);
+    }
 }

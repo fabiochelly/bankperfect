@@ -78,7 +78,11 @@ impl Editor {
         let mut action = EditorAction::None;
         ui.add_space(10.0);
         ui.horizontal(|ui| {
-            let title = if self.target.is_some() { "Modifier l'opération" } else { "Nouvelle opération" };
+            let title = if self.target.is_some() {
+                "Modifier l'opération"
+            } else {
+                "Nouvelle opération"
+            };
             ui.label(RichText::new(title).heading());
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 if ui.button(icon::X).on_hover_text("Fermer (Échap)").clicked() {
@@ -88,87 +92,125 @@ impl Editor {
         });
         ui.add_space(8.0);
 
-        egui::Grid::new("editor").num_columns(2).spacing([10.0, 10.0]).show(ui, |ui| {
-            ui.label("Date");
-            let date = ui.add(crate::theme::field(&mut self.date).hint_text("jj/mm/aaaa").desired_width(120.0));
-            if self.focus_requested {
-                date.request_focus();
-                self.focus_requested = false;
-            }
-            if date.has_focus() {
-                self.date_keys(ui);
-            }
-            ui.end_row();
+        egui::Grid::new("editor")
+            .num_columns(2)
+            .spacing([10.0, 10.0])
+            .show(ui, |ui| {
+                ui.label("Date");
+                let date = crate::datepicker::date_field(
+                    ui,
+                    "date",
+                    &mut self.date,
+                    190.0,
+                    crate::datepicker::Placement::Popup,
+                );
+                if self.focus_requested {
+                    date.request_focus();
+                    self.focus_requested = false;
+                }
+                if date.has_focus() {
+                    self.date_keys(ui);
+                }
+                ui.end_row();
 
-            ui.label("Mode");
-            egui::ComboBox::from_id_salt("mode")
-                .selected_text(self.mode.label())
-                .width(ui.available_width())
-                .show_ui(ui, |ui| {
-                    for mode in document.mode_list() {
-                        let label = mode.label().to_string();
-                        ui.selectable_value(&mut self.mode, mode, label);
+                ui.label("Mode");
+                egui::ComboBox::from_id_salt("mode")
+                    .selected_text(self.mode.label())
+                    .width(ui.available_width())
+                    .show_ui(ui, |ui| {
+                        for mode in document.mode_list() {
+                            let label = mode.label().to_string();
+                            ui.selectable_value(&mut self.mode, mode, label);
+                        }
+                    });
+                ui.end_row();
+
+                ui.label("Tiers");
+                ui.vertical(|ui| {
+                    let response =
+                        ui.add(crate::theme::field(&mut self.payee).desired_width(f32::INFINITY));
+                    if response.has_focus() && !self.payee.is_empty() {
+                        self.payee_suggestions(ui, document);
                     }
                 });
-            ui.end_row();
+                ui.end_row();
 
-            ui.label("Tiers");
-            ui.vertical(|ui| {
-                let response = ui.add(crate::theme::field(&mut self.payee).desired_width(f32::INFINITY));
-                if response.has_focus() && !self.payee.is_empty() {
-                    self.payee_suggestions(ui, document);
-                }
-            });
-            ui.end_row();
+                ui.label("Détail");
+                ui.add(crate::theme::field(&mut self.details).desired_width(f32::INFINITY));
+                ui.end_row();
 
-            ui.label("Détail");
-            ui.add(crate::theme::field(&mut self.details).desired_width(f32::INFINITY));
-            ui.end_row();
+                ui.label("Catégorie");
+                let selected = self
+                    .category
+                    .and_then(|id| document.category_label(id))
+                    .unwrap_or_else(|| "(aucune)".into());
+                egui::ComboBox::from_id_salt("category")
+                    .selected_text(selected)
+                    .width(ui.available_width())
+                    .height(400.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.category, None, "(aucune)");
+                        for c in &document.categories {
+                            let label = if c.is_child {
+                                format!("      {}", c.name)
+                            } else {
+                                c.name.clone()
+                            };
+                            let text = if c.is_child {
+                                RichText::new(label)
+                            } else {
+                                RichText::new(label).family(crate::theme::semibold())
+                            };
+                            ui.selectable_value(&mut self.category, Some(c.id), text);
+                        }
+                    });
+                ui.end_row();
 
-            ui.label("Catégorie");
-            let selected = self.category.and_then(|id| document.category_label(id)).unwrap_or_else(|| "(aucune)".into());
-            egui::ComboBox::from_id_salt("category")
-                .selected_text(selected)
-                .width(ui.available_width())
-                .height(400.0)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.category, None, "(aucune)");
-                    for c in &document.categories {
-                        let label = if c.is_child { format!("      {}", c.name) } else { c.name.clone() };
-                        let text = if c.is_child { RichText::new(label) } else { RichText::new(label).family(crate::theme::semibold()) };
-                        ui.selectable_value(&mut self.category, Some(c.id), text);
+                ui.label("Montant");
+                let hint = self.sign_hint(document);
+                ui.add(
+                    crate::theme::field(&mut self.amount)
+                        .hint_text(hint)
+                        .desired_width(140.0),
+                );
+                ui.end_row();
+
+                ui.label("Pointage");
+                ui.horizontal(|ui| {
+                    // Contrôle segmenté : trois choix de même largeur.
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let width = (ui.available_width() - 8.0) / 3.0;
+                    for (tack, label) in [
+                        (Tack::None, "Non".to_string()),
+                        (Tack::Pointed, format!("{} Pointée", icon::CHECK)),
+                        (Tack::Reconciled, format!("{} Rappr.", icon::CHECKS)),
+                    ] {
+                        let button = egui::Button::selectable(self.tack == tack, label);
+                        if ui
+                            .add_sized([width, 32.0], button)
+                            .on_hover_text(tack_label(tack))
+                            .clicked()
+                        {
+                            self.tack = tack;
+                        }
                     }
                 });
-            ui.end_row();
-
-            ui.label("Montant");
-            let hint = self.sign_hint(document);
-            ui.add(crate::theme::field(&mut self.amount).hint_text(hint).desired_width(140.0));
-            ui.end_row();
-
-            ui.label("Pointage");
-            ui.horizontal(|ui| {
-                // Contrôle segmenté : trois choix de même largeur.
-                ui.spacing_mut().item_spacing.x = 4.0;
-                let width = (ui.available_width() - 8.0) / 3.0;
-                for (tack, label) in [
-                    (Tack::None, "Non".to_string()),
-                    (Tack::Pointed, format!("{} Pointée", icon::CHECK)),
-                    (Tack::Reconciled, format!("{} Rappr.", icon::CHECKS)),
-                ] {
-                    let button = egui::Button::selectable(self.tack == tack, label);
-                    if ui.add_sized([width, 32.0], button).on_hover_text(tack_label(tack)).clicked() {
-                        self.tack = tack;
-                    }
-                }
+                ui.end_row();
             });
-            ui.end_row();
-        });
 
-        let visible_extra: Vec<_> = self.extra.iter().filter(|(k, _)| !k.starts_with('#') && k != "freeicon").collect();
+        let visible_extra: Vec<_> = self
+            .extra
+            .iter()
+            .filter(|(k, _)| !k.starts_with('#') && k != "freeicon")
+            .collect();
         if !visible_extra.is_empty() {
             ui.add_space(8.0);
-            ui.label(RichText::new("Champs supplémentaires").small().family(crate::theme::medium()).color(pal.muted));
+            ui.label(
+                RichText::new("Champs supplémentaires")
+                    .small()
+                    .family(crate::theme::medium())
+                    .color(pal.muted),
+            );
             for (k, v) in visible_extra {
                 ui.label(format!("{k} : {v}"));
             }
@@ -196,7 +238,12 @@ impl Editor {
         );
         ui.label(RichText::new(help).small().color(pal.muted));
 
-        let (enter, escape) = ui.input(|i| (i.modifiers.command && i.key_pressed(Key::Enter), i.key_pressed(Key::Escape)));
+        let (enter, escape) = ui.input(|i| {
+            (
+                i.modifiers.command && i.key_pressed(Key::Enter),
+                i.key_pressed(Key::Escape),
+            )
+        });
         if enter {
             action = self.validate(document);
         } else if escape {
@@ -206,7 +253,11 @@ impl Editor {
     }
 
     fn sign_hint(&self, document: &Document) -> &'static str {
-        if mode_is_debit(document, &self.mode) { "dépense, ex. 12,50" } else { "recette, ex. 12,50" }
+        if mode_is_debit(document, &self.mode) {
+            "dépense, ex. 12,50"
+        } else {
+            "recette, ex. 12,50"
+        }
     }
 
     /// ↑/↓ (ou PgPréc/PgSuiv) : ±1 jour ; avec Ctrl : ±1 mois.
@@ -221,7 +272,9 @@ impl Editor {
         if !(up || down) {
             return;
         }
-        let Some(date) = Date::parse_fr(&self.date, Date::today()) else { return };
+        let Some(date) = Date::parse_fr(&self.date, Date::today()) else {
+            return;
+        };
         let naive = date.to_naive();
         let moved = match (up, ctrl) {
             (true, false) => naive.succ_opt(),
@@ -257,7 +310,13 @@ impl Editor {
         egui::Frame::popup(ui.style()).show(ui, |ui| {
             for p in memorized {
                 let text = format!("{}  {}", icon::ADDRESS_BOOK, p.caption);
-                if ui.selectable_label(false, text).on_hover_text("Tiers mémorisé : remplit aussi mode, catégorie, détail et montant").clicked() {
+                if ui
+                    .selectable_label(false, text)
+                    .on_hover_text(
+                        "Tiers mémorisé : remplit aussi mode, catégorie, détail et montant",
+                    )
+                    .clicked()
+                {
                     self.payee = p.payee.clone();
                     self.mode = p.mode.clone();
                     if p.category.is_some() {
@@ -329,7 +388,11 @@ fn tack_label(tack: Tack) -> &'static str {
 fn mode_is_debit(document: &Document, mode: &Mode) -> bool {
     match mode {
         Mode::Standard(m) => m.is_debit(),
-        Mode::Custom(name) => document.custom_modes.iter().find(|m| &m.name == name).is_none_or(|m| m.debit),
+        Mode::Custom(name) => document
+            .custom_modes
+            .iter()
+            .find(|m| &m.name == name)
+            .is_none_or(|m| m.debit),
     }
 }
 

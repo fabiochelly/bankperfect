@@ -14,8 +14,8 @@ use crate::document::OpenDoc;
 use crate::editor::{Editor, EditorAction};
 use crate::format::money;
 use crate::grid::{self, GridAction};
-use crate::{menu, sidebar};
 use crate::theme::palette;
+use crate::{menu, sidebar};
 
 const SHORTCUT_OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
 const SHORTCUT_SAVE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::S);
@@ -45,6 +45,7 @@ pub struct BankPerfectApp {
     title: String,
     drawer_open: bool,
     drawer_opened_at: f64,
+    menus: menu::MenuBar,
 }
 
 const DRAWER_WIDTH: f32 = 420.0;
@@ -66,6 +67,7 @@ impl BankPerfectApp {
             title: String::new(),
             drawer_open: false,
             drawer_opened_at: 0.0,
+            menus: menu::MenuBar::default(),
         };
         if let Some(path) = initial_file {
             app.open_path(path);
@@ -100,7 +102,9 @@ impl BankPerfectApp {
     fn open_path(&mut self, path: PathBuf) {
         let data = match std::fs::read(&path) {
             Ok(data) => data,
-            Err(e) => return self.error = Some(format!("Impossible de lire {} : {e}", path.display())),
+            Err(e) => {
+                return self.error = Some(format!("Impossible de lire {} : {e}", path.display()));
+            }
         };
         match file::requires_password(&data) {
             Ok(true) => {
@@ -174,7 +178,7 @@ impl BankPerfectApp {
         }
 
         // Raccourcis de la grille, actifs quand aucun champ n'a le focus.
-        if ctx.memory(|m| m.focused().is_some()) {
+        if ctx.memory(|m| m.focused().is_some()) || self.menus.is_open() {
             return;
         }
         let pressed = |key| ctx.input(|i| i.key_pressed(key));
@@ -186,7 +190,9 @@ impl BankPerfectApp {
             doc.cycle_tack();
         } else if pressed(Key::Insert) || pressed(Key::Plus) {
             self.editor = Some(Editor::new_operation(&doc.document, doc.account));
-        } else if pressed(Key::Enter) && let Some(&index) = doc.selection.iter().next() {
+        } else if pressed(Key::Enter)
+            && let Some(&index) = doc.selection.iter().next()
+        {
             self.editor = Some(Editor::edit(&doc.document, doc.account, index));
         } else if pressed(Key::Delete) && !doc.selection.is_empty() {
             self.confirm_delete = true;
@@ -195,7 +201,11 @@ impl BankPerfectApp {
 
     fn update_title(&mut self, ctx: &egui::Context) {
         let title = match &self.doc {
-            Some(doc) => format!("{}{} — BankPerfect", doc.file_name(), if doc.dirty { " •" } else { "" }),
+            Some(doc) => format!(
+                "{}{} — BankPerfect",
+                doc.file_name(),
+                if doc.dirty { " •" } else { "" }
+            ),
             None => "BankPerfect".to_string(),
         };
         if title != self.title {
@@ -205,43 +215,87 @@ impl BankPerfectApp {
     }
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
+        let titles: &[&str] = if self.doc.is_some() {
+            &["Fichier", "Édition", "Affichage", "Comptes", "Opérations"]
+        } else {
+            &["Fichier"]
+        };
+        if let Some((index, anchor)) = self.menus.titles(ui, titles) {
+            let ctx = ui.ctx().clone();
+            let mut menus = std::mem::take(&mut self.menus);
+            menus.popup(&ctx, index, anchor, |ui| self.menu_content(ui, index));
+            self.menus = menus;
+        }
+    }
+
+    fn menu_content(&mut self, ui: &mut egui::Ui, index: usize) {
         let now = ui.input(|i| i.time);
-        egui::MenuBar::new().style(menu::bar_style).config(menu::config()).ui(ui, |ui| {
-            let mut buttons = Vec::new();
-            buttons.push(ui.menu_button("Fichier", |ui| {
+        if index == 0 {
+            menu::begin(ui);
+            if menu::item(ui, Some(icon::FOLDER_OPEN), "Ouvrir…", Some("Ctrl+O")).clicked() {
+                self.request(Pending::Open(None));
+            }
+            if menu::item_enabled(
+                ui,
+                self.doc.is_some(),
+                Some(icon::FLOPPY_DISK),
+                "Enregistrer",
+                Some("Ctrl+S"),
+            )
+            .clicked()
+            {
+                self.save(now);
+            }
+            menu::separator(ui);
+            if menu::item(ui, Some(icon::SIGN_OUT), "Quitter", None).clicked() {
+                ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+            }
+
+            return;
+        }
+        let Some(doc) = &mut self.doc else { return };
+        match index {
+            1 => {
                 menu::begin(ui);
-                if menu::item(ui, Some(icon::FOLDER_OPEN), "Ouvrir…", Some("Ctrl+O")).clicked() {
-                    self.request(Pending::Open(None));
-                }
-                if menu::item_enabled(ui, self.doc.is_some(), Some(icon::FLOPPY_DISK), "Enregistrer", Some("Ctrl+S")).clicked() {
-                    self.save(now);
-                }
-                menu::separator(ui);
-                if menu::item(ui, Some(icon::SIGN_OUT), "Quitter", None).clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            }).response);
-            let Some(doc) = &mut self.doc else { return };
-            buttons.push(ui.menu_button("Édition", |ui| {
-                menu::begin(ui);
-                if menu::item(ui, Some(icon::PLUS), "Nouvelle opération", Some("Inser")).clicked() {
+                if menu::item(ui, Some(icon::PLUS), "Nouvelle opération", Some("Inser")).clicked()
+                {
                     self.editor = Some(Editor::new_operation(&doc.document, doc.account));
                 }
                 let single = doc.selection.iter().next().copied();
-                if menu::item_enabled(ui, single.is_some(), Some(icon::PENCIL_SIMPLE), "Modifier l'opération", Some("Entrée")).clicked()
+                if menu::item_enabled(
+                    ui,
+                    single.is_some(),
+                    Some(icon::PENCIL_SIMPLE),
+                    "Modifier l'opération",
+                    Some("Entrée"),
+                )
+                .clicked()
                     && let Some(index) = single
                 {
                     self.editor = Some(Editor::edit(&doc.document, doc.account, index));
                 }
                 menu::separator(ui);
-                if menu::item_enabled(ui, !doc.selection.is_empty(), Some(icon::TRASH), "Supprimer", Some("Suppr")).clicked() {
+                if menu::item_enabled(
+                    ui,
+                    !doc.selection.is_empty(),
+                    Some(icon::TRASH),
+                    "Supprimer",
+                    Some("Suppr"),
+                )
+                .clicked()
+                {
                     self.confirm_delete = true;
                 }
-            }).response);
-            buttons.push(ui.menu_button("Affichage", |ui| {
+            }
+            2 => {
                 menu::begin(ui);
                 menu::toggle(ui, &mut doc.two_lines, "Affichage sur 2 lignes", Some("F4"));
-                menu::toggle(ui, &mut doc.filters.hide_old_lines, "Cacher les lignes inutiles", Some("Ctrl+H"));
+                menu::toggle(
+                    ui,
+                    &mut doc.filters.hide_old_lines,
+                    "Cacher les lignes inutiles",
+                    Some("Ctrl+H"),
+                );
                 menu::separator(ui);
                 menu::heading(ui, "Thème");
                 let current = ui.ctx().options(|o| o.theme_preference);
@@ -254,8 +308,8 @@ impl BankPerfectApp {
                         ui.ctx().set_theme(preference);
                     }
                 }
-            }).response);
-            buttons.push(ui.menu_button("Comptes", |ui| {
+            }
+            3 => {
                 menu::begin(ui);
                 for &i in &doc.document.account_order.clone() {
                     let account = &doc.document.accounts[i];
@@ -268,24 +322,52 @@ impl BankPerfectApp {
                     }
                 }
                 menu::separator(ui);
-                if menu::item(ui, Some(icon::ARROW_RIGHT), "Compte suivant", Some("Ctrl+Tab")).clicked() {
+                if menu::item(
+                    ui,
+                    Some(icon::ARROW_RIGHT),
+                    "Compte suivant",
+                    Some("Ctrl+Tab"),
+                )
+                .clicked()
+                {
                     doc.cycle_account(true);
                 }
-                if menu::item(ui, Some(icon::ARROW_LEFT), "Compte précédent", Some("Ctrl+Maj+Tab")).clicked() {
+                if menu::item(
+                    ui,
+                    Some(icon::ARROW_LEFT),
+                    "Compte précédent",
+                    Some("Ctrl+Maj+Tab"),
+                )
+                .clicked()
+                {
                     doc.cycle_account(false);
                 }
-            }).response);
-            buttons.push(ui.menu_button("Opérations", |ui| {
+            }
+            _ => {
                 menu::begin_with_width(ui, 340.0);
-                if menu::item_enabled(ui, !doc.selection.is_empty(), Some(icon::CHECK), "Pointer", Some("Espace")).clicked() {
+                if menu::item_enabled(
+                    ui,
+                    !doc.selection.is_empty(),
+                    Some(icon::CHECK),
+                    "Pointer",
+                    Some("Espace"),
+                )
+                .clicked()
+                {
                     doc.cycle_tack();
                 }
-                if menu::item(ui, Some(icon::CHECKS), "Rapprocher toutes les lignes pointées", None).clicked() {
+                if menu::item(
+                    ui,
+                    Some(icon::CHECKS),
+                    "Rapprocher toutes les lignes pointées",
+                    None,
+                )
+                .clicked()
+                {
                     doc.reconcile_all_pointed();
                 }
-            }).response);
-            menu::switch_on_hover(ui.ctx(), &buttons);
-        });
+            }
+        }
     }
 
     fn balance_strip(ui: &mut egui::Ui, doc: &OpenDoc) -> bool {
@@ -297,7 +379,11 @@ impl BankPerfectApp {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                ui.label(RichText::new(&account.name).size(22.0).family(crate::theme::semibold()));
+                ui.label(
+                    RichText::new(&account.name)
+                        .size(22.0)
+                        .family(crate::theme::semibold()),
+                );
                 let mut sub = account.bank_name.clone();
                 if !account.iban.trim().is_empty() {
                     sub = format!("{sub}  ·  {}", account.iban.trim());
@@ -305,7 +391,8 @@ impl BankPerfectApp {
                 ui.label(RichText::new(sub).small().color(pal.muted));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let button = crate::theme::primary_button(ui, format!("{}  Nouvelle opération", icon::PLUS));
+                let button =
+                    crate::theme::primary_button(ui, format!("{}  Nouvelle opération", icon::PLUS));
                 if ui.add(button).on_hover_text("Inser").clicked() {
                     new_operation = true;
                 }
@@ -370,7 +457,11 @@ impl BankPerfectApp {
         stat_cards(ui, &pal, cards);
         if doc.filters.is_active() {
             ui.add_space(4.0);
-            ui.label(RichText::new(format!("{}  calculé sur les lignes filtrées", icon::FUNNEL)).small().color(pal.pointed));
+            ui.label(
+                RichText::new(format!("{}  calculé sur les lignes filtrées", icon::FUNNEL))
+                    .small()
+                    .color(pal.pointed),
+            );
         }
         ui.add_space(10.0);
         new_operation
@@ -379,11 +470,17 @@ impl BankPerfectApp {
     fn status_bar(ui: &mut egui::Ui, doc: &mut OpenDoc, toast: Option<&str>) {
         let pal = palette(ui);
         ui.horizontal(|ui| {
-            let shown = doc.visible().len();
+            let shown = doc.visible_len();
             let total = doc.total_count();
             if doc.filters.is_active() {
-                ui.label(RichText::new(format!("{}  {shown} / {total} opérations", icon::FUNNEL)).color(pal.pointed));
-                if ui.small_button(format!("{}  Effacer les filtres", icon::FUNNEL_X)).clicked() {
+                ui.label(
+                    RichText::new(format!("{}  {shown} / {total} opérations", icon::FUNNEL))
+                        .color(pal.pointed),
+                );
+                if ui
+                    .small_button(format!("{}  Effacer les filtres", icon::FUNNEL_X))
+                    .clicked()
+                {
                     let hide = doc.filters.hide_old_lines;
                     doc.filters = Default::default();
                     doc.filters.hide_old_lines = hide;
@@ -394,7 +491,11 @@ impl BankPerfectApp {
             ui.separator();
             selection_summary(ui, doc);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(RichText::new("BankPerfect · Enregistré").small().color(pal.muted));
+                ui.label(
+                    RichText::new("BankPerfect · Enregistré")
+                        .small()
+                        .color(pal.muted),
+                );
                 if let Some(text) = toast {
                     ui.label(RichText::new(format!("{}  {text}", icon::CHECK)).color(pal.positive));
                 }
@@ -405,14 +506,29 @@ impl BankPerfectApp {
     fn welcome(&mut self, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
             ui.add_space(ui.available_height() * 0.28);
-            ui.label(RichText::new(icon::PIGGY_BANK).size(56.0).color(palette(ui).accent));
-            ui.label(RichText::new("BankPerfect").size(30.0).family(crate::theme::semibold()));
+            ui.label(
+                RichText::new(icon::PIGGY_BANK)
+                    .size(56.0)
+                    .color(palette(ui).accent),
+            );
+            ui.label(
+                RichText::new("BankPerfect")
+                    .size(30.0)
+                    .family(crate::theme::semibold()),
+            );
             ui.add_space(18.0);
-            if ui.add(egui::Button::new(RichText::new(format!("{}  Ouvrir un fichier…", icon::FOLDER_OPEN)).size(15.0))).clicked() {
+            if ui
+                .add(egui::Button::new(
+                    RichText::new(format!("{}  Ouvrir un fichier…", icon::FOLDER_OPEN)).size(15.0),
+                ))
+                .clicked()
+            {
                 self.request(Pending::Open(None));
             }
             ui.add_space(8.0);
-            ui.label(RichText::new("ou déposez un fichier .bp dans la fenêtre").color(palette(ui).muted));
+            ui.label(
+                RichText::new("ou déposez un fichier .bp dans la fenêtre").color(palette(ui).muted),
+            );
         });
     }
 
@@ -423,7 +539,9 @@ impl BankPerfectApp {
             self.drawer_opened_at = now;
         }
         self.drawer_open = open;
-        let (Some(editor), Some(doc)) = (&mut self.editor, &mut self.doc) else { return };
+        let (Some(editor), Some(doc)) = (&mut self.editor, &mut self.doc) else {
+            return;
+        };
 
         // Glissement depuis la droite (150 ms, décélération).
         let t = (((now - self.drawer_opened_at) / DRAWER_SLIDE_SECONDS) as f32).clamp(0.0, 1.0);
@@ -443,9 +561,24 @@ impl BankPerfectApp {
                 egui::Frame::new()
                     .fill(pal.surface)
                     .stroke(egui::Stroke::new(1.0, pal.border))
-                    .corner_radius(egui::CornerRadius { nw: 14, sw: 14, ne: 0, se: 0 })
-                    .shadow(egui::Shadow { offset: [-6, 0], blur: 28, spread: 0, color: egui::Color32::from_black_alpha(90) })
-                    .inner_margin(egui::Margin { left: 20, right: 20, top: 8, bottom: 16 })
+                    .corner_radius(egui::CornerRadius {
+                        nw: 14,
+                        sw: 14,
+                        ne: 0,
+                        se: 0,
+                    })
+                    .shadow(egui::Shadow {
+                        offset: [-6, 0],
+                        blur: 28,
+                        spread: 0,
+                        color: egui::Color32::from_black_alpha(90),
+                    })
+                    .inner_margin(egui::Margin {
+                        left: 20,
+                        right: 20,
+                        top: 8,
+                        bottom: 16,
+                    })
                     .show(ui, |ui| {
                         ui.set_width(width - 40.0);
                         ui.set_min_height(content.height() - 24.0);
@@ -476,7 +609,11 @@ impl BankPerfectApp {
                     let recovery = prompt.use_recovery_key;
                     match std::fs::read(&path) {
                         Ok(data) => {
-                            let unlock = if recovery { Unlock::RecoveryKey(&input) } else { Unlock::Password(&input) };
+                            let unlock = if recovery {
+                                Unlock::RecoveryKey(&input)
+                            } else {
+                                Unlock::Password(&input)
+                            };
                             self.finish_open(path, &data, unlock);
                         }
                         Err(e) => self.error = Some(e.to_string()),
@@ -499,7 +636,11 @@ impl BankPerfectApp {
             && let Some(doc) = &mut self.doc
         {
             let n = doc.selection.len();
-            let message = if n == 1 { "Supprimer l'opération sélectionnée ?".to_string() } else { format!("Supprimer les {n} opérations sélectionnées ?") };
+            let message = if n == 1 {
+                "Supprimer l'opération sélectionnée ?".to_string()
+            } else {
+                format!("Supprimer les {n} opérations sélectionnées ?")
+            };
             match dialogs::confirm(ctx, "delete", "Supprimer", &message, "Supprimer", None) {
                 Choice::Pending => {}
                 Choice::Yes => {
@@ -546,22 +687,56 @@ impl BankPerfectApp {
 }
 
 impl eframe::App for BankPerfectApp {
+    /// Molette sans lissage : egui étale chaque cran sur ~0,1 s, ce qui donne
+    /// une impression de mollesse. On convertit les crans en points et on
+    /// passe par le chemin « tactile » d'egui, appliqué immédiatement.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
-        for event in &mut raw_input.events {
-            if let egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, .. } = event {
-                *delta *= crate::theme::WHEEL_POINT_FACTOR;
+        let mut events = Vec::with_capacity(raw_input.events.len() + 2);
+        for event in raw_input.events.drain(..) {
+            match event {
+                egui::Event::MouseWheel {
+                    unit,
+                    delta,
+                    phase: egui::TouchPhase::Move,
+                    modifiers,
+                } => {
+                    let delta = match unit {
+                        egui::MouseWheelUnit::Line => delta * crate::theme::WHEEL_LINE_SPEED,
+                        egui::MouseWheelUnit::Point => delta * crate::theme::WHEEL_POINT_FACTOR,
+                        egui::MouseWheelUnit::Page => delta * 600.0,
+                    };
+                    let wheel = |delta, phase| egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta,
+                        phase,
+                        modifiers,
+                    };
+                    events.push(wheel(egui::Vec2::ZERO, egui::TouchPhase::Start));
+                    events.push(wheel(delta, egui::TouchPhase::Move));
+                }
+                other => events.push(other),
             }
         }
+        raw_input.events = events;
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
         crate::theme::adapt_to_display(&ctx);
 
-        if let Some(path) = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty())) {
+        if let Some(path) = ctx.input(|i| {
+            i.raw
+                .dropped_files
+                .first()
+                .map(|f| f.path().to_path_buf())
+                .filter(|p| !p.as_os_str().is_empty())
+        }) {
             self.request(Pending::Open(Some(path)));
         }
-        if ctx.input(|i| i.viewport().close_requested()) && !self.allow_close && self.doc.as_ref().is_some_and(|d| d.dirty) {
+        if ctx.input(|i| i.viewport().close_requested())
+            && !self.allow_close
+            && self.doc.as_ref().is_some_and(|d| d.dirty)
+        {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
             self.pending = Some(Pending::Quit);
         }
@@ -601,7 +776,11 @@ impl eframe::App for BankPerfectApp {
             .resizable(true)
             .default_size(260.0)
             .min_size(200.0)
-            .frame(egui::Frame::side_top_panel(ui.style()).fill(sidebar_fill).inner_margin(12))
+            .frame(
+                egui::Frame::side_top_panel(ui.style())
+                    .fill(sidebar_fill)
+                    .inner_margin(12),
+            )
             .show(ui, |ui| sidebar::show(ui, doc));
 
         // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
@@ -610,7 +789,9 @@ impl eframe::App for BankPerfectApp {
         doc.refresh();
         let mut grid_action = GridAction::None;
         let new_operation = egui::Panel::top("balances")
-            .frame(egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)))
+            .frame(
+                egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
+            )
             .show(ui, |ui| Self::balance_strip(ui, doc))
             .inner;
         if new_operation {
@@ -625,8 +806,12 @@ impl eframe::App for BankPerfectApp {
         });
         match grid_action {
             GridAction::None => {}
-            GridAction::Edit(index) => self.editor = Some(Editor::edit(&doc.document, doc.account, index)),
-            GridAction::New => self.editor = Some(Editor::new_operation(&doc.document, doc.account)),
+            GridAction::Edit(index) => {
+                self.editor = Some(Editor::edit(&doc.document, doc.account, index))
+            }
+            GridAction::New => {
+                self.editor = Some(Editor::new_operation(&doc.document, doc.account))
+            }
         }
 
         self.editor_drawer(&ctx, content_rect, now);
@@ -662,7 +847,8 @@ const CARD_GAP: f32 = 12.0;
 /// répartie selon la place disponible, passage à la ligne si nécessaire.
 fn stat_cards(ui: &mut egui::Ui, pal: &crate::theme::Palette, cards: Vec<StatCard<'_>>) {
     let available = ui.available_width();
-    let columns = (((available + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)).floor() as usize).clamp(1, cards.len().max(1));
+    let columns = (((available + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)).floor() as usize)
+        .clamp(1, cards.len().max(1));
     let width = (available - CARD_GAP * (columns - 1) as f32) / columns as f32;
     let mut cards = cards.into_iter().peekable();
     while cards.peek().is_some() {
@@ -682,16 +868,36 @@ fn stat_cards(ui: &mut egui::Ui, pal: &crate::theme::Palette, cards: Vec<StatCar
 fn stat_card(ui: &mut egui::Ui, pal: &crate::theme::Palette, card: StatCard<'_>, width: f32) {
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, CARD_HEIGHT), egui::Sense::hover());
     let painter = ui.painter();
-    painter.rect(rect, 10.0, pal.surface, egui::Stroke::new(1.0, pal.border), egui::StrokeKind::Inside);
+    painter.rect(
+        rect,
+        10.0,
+        pal.surface,
+        egui::Stroke::new(1.0, pal.border),
+        egui::StrokeKind::Inside,
+    );
     painter.rect_filled(
         egui::Rect::from_min_size(rect.min, egui::vec2(4.0, rect.height())),
-        egui::CornerRadius { nw: 10, sw: 10, ne: 0, se: 0 },
+        egui::CornerRadius {
+            nw: 10,
+            sw: 10,
+            ne: 0,
+            se: 0,
+        },
         card.color,
     );
     // Ligne 1 : libellé à gauche, pastille d'icône à droite. Puis montant et détail.
-    let badge = egui::Rect::from_min_size(egui::pos2(rect.right() - 14.0 - 28.0, rect.top() + 12.0), egui::vec2(28.0, 28.0));
+    let badge = egui::Rect::from_min_size(
+        egui::pos2(rect.right() - 14.0 - 28.0, rect.top() + 12.0),
+        egui::vec2(28.0, 28.0),
+    );
     painter.rect_filled(badge, 7.0, card.color.gamma_multiply(0.18));
-    painter.text(badge.center(), egui::Align2::CENTER_CENTER, card.icon, egui::FontId::proportional(16.0), card.color);
+    painter.text(
+        badge.center(),
+        egui::Align2::CENTER_CENTER,
+        card.icon,
+        egui::FontId::proportional(16.0),
+        card.color,
+    );
     painter.text(
         egui::pos2(rect.left() + 20.0, badge.center().y),
         egui::Align2::LEFT_CENTER,
@@ -704,12 +910,22 @@ fn stat_card(ui: &mut egui::Ui, pal: &crate::theme::Palette, card: StatCard<'_>,
         egui::pos2(rect.left() + 20.0, badge.bottom() + 4.0),
         egui::pos2(rect.right() - 14.0, rect.bottom() - 8.0),
     );
-    let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(content).layout(Layout::top_down(Align::Min)));
+    let mut ui = ui.new_child(
+        egui::UiBuilder::new()
+            .max_rect(content)
+            .layout(Layout::top_down(Align::Min)),
+    );
     ui.spacing_mut().item_spacing.y = 2.0;
     let line = |ui: &mut egui::Ui, text: RichText, max_width: f32| {
-        ui.allocate_ui(egui::vec2(max_width, 0.0), |ui| ui.add(egui::Label::new(text).truncate()));
+        ui.allocate_ui(egui::vec2(max_width, 0.0), |ui| {
+            ui.add(egui::Label::new(text).truncate())
+        });
     };
-    let value_color = if card.value.is_negative() { pal.negative } else { pal.fg };
+    let value_color = if card.value.is_negative() {
+        pal.negative
+    } else {
+        pal.fg
+    };
     let value = RichText::new(money(card.value, card.currency))
         .size(if card.primary { 22.0 } else { 20.0 })
         .family(crate::theme::semibold())
@@ -717,20 +933,46 @@ fn stat_card(ui: &mut egui::Ui, pal: &crate::theme::Palette, card: StatCard<'_>,
     line(&mut ui, value, content.width());
     match &card.detail {
         Detail::Trend(delta, period) => {
-            let (glyph, color) = if delta.is_negative() { (icon::TREND_DOWN, pal.negative) } else { (icon::TREND_UP, pal.positive) };
+            let (glyph, color) = if delta.is_negative() {
+                (icon::TREND_DOWN, pal.negative)
+            } else {
+                (icon::TREND_UP, pal.positive)
+            };
             let sign = if delta.is_negative() { "" } else { "+" };
             let text = format!("{glyph}  {sign}{} {period}", money(*delta, card.currency));
-            line(&mut ui, RichText::new(text).small().color(color), content.width());
+            line(
+                &mut ui,
+                RichText::new(text).small().color(color),
+                content.width(),
+            );
         }
         Detail::InOut(income, expenses) => {
             let mut job = egui::text::LayoutJob::default();
             let font = egui::TextStyle::Small.resolve(ui.style());
-            let fmt = |color| egui::TextFormat { font_id: font.clone(), color, ..Default::default() };
-            job.append(&format!("{} +{}", icon::ARROW_UP, money(*income, card.currency)), 0.0, fmt(pal.positive));
-            job.append(&format!("{} {}", icon::ARROW_DOWN, money(*expenses, card.currency)), 12.0, fmt(pal.negative));
-            ui.allocate_ui(egui::vec2(content.width(), 0.0), |ui| ui.add(egui::Label::new(job).truncate()));
+            let fmt = |color| egui::TextFormat {
+                font_id: font.clone(),
+                color,
+                ..Default::default()
+            };
+            job.append(
+                &format!("{} +{}", icon::ARROW_UP, money(*income, card.currency)),
+                0.0,
+                fmt(pal.positive),
+            );
+            job.append(
+                &format!("{} {}", icon::ARROW_DOWN, money(*expenses, card.currency)),
+                12.0,
+                fmt(pal.negative),
+            );
+            ui.allocate_ui(egui::vec2(content.width(), 0.0), |ui| {
+                ui.add(egui::Label::new(job).truncate())
+            });
         }
-        Detail::Text(text) => line(&mut ui, RichText::new(text).small().color(pal.muted), content.width()),
+        Detail::Text(text) => line(
+            &mut ui,
+            RichText::new(text).small().color(pal.muted),
+            content.width(),
+        ),
     }
 }
 
@@ -748,19 +990,39 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
                 Tack::Pointed => " · pointée",
                 Tack::Reconciled => " · rapprochée",
             };
-            ui.label(format!("Ligne {} : {}{tack}", op.uid, money(op.amount, &currency)));
+            ui.label(format!(
+                "Ligne {} : {}{tack}",
+                op.uid,
+                money(op.amount, &currency)
+            ));
         }
         n => {
             let total: Amount = ops.iter().map(|op| op.amount).sum();
-            let credits: Amount = ops.iter().filter(|op| !op.amount.is_negative()).map(|op| op.amount).sum();
-            let debits: Amount = ops.iter().filter(|op| op.amount.is_negative()).map(|op| op.amount).sum();
-            let mut text = RichText::new(format!("{n} lignes : {}", money(total, &currency))).family(crate::theme::semibold());
+            let credits: Amount = ops
+                .iter()
+                .filter(|op| !op.amount.is_negative())
+                .map(|op| op.amount)
+                .sum();
+            let debits: Amount = ops
+                .iter()
+                .filter(|op| op.amount.is_negative())
+                .map(|op| op.amount)
+                .sum();
+            let mut text = RichText::new(format!("{n} lignes : {}", money(total, &currency)))
+                .family(crate::theme::semibold());
             if total.is_negative() {
                 text = text.color(pal.negative);
             }
             ui.label(text);
             if credits != Amount::ZERO && debits != Amount::ZERO {
-                ui.label(RichText::new(format!("+{}  {}", money(credits, &currency), money(debits, &currency))).color(pal.muted));
+                ui.label(
+                    RichText::new(format!(
+                        "+{}  {}",
+                        money(credits, &currency),
+                        money(debits, &currency)
+                    ))
+                    .color(pal.muted),
+                );
             }
         }
     }
@@ -785,14 +1047,21 @@ fn save_document(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
     if doc.format == FileFormat::V5 {
         backup_v5_original(&doc.path)?;
     }
-    file::save(&doc.path, &doc.document, doc.protection.as_ref().expect("protection choisie"))?;
+    file::save(
+        &doc.path,
+        &doc.document,
+        doc.protection.as_ref().expect("protection choisie"),
+    )?;
     doc.format = FileFormat::V6;
     doc.dirty = false;
     Ok(recovery)
 }
 
 fn backup_v5_original(path: &Path) -> std::io::Result<()> {
-    let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let backup = path.with_file_name(format!("{stem}_v5.bp0"));
     if !backup.exists() {
         std::fs::copy(path, backup)?;

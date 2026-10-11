@@ -59,7 +59,13 @@ pub struct SearchIndex {
 
 impl SearchIndex {
     pub fn build(document: &Document, account: &Account) -> Self {
-        Self { rows: account.operations.iter().map(|op| index_operation(document, op)).collect() }
+        Self {
+            rows: account
+                .operations
+                .iter()
+                .map(|op| index_operation(document, op))
+                .collect(),
+        }
     }
 
     pub fn update(&mut self, document: &Document, account: &Account, index: usize) {
@@ -100,7 +106,11 @@ fn index_operation(document: &Document, op: &Operation) -> IndexedOperation {
     IndexedOperation {
         mode: padded(&op.mode_label()),
         payee: padded(&payee),
-        category: padded(&op.category.and_then(|id| document.category_label(id)).unwrap_or_default()),
+        category: padded(
+            &op.category
+                .and_then(|id| document.category_label(id))
+                .unwrap_or_default(),
+        ),
     }
 }
 
@@ -116,8 +126,13 @@ pub enum TackFilter {
 }
 
 impl TackFilter {
-    pub const ALL: [TackFilter; 5] =
-        [Self::NotPointed, Self::Pointed, Self::Reconciled, Self::PointedOrReconciled, Self::All];
+    pub const ALL: [TackFilter; 5] = [
+        Self::NotPointed,
+        Self::Pointed,
+        Self::Reconciled,
+        Self::PointedOrReconciled,
+        Self::All,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -168,7 +183,8 @@ impl Filters {
     pub fn compile(&self, today: Date) -> CompiledFilters {
         let first_of_month = {
             let d = today.to_naive();
-            Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1).unwrap_or(today)
+            Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1)
+                .unwrap_or(today)
         };
         CompiledFilters {
             mode: TextQuery::parse(&self.mode),
@@ -201,7 +217,9 @@ impl CompiledFilters {
         self.tack.accepts(op.tack)
             && self.date_from.is_none_or(|d| op.date >= d)
             && self.date_to.is_none_or(|d| op.date <= d)
-            && self.hide_before.is_none_or(|d| !(op.tack == Tack::Reconciled && op.date < d))
+            && self
+                .hide_before
+                .is_none_or(|d| !(op.tack == Tack::Reconciled && op.date < d))
             && self.amount.matches(op.amount)
             && self.mode.matches(&indexed.mode)
             && self.category.matches(&indexed.category)
@@ -262,8 +280,13 @@ impl TextQuery {
                 token.text.split('|').map(str::to_string).collect()
             };
             let leading_or = !token.quoted && token_starts_with_or(&alternatives);
-            let trailing_or = !token.quoted && alternatives.len() > 1 && alternatives.last().is_some_and(String::is_empty);
-            let terms: Vec<Term> = alternatives.iter().filter_map(|a| Term::parse(a, token.quoted)).collect();
+            let trailing_or = !token.quoted
+                && alternatives.len() > 1
+                && alternatives.last().is_some_and(String::is_empty);
+            let terms: Vec<Term> = alternatives
+                .iter()
+                .filter_map(|a| Term::parse(a, token.quoted))
+                .collect();
             if terms.is_empty() {
                 join_next |= trailing_or || leading_or;
                 continue;
@@ -274,7 +297,11 @@ impl TextQuery {
             }
             join_next = trailing_or;
         }
-        if groups.is_empty() { Self::Any } else { Self::Terms(groups) }
+        if groups.is_empty() {
+            Self::Any
+        } else {
+            Self::Terms(groups)
+        }
     }
 
     fn matches(&self, padded_value: &str) -> bool {
@@ -282,7 +309,9 @@ impl TextQuery {
             Self::Any => true,
             Self::Empty => padded_value.trim().is_empty(),
             Self::Exact(expected) => padded_value == expected,
-            Self::Terms(groups) => groups.iter().all(|group| group.iter().any(|t| t.matches(padded_value))),
+            Self::Terms(groups) => groups
+                .iter()
+                .all(|group| group.iter().any(|t| t.matches(padded_value))),
         }
     }
 }
@@ -356,7 +385,10 @@ fn tokenize(query: &str) -> Vec<Token> {
                 text.push(c);
                 chars.next();
             }
-            tokens.push(Token { text, quoted: false });
+            tokens.push(Token {
+                text,
+                quoted: false,
+            });
         }
     }
     tokens
@@ -374,7 +406,10 @@ enum AmountQuery {
 
 impl AmountQuery {
     fn parse(query: &str) -> Self {
-        let q: String = query.chars().filter(|c| !c.is_whitespace() && *c != '=').collect();
+        let q: String = query
+            .chars()
+            .filter(|c| !c.is_whitespace() && *c != '=')
+            .collect();
         if q.is_empty() {
             return Self::Any;
         }
@@ -414,7 +449,10 @@ mod tests {
 
     #[test]
     fn normalization() {
-        assert_eq!(normalize("Société Générale-Paris!"), "societe generale paris ");
+        assert_eq!(
+            normalize("Société Générale-Paris!"),
+            "societe generale paris "
+        );
         assert_eq!(normalize("Œuf, 12€"), "ouf, 12 ");
     }
 
@@ -447,7 +485,8 @@ mod tests {
 
     #[test]
     fn amount_queries() {
-        let m = |query: &str, cents: i64| AmountQuery::parse(query).matches(Amount::from_cents(cents));
+        let m =
+            |query: &str, cents: i64| AmountQuery::parse(query).matches(Amount::from_cents(cents));
         assert!(m("<0", -500));
         assert!(!m("<0", 500));
         assert!(m(">-100", -9_999));

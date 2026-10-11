@@ -28,21 +28,38 @@ impl PasswordPrompt {
         Modal::new(Id::new("password")).show(ctx, |ui| {
             ui.set_width(420.0);
             ui.label(RichText::new(format!("{}  Fichier protégé", icon::LOCK_SIMPLE)).heading());
-            ui.label(self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default());
+            ui.label(
+                self.path
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default(),
+            );
             ui.add_space(8.0);
             let response = if self.use_recovery_key {
                 ui.label("Clé de secours (24 mots) :");
-                ui.add(egui::TextEdit::multiline(&mut self.input).desired_rows(3).desired_width(f32::INFINITY))
+                ui.add(
+                    egui::TextEdit::multiline(&mut self.input)
+                        .desired_rows(3)
+                        .desired_width(f32::INFINITY),
+                )
             } else {
                 ui.label("Mot de passe :");
-                ui.add(crate::theme::field(&mut self.input).password(true).desired_width(f32::INFINITY))
+                ui.add(
+                    crate::theme::field(&mut self.input)
+                        .password(true)
+                        .desired_width(f32::INFINITY),
+                )
             };
             response.request_focus();
             if let Some(error) = &self.error {
                 ui.label(RichText::new(error).color(palette(ui).negative));
             }
             if self.can_use_recovery_key {
-                let label = if self.use_recovery_key { "Utiliser le mot de passe" } else { "Mot de passe oublié ? Utiliser la clé de secours" };
+                let label = if self.use_recovery_key {
+                    "Utiliser le mot de passe"
+                } else {
+                    "Mot de passe oublié ? Utiliser la clé de secours"
+                };
                 if ui.link(label).clicked() {
                     self.use_recovery_key = !self.use_recovery_key;
                     self.input.clear();
@@ -51,7 +68,9 @@ impl PasswordPrompt {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button("Ouvrir").clicked() || (!self.use_recovery_key && ui.input(|i| i.key_pressed(Key::Enter))) {
+                if ui.button("Ouvrir").clicked()
+                    || (!self.use_recovery_key && ui.input(|i| i.key_pressed(Key::Enter)))
+                {
                     result = PromptResult::Submit;
                 }
                 if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
@@ -103,7 +122,14 @@ pub enum Choice {
 }
 
 /// Question à trois réponses (Oui / Non / Annuler).
-pub fn confirm(ctx: &egui::Context, id: &str, title: &str, message: &str, yes: &str, no: Option<&str>) -> Choice {
+pub fn confirm(
+    ctx: &egui::Context,
+    id: &str,
+    title: &str,
+    message: &str,
+    yes: &str,
+    no: Option<&str>,
+) -> Choice {
     let mut choice = Choice::Pending;
     Modal::new(Id::new(id)).show(ctx, |ui| {
         ui.set_width(420.0);
@@ -112,7 +138,10 @@ pub fn confirm(ctx: &egui::Context, id: &str, title: &str, message: &str, yes: &
         ui.label(message);
         ui.add_space(10.0);
         ui.horizontal(|ui| {
-            if ui.button(RichText::new(yes).family(crate::theme::semibold())).clicked() {
+            if ui
+                .button(RichText::new(yes).family(crate::theme::semibold()))
+                .clicked()
+            {
                 choice = Choice::Yes;
             }
             if let Some(no) = no
@@ -137,7 +166,9 @@ pub fn alert(ctx: &egui::Context, title: &str, message: &str) -> bool {
         ui.add_space(6.0);
         ui.label(message);
         ui.add_space(10.0);
-        if ui.button("OK").clicked() || ui.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Enter)) {
+        if ui.button("OK").clicked()
+            || ui.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Enter))
+        {
             close = true;
         }
     });
@@ -149,13 +180,21 @@ pub fn warnings(ctx: &egui::Context, warnings: &[String]) -> bool {
     let mut close = false;
     Modal::new(Id::new("warnings")).show(ctx, |ui| {
         ui.set_width(520.0);
-        ui.label(RichText::new(format!("{}  Anomalies corrigées à l'ouverture", icon::WARNING)).heading());
+        ui.label(
+            RichText::new(format!(
+                "{}  Anomalies corrigées à l'ouverture",
+                icon::WARNING
+            ))
+            .heading(),
+        );
         ui.add_space(6.0);
-        egui::ScrollArea::vertical().max_height(300.0).show(ui, |ui| {
-            for w in warnings {
-                ui.label(format!("• {w}"));
-            }
-        });
+        egui::ScrollArea::vertical()
+            .max_height(300.0)
+            .show(ui, |ui| {
+                for w in warnings {
+                    ui.label(format!("• {w}"));
+                }
+            });
         ui.add_space(8.0);
         if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
             close = true;

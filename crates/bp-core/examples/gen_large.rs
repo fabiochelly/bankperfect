@@ -9,9 +9,26 @@ use bp_core::model::*;
 use bp_core::view::{SortColumn, running_balances, sorted_order};
 
 const PAYEES: &[&str] = &[
-    "Carrefour", "Monoprix", "Franprix", "EDF", "Gaz de France", "SNCF", "Fnac", "Amazon.fr",
-    "Leroy Merlin", "Pharmacie Centrale", "Boulangerie Paul", "Station Total", "Péage A6",
-    "Orange", "SFR", "Trésor Public", "Mutuelle Bleue", "Salaire ACME", "Loyer", "Cinéma UGC",
+    "Carrefour",
+    "Monoprix",
+    "Franprix",
+    "EDF",
+    "Gaz de France",
+    "SNCF",
+    "Fnac",
+    "Amazon.fr",
+    "Leroy Merlin",
+    "Pharmacie Centrale",
+    "Boulangerie Paul",
+    "Station Total",
+    "Péage A6",
+    "Orange",
+    "SFR",
+    "Trésor Public",
+    "Mutuelle Bleue",
+    "Salaire ACME",
+    "Loyer",
+    "Cinéma UGC",
 ];
 
 fn main() {
@@ -19,11 +36,25 @@ fn main() {
     let out = args.get(1).expect("chemin de sortie");
     let count: usize = args.get(2).and_then(|s| s.parse().ok()).unwrap_or(160_000);
 
-    let categories: Vec<Category> = ["Alimentation", "Epicerie", "Restaurant", "Habitation", "EDF", "Loyer", "Transport", "Essence", "Salaire"]
-        .iter()
-        .enumerate()
-        .map(|(i, name)| Category { id: i as u32, name: name.to_string(), is_child: ![0, 3, 6, 8].contains(&i) })
-        .collect();
+    let categories: Vec<Category> = [
+        "Alimentation",
+        "Epicerie",
+        "Restaurant",
+        "Habitation",
+        "EDF",
+        "Loyer",
+        "Transport",
+        "Essence",
+        "Salaire",
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, name)| Category {
+        id: i as u32,
+        name: name.to_string(),
+        is_child: ![0, 3, 6, 8].contains(&i),
+    })
+    .collect();
 
     let start = Date::from_ymd(1986, 1, 1).unwrap().0;
     let end = Date::today().0 + 60;
@@ -41,7 +72,13 @@ fn main() {
         let mode = StandardMode::ALL[rand() as usize % 10];
         let cents = (rand() % if mode.is_debit() { 9_000 } else { 21_000 }) as i64 + 1;
         let amount = Amount::from_cents(if mode.is_debit() { -cents } else { cents });
-        let tack = if date.0 < end - 90 { Tack::Reconciled } else if rand() % 2 == 0 { Tack::Pointed } else { Tack::None };
+        let tack = if date.0 < end - 90 {
+            Tack::Reconciled
+        } else if rand() % 2 == 0 {
+            Tack::Pointed
+        } else {
+            Tack::None
+        };
         operations.push(Operation {
             uid: i as u64 + 1,
             date,
@@ -49,7 +86,11 @@ fn main() {
             tack,
             mode: Mode::Standard(mode),
             payee: payee.to_string(),
-            details: if mode == StandardMode::ChequeEmis { format!("n°{}", 1_000_000 + i) } else { String::new() },
+            details: if mode == StandardMode::ChequeEmis {
+                format!("n°{}", 1_000_000 + i)
+            } else {
+                String::new()
+            },
             category: Some(rand() as u32 % categories.len() as u32),
             amount,
             extra: Vec::new(),
@@ -76,14 +117,28 @@ fn main() {
         disabled: false,
         operations: ops,
     };
-    let small: Vec<Operation> = operations.iter().step_by(40).cloned().enumerate()
-        .map(|(i, mut op)| { op.uid = count as u64 + i as u64 + 1; op }).collect();
+    let small: Vec<Operation> = operations
+        .iter()
+        .step_by(40)
+        .cloned()
+        .enumerate()
+        .map(|(i, mut op)| {
+            op.uid = count as u64 + i as u64 + 1;
+            op
+        })
+        .collect();
     let document = Document {
         group_name: "Démo 40 ans".into(),
         guid: bp_core::v5_text::new_file_guid(),
         user_name: "Démo".into(),
-        custom_modes: vec![CustomMode { name: "Espèces".into(), debit: true }],
-        accounts: vec![account("Compte courant", operations), account("Livret A", small)],
+        custom_modes: vec![CustomMode {
+            name: "Espèces".into(),
+            debit: true,
+        }],
+        accounts: vec![
+            account("Compte courant", operations),
+            account("Livret A", small),
+        ],
         account_order: vec![0, 1],
         default_account: 0,
         categories,
@@ -111,13 +166,42 @@ fn main() {
     println!("tri + solde progressif             : {:.1?}", t.elapsed());
 
     for (label, filters) in [
-        ("tiers « carre »", Filters { payee: "carre".into(), ..Default::default() }),
-        ("tiers « edf|gaz /total »", Filters { payee: "edf|gaz /total".into(), ..Default::default() }),
-        ("montant -50>50 + non pointées", Filters { amount: "-50>50".into(), tack: bp_core::filter::TackFilter::NotPointed, ..Default::default() }),
-        ("catégorie « transport »", Filters { category: "transport".into(), ..Default::default() }),
+        (
+            "tiers « carre »",
+            Filters {
+                payee: "carre".into(),
+                ..Default::default()
+            },
+        ),
+        (
+            "tiers « edf|gaz /total »",
+            Filters {
+                payee: "edf|gaz /total".into(),
+                ..Default::default()
+            },
+        ),
+        (
+            "montant -50>50 + non pointées",
+            Filters {
+                amount: "-50>50".into(),
+                tack: bp_core::filter::TackFilter::NotPointed,
+                ..Default::default()
+            },
+        ),
+        (
+            "catégorie « transport »",
+            Filters {
+                category: "transport".into(),
+                ..Default::default()
+            },
+        ),
     ] {
         let t = Instant::now();
         let visible = filters.compile(Date::today()).apply(acc, &index, &order);
-        println!("filtre {label:<30}: {:>7.2?} → {} lignes", t.elapsed(), visible.len());
+        println!(
+            "filtre {label:<30}: {:>7.2?} → {} lignes",
+            t.elapsed(),
+            visible.len()
+        );
     }
 }

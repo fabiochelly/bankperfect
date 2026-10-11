@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 use bp_core::FileFormat;
 use bp_core::filter::{Filters, SearchIndex};
@@ -48,7 +49,12 @@ struct View {
     order: Vec<usize>,
     /// Solde progressif, indexé par opération.
     balance_of: Vec<Amount>,
-    visible: Vec<usize>,
+    /// Partagé pour que la grille ne le recopie pas à chaque image.
+    visible: Arc<[usize]>,
+    /// Totaux des cartes, recalculés seulement quand la vue change.
+    totals: Totals,
+    /// Solde de chaque compte (barre latérale).
+    account_balances: Vec<Amount>,
 }
 
 /// Totaux du panneau des soldes.
@@ -68,7 +74,10 @@ pub struct Totals {
 
 impl OpenDoc {
     pub fn new(path: PathBuf, opened: bp_core::file::OpenedFile) -> Self {
-        let account = opened.document.default_account.min(opened.document.accounts.len().saturating_sub(1));
+        let account = opened
+            .document
+            .default_account
+            .min(opened.document.accounts.len().saturating_sub(1));
         let mut doc = Self {
             path,
             format: opened.format,
@@ -93,7 +102,10 @@ impl OpenDoc {
     }
 
     pub fn file_name(&self) -> String {
-        self.path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        self.path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default()
     }
 
     /// Met la vue à jour si nécessaire. Appelé à chaque image : ne coûte rien
@@ -112,19 +124,39 @@ impl OpenDoc {
             for (pos, &op) in self.view.order.iter().enumerate() {
                 self.view.balance_of[op] = balances[pos];
             }
+            self.view.account_balances =
+                self.document.accounts.iter().map(|a| a.balance()).collect();
             self.view.key = Some(key);
             self.view.filters = None;
         }
         let today = Date::today();
         if self.view.filters.as_ref() != Some(&(self.filters.clone(), today)) {
             let account = &self.document.accounts[self.account];
-            self.view.visible = self.filters.compile(today).apply(account, &self.view.index, &self.view.order);
+            self.view.visible = self
+                .filters
+                .compile(today)
+                .apply(account, &self.view.index, &self.view.order)
+                .into();
             self.view.filters = Some((self.filters.clone(), today));
+            self.view.totals = self.compute_totals();
         }
     }
 
-    pub fn visible(&self) -> &[usize] {
-        &self.view.visible
+    pub fn visible(&self) -> Arc<[usize]> {
+        Arc::clone(&self.view.visible)
+    }
+
+    pub fn visible_len(&self) -> usize {
+        self.view.visible.len()
+    }
+
+    /// Solde d'un compte (mis en cache, recalculé à chaque modification).
+    pub fn account_balance(&self, account: usize) -> Amount {
+        self.view
+            .account_balances
+            .get(account)
+            .copied()
+            .unwrap_or_default()
     }
 
     pub fn total_count(&self) -> usize {
@@ -146,15 +178,20 @@ impl OpenDoc {
     /// Soldes calculés sur les lignes affichées (comportement par défaut de
     /// l'ancienne version).
     pub fn totals(&self) -> Totals {
+        self.view.totals
+    }
+
+    fn compute_totals(&self) -> Totals {
         let ops = &self.current_account().operations;
         let today = Date::today();
         let month_ago = Date(today.0 - 30);
         let first_of_month = {
             let d = today.to_naive();
-            Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1).unwrap_or(today)
+            Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1)
+                .unwrap_or(today)
         };
         let mut totals = Totals::default();
-        for &i in &self.view.visible {
+        for &i in self.view.visible.iter() {
             let op = &ops[i];
             totals.balance = totals.balance + op.amount;
             if op.date <= month_ago {
@@ -179,7 +216,11 @@ impl OpenDoc {
                 }
             }
         }
-        totals.last_reconciled = ops.iter().filter(|op| op.tack == Tack::Reconciled).map(|op| op.date).max();
+        totals.last_reconciled = ops
+            .iter()
+            .filter(|op| op.tack == Tack::Reconciled)
+            .map(|op| op.date)
+            .max();
         totals
     }
 
@@ -201,17 +242,24 @@ impl OpenDoc {
             .copied()
             .filter(|&i| !self.document.accounts[i].disabled || i == self.account)
             .collect();
-        let Some(pos) = order.iter().position(|&i| i == self.account) else { return };
-        let next = if forward { (pos + 1) % order.len() } else { (pos + order.len() - 1) % order.len() };
+        let Some(pos) = order.iter().position(|&i| i == self.account) else {
+            return;
+        };
+        let next = if forward {
+            (pos + 1) % order.len()
+        } else {
+            (pos + order.len() - 1) % order.len()
+        };
         self.select_account(order[next]);
     }
 
     pub fn click_row(&mut self, op: usize, ctrl: bool, shift: bool) {
         if shift && let Some(anchor) = self.anchor {
-            let visible = &self.view.visible;
-            if let (Some(a), Some(b)) =
-                (visible.iter().position(|&i| i == anchor), visible.iter().position(|&i| i == op))
-            {
+            let visible = Arc::clone(&self.view.visible);
+            if let (Some(a), Some(b)) = (
+                visible.iter().position(|&i| i == anchor),
+                visible.iter().position(|&i| i == op),
+            ) {
                 if !ctrl {
                     self.selection.clear();
                 }
@@ -232,11 +280,13 @@ impl OpenDoc {
 
     /// Déplace la sélection d'une ligne vers le haut ou le bas.
     pub fn move_selection(&mut self, delta: isize) {
-        let visible = &self.view.visible;
+        let visible = Arc::clone(&self.view.visible);
         if visible.is_empty() {
             return;
         }
-        let current = self.anchor.and_then(|a| visible.iter().position(|&i| i == a));
+        let current = self
+            .anchor
+            .and_then(|a| visible.iter().position(|&i| i == a));
         let pos = match current {
             Some(p) => (p as isize + delta).clamp(0, visible.len() as isize - 1) as usize,
             None => 0,
@@ -251,7 +301,9 @@ impl OpenDoc {
     /// Pointage (MARK-01) : non pointé → pointé → rapproché → non pointé. Seules
     /// les lignes dans le même état que la ligne de référence changent.
     pub fn cycle_tack(&mut self) {
-        let Some(&reference) = self.selection.iter().next() else { return };
+        let Some(&reference) = self.selection.iter().next() else {
+            return;
+        };
         let ops = &mut self.document.accounts[self.account].operations;
         let from = ops[reference].tack;
         let to = match from {
@@ -271,9 +323,9 @@ impl OpenDoc {
 
     /// Rapprocher toutes les lignes pointées affichées (MARK-03).
     pub fn reconcile_all_pointed(&mut self) {
-        let visible = self.view.visible.clone();
+        let visible = Arc::clone(&self.view.visible);
         let ops = &mut self.document.accounts[self.account].operations;
-        for i in visible {
+        for &i in visible.iter() {
             if ops[i].tack == Tack::Pointed {
                 ops[i].tack = Tack::Reconciled;
             }
@@ -405,7 +457,7 @@ mod tests {
     #[test]
     fn sorted_newest_first_with_running_balance() {
         let d = doc();
-        assert_eq!(d.visible(), [3, 2, 1, 0]);
+        assert_eq!(*d.visible(), [3, 2, 1, 0]);
         assert_eq!(d.balance_of(3), Amount::from_cents(192_000));
         assert_eq!(d.balance_of(0), Amount::from_cents(-1_000));
     }
@@ -415,7 +467,7 @@ mod tests {
         let mut d = doc();
         d.filters.payee = "carre".into();
         d.refresh();
-        assert_eq!(d.visible(), [3, 0]);
+        assert_eq!(*d.visible(), [3, 0]);
         let totals = d.totals();
         assert_eq!(totals.balance, Amount::from_cents(-3_000));
         assert_eq!(totals.pending, Amount::from_cents(-2_000));
@@ -434,7 +486,11 @@ mod tests {
         assert!(d.dirty);
         d.filters.tack = bp_core::filter::TackFilter::NotPointed;
         d.refresh();
-        assert_eq!(d.visible(), [3], "le filtre de pointage voit le changement");
+        assert_eq!(
+            *d.visible(),
+            [3],
+            "le filtre de pointage voit le changement"
+        );
     }
 
     #[test]
@@ -446,7 +502,11 @@ mod tests {
         assert_eq!(d.selection.iter().copied().collect::<Vec<_>>(), [4]);
         d.filters.payee = "fnac".into();
         d.refresh();
-        assert_eq!(d.visible(), [4], "l'index de recherche connaît la nouvelle ligne");
+        assert_eq!(
+            *d.visible(),
+            [4],
+            "l'index de recherche connaît la nouvelle ligne"
+        );
 
         d.delete_selection();
         d.refresh();

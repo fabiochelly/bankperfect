@@ -7,7 +7,14 @@ use std::path::PathBuf;
 use egui_kittest::Harness;
 use egui_kittest::kittest::Queryable;
 
-fn render(name: &str, theme: egui::Theme, setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>)) {
+/// Icône Phosphor du bouton calendrier.
+const CALENDAR_DOTS: &str = "\u{E7B4}";
+
+fn render(
+    name: &str,
+    theme: egui::Theme,
+    setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
+) {
     let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1440.0, 900.0))
@@ -32,8 +39,17 @@ fn render(name: &str, theme: egui::Theme, setup: impl FnOnce(&mut Harness<'_, ba
 fn screenshots() {
     render("01-clair", egui::Theme::Light, |_| {});
     render("02-sombre", egui::Theme::Dark, |_| {});
-    render("03-saisie", egui::Theme::Dark, |h| h.get_by_label_contains("Nouvelle opération").click());
-    render("04-menu", egui::Theme::Dark, |h| h.get_by_label("Édition").click());
+    render("03-saisie", egui::Theme::Dark, |h| {
+        h.get_by_label_contains("Nouvelle opération").click()
+    });
+    render("04-menu", egui::Theme::Dark, |h| {
+        h.get_by_label("Édition").click()
+    });
+    render("06-calendrier", egui::Theme::Dark, |h| {
+        h.get_by_label_contains("Nouvelle opération").click();
+        h.run_steps(20);
+        h.get_by_label(CALENDAR_DOTS).click();
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

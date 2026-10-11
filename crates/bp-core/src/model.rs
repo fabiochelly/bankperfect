@@ -49,7 +49,15 @@ impl Date {
             [d, m, y] if y < 100 => {
                 let century = now.year() / 100 * 100;
                 let year = century + y as i32;
-                (d, m, if year > now.year() + 20 { year - 100 } else { year })
+                (
+                    d,
+                    m,
+                    if year > now.year() + 20 {
+                        year - 100
+                    } else {
+                        year
+                    },
+                )
             }
             [d, m, y] => (d, m, y as i32),
             _ => return None,

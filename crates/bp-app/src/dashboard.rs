@@ -1,12 +1,10 @@
-//! Bandeau des soldes : « Pointé + À venir = Solde final ».
+//! Bandeau des soldes : Pointé, À venir, Solde final.
 //!
-//! Trois chiffres seulement, reliés par leur relation, lisibles d'un coup
-//! d'œil. Chacun porte son contexte (barre rapproché/pointé, nombre
-//! d'opérations, variation et courbe du solde) et filtre la grille au clic.
-//! La courbe du solde montre le prévisionnel en pointillés après aujourd'hui ;
-//! glisser dessus sélectionne une période.
-
-use std::f32::consts::TAU;
+//! Trois blocs à plat (sans cadre), séparés par un trait fin. Chacun suit le
+//! même schéma : libellé, un nombre principal, de petits chiffres secondaires
+//! avec la tendance, et un mini-graphique. Toutes les tendances portent sur
+//! la même période (1M à Tout). Les graphiques filtrent la grille : glisser
+//! sur une courbe sélectionne une période, cliquer une barre filtre la semaine.
 
 use bp_core::filter::TackFilter;
 use bp_core::model::{Amount, Date};
@@ -17,382 +15,378 @@ use crate::document::{ChartWindow, OpenDoc};
 use crate::format::{money, money_compact};
 use crate::theme::{Palette, palette};
 
-const STRIP_HEIGHT: f32 = 98.0;
-const OPERATOR_WIDTH: f32 = 34.0;
+const STRIP_HEIGHT: f32 = 92.0;
 /// Durée de l'animation des montants quand les données changent.
 const COUNT_UP_SECONDS: f64 = 0.28;
 
 pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) {
+    let pal = palette(ui);
     let available = ui.available_width();
     let (strip, _) = ui.allocate_exact_size(vec2(available, STRIP_HEIGHT), Sense::hover());
-    let solde_width = (available * 0.46)
-        .clamp(320.0, 760.0)
-        .min(available - 2.0 * OPERATOR_WIDTH - 2.0 * 180.0);
-    let small_width = (available - solde_width - 2.0 * OPERATOR_WIDTH) / 2.0;
-    let pointed = Rect::from_min_size(strip.min, vec2(small_width, STRIP_HEIGHT));
-    let pending = Rect::from_min_size(
-        pos2(pointed.right() + OPERATOR_WIDTH, strip.top()),
-        vec2(small_width, STRIP_HEIGHT),
-    );
-    let solde = Rect::from_min_max(
-        pos2(pending.right() + OPERATOR_WIDTH, strip.top()),
-        strip.max,
-    );
-    let pal = palette(ui);
-    for (x, sign) in [(pointed.right(), "+"), (pending.right(), "=")] {
-        ui.painter().text(
-            pos2(x + OPERATOR_WIDTH / 2.0, strip.center().y),
-            Align2::CENTER_CENTER,
-            sign,
-            FontId::new(26.0, egui::FontFamily::Proportional),
-            pal.muted.gamma_multiply(0.8),
+    let width = strip.width() / 3.0;
+    let blocks: Vec<Rect> = (0..3)
+        .map(|k| {
+            Rect::from_min_size(
+                pos2(strip.left() + width * k as f32, strip.top()),
+                vec2(width, STRIP_HEIGHT),
+            )
+        })
+        .collect();
+    for block in &blocks[1..] {
+        ui.painter().vline(
+            block.left(),
+            strip.y_range().shrink(10.0),
+            Stroke::new(1.0, pal.border),
         );
     }
-    pointed_tile(ui, pointed, doc);
-    pending_tile(ui, pending, doc);
-    balance_tile(ui, solde, doc);
-    ui.add_space(14.0);
+    let series = doc.insights().series.clone();
+    let window = window_dates(&series, doc.chart_window);
+    pointed_block(ui, blocks[0].shrink2(vec2(20.0, 6.0)), doc, window);
+    pending_block(ui, blocks[1].shrink2(vec2(20.0, 6.0)), doc);
+    balance_block(ui, blocks[2].shrink2(vec2(20.0, 6.0)), doc, window);
+    ui.add_space(10.0);
 }
 
-/// Fond d'une tuile ; `hero` ajoute un halo et une bordure d'accent.
-fn tile(ui: &Ui, rect: Rect, color: Color32, hero: bool) {
+/// Partie gauche d'un bloc : libellé (avec icône), nombre principal animé et
+/// lignes secondaires. Renvoie la largeur occupée.
+#[allow(clippy::too_many_arguments)]
+fn block_text(
+    ui: &Ui,
+    rect: Rect,
+    glyph: &str,
+    label: &str,
+    color: Color32,
+    value: Amount,
+    id: &str,
+    currency: &str,
+    lines: &[(String, Color32)],
+) -> f32 {
     let pal = palette(ui);
-    let stroke = if hero {
-        Stroke::new(1.0, color.gamma_multiply(0.45))
-    } else {
-        Stroke::new(1.0, pal.border)
-    };
-    ui.painter()
-        .rect(rect, 14.0, pal.surface, stroke, egui::StrokeKind::Inside);
-    let glow = ui.painter_at(rect.shrink(1.0));
-    let (radius, strength) = if hero {
-        (rect.height() * 2.2, 0.20)
-    } else {
-        (rect.height() * 1.4, 0.10)
-    };
-    radial_glow(
-        &glow,
-        rect.left_top() + vec2(28.0, 20.0),
-        radius,
-        color.gamma_multiply(strength),
-    );
-    ui.painter().hline(
-        rect.x_range().shrink(14.0),
-        rect.top() + 0.5,
-        Stroke::new(1.0, Color32::from_white_alpha(14)),
-    );
-}
-
-/// Libellé de tuile avec son icône colorée ; renvoie la position sous le libellé.
-fn tile_label(ui: &Ui, pos: Pos2, glyph: &str, text: &str, color: Color32) -> f32 {
-    let pal = palette(ui);
-    let icon_rect = ui.painter().text(
-        pos,
+    let head = ui.painter().text(
+        rect.left_top(),
         Align2::LEFT_TOP,
         glyph,
-        FontId::proportional(14.0),
+        FontId::proportional(13.0),
         color,
     );
-    let label = ui.painter().text(
-        pos2(icon_rect.right() + 6.0, pos.y),
+    let title = ui.painter().text(
+        pos2(head.right() + 6.0, rect.top()),
         Align2::LEFT_TOP,
-        text,
-        FontId::new(12.5, crate::theme::medium()),
-        pal.fg_dark,
+        label,
+        FontId::new(12.0, crate::theme::medium()),
+        pal.muted,
     );
-    label.bottom().max(icon_rect.bottom())
-}
-
-fn tile_value(
-    ui: &Ui,
-    pos: Pos2,
-    amount: Amount,
-    currency: &str,
-    size: f32,
-    max_width: f32,
-) -> Rect {
-    let pal = palette(ui);
-    let color = if amount.is_negative() {
+    let shown = animated(ui, ui.id().with(id), value);
+    let value_color = if value.is_negative() {
         pal.negative
     } else {
         pal.fg
     };
-    let full = money(amount, currency);
-    let font = FontId::new(size, crate::theme::semibold());
-    let galley = ui.painter().layout_no_wrap(full, font.clone(), color);
-    // Trop large : montant abrégé plutôt que tronqué.
-    let galley = if galley.size().x > max_width {
-        ui.painter()
-            .layout_no_wrap(money_compact(amount, currency), font, color)
-    } else {
-        galley
-    };
-    let rect = Rect::from_min_size(pos, galley.size());
-    ui.painter().galley(pos, galley, color);
-    rect
-}
-
-// ─────────────────────────────── Pointé ───────────────────────────────
-
-fn pointed_tile(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
-    let pal = palette(ui);
-    tile(ui, rect, pal.pointed, false);
-    let currency = doc.current_account().currency.clone();
-    let totals = doc.totals();
-    let insights = doc.insights().clone();
-    let inner = rect.shrink2(vec2(16.0, 12.0));
-    let y = tile_label(ui, inner.left_top(), icon::CHECKS, "Pointé", pal.pointed);
-    let shown = animated(ui, ui.id().with("pointed_value"), totals.pointed);
-    let value = tile_value(
-        ui,
-        pos2(inner.left(), y + 4.0),
-        shown,
-        &currency,
-        23.0,
-        inner.width(),
-    );
-
-    // Barre rapproché / pointé (en nombre d'opérations), cliquable.
-    let bar = Rect::from_min_size(
-        pos2(inner.left(), value.bottom() + 8.0),
-        vec2(inner.width(), 6.0),
-    );
-    let reconciled = insights.tack_counts[2];
-    let pointed_only = insights.tack_counts[1];
-    let total = (reconciled + pointed_only).max(1);
-    let split = bar.left() + bar.width() * reconciled as f32 / total as f32;
-    let zones = [
-        (
-            Rect::from_min_max(bar.min, pos2(split, bar.bottom())),
-            TackFilter::Reconciled,
-            pal.reconciled,
-            "rapprochées",
-            reconciled,
-            insights.tack_sums[2],
-        ),
-        (
-            Rect::from_min_max(pos2(split, bar.top()), bar.max),
-            TackFilter::Pointed,
-            pal.pointed,
-            "pointées (non rapprochées)",
-            pointed_only,
-            insights.tack_sums[1],
-        ),
-    ];
-    ui.painter().rect_filled(bar, 3.0, pal.bg_highlight);
-    for (k, (zone, filter, color, label, count, sum)) in zones.into_iter().enumerate() {
-        if zone.width() <= 0.0 {
-            continue;
-        }
-        let response = ui.interact(
-            zone.expand2(vec2(0.0, 6.0)),
-            ui.id().with(("pointed_zone", k)),
-            Sense::click(),
+    let font = FontId::new(24.0, crate::theme::semibold());
+    let max = rect.width() * 0.55;
+    let mut galley = ui
+        .painter()
+        .layout_no_wrap(money(shown, currency), font.clone(), value_color);
+    if galley.size().x > max {
+        galley = ui
+            .painter()
+            .layout_no_wrap(money_compact(shown, currency), font, value_color);
+    }
+    let value_pos = pos2(rect.left(), title.bottom() + 4.0);
+    let mut width = galley.size().x.max(title.right() - rect.left());
+    let mut y = value_pos.y + galley.size().y + 3.0;
+    ui.painter().galley(value_pos, galley, value_color);
+    for (text, color) in lines {
+        let line = ui.painter().text(
+            pos2(rect.left(), y),
+            Align2::LEFT_TOP,
+            text,
+            FontId::proportional(11.5),
+            *color,
         );
-        let active = doc.filters.tack == filter;
-        let dimmed = doc.filters.tack != TackFilter::All && !active;
-        let fill = if dimmed {
-            color.gamma_multiply(0.3)
-        } else if response.hovered() {
-            color
-        } else {
-            color.gamma_multiply(0.85)
-        };
-        ui.painter().rect_filled(zone, 3.0, fill);
-        if response.clicked() {
-            doc.filters.tack = if active { TackFilter::All } else { filter };
-        }
-        response.on_hover_text(format!(
-            "{} {label}\n{}\nCliquer pour filtrer",
-            crate::format::count(count),
-            money(sum, &currency)
-        ));
+        width = width.max(line.width());
+        y = line.bottom() + 1.0;
     }
-    let detail = match totals.last_reconciled {
-        Some(date) => format!(
-            "dont {} rapproché au {date}",
-            money_compact(totals.reconciled, &currency)
-        ),
-        None => "aucun rapprochement".into(),
-    };
-    ui.painter().text(
-        pos2(inner.left(), bar.bottom() + 5.0),
-        Align2::LEFT_TOP,
-        detail,
-        FontId::proportional(11.0),
-        pal.muted,
-    );
+    width
 }
 
-// ─────────────────────────────── À venir ───────────────────────────────
-
-fn pending_tile(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
-    let pal = palette(ui);
-    let active = doc.filters.tack == TackFilter::NotPointed;
-    let response = ui.interact(rect, ui.id().with("pending_tile"), Sense::click());
-    tile(ui, rect, pal.future, active);
-    if response.hovered() {
-        ui.painter().rect_stroke(
-            rect,
-            14.0,
-            Stroke::new(1.0, pal.future.gamma_multiply(0.6)),
-            egui::StrokeKind::Inside,
-        );
-    }
-    let currency = doc.current_account().currency.clone();
-    let totals = doc.totals();
-    let inner = rect.shrink2(vec2(16.0, 12.0));
-    let y = tile_label(ui, inner.left_top(), icon::CLOCK, "À venir", pal.future);
-    let shown = animated(ui, ui.id().with("pending_value"), totals.pending);
-    let value = tile_value(
-        ui,
-        pos2(inner.left(), y + 4.0),
-        shown,
-        &currency,
-        23.0,
-        inner.width(),
-    );
-    let count = match totals.pending_count {
-        0 => "aucune opération à pointer".to_string(),
-        1 => "1 opération non pointée".to_string(),
-        n => format!("{} opérations non pointées", crate::format::count(n)),
-    };
-    ui.painter().text(
-        pos2(inner.left(), value.bottom() + 8.0),
-        Align2::LEFT_TOP,
-        count,
-        FontId::proportional(11.5),
-        pal.fg_dark,
-    );
-    let hint = if active {
-        "Cliquer pour tout afficher"
-    } else {
-        "Cliquer pour n'afficher que les opérations non pointées"
-    };
-    let response = response.on_hover_text(hint);
-    if response.clicked() {
-        doc.filters.tack = if active {
-            TackFilter::All
-        } else {
-            TackFilter::NotPointed
-        };
-    }
-}
-
-// ─────────────────────────────── Solde final ───────────────────────────────
-
-fn balance_tile(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
-    let pal = palette(ui);
-    tile(ui, rect, pal.accent, true);
-    let currency = doc.current_account().currency.clone();
-    let inner = rect.shrink2(vec2(16.0, 12.0));
-    let y = tile_label(
-        ui,
-        inner.left_top(),
-        icon::WALLET,
-        "Solde final",
-        pal.accent,
-    );
-    let chips = Rect::from_min_max(
-        pos2(inner.center().x, inner.top() - 4.0),
-        pos2(inner.right(), inner.top() + 18.0),
-    );
-    window_chips(ui, chips, doc, &pal);
-
-    let totals = doc.totals();
-    let shown = animated(ui, ui.id().with("balance_value"), totals.balance);
-    let value = tile_value(
-        ui,
-        pos2(inner.left(), y + 4.0),
-        shown,
-        &currency,
-        27.0,
-        inner.width() * 0.5,
-    );
-
-    let series = doc.insights().series.clone();
-    let Some((start, end)) = window_dates(&series, doc.chart_window) else {
-        return;
-    };
-    let today = Date::today().min(end);
-    let before = balance_at(&series, start);
-    let delta = balance_at(&series, today) + -before;
-    let percent = (before.0 != 0).then(|| delta.0 as f64 / before.0.unsigned_abs() as f64 * 100.0);
-    let label = match doc.chart_window {
-        ChartWindow::Month => "sur 1 mois",
-        ChartWindow::SixMonths => "sur 6 mois",
-        ChartWindow::Year => "sur 1 an",
-        ChartWindow::FiveYears => "sur 5 ans",
-        ChartWindow::All => "depuis l'origine",
-    };
-    let badge = delta_badge(
-        ui,
-        pos2(inner.left(), value.bottom() + 6.0),
-        delta,
-        percent,
-        &currency,
-        label,
-    );
-
-    let chart_left = value.right().max(badge.right()) + 20.0;
-    let chart = Rect::from_min_max(pos2(chart_left, inner.top() + 24.0), inner.right_bottom());
-    if chart.width() > 80.0 {
-        balance_chart(ui, chart, doc, &series, start, end, &currency, &pal);
-    }
-}
-
-/// Disque dégradé (opaque au centre, transparent au bord).
-fn radial_glow(painter: &egui::Painter, center: Pos2, radius: f32, color: Color32) {
-    let mut mesh = egui::Mesh::default();
-    mesh.colored_vertex(center, color);
-    let steps = 48;
-    for i in 0..=steps {
-        let a = TAU * i as f32 / steps as f32;
-        mesh.colored_vertex(
-            center + vec2(a.cos(), a.sin()) * radius,
-            Color32::TRANSPARENT,
-        );
-    }
-    for i in 1..=steps as u32 {
-        mesh.add_triangle(0, i, i + 1);
-    }
-    painter.add(mesh);
-}
-
-/// Pastille de variation : flèche, montant (et pourcentage), couleur selon le
-/// signe. Dessinée à partir de `pos` (coin haut gauche) ; renvoie son rectangle.
-fn delta_badge(
-    ui: &Ui,
-    pos: Pos2,
+/// Texte de tendance : flèche, variation abrégée et pourcentage.
+fn trend_line(
     delta: Amount,
-    percent: Option<f64>,
+    base: Amount,
     currency: &str,
-    suffix: &str,
-) -> Rect {
-    let pal = palette(ui);
+    period: &str,
+    pal: &Palette,
+) -> (String, Color32) {
     let (glyph, color) = if delta.is_negative() {
         (icon::TREND_DOWN, pal.negative)
     } else {
         (icon::TREND_UP, pal.positive)
     };
     let sign = if delta.is_negative() { "" } else { "+" };
-    let mut text = format!("{glyph} {sign}{}", money_compact(delta, currency));
-    if let Some(p) = percent.filter(|p| p.is_finite()) {
-        text.push_str(&format!("  {sign}{p:.1} %").replace('.', ","));
+    let percent = if base.0 != 0 {
+        format!(
+            "  {sign}{:.1} %",
+            delta.0 as f64 / base.0.unsigned_abs() as f64 * 100.0
+        )
+        .replace('.', ",")
+    } else {
+        String::new()
+    };
+    (
+        format!(
+            "{glyph} {sign}{}{percent} {period}",
+            money_compact(delta, currency)
+        ),
+        color,
+    )
+}
+
+fn period_label(window: ChartWindow) -> &'static str {
+    match window {
+        ChartWindow::Month => "sur 1 mois",
+        ChartWindow::SixMonths => "sur 6 mois",
+        ChartWindow::Year => "sur 1 an",
+        ChartWindow::FiveYears => "sur 5 ans",
+        ChartWindow::All => "depuis l'origine",
     }
-    if !suffix.is_empty() {
-        text.push_str("  ");
-        text.push_str(suffix);
+}
+
+// ─────────────────────────────── Pointé ───────────────────────────────
+
+fn pointed_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Date, Date)>) {
+    let pal = palette(ui);
+    let currency = doc.current_account().currency.clone();
+    let totals = doc.totals();
+    let series = doc.insights().pointed_series.clone();
+    let mut lines = Vec::new();
+    if let Some((start, end)) = window {
+        let today = Date::today().min(end);
+        let before = balance_at(&series, start);
+        lines.push(trend_line(
+            balance_at(&series, today) + -before,
+            before,
+            &currency,
+            period_label(doc.chart_window),
+            &pal,
+        ));
     }
-    let galley =
-        ui.painter()
-            .layout_no_wrap(text, FontId::new(11.5, crate::theme::medium()), color);
-    let rect = Rect::from_min_size(pos, galley.size() + vec2(14.0, 6.0));
-    ui.painter()
-        .rect_filled(rect, rect.height() / 2.0, color.gamma_multiply(0.15));
-    ui.painter()
-        .galley(rect.min + vec2(7.0, 3.0), galley, color);
-    rect
+    lines.push(match totals.last_reconciled {
+        Some(date) => (
+            format!(
+                "dont {} rapproché au {date}",
+                money_compact(totals.reconciled, &currency)
+            ),
+            pal.muted,
+        ),
+        None => ("aucun rapprochement".into(), pal.muted),
+    });
+    let used = block_text(
+        ui,
+        rect,
+        icon::CHECKS,
+        "Pointé",
+        pal.pointed,
+        totals.pointed,
+        "pointed_value",
+        &currency,
+        &lines,
+    );
+    if let Some((start, end)) = window {
+        let chart = chart_rect(rect, used);
+        if chart.width() > 60.0 {
+            balance_chart(
+                ui,
+                chart,
+                doc,
+                &series,
+                start.min(Date::today()),
+                end.min(Date::today()),
+                &currency,
+                &pal,
+                pal.pointed,
+                "pointed_chart",
+            );
+        }
+    }
+}
+
+// ─────────────────────────────── À venir ───────────────────────────────
+
+fn pending_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc) {
+    let pal = palette(ui);
+    let currency = doc.current_account().currency.clone();
+    let totals = doc.totals();
+    let insights = doc.insights().clone();
+    let count = match totals.pending_count {
+        0 => "aucune opération à pointer".to_string(),
+        1 => "1 opération non pointée".to_string(),
+        n => format!("{} opérations non pointées", crate::format::count(n)),
+    };
+    let (future_sum, future_count) = insights.future_pending;
+    let future = if future_count == 0 {
+        "aucune opération future".to_string()
+    } else {
+        format!(
+            "dont {} à venir ({})",
+            money_compact(future_sum, &currency),
+            crate::format::count(future_count)
+        )
+    };
+    let lines = [(count, pal.fg_dark), (future, pal.muted)];
+    let used = block_text(
+        ui,
+        rect,
+        icon::CLOCK,
+        "À venir",
+        pal.future,
+        totals.pending,
+        "pending_value",
+        &currency,
+        &lines,
+    );
+
+    // Barres par semaine : 8 passées, celle en cours, 4 à venir.
+    let chart = chart_rect(rect, used);
+    if chart.width() < 60.0 {
+        return;
+    }
+    let weeks = &insights.pending_weeks;
+    let max = weeks
+        .iter()
+        .map(|w| w.1.0.unsigned_abs())
+        .max()
+        .unwrap_or(0)
+        .max(1) as f32;
+    let today = Date::today();
+    let slot = chart.width() / weeks.len().max(1) as f32;
+    ui.painter().hline(
+        chart.x_range(),
+        chart.bottom(),
+        Stroke::new(1.0, pal.border),
+    );
+    for (i, (monday, sum, n)) in weeks.iter().enumerate() {
+        let sunday = Date(monday.0 + 6);
+        let x0 = chart.left() + slot * i as f32;
+        let column = Rect::from_min_max(pos2(x0, chart.top()), pos2(x0 + slot, chart.bottom()));
+        let response = ui.interact(column, ui.id().with(("pending_week", i)), Sense::click());
+        let active = doc.filters.tack == TackFilter::NotPointed
+            && doc.filters.date_from == Some(*monday)
+            && doc.filters.date_to == Some(sunday);
+        let h = (chart.height() * sum.0.unsigned_abs() as f32 / max).max(if *n > 0 {
+            2.0
+        } else {
+            0.0
+        });
+        let bar = Rect::from_min_max(
+            pos2(x0 + slot * 0.22, chart.bottom() - h),
+            pos2(x0 + slot * 0.78, chart.bottom()),
+        );
+        let current = (*monday..=sunday).contains(&today);
+        let future = *monday > today;
+        let color = if future { pal.violet } else { pal.future };
+        let fill = if active || response.hovered() || current {
+            color
+        } else {
+            color.gamma_multiply(0.55)
+        };
+        if response.hovered() {
+            ui.painter()
+                .rect_filled(column, 3.0, pal.bg_highlight.gamma_multiply(0.6));
+        }
+        ui.painter().rect_filled(bar, 2.0, fill);
+        if response.clicked() {
+            if active {
+                doc.filters.tack = TackFilter::All;
+                doc.filters.date_from = None;
+                doc.filters.date_to = None;
+            } else {
+                doc.filters.tack = TackFilter::NotPointed;
+                doc.filters.date_from = Some(*monday);
+                doc.filters.date_to = Some(sunday);
+            }
+        }
+        response.on_hover_text(format!(
+            "Semaine du {monday} au {sunday}\n{} non pointée(s) : {}\nCliquer pour filtrer",
+            crate::format::count(*n),
+            money(*sum, &currency)
+        ));
+    }
+}
+
+// ─────────────────────────────── Solde final ───────────────────────────────
+
+fn balance_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Date, Date)>) {
+    let pal = palette(ui);
+    let currency = doc.current_account().currency.clone();
+    let totals = doc.totals();
+    let series = doc.insights().series.clone();
+    // Boutons de période, en haut à droite du bloc.
+    let chips = Rect::from_min_max(
+        pos2(rect.center().x, rect.top() - 3.0),
+        pos2(rect.right(), rect.top() + 17.0),
+    );
+    window_chips(ui, chips, doc, &pal);
+    let mut lines = Vec::new();
+    if let Some((start, end)) = window {
+        let today = Date::today().min(end);
+        let before = balance_at(&series, start);
+        lines.push(trend_line(
+            balance_at(&series, today) + -before,
+            before,
+            &currency,
+            period_label(doc.chart_window),
+            &pal,
+        ));
+        if end > Date::today() {
+            lines.push((
+                format!(
+                    "prévu {} au {end}",
+                    money_compact(balance_at(&series, end), &currency)
+                ),
+                pal.muted,
+            ));
+        }
+    }
+    let used = block_text(
+        ui,
+        rect,
+        icon::WALLET,
+        "Solde final",
+        pal.accent,
+        totals.balance,
+        "balance_value",
+        &currency,
+        &lines,
+    );
+    if let Some((start, end)) = window {
+        let chart = Rect::from_min_max(
+            pos2(rect.left() + used + 20.0, rect.top() + 22.0),
+            rect.right_bottom(),
+        );
+        if chart.width() > 60.0 {
+            balance_chart(
+                ui,
+                chart,
+                doc,
+                &series,
+                start,
+                end,
+                &currency,
+                &pal,
+                pal.accent,
+                "balance_chart",
+            );
+        }
+    }
+}
+
+/// Zone du mini-graphique : à droite du texte, sur la hauteur du bloc.
+fn chart_rect(rect: Rect, text_width: f32) -> Rect {
+    Rect::from_min_max(
+        pos2(rect.left() + text_width + 20.0, rect.top() + 8.0),
+        rect.right_bottom(),
+    )
 }
 
 /// Montant animé : quand la valeur change, il « défile » vers la nouvelle
@@ -491,6 +485,8 @@ fn balance_chart(
     end: Date,
     currency: &str,
     pal: &Palette,
+    color: Color32,
+    id: &str,
 ) {
     let span = (end.0 - start.0).max(1) as f32;
     let samples = (rect.width() / 2.0).max(2.0) as usize;
@@ -529,7 +525,7 @@ fn balance_chart(
         painter.rect_filled(
             Rect::from_x_y_ranges(a..=b, rect.y_range()),
             4.0,
-            pal.accent.gamma_multiply(0.12),
+            color.gamma_multiply(0.12),
         );
     }
 
@@ -554,8 +550,8 @@ fn balance_chart(
     let mut mesh = egui::Mesh::default();
     for (i, p) in points.iter().enumerate() {
         let strength = if i < split { 0.30 } else { 0.12 };
-        mesh.colored_vertex(*p, pal.accent.gamma_multiply(strength));
-        mesh.colored_vertex(pos2(p.x, rect.bottom()), pal.accent.gamma_multiply(0.0));
+        mesh.colored_vertex(*p, color.gamma_multiply(strength));
+        mesh.colored_vertex(pos2(p.x, rect.bottom()), color.gamma_multiply(0.0));
     }
     for i in 0..points.len().saturating_sub(1) as u32 {
         let k = i * 2;
@@ -569,29 +565,26 @@ fn balance_chart(
     if past.len() > 1 {
         painter.add(egui::Shape::line(
             past.clone(),
-            Stroke::new(7.0, pal.accent.gamma_multiply(0.12)),
+            Stroke::new(7.0, color.gamma_multiply(0.12)),
         ));
-        painter.add(egui::Shape::line(
-            past.clone(),
-            Stroke::new(2.0, pal.accent),
-        ));
+        painter.add(egui::Shape::line(past.clone(), Stroke::new(2.0, color)));
     }
     if split < points.len() {
         let future: Vec<Pos2> = points[split.saturating_sub(1)..].to_vec();
         painter.add(egui::Shape::dashed_line(
             &future,
-            Stroke::new(2.0, pal.accent.gamma_multiply(0.7)),
+            Stroke::new(2.0, color.gamma_multiply(0.7)),
             5.0,
             4.0,
         ));
         if let Some(last) = past.last() {
-            painter.circle(*last, 3.5, pal.surface, Stroke::new(2.0, pal.accent));
+            painter.circle(*last, 3.5, pal.surface, Stroke::new(2.0, color));
         }
     }
 
     // Interaction : survol (valeur), glisser (période), clic (effacer).
-    let response = ui.interact(rect, ui.id().with("balance_chart"), Sense::click_and_drag());
-    let drag_id = ui.id().with("balance_chart_drag");
+    let response = ui.interact(rect, ui.id().with(id), Sense::click_and_drag());
+    let drag_id = ui.id().with((id, "drag"));
     if response.drag_started()
         && let Some(p) = response.interact_pointer_pos()
     {
@@ -607,7 +600,7 @@ fn balance_chart(
             painter.rect_filled(
                 Rect::from_x_y_ranges(a..=b, rect.y_range()),
                 4.0,
-                pal.accent.gamma_multiply(0.25),
+                color.gamma_multiply(0.25),
             );
         }
         if response.drag_stopped() {
@@ -632,7 +625,7 @@ fn balance_chart(
             rect.y_range(),
             Stroke::new(1.0, pal.fg.gamma_multiply(0.3)),
         );
-        painter.circle(pos2(x, y), 4.5, pal.accent, Stroke::new(2.0, pal.surface));
+        painter.circle(pos2(x, y), 4.5, color, Stroke::new(2.0, pal.surface));
         let future = if date > today {
             "  · prévisionnel"
         } else {

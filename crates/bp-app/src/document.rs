@@ -135,6 +135,12 @@ pub struct Insights {
     /// Non pointées, pointées, rapprochées : nombre et somme (tout le compte).
     pub tack_counts: [usize; 3],
     pub tack_sums: [Amount; 3],
+    /// Solde pointé (pointées et rapprochées) en fin de journée, par date croissante.
+    pub pointed_series: Arc<[(Date, Amount)]>,
+    /// Non pointées par semaine (lundi), de 8 semaines avant à 4 après aujourd'hui.
+    pub pending_weeks: Vec<(Date, Amount, usize)>,
+    /// Non pointées datées après aujourd'hui : somme et nombre.
+    pub future_pending: (Amount, usize),
 }
 
 /// Totaux du panneau des soldes.
@@ -235,8 +241,18 @@ impl OpenDoc {
     /// pour que le graphique reste stable).
     fn compute_tack_insights(&mut self) {
         let ops = &self.document.accounts[self.account].operations;
+        let today = Date::today();
+        let monday = |d: Date| {
+            Date(d.0 - chrono::Datelike::weekday(&d.to_naive()).num_days_from_monday() as i32)
+        };
+        let first_week = Date(monday(today).0 - 8 * 7);
+        let mut weeks: Vec<(Date, Amount, usize)> = (0..13)
+            .map(|k| (Date(first_week.0 + 7 * k), Amount::ZERO, 0))
+            .collect();
         let mut counts = [0usize; 3];
         let mut sums = [Amount::ZERO; 3];
+        let mut future = (Amount::ZERO, 0usize);
+        let mut pointed: Vec<(Date, Amount)> = Vec::new();
         for op in ops {
             let k = match op.tack {
                 Tack::None => 0,
@@ -245,10 +261,36 @@ impl OpenDoc {
             };
             counts[k] += 1;
             sums[k] = sums[k] + op.amount;
+            if k == 0 {
+                let w = (op.date.0 - first_week.0).div_euclid(7);
+                if (0..13).contains(&w) {
+                    let slot = &mut weeks[w as usize];
+                    slot.1 = slot.1 + op.amount;
+                    slot.2 += 1;
+                }
+                if op.date > today {
+                    future = (future.0 + op.amount, future.1 + 1);
+                }
+            } else {
+                pointed.push((op.date, op.amount));
+            }
+        }
+        pointed.sort_unstable_by_key(|(d, _)| *d);
+        let mut series: Vec<(Date, Amount)> = Vec::new();
+        let mut balance = Amount::ZERO;
+        for (date, amount) in pointed {
+            balance = balance + amount;
+            match series.last_mut() {
+                Some(last) if last.0 == date => last.1 = balance,
+                _ => series.push((date, balance)),
+            }
         }
         let insights = &mut self.view.insights;
         insights.tack_counts = counts;
         insights.tack_sums = sums;
+        insights.pointed_series = series.into();
+        insights.pending_weeks = weeks;
+        insights.future_pending = future;
     }
 
     pub fn visible(&self) -> Arc<[usize]> {

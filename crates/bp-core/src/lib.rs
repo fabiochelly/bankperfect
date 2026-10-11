@@ -8,6 +8,7 @@ pub mod export;
 pub mod file;
 pub mod filter;
 pub mod format_v6;
+pub mod manage;
 pub mod model;
 pub mod v5_text;
 pub mod view;

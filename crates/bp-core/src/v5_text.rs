@@ -219,6 +219,11 @@ impl CustomMode {
     }
 }
 
+/// Analyse une liste de catégories au format du fichier (`id=nom;id=  enfant`).
+pub fn parse_categories_text(value: &str) -> Vec<Category> {
+    parse_categories(value)
+}
+
 fn parse_categories(value: &str) -> Vec<Category> {
     let mut categories: Vec<Category> = Vec::new();
     if value.is_empty() {

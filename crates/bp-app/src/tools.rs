@@ -988,7 +988,9 @@ impl CalcForm {
                 // Curseur en fin de saisie après un clic sur une touche du pavé.
                 if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), field.id) {
                     let end = egui::text::CCursor::new(self.expression.chars().count());
-                    state.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+                    state
+                        .cursor
+                        .set_char_range(Some(egui::text::CCursorRange::one(end)));
                     state.store(ui.ctx(), field.id);
                 }
             }

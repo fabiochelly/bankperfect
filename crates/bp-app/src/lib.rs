@@ -11,6 +11,7 @@ mod format;
 mod grid;
 mod menu;
 mod profiler;
+mod settings;
 mod sidebar;
 pub mod theme;
 mod tools;

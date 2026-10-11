@@ -1,5 +1,6 @@
 //! Cœur de BankPerfect : formats de fichiers, modèle de données et calculs.
 
+pub mod backup;
 pub mod codec_v5;
 pub mod edit;
 pub mod error;

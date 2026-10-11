@@ -10,6 +10,7 @@ use crate::document::OpenDoc;
 use crate::theme::palette;
 
 pub enum Tool {
+    Backups(BackupsForm),
     Replace(ReplaceForm),
     ModifyGroup(GroupForm),
     ExportCsv(CsvForm),
@@ -21,11 +22,14 @@ pub enum Outcome {
     Close,
     /// Fermer et afficher un message de confirmation.
     Done(String),
+    /// Fermer, rouvrir ce fichier et afficher un message.
+    Reopen(std::path::PathBuf, String),
 }
 
 impl Tool {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         match self {
+            Tool::Backups(form) => form.show(ctx, doc),
             Tool::Replace(form) => form.show(ctx, doc),
             Tool::ModifyGroup(form) => form.show(ctx, doc),
             Tool::ExportCsv(form) => form.show(ctx, doc),
@@ -519,4 +523,87 @@ pub fn export_qif(doc: &OpenDoc) -> Option<String> {
         Ok(()) => format!("Fichier {} créé", path.display()),
         Err(e) => format!("Impossible de créer {} : {e}", path.display()),
     })
+}
+
+// ─────────────────────────────── Sauvegardes ───────────────────────────────
+
+/// Liste des sauvegardes `.bp0` du fichier ouvert, avec restauration.
+pub struct BackupsForm {
+    dir: std::path::PathBuf,
+    keep: usize,
+    confirm: Option<std::path::PathBuf>,
+    error: Option<String>,
+}
+
+impl BackupsForm {
+    pub fn new(dir: std::path::PathBuf, keep: usize) -> Self {
+        Self {
+            dir,
+            keep,
+            confirm: None,
+            error: None,
+        }
+    }
+
+    fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
+        let mut outcome = Outcome::Keep;
+        let backups = bp_core::backup::list(&doc.path, &self.dir);
+        Modal::new(Id::new("tool_backups")).show(ctx, |ui| {
+            ui.set_width(560.0);
+            title(ui, icon::CLOCK_COUNTER_CLOCKWISE, "Sauvegardes");
+            let pal = palette(ui);
+            ui.label(RichText::new(format!("Dossier : {}", self.dir.display())).small().color(pal.muted));
+            ui.label(
+                RichText::new(format!("Une sauvegarde est créée à chaque enregistrement ; les {} plus récentes sont gardées.", self.keep))
+                    .small()
+                    .color(pal.muted),
+            );
+            ui.add_space(8.0);
+            if backups.is_empty() {
+                ui.label("Aucune sauvegarde pour ce fichier pour l'instant.");
+            }
+            egui::ScrollArea::vertical().max_height(340.0).show(ui, |ui| {
+                for backup in &backups {
+                    ui.horizontal(|ui| {
+                        let when: chrono::DateTime<chrono::Local> = backup.modified.into();
+                        ui.label(RichText::new(icon::FILE).color(pal.muted));
+                        ui.label(when.format("%d/%m/%Y à %H:%M:%S").to_string());
+                        ui.label(RichText::new(format!("{} Ko", backup.size.div_ceil(1024))).small().color(pal.muted));
+                        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                            if ui.button(format!("{}  Restaurer", icon::ARROW_COUNTER_CLOCKWISE)).clicked() {
+                                self.confirm = Some(backup.path.clone());
+                            }
+                        });
+                    });
+                }
+            });
+            if let Some(error) = &self.error {
+                ui.label(RichText::new(error).color(pal.negative));
+            }
+            if let Some(path) = self.confirm.clone() {
+                ui.add_space(8.0);
+                let unsaved = if doc.dirty { " Les modifications non enregistrées seront perdues." } else { "" };
+                ui.label(
+                    RichText::new(format!("Restaurer cette sauvegarde ? La version actuelle du fichier sera elle-même sauvegardée.{unsaved}"))
+                        .color(pal.warning),
+                );
+                ui.horizontal(|ui| {
+                    if ui.add(crate::theme::primary_button(ui, "Restaurer")).clicked() {
+                        match bp_core::backup::restore(&path, &doc.path, &self.dir, self.keep) {
+                            Ok(()) => outcome = Outcome::Reopen(doc.path.clone(), "Sauvegarde restaurée".into()),
+                            Err(e) => self.error = Some(format!("Restauration impossible : {e}")),
+                        }
+                    }
+                    if ui.button("Non").clicked() {
+                        self.confirm = None;
+                    }
+                });
+            }
+            ui.add_space(10.0);
+            if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                outcome = Outcome::Close;
+            }
+        });
+        outcome
+    }
 }

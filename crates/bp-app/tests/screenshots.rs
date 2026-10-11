@@ -24,7 +24,10 @@ fn render_sized(
     size: egui::Vec2,
     setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
 ) {
-    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    let file = std::env::var("BP_SCREENSHOT_OVERRIDE")
+        .or_else(|_| std::env::var("BP_SCREENSHOT_FILE"))
+        .map(PathBuf::from)
+        .expect("BP_SCREENSHOT_FILE");
     let mut harness = Harness::builder()
         .with_size(size)
         .with_pixels_per_point(2.0)
@@ -202,6 +205,20 @@ fn screenshots() {
         });
     }
     bankperfect::theme::set_surface_transparent(false);
+    render("28-menu-fichier", egui::Theme::Dark, |h| {
+        h.get_by_label("Fichier").click();
+    });
+    render("29-nouveau-fichier", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::N);
+    });
+    // Fichier illisible.
+    let dir = std::env::temp_dir().join("bp-screenshot-corrompu");
+    std::fs::create_dir_all(&dir).unwrap();
+    let corrupt = dir.join("Comptes abîmés.bp");
+    std::fs::write(&corrupt, b"BPFILE6\0\x01\x00garbage").unwrap();
+    unsafe { std::env::set_var("BP_SCREENSHOT_OVERRIDE", &corrupt) };
+    render("30-fichier-illisible", egui::Theme::Dark, |_| {});
+    unsafe { std::env::remove_var("BP_SCREENSHOT_OVERRIDE") };
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

@@ -10,6 +10,7 @@ mod datepicker;
 mod dialogs;
 mod document;
 mod editor;
+mod files_ui;
 mod format;
 mod grid;
 pub mod logo;

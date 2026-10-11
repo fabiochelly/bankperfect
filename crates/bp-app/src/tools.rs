@@ -12,6 +12,7 @@ use crate::theme::palette;
 use crate::ui_kit;
 
 pub enum Tool {
+    NewFile(crate::files_ui::NewFileForm),
     Manage(crate::manage_ui::ManageForm),
     Protection(crate::protection_ui::ProtectionForm),
     Backups(BackupsForm),
@@ -38,9 +39,12 @@ pub enum Outcome {
 impl Tool {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         match self {
+            Tool::NewFile(form) => {
+                form.show_standalone(ctx, doc.path.parent().map(std::path::Path::to_path_buf))
+            }
             Tool::Manage(form) => form.show(ctx, doc),
             Tool::Protection(form) => form.show(ctx, doc),
-            Tool::Backups(form) => form.show(ctx, doc),
+            Tool::Backups(form) => form.show_standalone(ctx, doc.dirty),
             Tool::Calculator(form) => form.show_standalone(ctx),
             Tool::ExtraValues(form) => form.show(ctx, doc),
             Tool::Notes(form) => form.show_standalone(ctx),
@@ -701,6 +705,8 @@ pub fn export_qif(doc: &OpenDoc) -> Option<String> {
 
 /// Liste des sauvegardes `.bp0` du fichier ouvert, avec restauration.
 pub struct BackupsForm {
+    /// Fichier dont on liste les sauvegardes (ouvert, ou illisible).
+    path: std::path::PathBuf,
     dir: std::path::PathBuf,
     keep: usize,
     confirm: Option<std::path::PathBuf>,
@@ -722,8 +728,9 @@ fn ago(time: std::time::SystemTime) -> String {
 }
 
 impl BackupsForm {
-    pub fn new(dir: std::path::PathBuf, keep: usize) -> Self {
+    pub fn new(path: std::path::PathBuf, dir: std::path::PathBuf, keep: usize) -> Self {
         Self {
+            path,
             dir,
             keep,
             confirm: None,
@@ -731,9 +738,10 @@ impl BackupsForm {
         }
     }
 
-    fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
+    /// `dirty` : le fichier ouvert a des modifications non enregistrées.
+    pub fn show_standalone(&mut self, ctx: &egui::Context, dirty: bool) -> Outcome {
         let mut outcome = Outcome::Keep;
-        let backups = bp_core::backup::list(&doc.path, &self.dir);
+        let backups = bp_core::backup::list(&self.path, &self.dir);
         let width = ui_kit::dialog_width(ctx, 0.5, 640.0, 780.0);
         crate::dialogs::modal(ctx, "tool_backups").show(ctx, |ui| {
             ui.set_width(width);
@@ -816,7 +824,7 @@ impl BackupsForm {
             }
             if let Some(path) = self.confirm.clone() {
                 ui.add_space(14.0);
-                let unsaved = if doc.dirty { " Les modifications non enregistrées seront perdues." } else { "" };
+                let unsaved = if dirty { " Les modifications non enregistrées seront perdues." } else { "" };
                 egui::Frame::new()
                     .fill(pal.warning.gamma_multiply(0.10))
                     .stroke(egui::Stroke::new(1.0, pal.warning.gamma_multiply(0.4)))
@@ -833,8 +841,8 @@ impl BackupsForm {
                         );
                         crate::dialogs::footer(ui, |ui| {
                             if crate::dialogs::primary(ui, "Restaurer", true).clicked() {
-                                match bp_core::backup::restore(&path, &doc.path, &self.dir, self.keep) {
-                                    Ok(()) => outcome = Outcome::Reopen(doc.path.clone(), "Sauvegarde restaurée".into()),
+                                match bp_core::backup::restore(&path, &self.path, &self.dir, self.keep) {
+                                    Ok(()) => outcome = Outcome::Reopen(self.path.clone(), "Sauvegarde restaurée".into()),
                                     Err(e) => self.error = Some(format!("Restauration impossible : {e}")),
                                 }
                             }

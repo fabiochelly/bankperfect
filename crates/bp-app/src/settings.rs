@@ -21,6 +21,10 @@ pub struct Settings {
     /// Fond de fenêtre translucide et flouté par le compositeur (`None` :
     /// actif par défaut sous Linux seulement).
     pub translucent: Option<bool>,
+    /// Réglages lus sur disque : seuls ceux-là sont réenregistrés (les tests
+    /// partent de réglages par défaut et n'écrivent rien).
+    #[serde(skip)]
+    persist: bool,
 }
 
 impl Default for Settings {
@@ -31,6 +35,7 @@ impl Default for Settings {
             backup_keep: bp_core::backup::DEFAULT_KEEP,
             recent_files: Vec::new(),
             translucent: None,
+            persist: false,
         }
     }
 }
@@ -47,12 +52,19 @@ impl Settings {
     pub fn load() -> Self {
         settings_path()
             .and_then(|p| std::fs::read(p).ok())
-            .and_then(|bytes| serde_json::from_slice(&bytes).ok())
-            .unwrap_or_default()
+            .and_then(|bytes| serde_json::from_slice::<Settings>(&bytes).ok())
+            .map(|s| Settings { persist: true, ..s })
+            .unwrap_or_else(|| Settings {
+                persist: true,
+                ..Default::default()
+            })
     }
 
     /// Enregistre les réglages ; une erreur n'empêche pas de continuer.
     pub fn save(&self) {
+        if !self.persist {
+            return;
+        }
         let Some(path) = settings_path() else { return };
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);

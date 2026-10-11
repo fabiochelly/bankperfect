@@ -1,6 +1,8 @@
 //! Rapports : total des comptes, totaux par catégorie (Ctrl+T) et par tiers,
 //! relevé multicompte ; chacun s'exporte vers un tableur.
 
+use std::collections::HashSet;
+
 use bp_core::model::{Amount, Tack};
 use bp_core::reports::{self, AccountScope, Pivot, PivotGoal, PivotOptions};
 use egui::{Key, RichText};
@@ -32,7 +34,41 @@ pub struct ReportsForm {
     /// Comptes du relevé multicompte.
     statement_accounts: Vec<bool>,
     statement_filtered: bool,
+    visible: VisibleLines,
     message: Option<String>,
+}
+
+/// Lignes retenues par les filtres de la grille, compte par compte, mises
+/// en cache tant que ni le document ni les filtres ne changent.
+#[derive(Default)]
+pub struct VisibleLines {
+    key: Option<(u64, bp_core::filter::Filters, bp_core::model::Date)>,
+    lines: Vec<HashSet<usize>>,
+}
+
+impl VisibleLines {
+    pub fn get(&mut self, doc: &OpenDoc) -> &[HashSet<usize>] {
+        let today = bp_core::model::Date::today();
+        let key = (doc.revision(), doc.filters.clone(), today);
+        if self.key.as_ref() != Some(&key) {
+            let compiled = doc.filters.compile(today);
+            self.lines = doc
+                .document
+                .accounts
+                .iter()
+                .map(|account| {
+                    let index = bp_core::filter::SearchIndex::build(&doc.document, account);
+                    let order: Vec<usize> = (0..account.operations.len()).collect();
+                    compiled
+                        .apply(account, &index, &order)
+                        .into_iter()
+                        .collect()
+                })
+                .collect();
+            self.key = Some(key);
+        }
+        &self.lines
+    }
 }
 
 impl ReportsForm {
@@ -57,6 +93,7 @@ impl ReportsForm {
                 .map(|(i, a)| i == doc.account || !a.counts_as_virtual())
                 .collect(),
             statement_filtered: true,
+            visible: VisibleLines::default(),
             message: None,
         }
     }
@@ -443,24 +480,7 @@ impl ReportsForm {
             .copied()
             .filter(|&i| self.statement_accounts.get(i).copied().unwrap_or(false))
             .collect();
-        // Lignes retenues par les filtres, compte par compte.
-        let compiled = doc.filters.compile(bp_core::model::Date::today());
-        let visible: Vec<std::collections::HashSet<usize>> = doc
-            .document
-            .accounts
-            .iter()
-            .map(|account| {
-                if !self.statement_filtered {
-                    return Default::default();
-                }
-                let index = bp_core::filter::SearchIndex::build(&doc.document, account);
-                let order: Vec<usize> = (0..account.operations.len()).collect();
-                compiled
-                    .apply(account, &index, &order)
-                    .into_iter()
-                    .collect()
-            })
-            .collect();
+        let visible = self.visible.get(doc);
         let filtered = self.statement_filtered;
         let keep = |account: usize, line: usize, _op: &bp_core::model::Operation| {
             !filtered || visible[account].contains(&line)

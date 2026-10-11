@@ -22,6 +22,7 @@ pub enum Command {
     ExportCsv,
     ExportXlsx,
     Report(ReportTab),
+    Charts,
     ExportQif,
     Print,
     Import,
@@ -128,6 +129,7 @@ impl Command {
                 Report(ReportTab::Categories),
                 Report(ReportTab::Payees),
                 Report(ReportTab::Statement),
+                Charts,
                 AutoFilters,
                 SaveFilter,
                 ClearFilters,
@@ -292,6 +294,13 @@ impl Command {
                 };
                 info("Rapports", label, glyph, shortcut, keywords)
             }
+            Charts => info(
+                "Rapports",
+                "Graphiques…",
+                icon::CHART_BAR,
+                Some("Ctrl+Maj+G"),
+                "camembert anneau barres courbe répartition évolution",
+            ),
             ExportQif => info(
                 "Fichier",
                 "Exporter en QIF…",

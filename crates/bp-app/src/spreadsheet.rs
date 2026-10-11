@@ -12,6 +12,8 @@ pub enum Cell {
     Money(f64),
     /// Montant en gras (totaux).
     BoldMoney(f64),
+    /// Nombre entier (comptes d'opérations).
+    Number(f64),
     Empty,
 }
 
@@ -61,6 +63,12 @@ pub fn write(path: &std::path::Path, sheet: &str, rows: &[Vec<Cell>]) -> Result<
                         .write_number_with_format(r, c16, *v, &bold_money)
                         .map_err(|e| e.to_string())?;
                     12
+                }
+                Cell::Number(v) => {
+                    worksheet
+                        .write_number(r, c16, *v)
+                        .map_err(|e| e.to_string())?;
+                    8
                 }
                 Cell::Empty => 0,
             };
@@ -118,7 +126,11 @@ mod tests {
         let rows = vec![
             vec![Cell::Bold("Catégorie".into()), Cell::Bold("Janv".into())],
             vec![Cell::Text("Alimentation".into()), Cell::Money(-12.5)],
-            vec![Cell::Bold("Total".into()), Cell::BoldMoney(-12.5), Cell::Empty],
+            vec![
+                Cell::Bold("Total".into()),
+                Cell::BoldMoney(-12.5),
+                Cell::Empty,
+            ],
         ];
         write(&path, "Totaux: par/catégorie", &rows).unwrap();
         let bytes = std::fs::read(&path).unwrap();

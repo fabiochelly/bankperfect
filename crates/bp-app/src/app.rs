@@ -39,6 +39,8 @@ const SHORTCUT_NOTES: KeyboardShortcut =
 const SHORTCUT_RULES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
 const SHORTCUT_CATEGORY_TOTALS: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::T);
+const SHORTCUT_CHARTS: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::G);
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
@@ -367,6 +369,9 @@ impl BankPerfectApp {
                 crate::tools::GroupForm::new(),
             ));
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CHARTS)) {
+            return self.execute(ctx, Command::Charts);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_ACCOUNTS)) {
             self.tool = Some(crate::tools::Tool::Manage(
                 crate::manage_ui::ManageForm::new(doc, crate::manage_ui::Tab::Accounts),
@@ -568,6 +573,9 @@ impl BankPerfectApp {
                 if let Some(message) = crate::spreadsheet::save_dialog(&dir, &name, &name, &rows) {
                     doc.notice = Some(message);
                 }
+            }
+            Command::Charts => {
+                self.tool = Some(Tool::Charts(Box::new(crate::charts_ui::ChartsForm::new())))
             }
             Command::Report(tab) => {
                 self.tool = Some(Tool::Reports(Box::new(
@@ -987,6 +995,8 @@ impl BankPerfectApp {
             self.menu_command(ui, Report(ReportTab::Categories));
             self.menu_command(ui, Report(ReportTab::Payees));
             self.menu_command(ui, Report(ReportTab::Statement));
+            menu::separator(ui);
+            self.menu_command(ui, Charts);
             menu::separator(ui);
             self.menu_command(ui, ExportXlsx);
             return;

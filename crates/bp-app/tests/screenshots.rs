@@ -316,6 +316,30 @@ fn report_screenshots() {
         h.run_steps(3);
         h.get_by_label("Relevé multicompte").click();
     });
+    let charts = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::G,
+        );
+        h.run_steps(3);
+    };
+    render("49-graphique-anneau", egui::Theme::Dark, |h| charts(h));
+    render("50-graphique-barres", egui::Theme::Light, |h| {
+        charts(h);
+        h.get_by_label("Barres").click();
+    });
+    render("51-graphique-soldes", egui::Theme::Dark, |h| {
+        charts(h);
+        h.get_by_label_contains("Soldes des comptes").click();
+    });
+    render("52-graphique-evolution", egui::Theme::Light, |h| {
+        charts(h);
+        h.get_by_label_contains("Évolution du solde").click();
+    });
+    render("53-graphique-jours", egui::Theme::Dark, |h| {
+        charts(h);
+        h.get_by_label_contains("Par jour du mois").click();
+    });
 }
 
 /// Temps CPU d'une image (passe egui complète, sans rendu GPU), en faisant

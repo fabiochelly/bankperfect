@@ -229,7 +229,8 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     };
     v.override_text_color = None;
     v.panel_fill = p.bg;
-    v.window_fill = p.menu_bg;
+    // Fenêtres et listes déroulantes opaques ; seuls les menus restent translucides.
+    v.window_fill = p.menu_bg.to_opaque();
     v.window_stroke = Stroke::new(1.0, p.border);
     v.window_corner_radius = CornerRadius::same(12);
     v.window_shadow = Shadow {

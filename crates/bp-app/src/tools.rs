@@ -11,6 +11,7 @@ use crate::theme::palette;
 
 pub enum Tool {
     Manage(crate::manage_ui::ManageForm),
+    Protection(crate::protection_ui::ProtectionForm),
     Backups(BackupsForm),
     Calculator(CalcForm),
     ExtraValues(ExtraForm),
@@ -28,12 +29,15 @@ pub enum Outcome {
     Done(String),
     /// Fermer, rouvrir ce fichier et afficher un message.
     Reopen(std::path::PathBuf, String),
+    /// Fermer et montrer la nouvelle clé de secours.
+    Protected(String),
 }
 
 impl Tool {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         match self {
             Tool::Manage(form) => form.show(ctx, doc),
+            Tool::Protection(form) => form.show(ctx, doc),
             Tool::Backups(form) => form.show(ctx, doc),
             Tool::Calculator(form) => form.show_standalone(ctx),
             Tool::ExtraValues(form) => form.show(ctx, doc),

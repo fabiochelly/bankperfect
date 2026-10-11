@@ -62,52 +62,50 @@ impl ManageForm {
 
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
-        let frame = egui::Frame::popup(&ctx.global_style()).fill(crate::theme::palette_of(ctx).bg);
-        Modal::new(Id::new("tool_manage"))
-            .frame(frame)
-            .show(ctx, |ui| {
-                ui.set_width(860.0);
-                ui.set_height(560.0);
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("{}  Gestion", icon::GEAR_SIX)).heading());
-                    ui.add_space(20.0);
-                    for (tab, label, glyph) in [
-                        (Tab::Accounts, "Comptes", icon::BANK),
-                        (Tab::Categories, "Catégories", icon::TAG),
-                        (Tab::Payees, "Tiers", icon::ADDRESS_BOOK),
-                        (Tab::Modes, "Modes de paiement", icon::CREDIT_CARD),
-                    ] {
-                        if ui
-                            .selectable_label(self.tab == tab, format!("{glyph}  {label}"))
-                            .clicked()
-                            && self.tab != tab
-                        {
-                            self.tab = tab;
-                            self.buffers.clear();
-                            self.confirm = None;
-                            self.message = None;
-                        }
-                    }
-                });
-                ui.separator();
-                ui.add_space(4.0);
-                match self.tab {
-                    Tab::Accounts => self.accounts(ui, doc),
-                    Tab::Categories => self.categories(ui, doc),
-                    Tab::Payees => self.payees(ui, doc),
-                    Tab::Modes => self.modes(ui, doc),
-                }
-                if let Some(message) = &self.message {
-                    ui.label(RichText::new(message).color(palette(ui).warning));
-                }
-                ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
-                    if ui.add(crate::theme::primary_button(ui, "Fermer")).clicked()
-                        || ui.input(|i| i.key_pressed(Key::Escape))
+
+        Modal::new(Id::new("tool_manage")).show(ctx, |ui| {
+            ui.set_width(860.0);
+            ui.set_height(560.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("{}  Gestion", icon::GEAR_SIX)).heading());
+                ui.add_space(20.0);
+                for (tab, label, glyph) in [
+                    (Tab::Accounts, "Comptes", icon::BANK),
+                    (Tab::Categories, "Catégories", icon::TAG),
+                    (Tab::Payees, "Tiers", icon::ADDRESS_BOOK),
+                    (Tab::Modes, "Modes de paiement", icon::CREDIT_CARD),
+                ] {
+                    if ui
+                        .selectable_label(self.tab == tab, format!("{glyph}  {label}"))
+                        .clicked()
+                        && self.tab != tab
                     {
-                        outcome = Outcome::Close;
+                        self.tab = tab;
+                        self.buffers.clear();
+                        self.confirm = None;
+                        self.message = None;
                     }
-                });
+                }
             });
+            ui.separator();
+            ui.add_space(4.0);
+            match self.tab {
+                Tab::Accounts => self.accounts(ui, doc),
+                Tab::Categories => self.categories(ui, doc),
+                Tab::Payees => self.payees(ui, doc),
+                Tab::Modes => self.modes(ui, doc),
+            }
+            if let Some(message) = &self.message {
+                ui.label(RichText::new(message).color(palette(ui).warning));
+            }
+            ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
+                if ui.add(crate::theme::primary_button(ui, "Fermer")).clicked()
+                    || ui.input(|i| i.key_pressed(Key::Escape))
+                {
+                    outcome = Outcome::Close;
+                }
+            });
+        });
         outcome
     }
 

@@ -14,6 +14,7 @@ mod manage_ui;
 mod menu;
 mod notes;
 mod profiler;
+mod protection_ui;
 mod settings;
 mod sidebar;
 pub mod theme;

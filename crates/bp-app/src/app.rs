@@ -67,7 +67,7 @@ pub struct BankPerfectApp {
     interactive: bool,
 }
 
-const DRAWER_WIDTH: f32 = 420.0;
+const DRAWER_WIDTH: f32 = 460.0;
 const DRAWER_SLIDE_SECONDS: f64 = 0.15;
 
 impl BankPerfectApp {
@@ -833,7 +833,8 @@ impl BankPerfectApp {
                     .show(ui, |ui| {
                         ui.set_width(width - 40.0);
                         ui.set_min_height(content.height() - 24.0);
-                        editor.show(ui, &doc.document)
+                        ui.set_max_height(content.height() - 24.0);
+                        editor.show(ui, doc)
                     })
                     .inner
             })

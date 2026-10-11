@@ -294,6 +294,18 @@ fn screenshots() {
     });
 }
 
+/// Outils autonomes : simulateur de crédit, convertisseur de devises.
+#[test]
+#[ignore]
+fn tool_screenshots() {
+    render("61-credit", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::L);
+    });
+    render("62-credit-clair", egui::Theme::Light, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::L);
+    });
+}
+
 /// Encadrés de solde à plusieurs largeurs de fenêtre.
 #[test]
 #[ignore]

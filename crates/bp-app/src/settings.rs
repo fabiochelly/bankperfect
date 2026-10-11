@@ -89,6 +89,21 @@ fn project_dirs() -> Option<directories::ProjectDirs> {
     directories::ProjectDirs::from("net", "chelly", "bankperfect")
 }
 
+/// Fichier `name` du dossier de configuration de l'application (profils
+/// de crédit, devises…).
+pub fn config_file(name: &str) -> Option<PathBuf> {
+    project_dirs().map(|d| d.config_dir().join(name))
+}
+
+/// Écrit `json` dans le fichier de configuration `name`.
+pub fn write_config_file(name: &str, json: &[u8]) -> Result<(), String> {
+    let path = config_file(name).ok_or("dossier de configuration introuvable")?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    bp_core::format_v6::write_atomic(&path, json).map_err(|e| e.to_string())
+}
+
 fn settings_path() -> Option<PathBuf> {
     project_dirs().map(|d| d.config_dir().join("reglages.json"))
 }

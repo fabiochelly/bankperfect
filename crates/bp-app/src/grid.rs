@@ -173,13 +173,13 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     doc.click_row(index, false, false);
                 }
                 response.context_menu(|ui| {
-                    if ui.button(format!("{}  Modifier", icon::PENCIL_SIMPLE)).clicked() {
+                    crate::menu::popup_style(ui.style_mut());
+                    crate::menu::begin(ui);
+                    if crate::menu::item(ui, Some(icon::PENCIL_SIMPLE), "Modifier", Some("Entrée")).clicked() {
                         action = GridAction::Edit(index);
-                        ui.close();
                     }
-                    if ui.button(format!("{}  Pointer", icon::CHECK)).clicked() {
+                    if crate::menu::item(ui, Some(icon::CHECK), "Pointer", Some("Espace")).clicked() {
                         doc.cycle_tack();
-                        ui.close();
                     }
                 });
             });
@@ -289,10 +289,12 @@ fn tack_filter_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         let glyph = if active { icon::FUNNEL } else { icon::CHECKS };
         let response = ui.add(egui::Button::new(glyph).selected(active).frame(active)).on_hover_text("Filtrer par pointage");
         egui::Popup::menu(&response).show(|ui| {
+            crate::menu::popup_style(ui.style_mut());
+            crate::menu::begin(ui);
+            crate::menu::heading(ui, "Afficher les lignes");
             for filter in TackFilter::ALL {
-                if ui.selectable_label(doc.filters.tack == filter, filter.label()).clicked() {
+                if crate::menu::choice(ui, doc.filters.tack == filter, filter.label()).clicked() {
                     doc.filters.tack = filter;
-                    ui.close();
                 }
             }
         });

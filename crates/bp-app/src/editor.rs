@@ -148,9 +148,19 @@ impl Editor {
 
             ui.label("Pointage");
             ui.horizontal(|ui| {
-                ui.selectable_value(&mut self.tack, Tack::None, "Non pointée");
-                ui.selectable_value(&mut self.tack, Tack::Pointed, format!("{} Pointée", icon::CHECK));
-                ui.selectable_value(&mut self.tack, Tack::Reconciled, format!("{} Rapprochée", icon::CHECKS));
+                // Contrôle segmenté : trois choix de même largeur.
+                ui.spacing_mut().item_spacing.x = 4.0;
+                let width = (ui.available_width() - 8.0) / 3.0;
+                for (tack, label) in [
+                    (Tack::None, "Non".to_string()),
+                    (Tack::Pointed, format!("{} Pointée", icon::CHECK)),
+                    (Tack::Reconciled, format!("{} Rappr.", icon::CHECKS)),
+                ] {
+                    let button = egui::Button::selectable(self.tack == tack, label);
+                    if ui.add_sized([width, 32.0], button).on_hover_text(tack_label(tack)).clicked() {
+                        self.tack = tack;
+                    }
+                }
             });
             ui.end_row();
         });
@@ -305,6 +315,14 @@ impl Editor {
                 extra: self.extra.clone(),
             },
         )
+    }
+}
+
+fn tack_label(tack: Tack) -> &'static str {
+    match tack {
+        Tack::None => "Non pointée",
+        Tack::Pointed => "Pointée",
+        Tack::Reconciled => "Rapprochée",
     }
 }
 

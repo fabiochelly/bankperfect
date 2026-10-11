@@ -14,7 +14,7 @@ use crate::document::OpenDoc;
 use crate::editor::{Editor, EditorAction};
 use crate::format::money;
 use crate::grid::{self, GridAction};
-use crate::sidebar;
+use crate::{menu, sidebar};
 use crate::theme::palette;
 
 const SHORTCUT_OPEN: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::O);
@@ -43,7 +43,12 @@ pub struct BankPerfectApp {
     toast: Option<(String, f64)>,
     allow_close: bool,
     title: String,
+    drawer_open: bool,
+    drawer_opened_at: f64,
 }
+
+const DRAWER_WIDTH: f32 = 420.0;
+const DRAWER_SLIDE_SECONDS: f64 = 0.15;
 
 impl BankPerfectApp {
     pub fn new(initial_file: Option<PathBuf>) -> Self {
@@ -59,6 +64,8 @@ impl BankPerfectApp {
             toast: None,
             allow_close: false,
             title: String::new(),
+            drawer_open: false,
+            drawer_opened_at: 0.0,
         };
         if let Some(path) = initial_file {
             app.open_path(path);
@@ -199,85 +206,85 @@ impl BankPerfectApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let now = ui.input(|i| i.time);
-        egui::MenuBar::new().ui(ui, |ui| {
-            ui.menu_button("Fichier", |ui| {
-                if ui.add(egui::Button::new(format!("{}  Ouvrir…", icon::FOLDER_OPEN)).shortcut_text("Ctrl+O")).clicked() {
+        egui::MenuBar::new().style(menu::bar_style).config(menu::config()).ui(ui, |ui| {
+            let mut buttons = Vec::new();
+            buttons.push(ui.menu_button("Fichier", |ui| {
+                menu::begin(ui);
+                if menu::item(ui, Some(icon::FOLDER_OPEN), "Ouvrir…", Some("Ctrl+O")).clicked() {
                     self.request(Pending::Open(None));
                 }
-                let can_save = self.doc.is_some();
-                if ui
-                    .add_enabled(can_save, egui::Button::new(format!("{}  Enregistrer", icon::FLOPPY_DISK)).shortcut_text("Ctrl+S"))
-                    .clicked()
-                {
+                if menu::item_enabled(ui, self.doc.is_some(), Some(icon::FLOPPY_DISK), "Enregistrer", Some("Ctrl+S")).clicked() {
                     self.save(now);
                 }
-                ui.separator();
-                if ui.button("Quitter").clicked() {
+                menu::separator(ui);
+                if menu::item(ui, Some(icon::SIGN_OUT), "Quitter", None).clicked() {
                     ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
                 }
-            });
+            }).response);
             let Some(doc) = &mut self.doc else { return };
-            ui.menu_button("Édition", |ui| {
-                if ui.add(egui::Button::new(format!("{}  Nouvelle opération", icon::PLUS)).shortcut_text("Inser")).clicked() {
+            buttons.push(ui.menu_button("Édition", |ui| {
+                menu::begin(ui);
+                if menu::item(ui, Some(icon::PLUS), "Nouvelle opération", Some("Inser")).clicked() {
                     self.editor = Some(Editor::new_operation(&doc.document, doc.account));
                 }
                 let single = doc.selection.iter().next().copied();
-                if ui.add_enabled(single.is_some(), egui::Button::new("Modifier").shortcut_text("Entrée")).clicked()
+                if menu::item_enabled(ui, single.is_some(), Some(icon::PENCIL_SIMPLE), "Modifier l'opération", Some("Entrée")).clicked()
                     && let Some(index) = single
                 {
                     self.editor = Some(Editor::edit(&doc.document, doc.account, index));
                 }
-                if ui
-                    .add_enabled(!doc.selection.is_empty(), egui::Button::new(format!("{}  Supprimer", icon::TRASH)).shortcut_text("Suppr"))
-                    .clicked()
-                {
+                menu::separator(ui);
+                if menu::item_enabled(ui, !doc.selection.is_empty(), Some(icon::TRASH), "Supprimer", Some("Suppr")).clicked() {
                     self.confirm_delete = true;
                 }
-            });
-            ui.menu_button("Affichage", |ui| {
-                ui.add(egui::Checkbox::new(&mut doc.two_lines, "Affichage sur 2 lignes (F4)"));
-                ui.add(egui::Checkbox::new(&mut doc.filters.hide_old_lines, "Cacher les lignes inutiles (Ctrl+H)"));
-                ui.separator();
-                ui.label(RichText::new("Thème").small().color(palette(ui).muted));
+            }).response);
+            buttons.push(ui.menu_button("Affichage", |ui| {
+                menu::begin(ui);
+                menu::toggle(ui, &mut doc.two_lines, "Affichage sur 2 lignes", Some("F4"));
+                menu::toggle(ui, &mut doc.filters.hide_old_lines, "Cacher les lignes inutiles", Some("Ctrl+H"));
+                menu::separator(ui);
+                menu::heading(ui, "Thème");
                 let current = ui.ctx().options(|o| o.theme_preference);
                 for (preference, label) in [
-                    (egui::ThemePreference::Dark, "Tokyo Night (sombre)"),
-                    (egui::ThemePreference::Light, "Tokyo Night Day (clair)"),
+                    (egui::ThemePreference::Dark, "Tokyo Night"),
+                    (egui::ThemePreference::Light, "Tokyo Night Day"),
                     (egui::ThemePreference::System, "Suivre le système"),
                 ] {
-                    if ui.radio(current == preference, label).clicked() {
+                    if menu::choice(ui, current == preference, label).clicked() {
                         ui.ctx().set_theme(preference);
                     }
                 }
-            });
-            ui.menu_button("Comptes", |ui| {
+            }).response);
+            buttons.push(ui.menu_button("Comptes", |ui| {
+                menu::begin(ui);
                 for &i in &doc.document.account_order.clone() {
                     let account = &doc.document.accounts[i];
                     if account.disabled {
                         continue;
                     }
-                    if ui.selectable_label(i == doc.account, &account.name).clicked() {
+                    if menu::choice(ui, i == doc.account, &account.name).clicked() {
                         doc.select_account(i);
                         self.editor = None;
-                        ui.close();
                     }
                 }
-                ui.separator();
-                if ui.add(egui::Button::new("Compte suivant").shortcut_text("Ctrl+Tab")).clicked() {
+                menu::separator(ui);
+                if menu::item(ui, Some(icon::ARROW_RIGHT), "Compte suivant", Some("Ctrl+Tab")).clicked() {
                     doc.cycle_account(true);
                 }
-                if ui.add(egui::Button::new("Compte précédent").shortcut_text("Ctrl+Maj+Tab")).clicked() {
+                if menu::item(ui, Some(icon::ARROW_LEFT), "Compte précédent", Some("Ctrl+Maj+Tab")).clicked() {
                     doc.cycle_account(false);
                 }
-            });
-            ui.menu_button("Opérations", |ui| {
-                if ui.add_enabled(!doc.selection.is_empty(), egui::Button::new("Pointer").shortcut_text("Espace")).clicked() {
+            }).response);
+            buttons.push(ui.menu_button("Opérations", |ui| {
+                menu::begin_with_width(ui, 340.0);
+                if menu::item_enabled(ui, !doc.selection.is_empty(), Some(icon::CHECK), "Pointer", Some("Espace")).clicked() {
                     doc.cycle_tack();
                 }
-                if ui.button("Rapprocher toutes les lignes pointées").clicked() {
+                if menu::item(ui, Some(icon::CHECKS), "Rapprocher toutes les lignes pointées", None).clicked() {
                     doc.reconcile_all_pointed();
                 }
-            });
+            }).response);
+            menu::switch_on_hover(ui.ctx(), &buttons);
         });
     }
 
@@ -407,6 +414,54 @@ impl BankPerfectApp {
             ui.add_space(8.0);
             ui.label(RichText::new("ou déposez un fichier .bp dans la fenêtre").color(palette(ui).muted));
         });
+    }
+
+    /// Tiroir de saisie qui glisse par-dessus la grille, collé au bord droit.
+    fn editor_drawer(&mut self, ctx: &egui::Context, content: egui::Rect, now: f64) {
+        let open = self.editor.is_some();
+        if open && !self.drawer_open {
+            self.drawer_opened_at = now;
+        }
+        self.drawer_open = open;
+        let (Some(editor), Some(doc)) = (&mut self.editor, &mut self.doc) else { return };
+
+        // Glissement depuis la droite (150 ms, décélération).
+        let t = (((now - self.drawer_opened_at) / DRAWER_SLIDE_SECONDS) as f32).clamp(0.0, 1.0);
+        if t < 1.0 {
+            ctx.request_repaint();
+        }
+        let eased = 1.0 - (1.0 - t).powi(3);
+        let width = DRAWER_WIDTH.min(content.width() - 40.0);
+        let x = content.right() - width + (1.0 - eased) * width;
+
+        let pal = crate::theme::palette_of(ctx);
+        let action = egui::Area::new(egui::Id::new("editor_drawer"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(egui::pos2(x, content.top()))
+            .constrain(false)
+            .show(ctx, |ui| {
+                egui::Frame::new()
+                    .fill(pal.surface)
+                    .stroke(egui::Stroke::new(1.0, pal.border))
+                    .corner_radius(egui::CornerRadius { nw: 14, sw: 14, ne: 0, se: 0 })
+                    .shadow(egui::Shadow { offset: [-6, 0], blur: 28, spread: 0, color: egui::Color32::from_black_alpha(90) })
+                    .inner_margin(egui::Margin { left: 20, right: 20, top: 8, bottom: 16 })
+                    .show(ui, |ui| {
+                        ui.set_width(width - 40.0);
+                        ui.set_min_height(content.height() - 24.0);
+                        editor.show(ui, &doc.document)
+                    })
+                    .inner
+            })
+            .inner;
+        match action {
+            EditorAction::None => {}
+            EditorAction::Close => self.editor = None,
+            EditorAction::Save(target, op) => {
+                doc.upsert_operation(target, op);
+                self.editor = None;
+            }
+        }
     }
 
     fn modals(&mut self, ctx: &egui::Context) {
@@ -549,23 +604,8 @@ impl eframe::App for BankPerfectApp {
             .frame(egui::Frame::side_top_panel(ui.style()).fill(sidebar_fill).inner_margin(12))
             .show(ui, |ui| sidebar::show(ui, doc));
 
-        if let Some(editor) = &mut self.editor {
-            let action = egui::Panel::right("editor")
-                .resizable(true)
-                .default_size(360.0)
-                .min_size(300.0)
-                .frame(egui::Frame::side_top_panel(ui.style()).inner_margin(14))
-                .show(ui, |ui| editor.show(ui, &doc.document))
-                .inner;
-            match action {
-                EditorAction::None => {}
-                EditorAction::Close => self.editor = None,
-                EditorAction::Save(target, op) => {
-                    doc.upsert_operation(target, op);
-                    self.editor = None;
-                }
-            }
-        }
+        // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
+        let content_rect = ui.available_rect_before_wrap();
 
         doc.refresh();
         let mut grid_action = GridAction::None;
@@ -589,6 +629,7 @@ impl eframe::App for BankPerfectApp {
             GridAction::New => self.editor = Some(Editor::new_operation(&doc.document, doc.account)),
         }
 
+        self.editor_drawer(&ctx, content_rect, now);
         self.modals(&ctx);
         self.update_title(&ctx);
     }
@@ -613,7 +654,7 @@ struct StatCard<'a> {
     detail: Detail,
 }
 
-const CARD_HEIGHT: f32 = 92.0;
+const CARD_HEIGHT: f32 = 100.0;
 const CARD_MIN_WIDTH: f32 = 200.0;
 const CARD_GAP: f32 = 12.0;
 
@@ -647,27 +688,33 @@ fn stat_card(ui: &mut egui::Ui, pal: &crate::theme::Palette, card: StatCard<'_>,
         egui::CornerRadius { nw: 10, sw: 10, ne: 0, se: 0 },
         card.color,
     );
-    let badge = egui::Rect::from_min_size(egui::pos2(rect.right() - 14.0 - 32.0, rect.top() + 14.0), egui::vec2(32.0, 32.0));
-    painter.rect_filled(badge, 8.0, card.color.gamma_multiply(0.18));
-    painter.text(badge.center(), egui::Align2::CENTER_CENTER, card.icon, egui::FontId::proportional(18.0), card.color);
+    // Ligne 1 : libellé à gauche, pastille d'icône à droite. Puis montant et détail.
+    let badge = egui::Rect::from_min_size(egui::pos2(rect.right() - 14.0 - 28.0, rect.top() + 12.0), egui::vec2(28.0, 28.0));
+    painter.rect_filled(badge, 7.0, card.color.gamma_multiply(0.18));
+    painter.text(badge.center(), egui::Align2::CENTER_CENTER, card.icon, egui::FontId::proportional(16.0), card.color);
+    painter.text(
+        egui::pos2(rect.left() + 20.0, badge.center().y),
+        egui::Align2::LEFT_CENTER,
+        card.label,
+        egui::FontId::new(12.5, crate::theme::medium()),
+        pal.muted,
+    );
 
     let content = egui::Rect::from_min_max(
-        egui::pos2(rect.left() + 20.0, rect.top() + 12.0),
-        egui::pos2(rect.right() - 14.0, rect.bottom() - 10.0),
+        egui::pos2(rect.left() + 20.0, badge.bottom() + 4.0),
+        egui::pos2(rect.right() - 14.0, rect.bottom() - 8.0),
     );
     let mut ui = ui.new_child(egui::UiBuilder::new().max_rect(content).layout(Layout::top_down(Align::Min)));
-    ui.spacing_mut().item_spacing.y = 3.0;
+    ui.spacing_mut().item_spacing.y = 2.0;
     let line = |ui: &mut egui::Ui, text: RichText, max_width: f32| {
         ui.allocate_ui(egui::vec2(max_width, 0.0), |ui| ui.add(egui::Label::new(text).truncate()));
     };
-    let label_width = content.width() - 40.0;
-    line(&mut ui, RichText::new(card.label).small().family(crate::theme::medium()).color(pal.muted), label_width);
     let value_color = if card.value.is_negative() { pal.negative } else { pal.fg };
     let value = RichText::new(money(card.value, card.currency))
-        .size(if card.primary { 21.0 } else { 19.0 })
+        .size(if card.primary { 22.0 } else { 20.0 })
         .family(crate::theme::semibold())
         .color(value_color);
-    line(&mut ui, value, label_width);
+    line(&mut ui, value, content.width());
     match &card.detail {
         Detail::Trend(delta, period) => {
             let (glyph, color) = if delta.is_negative() { (icon::TREND_DOWN, pal.negative) } else { (icon::TREND_UP, pal.positive) };

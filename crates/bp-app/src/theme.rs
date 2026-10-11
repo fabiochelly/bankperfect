@@ -12,11 +12,11 @@ use egui::{
 const INTER: &[u8] = include_bytes!("../assets/fonts/InterVariable.ttf");
 
 const MEDIUM: &str = "inter-medium";
-const WHEEL_LINE_SPEED: f32 = 120.0;
+const WHEEL_LINE_SPEED: f32 = 180.0;
 /// Largeur de la barre de défilement au survol.
 pub const SCROLLBAR_WIDTH: f32 = 14.0;
 /// Multiplicateur des défilements exprimés en points (molettes sous Wayland).
-pub const WHEEL_POINT_FACTOR: f32 = 2.0;
+pub const WHEEL_POINT_FACTOR: f32 = 3.0;
 const SEMIBOLD: &str = "inter-semibold";
 
 /// Couleurs d'une variante de Tokyo Night.
@@ -132,7 +132,7 @@ pub fn install(ctx: &egui::Context) {
         // ligne ou d'un compte sélectionne bien la ligne ou le compte.
         style.interaction.selectable_labels = false;
     });
-    // Molette : environ 4 lignes de la grille par cran (egui : 40 points).
+    // Molette : environ 6 lignes de la grille par cran (egui : 40 points).
     ctx.options_mut(|o| o.input_options.line_scroll_speed = WHEEL_LINE_SPEED);
     ctx.set_visuals_of(Theme::Dark, visuals(&NIGHT, true));
     ctx.set_visuals_of(Theme::Light, visuals(&DAY, false));
@@ -242,6 +242,11 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
 /// Palette du thème courant.
 pub fn palette(ui: &egui::Ui) -> Palette {
     if ui.visuals().dark_mode { NIGHT } else { DAY }
+}
+
+/// Palette du thème courant, hors d'un `Ui`.
+pub fn palette_of(ctx: &egui::Context) -> Palette {
+    if ctx.theme() == Theme::Dark { NIGHT } else { DAY }
 }
 
 /// Champ de saisie d'une ligne, plus haut et plus aéré que celui d'egui.

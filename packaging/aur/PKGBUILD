@@ -1,0 +1,25 @@
+# Maintainer: Fabio Chelly <fabio@chelly.net>
+pkgname=bankperfect-bin
+pkgver=9.0.0
+pkgrel=1
+pkgdesc="Gestion de comptes bancaires personnels, rapide et moderne"
+arch=('x86_64')
+url="https://github.com/fabiochelly/bankperfect"
+license=('MIT')
+depends=('glibc' 'gcc-libs' 'libxkbcommon' 'wayland' 'libx11' 'vulkan-icd-loader' 'hicolor-icon-theme' 'xdg-desktop-portal')
+provides=('bankperfect')
+conflicts=('bankperfect')
+source=("$url/releases/download/v$pkgver/bankperfect-$pkgver-linux-x86_64.tar.gz")
+sha256sums=('@SHA256_LINUX@')
+
+package() {
+  cd "bankperfect-$pkgver-linux-x86_64"
+  install -Dm755 bankperfect "$pkgdir/usr/bin/bankperfect"
+  install -Dm644 bankperfect.desktop "$pkgdir/usr/share/applications/bankperfect.desktop"
+  install -Dm644 bankperfect-mime.xml "$pkgdir/usr/share/mime/packages/bankperfect.xml"
+  for s in 16 32 48 64 128 256 512; do
+    install -Dm644 "icons/bankperfect-$s.png" "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/bankperfect.png"
+  done
+  install -Dm644 icons/bankperfect.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/bankperfect.svg"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

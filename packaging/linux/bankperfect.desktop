@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=BankPerfect
+GenericName=Gestion de comptes
+Comment=Comptes bancaires personnels : saisie, pointage, budgets, rapports
+Exec=bankperfect %f
+Icon=bankperfect
+Terminal=false
+Categories=Office;Finance;
+MimeType=application/x-bankperfect;
+Keywords=banque;comptes;budget;finances;
+StartupWMClass=bankperfect

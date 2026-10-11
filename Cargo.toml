@@ -3,7 +3,10 @@ resolver = "3"
 members = ["crates/bp-app","crates/bp-core"]
 
 [workspace.package]
-version = "0.1.0"
+version = "9.0.0"
 edition = "2024"
-license = "Proprietary"
+license = "MIT"
+repository = "https://github.com/fabiochelly/bankperfect"
+homepage = "https://github.com/fabiochelly/bankperfect"
+description = "Gestion de comptes bancaires personnels, rapide et moderne"
 authors = ["Fabio Chelly <fabio@chelly.net>"]

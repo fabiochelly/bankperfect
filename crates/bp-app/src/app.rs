@@ -748,10 +748,11 @@ impl BankPerfectApp {
                 // barre (il déborde un peu sous elle sans la grandir).
                 let pal = palette(ui);
                 let size = 40.0;
-                let right = ui.max_rect().right() - 18.0;
-                let top = ui.ctx().content_rect().top() + 10.0;
+                // Même marge en haut et à droite de la fenêtre.
+                let margin = 8.0;
+                let window = ui.ctx().content_rect();
                 let rect = egui::Rect::from_min_size(
-                    egui::pos2(right - size, top),
+                    egui::pos2(window.right() - margin - size, window.top() + margin),
                     egui::vec2(size, size),
                 );
                 let painter = ui.ctx().layer_painter(egui::LayerId::new(
@@ -759,6 +760,14 @@ impl BankPerfectApp {
                     egui::Id::new("logo"),
                 ));
                 crate::logo::paint_symbol(&painter, rect, pal.accent, pal.violet);
+                // Mention discrète du nom, à gauche du symbole.
+                painter.text(
+                    egui::pos2(rect.left() - 4.0, rect.center().y),
+                    egui::Align2::RIGHT_CENTER,
+                    "BankPerfect",
+                    egui::FontId::new(12.5, crate::theme::medium()),
+                    pal.muted,
+                );
                 opened
             })
             .inner;

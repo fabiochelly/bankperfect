@@ -40,6 +40,8 @@ pub struct OpenDoc {
     pub scroll_to: Option<usize>,
 
     view: View,
+    undo: Vec<UndoEntry>,
+    redo: Vec<UndoEntry>,
     /// Incrémenté à chaque modification des opérations.
     revision: u64,
 }
@@ -66,6 +68,16 @@ struct View {
     insights: Insights,
     /// Compte et révision pour lesquels la courbe du solde est à jour.
     series_key: Option<(usize, u64)>,
+}
+
+/// Nombre d'actions annulables conservées (`MaxUndo` de l'ancienne version).
+const MAX_UNDO: usize = 30;
+
+/// État d'un compte avant une action, pour Annuler/Refaire.
+struct UndoEntry {
+    label: String,
+    account: usize,
+    operations: Vec<Operation>,
 }
 
 /// Destination d'un déplacement clavier dans la grille.
@@ -180,6 +192,8 @@ impl OpenDoc {
             cursor: None,
             scroll_to: None,
             view: View::default(),
+            undo: Vec::new(),
+            redo: Vec::new(),
             revision: 0,
         };
         doc.category_styles = crate::category_icons::styles(&doc.document);
@@ -464,6 +478,7 @@ impl OpenDoc {
         let Some(&reference) = self.selection.iter().next() else {
             return;
         };
+        self.snapshot("pointage");
         let ops = &mut self.document.accounts[self.account].operations;
         let from = ops[reference].tack;
         let to = match from {
@@ -483,6 +498,7 @@ impl OpenDoc {
 
     /// Rapprocher toutes les lignes pointées affichées (MARK-03).
     pub fn reconcile_all_pointed(&mut self) {
+        self.snapshot("rapprocher tout");
         let visible = Arc::clone(&self.view.visible);
         let ops = &mut self.document.accounts[self.account].operations;
         for &i in visible.iter() {
@@ -495,6 +511,11 @@ impl OpenDoc {
 
     /// Ajoute ou remplace une opération et la sélectionne.
     pub fn upsert_operation(&mut self, target: Option<usize>, mut op: Operation) {
+        self.snapshot(if target.is_some() {
+            "modification"
+        } else {
+            "ajout"
+        });
         let index = match target {
             Some(i) => {
                 op.uid = self.current_account().operations[i].uid;
@@ -519,6 +540,7 @@ impl OpenDoc {
     }
 
     pub fn delete_selection(&mut self) {
+        self.snapshot("suppression");
         let ops = &mut self.document.accounts[self.account].operations;
         for &i in self.selection.iter().rev() {
             ops.remove(i);
@@ -527,6 +549,111 @@ impl OpenDoc {
         self.anchor = None;
         self.view.indexed_account = None;
         self.touch();
+    }
+
+    /// Lignes sélectionnées et affichées, dans l'ordre d'affichage.
+    pub fn selected_visible(&self) -> Vec<usize> {
+        self.view
+            .visible
+            .iter()
+            .copied()
+            .filter(|i| self.selection.contains(i))
+            .collect()
+    }
+
+    /// Remplacer dans le tiers et le détail des lignes affichées.
+    pub fn replace_in_visible(&mut self, find: &str, replacement: &str) -> usize {
+        let lines: Vec<usize> = self.view.visible.to_vec();
+        if bp_core::edit::count_matches(&self.document.accounts[self.account], &lines, find) == 0 {
+            return 0;
+        }
+        self.snapshot("remplacer");
+        let count = bp_core::edit::replace_text(
+            &mut self.document.accounts[self.account],
+            &lines,
+            find,
+            replacement,
+        );
+        self.view.indexed_account = None;
+        self.touch();
+        count
+    }
+
+    /// Modifier le groupe des lignes sélectionnées et affichées.
+    pub fn apply_group_edit(&mut self, edit: &bp_core::edit::GroupEdit) -> usize {
+        let lines = self.selected_visible();
+        if lines.is_empty() {
+            return 0;
+        }
+        self.snapshot("modifier le groupe");
+        let document = self.document.clone_without_operations();
+        let changed = bp_core::edit::apply_group_edit(
+            &document,
+            &mut self.document.accounts[self.account],
+            &lines,
+            edit,
+        );
+        self.view.indexed_account = None;
+        self.touch();
+        changed
+    }
+
+    /// Mémorise l'état du compte courant avant une action.
+    fn snapshot(&mut self, label: &str) {
+        self.undo.push(UndoEntry {
+            label: label.to_string(),
+            account: self.account,
+            operations: self.document.accounts[self.account].operations.clone(),
+        });
+        if self.undo.len() > MAX_UNDO {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+    }
+
+    pub fn undo_label(&self) -> Option<&str> {
+        self.undo.last().map(|e| e.label.as_str())
+    }
+
+    pub fn redo_label(&self) -> Option<&str> {
+        self.redo.last().map(|e| e.label.as_str())
+    }
+
+    pub fn undo(&mut self) -> bool {
+        let Some(entry) = self.undo.pop() else {
+            return false;
+        };
+        let reverse = self.swap_in(entry);
+        self.redo.push(reverse);
+        true
+    }
+
+    pub fn redo(&mut self) -> bool {
+        let Some(entry) = self.redo.pop() else {
+            return false;
+        };
+        let reverse = self.swap_in(entry);
+        self.undo.push(reverse);
+        true
+    }
+
+    /// Remet les opérations mémorisées et renvoie l'état remplacé.
+    fn swap_in(&mut self, entry: UndoEntry) -> UndoEntry {
+        let current = std::mem::replace(
+            &mut self.document.accounts[entry.account].operations,
+            entry.operations,
+        );
+        self.account = entry.account;
+        self.selection.clear();
+        self.anchor = None;
+        self.cursor = None;
+        self.view.indexed_account = None;
+        self.touch();
+        UndoEntry {
+            label: entry.label,
+            account: entry.account,
+            operations: current,
+        }
     }
 
     /// Modification qui change le tri ou les soldes : tout est recalculé.
@@ -671,6 +798,27 @@ mod tests {
             [3],
             "le filtre de pointage voit le changement"
         );
+    }
+
+    #[test]
+    fn replace_then_undo_and_redo() {
+        let mut d = doc();
+        assert_eq!(d.replace_in_visible("Carrefour", "Monoprix"), 2);
+        assert_eq!(d.undo_label(), Some("remplacer"));
+        d.filters.payee = "monoprix".into();
+        d.refresh();
+        assert_eq!(
+            d.visible().len(),
+            2,
+            "l'index de recherche voit le remplacement"
+        );
+        assert!(d.undo());
+        d.refresh();
+        assert!(d.visible().is_empty());
+        assert_eq!(d.redo_label(), Some("remplacer"));
+        assert!(d.redo());
+        d.refresh();
+        assert_eq!(d.visible().len(), 2);
     }
 
     #[test]

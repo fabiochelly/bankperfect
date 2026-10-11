@@ -434,6 +434,7 @@ dependencies = [
  "egui-phosphor",
  "egui_extras",
  "egui_kittest",
+ "encoding_rs",
  "image",
  "rfd",
 ]

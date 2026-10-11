@@ -70,6 +70,21 @@ fn screenshots() {
         // Survol du badge de filtre : la croix passe au rouge.
         h.event(egui::Event::PointerMoved(egui::pos2(440.0, 881.0)));
     });
+    render("08-remplacer", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::R);
+    });
+    render("09-export-csv", egui::Theme::Dark, |h| {
+        h.get_by_label("Fichier").click();
+        h.run_steps(3);
+        h.get_by_label("Exporter en CSV…").click();
+    });
+    render("10-groupe", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::PageDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::M);
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

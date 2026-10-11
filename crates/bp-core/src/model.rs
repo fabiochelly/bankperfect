@@ -379,6 +379,30 @@ pub struct Account {
 }
 
 impl Account {
+    /// Copie des informations du compte, sans les opérations.
+    pub fn clone_header(&self) -> Account {
+        Account {
+            uid: self.uid.clone(),
+            name: self.name.clone(),
+            bank_name: self.bank_name.clone(),
+            agency_name: self.agency_name.clone(),
+            agency_address: self.agency_address.clone(),
+            number: self.number.clone(),
+            bank_code: self.bank_code.clone(),
+            agency_code: self.agency_code.clone(),
+            bic: self.bic.clone(),
+            iban: self.iban.clone(),
+            logo: self.logo.clone(),
+            currency: self.currency.clone(),
+            currency_rate: self.currency_rate,
+            secondary_currency: self.secondary_currency.clone(),
+            secondary_rate: self.secondary_rate,
+            is_virtual: self.is_virtual,
+            disabled: self.disabled,
+            operations: Vec::new(),
+        }
+    }
+
     /// Compte virtuel au sens des calculs : marqué virtuel, sans nom, ou dont le
     /// nom commence par `_` (`IsVirtualAccount`).
     pub fn counts_as_virtual(&self) -> bool {
@@ -471,6 +495,38 @@ impl Document {
                     .map(|m| Mode::Custom(m.name.clone())),
             )
             .collect()
+    }
+
+    /// Copie du document sans les opérations (référentiels seulement : modes,
+    /// catégories, tiers…), pour les traitements qui modifient un compte.
+    pub fn clone_without_operations(&self) -> Document {
+        Document {
+            accounts: self
+                .accounts
+                .iter()
+                .map(|a| Account {
+                    operations: Vec::new(),
+                    ..a.clone_header()
+                })
+                .collect(),
+            ..self.clone_shallow()
+        }
+    }
+
+    fn clone_shallow(&self) -> Document {
+        Document {
+            group_name: self.group_name.clone(),
+            guid: self.guid.clone(),
+            user_name: self.user_name.clone(),
+            custom_modes: self.custom_modes.clone(),
+            accounts: Vec::new(),
+            account_order: self.account_order.clone(),
+            default_account: self.default_account,
+            categories: self.categories.clone(),
+            payees: self.payees.clone(),
+            feature_data: self.feature_data.clone(),
+            unknown_header: self.unknown_header.clone(),
+        }
     }
 
     pub fn next_operation_uid(&self) -> u64 {

@@ -24,6 +24,7 @@ pub enum Command {
     Delete,
     Replace,
     ToggleHideOld,
+    ToggleTranslucent,
     Theme(ThemePreference),
     NextAccount,
     PreviousAccount,
@@ -94,6 +95,7 @@ impl Command {
             Theme(ThemePreference::Dark),
             Theme(ThemePreference::Light),
             Theme(ThemePreference::System),
+            ToggleTranslucent,
             Quit,
         ]);
         list
@@ -234,6 +236,20 @@ impl Command {
                     "masquer anciennes rapprochées",
                 )
             }
+            ToggleTranslucent => {
+                let label = if crate::theme::translucent() {
+                    "Fond opaque"
+                } else {
+                    "Fond translucide (flou du bureau)"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::DROP_HALF,
+                    None,
+                    "transparent vitré verre flou",
+                )
+            }
             Theme(ThemePreference::Dark) => info(
                 "Affichage",
                 "Thème : Tokyo Night",
@@ -371,7 +387,12 @@ impl Command {
                 "rechercher",
             ),
         };
-        if !has_doc && !matches!(self, Open | Quit | Notes | Calculator | Theme(_) | Palette) {
+        if !has_doc
+            && !matches!(
+                self,
+                Open | Quit | Notes | Calculator | Theme(_) | ToggleTranslucent | Palette
+            )
+        {
             result.enabled = false;
         }
         result

@@ -18,6 +18,9 @@ pub struct Settings {
     pub backup_keep: usize,
     /// Fichiers ouverts récemment, le plus récent en premier.
     pub recent_files: Vec<PathBuf>,
+    /// Fond de fenêtre translucide et flouté par le compositeur (`None` :
+    /// actif par défaut sous Linux seulement).
+    pub translucent: Option<bool>,
 }
 
 impl Default for Settings {
@@ -27,6 +30,7 @@ impl Default for Settings {
             backup_dir: None,
             backup_keep: bp_core::backup::DEFAULT_KEEP,
             recent_files: Vec::new(),
+            translucent: None,
         }
     }
 }
@@ -71,6 +75,10 @@ impl Settings {
         self.recent_files.insert(0, file);
         self.recent_files.truncate(MAX_RECENT);
         self.save();
+    }
+
+    pub fn translucent(&self) -> bool {
+        self.translucent.unwrap_or(cfg!(target_os = "linux"))
     }
 
     pub fn theme_preference(&self) -> egui::ThemePreference {

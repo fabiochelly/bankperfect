@@ -4,11 +4,14 @@
 
 fn main() -> eframe::Result {
     let initial_file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
+    let translucent = bankperfect::translucent_window_setting();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_title("BankPerfect")
             .with_app_id("bankperfect")
             .with_icon(std::sync::Arc::new(bankperfect::logo::window_icon()))
+            // Surface transparente : le compositeur floute le bureau derrière.
+            .with_transparent(translucent)
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([800.0, 500.0]),
         // Une seule image en attente de présentation : latence minimale.
@@ -25,7 +28,9 @@ fn main() -> eframe::Result {
         "BankPerfect",
         options,
         Box::new(move |cc| {
+            bankperfect::theme::set_surface_transparent(translucent);
             bankperfect::theme::install(&cc.egui_ctx);
+            bankperfect::theme::set_translucent(&cc.egui_ctx, translucent);
             Ok(Box::new(bankperfect::BankPerfectApp::new(initial_file)))
         }),
     )

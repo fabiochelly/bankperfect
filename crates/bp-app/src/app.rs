@@ -359,6 +359,19 @@ impl BankPerfectApp {
                 ctx.set_theme(preference);
                 return self.settings.set_theme(preference);
             }
+            Command::ToggleTranslucent => {
+                let on = !self.settings.translucent();
+                self.settings.translucent = Some(on);
+                self.settings.save();
+                crate::theme::set_translucent(ctx, on);
+                if on && !crate::theme::surface_transparent() {
+                    self.toast = Some((
+                        "Le fond translucide sera actif au prochain démarrage".into(),
+                        now + 5.0,
+                    ));
+                }
+                return;
+            }
             Command::Save => return self.save(now),
             _ => {}
         }
@@ -423,6 +436,7 @@ impl BankPerfectApp {
             | Command::Calculator
             | Command::Palette
             | Command::Theme(_)
+            | Command::ToggleTranslucent
             | Command::Save => {}
         }
     }
@@ -564,6 +578,19 @@ impl BankPerfectApp {
                         self.execute(&ctx, Theme(preference));
                     }
                 }
+                menu::separator(ui);
+                let mut translucent = self.settings.translucent();
+                if menu::toggle(
+                    ui,
+                    &mut translucent,
+                    "Fond translucide (flou du bureau)",
+                    None,
+                )
+                .clicked()
+                {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleTranslucent);
+                }
             }
             3 => {
                 menu::begin(ui);
@@ -606,18 +633,44 @@ impl BankPerfectApp {
         }
     }
 
-    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc, compact: bool) {
         let pal = palette(ui);
-        let account = doc.current_account();
         let filtered = doc.filters.is_active();
         // En-tête compact sur une ligne : nom du compte, banque et IBAN.
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(
-                RichText::new(&account.name)
-                    .size(18.0)
-                    .family(crate::theme::semibold()),
-            );
+            let title = RichText::new(&doc.current_account().name)
+                .size(18.0)
+                .family(crate::theme::semibold());
+            if compact {
+                // Sans panneau des comptes : le nom sert de sélecteur.
+                let mut selected = None;
+                egui::ComboBox::from_id_salt("account_switcher")
+                    .selected_text(title)
+                    .height(420.0)
+                    .show_ui(ui, |ui| {
+                        for &i in &doc.document.account_order {
+                            let a = &doc.document.accounts[i];
+                            if a.disabled {
+                                continue;
+                            }
+                            let label = format!(
+                                "{}    {}",
+                                a.name,
+                                money(doc.account_balance(i), &a.currency)
+                            );
+                            if ui.selectable_label(i == doc.account, label).clicked() {
+                                selected = Some(i);
+                            }
+                        }
+                    });
+                if let Some(i) = selected {
+                    doc.select_account(i);
+                }
+            } else {
+                ui.label(title);
+            }
+            let account = doc.current_account();
             let mut sub = account.bank_name.clone();
             if !account.iban.trim().is_empty() {
                 sub = if sub.is_empty() {
@@ -958,6 +1011,16 @@ impl BankPerfectApp {
 }
 
 impl eframe::App for BankPerfectApp {
+    /// Fond transparent si la fenêtre l'est (les panneaux peignent le fond
+    /// translucide par-dessus), sinon la couleur du thème.
+    fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+        if crate::theme::surface_transparent() {
+            [0.0; 4]
+        } else {
+            visuals.panel_fill.to_normalized_gamma_f32()
+        }
+    }
+
     /// Molette sans lissage : egui étale chaque cran sur ~0,1 s, ce qui donne
     /// une impression de mollesse. On convertit les crans en points et on
     /// passe par le chemin « tactile » d'egui, appliqué immédiatement.
@@ -1059,19 +1122,24 @@ impl BankPerfectApp {
         let doc = self.doc.as_mut().expect("document ouvert");
         egui::Panel::bottom("status").show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
 
-        let sidebar_fill = palette(ui).bg_dark;
+        let sidebar_fill = crate::theme::backdrop(palette(ui).bg_dark, crate::theme::SIDEBAR_ALPHA);
+        // Fenêtre étroite (tuile) : pas de panneau des comptes, le nom du
+        // compte devient un sélecteur.
+        let compact = ui.available_width() < 860.0;
         // Panneau des comptes plus étroit sur les petits écrans.
         let sidebar_width = (ui.available_width() * 0.2).clamp(190.0, 260.0);
-        egui::Panel::left("accounts")
-            .resizable(true)
-            .default_size(sidebar_width)
-            .min_size(170.0)
-            .frame(
-                egui::Frame::side_top_panel(ui.style())
-                    .fill(sidebar_fill)
-                    .inner_margin(12),
-            )
-            .show(ui, |ui| sidebar::show(ui, doc));
+        if !compact {
+            egui::Panel::left("accounts")
+                .resizable(true)
+                .default_size(sidebar_width)
+                .min_size(170.0)
+                .frame(
+                    egui::Frame::side_top_panel(ui.style())
+                        .fill(sidebar_fill)
+                        .inner_margin(12),
+                )
+                .show(ui, |ui| sidebar::show(ui, doc));
+        }
 
         // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
         let content_rect = ui.available_rect_before_wrap();
@@ -1082,7 +1150,7 @@ impl BankPerfectApp {
             .frame(
                 egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
             )
-            .show(ui, |ui| Self::balance_strip(ui, doc));
+            .show(ui, |ui| Self::balance_strip(ui, doc, compact));
 
         egui::CentralPanel::default_margins().show(ui, |ui| {
             let action = grid::show(ui, doc);

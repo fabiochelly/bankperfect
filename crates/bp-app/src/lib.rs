@@ -25,3 +25,9 @@ mod tools;
 mod ui_kit;
 
 pub use app::BankPerfectApp;
+
+/// Le fond translucide est-il demandé dans les réglages (à lire avant de
+/// créer la fenêtre, qui doit alors avoir une surface transparente) ?
+pub fn translucent_window_setting() -> bool {
+    settings::Settings::load().translucent()
+}

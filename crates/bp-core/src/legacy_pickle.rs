@@ -39,7 +39,6 @@
 //! | `fabiobpbudgetyear` | Budget annuel | liste de dicts `name`, `year`, `accounts` (liste d'index, facultatif), `lines` : liste de dicts `title`, `autocalc_real` (0/1), `categs` (ids), `estimated_values` et `real_values` (12 nombres) → [`LegacyBudgetYear`] |
 //! | `fabiobpautofilters` | Filtres prédéfinis (et Budget en lecture) | dict `{nom: {dt1, dt2, mde, who, ctg, val: textes, mrk: 0–4}}` ; `mrk` : 4 toutes, 3 pointées et rapprochées, 2 rapprochées, 1 pointées, 0 non pointées → [`LegacyFilterRule`] |
 //! | `fabiobpautofields` | Calcul automatique des champs | liste de dicts `active`, `field` (0 tiers, 1 détails, 2 les deux), `contains` (texte ou expression `=…`), `contains_or`, `do_mode`/`mode`, `do_third`/`third`, `do_info`/`info`, `do_categ`/`categ`, `emptycateg`, `do_date`/`date`, `withnewline` (booléens `I00`/`I01`) → [`LegacyAutoField`] |
-//! | `fabiobpabbreviations` | Saisie multiple | dict `{abréviation: texte}` → [`LegacyAbbreviations`] |
 //! | `fabiobptransfer` | Transfert de compte à compte | dict `mode` (0 virement, 1 chèque, 2 espèces), `categ`, `details`, `account1`, `account2` (derniers choix) → [`LegacyTransferSettings`] |
 //! | `fabiobpviewall` | Relevé multicompte | dict `{"accounts": [index des comptes]}` → [`LegacyViewAll`] |
 //! | `bpcashcards` | inconnu (aucun script fourni ne l'écrit) | dict `{numéro_de_carte: (texte, entier ×5)}`, ex. `('', 0, 2, 1, 18, 0)` ; signification non documentée → [`LegacyCashCards`] (valeurs brutes) |
@@ -1274,22 +1273,6 @@ impl LegacyAutoField {
     }
 }
 
-/// Abréviations de la saisie multiple (`fabiobpabbreviations`).
-#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
-pub struct LegacyAbbreviations(pub BTreeMap<String, String>);
-
-impl LegacyAbbreviations {
-    pub fn from_pickle(v: &Value) -> Self {
-        Self(
-            v.as_dict()
-                .unwrap_or_default()
-                .iter()
-                .map(|(k, v)| (text_of(k), text_of(v)))
-                .collect(),
-        )
-    }
-}
-
 /// Derniers choix de la fenêtre de transfert (`fabiobptransfer`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -1538,8 +1521,9 @@ pub(crate) mod tests {
         assert_eq!(rule.who, "");
 
         let data = b"(dp1\nS'edf'\np2\nS'\\xc9lectricit\\xe9 de France'\np3\ns.";
-        let abbr = LegacyAbbreviations::from_pickle(&parse(data).unwrap());
-        assert_eq!(abbr.0["edf"], "Électricité de France");
+        let value = parse(data).unwrap();
+        let dict = value.as_dict().unwrap();
+        assert_eq!(text_of(&dict[0].1), "Électricité de France");
     }
 
     #[test]

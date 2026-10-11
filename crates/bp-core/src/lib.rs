@@ -19,7 +19,6 @@ pub mod import;
 pub mod legacy_pickle;
 pub mod manage;
 pub mod model;
-pub mod multiple_input;
 pub mod pyvalue;
 pub mod quotes;
 pub mod reports;

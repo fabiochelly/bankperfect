@@ -13,6 +13,8 @@ const INTER: &[u8] = include_bytes!("../assets/fonts/InterVariable.ttf");
 
 const MEDIUM: &str = "inter-medium";
 const WHEEL_LINE_SPEED: f32 = 120.0;
+/// Largeur de la barre de défilement au survol.
+pub const SCROLLBAR_WIDTH: f32 = 14.0;
 /// Multiplicateur des défilements exprimés en points (molettes sous Wayland).
 pub const WHEEL_POINT_FACTOR: f32 = 2.0;
 const SEMIBOLD: &str = "inter-semibold";
@@ -39,6 +41,7 @@ pub struct Palette {
     pub pointed: Color32,
     pub reconciled: Color32,
     pub stripe: Color32,
+    pub violet: Color32,
 }
 
 /// Tokyo Night (« night »).
@@ -62,6 +65,7 @@ pub const NIGHT: Palette = Palette {
     pointed: Color32::from_rgb(0x7d, 0xcf, 0xff),
     reconciled: Color32::from_rgb(0x9e, 0xce, 0x6a),
     stripe: Color32::from_rgb(0x1e, 0x20, 0x30),
+    violet: Color32::from_rgb(0xbb, 0x9a, 0xf7),
 };
 
 /// Tokyo Night Day.
@@ -85,6 +89,7 @@ pub const DAY: Palette = Palette {
     pointed: Color32::from_rgb(0x00, 0x71, 0x97),
     reconciled: Color32::from_rgb(0x38, 0x7a, 0x1f),
     stripe: Color32::from_rgb(0xd9, 0xdb, 0xe3),
+    violet: Color32::from_rgb(0x98, 0x54, 0xf1),
 };
 
 pub fn install(ctx: &egui::Context) {
@@ -103,21 +108,24 @@ pub fn install(ctx: &egui::Context) {
         style.spacing.interact_size.y = 34.0;
         style.spacing.combo_height = 320.0;
         style.spacing.menu_margin = egui::Margin::same(8);
+        // Barre flottante au-dessus d'une marge réservée par la grille
+        // (voir grid::SCROLLBAR_GUTTER) : rail discret, poignée arrondie
+        // semi-transparente, plus large et plus opaque au survol.
         style.spacing.scroll = egui::style::ScrollStyle {
             floating: true,
-            bar_width: 12.0,
-            floating_width: 8.0,
+            bar_width: SCROLLBAR_WIDTH,
+            floating_width: 10.0,
             floating_allocated_width: 0.0,
-            handle_min_length: 48.0,
-            bar_inner_margin: 2.0,
-            bar_outer_margin: 2.0,
+            handle_min_length: 56.0,
+            bar_inner_margin: 3.0,
+            bar_outer_margin: 3.0,
             foreground_color: true,
-            dormant_background_opacity: 0.0,
-            active_background_opacity: 0.15,
-            interact_background_opacity: 0.25,
-            dormant_handle_opacity: 0.35,
-            active_handle_opacity: 0.55,
-            interact_handle_opacity: 0.75,
+            dormant_background_opacity: 0.25,
+            active_background_opacity: 0.45,
+            interact_background_opacity: 0.6,
+            dormant_handle_opacity: 0.4,
+            active_handle_opacity: 0.6,
+            interact_handle_opacity: 0.8,
             ..egui::style::ScrollStyle::floating()
         };
         // Les libellés ne capturent pas la souris : cliquer sur le texte d'une

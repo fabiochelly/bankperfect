@@ -16,7 +16,7 @@ use crate::theme::palette;
 const TRANSFER_TO: &str = "Transfert vers le compte ";
 const TRANSFER_FROM: &str = "Transfert depuis le compte ";
 const AUTO_PREFIX: &str = "[auto] ";
-const SCROLLBAR_GUTTER: f32 = 14.0;
+const SCROLLBAR_GUTTER: f32 = crate::theme::SCROLLBAR_WIDTH + 10.0;
 
 /// Ce que l'utilisateur a demandé depuis la grille.
 pub enum GridAction {

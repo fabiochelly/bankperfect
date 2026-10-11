@@ -353,13 +353,13 @@ impl SchedulerForm {
                     "recette (selon le mode)"
                 };
                 ui.label(RichText::new(sign).color(pal.muted));
-                if r.changed() || changed {
-                    if let Some(a) = Amount::parse(&self.amount) {
-                        let a = if debit { -a.abs() } else { a.abs() };
-                        if a != s.amount {
-                            s.amount = a;
-                            changed = true;
-                        }
+                if (r.changed() || changed)
+                    && let Some(a) = Amount::parse(&self.amount)
+                {
+                    let a = if debit { -a.abs() } else { a.abs() };
+                    if a != s.amount {
+                        s.amount = a;
+                        changed = true;
                     }
                 }
             });

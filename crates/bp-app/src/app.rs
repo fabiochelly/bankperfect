@@ -386,6 +386,11 @@ impl BankPerfectApp {
                 }
             }
             if self.doc.is_some()
+                && menu::item(ui, Some(icon::SHIELD_CHECK), "Protection…", None).clicked()
+            {
+                self.tool = Some(crate::tools::Tool::Protection(Default::default()));
+            }
+            if self.doc.is_some()
                 && menu::item(
                     ui,
                     Some(icon::CLOCK_COUNTER_CLOCKWISE),
@@ -863,6 +868,14 @@ impl BankPerfectApp {
                     self.tool = None;
                     self.toast = Some((message, now + 4.0));
                 }
+                crate::tools::Outcome::Protected(phrase) => {
+                    self.tool = None;
+                    self.recovery_phrase = Some(phrase);
+                    self.toast = Some((
+                        "Mot de passe défini — enregistrez (Ctrl+S) pour l'appliquer".into(),
+                        now + 6.0,
+                    ));
+                }
                 crate::tools::Outcome::Reopen(path, message) => {
                     self.tool = None;
                     if let Some(doc) = &mut self.doc {
@@ -1210,7 +1223,7 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
 }
 
 /// Bouton rond « Nouvelle opération », à cheval sur la barre de menus en
-/// haut à droite : verre bleuté semi-transparent avec reflet, croix blanche.
+/// haut à droite : effet givré plat, sombre et semi-transparent, croix blanche.
 fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
     const SIZE: f32 = 44.0;
     let center = egui::pos2(content.right() - 46.0, content.top() + 2.0);
@@ -1235,43 +1248,31 @@ fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
             let hovered = response.hovered();
             let painter = ui.painter();
             let radius = SIZE / 2.0;
+            // Givre plat : disque sombre translucide, voile clair uniforme et
+            // liseré fin, sans reflet ni relief.
             let shadow = egui::Shadow {
-                offset: [0, 4],
-                blur: 16,
+                offset: [0, 2],
+                blur: 12,
                 spread: 0,
-                color: egui::Color32::from_black_alpha(90),
+                color: egui::Color32::from_black_alpha(45),
             };
             painter.add(shadow.as_shape(rect, egui::CornerRadius::same(radius as u8)));
-            // Verre bleuté semi-transparent, plus dense au survol.
-            let alpha = if hovered { 215 } else { 150 };
             painter.circle_filled(
                 rect.center(),
                 radius,
-                egui::Color32::from_rgba_unmultiplied(0x3b, 0x7b, 0xf0, alpha),
+                egui::Color32::from_rgba_unmultiplied(0x16, 0x17, 0x20, 165),
             );
-            // Reflet : dégradé blanc sur la moitié haute.
-            let mut mesh = egui::Mesh::default();
-            let steps = 32;
-            let center = rect.center();
-            mesh.colored_vertex(
-                center - egui::vec2(0.0, radius * 0.15),
-                egui::Color32::from_white_alpha(8),
+            painter.circle_filled(
+                rect.center(),
+                radius,
+                egui::Color32::from_white_alpha(if hovered { 26 } else { 12 }),
             );
-            for k in 0..=steps {
-                let a = std::f32::consts::PI + std::f32::consts::PI * k as f32 / steps as f32;
-                let p = center + egui::vec2(a.cos(), a.sin()) * (radius - 1.5);
-                mesh.colored_vertex(p, egui::Color32::from_white_alpha(46));
-            }
-            for k in 1..=steps as u32 {
-                mesh.add_triangle(0, k, k + 1);
-            }
-            painter.add(mesh);
             painter.circle_stroke(
                 rect.center(),
                 radius - 0.5,
                 egui::Stroke::new(
                     1.0,
-                    egui::Color32::from_white_alpha(if hovered { 110 } else { 70 }),
+                    egui::Color32::from_white_alpha(if hovered { 60 } else { 34 }),
                 ),
             );
             painter.text(

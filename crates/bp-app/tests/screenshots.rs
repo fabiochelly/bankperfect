@@ -127,6 +127,13 @@ fn screenshots() {
         h.run_steps(2);
         h.query_all_by_label("EDF").last().unwrap().click();
     });
+    render("17-protection", egui::Theme::Dark, |h| {
+        h.get_by_label("Fichier").click();
+        h.run_steps(3);
+        h.get_by_label("Protection…").click();
+        h.run_steps(2);
+        h.get_by_label("Protéger").click();
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

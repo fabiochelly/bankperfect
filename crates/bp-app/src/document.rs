@@ -15,6 +15,8 @@ pub struct OpenDoc {
     pub document: Document,
     pub format: FileFormat,
     pub protection: Option<Protection>,
+    /// Mot de passe du fichier v5 d'origine, ou celui choisi pendant la
+    /// session (pas encore forcément enregistré).
     pub legacy_password: Option<String>,
     pub dirty: bool,
     pub warnings: Vec<String>,

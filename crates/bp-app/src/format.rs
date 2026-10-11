@@ -24,9 +24,28 @@ pub fn money(amount: Amount, currency: &str) -> String {
     }
 }
 
+/// Nombre entier avec espace fine insécable entre les milliers : `159 037`.
+pub fn count(n: usize) -> String {
+    let digits = n.to_string();
+    let mut out = String::with_capacity(digits.len() + digits.len() / 3 * 3);
+    for (i, c) in digits.chars().enumerate() {
+        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+            out.push('\u{202f}');
+        }
+        out.push(c);
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_count() {
+        assert_eq!(count(7), "7");
+        assert_eq!(count(159_037), "159\u{202f}037");
+    }
 
     #[test]
     fn formats_money() {

@@ -50,6 +50,23 @@ fn screenshots() {
         h.run_steps(20);
         h.get_by_label(CALENDAR_DOTS).click();
     });
+    render("07-plage", egui::Theme::Dark, |h| {
+        // Glisser sur la courbe du solde : sélection d'une période.
+        let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        h.event(egui::Event::PointerMoved(egui::pos2(360.0, 250.0)));
+        h.event(press(egui::pos2(360.0, 250.0), true));
+        h.run_steps(2);
+        for x in (370..=560).step_by(10) {
+            h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 250.0)));
+            h.run_steps(1);
+        }
+        h.event(press(egui::pos2(560.0, 250.0), false));
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

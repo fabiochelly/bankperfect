@@ -89,7 +89,9 @@ impl Profiler {
         }
         let now = Instant::now();
         let ui_ms = (now - started).as_secs_f32() * 1000.0;
-        let interval_ms = self.last_frame.map_or(0.0, |last| (started - last).as_secs_f32() * 1000.0);
+        let interval_ms = self
+            .last_frame
+            .map_or(0.0, |last| (started - last).as_secs_f32() * 1000.0);
         self.last_frame = Some(started);
         let at = (started - self.start).as_secs_f64();
         let e = std::mem::take(&mut self.events);
@@ -110,7 +112,11 @@ impl Profiler {
         if let Some(out) = &mut self.out {
             let _ = out.flush();
         }
-        self.recent.push_back(Frame { at, interval_ms, ui_ms });
+        self.recent.push_back(Frame {
+            at,
+            interval_ms,
+            ui_ms,
+        });
         while self.recent.front().is_some_and(|f| at - f.at > 1.0) {
             self.recent.pop_front();
         }
@@ -124,7 +130,9 @@ impl Profiler {
         if self.continuous {
             ctx.request_repaint();
         }
-        if ctx.input_mut(|i| i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::ALT, egui::Key::P)) {
+        if ctx.input_mut(|i| {
+            i.consume_key(egui::Modifiers::CTRL | egui::Modifiers::ALT, egui::Key::P)
+        }) {
             self.overlay = !self.overlay;
         }
         if !self.overlay {
@@ -132,7 +140,12 @@ impl Profiler {
         }
         let frames = self.recent.len();
         let worst_ui = self.recent.iter().map(|f| f.ui_ms).fold(0.0, f32::max);
-        let worst_interval = self.recent.iter().skip(1).map(|f| f.interval_ms).fold(0.0, f32::max);
+        let worst_interval = self
+            .recent
+            .iter()
+            .skip(1)
+            .map(|f| f.interval_ms)
+            .fold(0.0, f32::max);
         let last_ui = self.recent.back().map_or(0.0, |f| f.ui_ms);
         let cpu = cpu_previous.unwrap_or(0.0) * 1000.0;
         let text = format!(
@@ -148,7 +161,13 @@ impl Profiler {
                     .fill(egui::Color32::from_black_alpha(200))
                     .corner_radius(6)
                     .inner_margin(egui::Margin::symmetric(10, 6))
-                    .show(ui, |ui| ui.label(RichText::new(text).monospace().color(egui::Color32::from_rgb(0x9e, 0xce, 0x6a))));
+                    .show(ui, |ui| {
+                        ui.label(
+                            RichText::new(text)
+                                .monospace()
+                                .color(egui::Color32::from_rgb(0x9e, 0xce, 0x6a)),
+                        )
+                    });
             });
     }
 }

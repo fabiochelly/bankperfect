@@ -632,6 +632,12 @@ fn remaining_chart(
         &|k| points[k].0 + points[k].1,
         pal.warning.gamma_multiply(0.55),
     );
+    // Traits anticrénelés sur les bords des aires (un maillage ne l'est pas).
+    let capital_line: Vec<egui::Pos2> = (0..=n).map(|k| pos2(x(k), y(points[k].0))).collect();
+    painter.add(egui::Shape::line(
+        capital_line,
+        Stroke::new(1.5, pal.accent),
+    ));
     let line: Vec<egui::Pos2> = (0..=n)
         .map(|k| pos2(x(k), y(points[k].0 + points[k].1)))
         .collect();

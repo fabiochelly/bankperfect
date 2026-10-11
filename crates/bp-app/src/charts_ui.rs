@@ -990,19 +990,18 @@ fn donut(
             color
         };
         let gap = if sorted.len() > 1 { 0.012 } else { 0.0 };
-        let steps = ((a1 - a0) * 48.0).ceil().max(2.0) as usize;
+        let feather = 1.0 / ui.ctx().pixels_per_point();
         let mut mesh = egui::Mesh::default();
-        for s in 0..=steps {
-            let a = a0 + gap + (a1 - a0 - 2.0 * gap).max(0.0) * s as f32 / steps as f32;
-            let dir = vec2(a.cos(), a.sin());
-            mesh.colored_vertex(center + dir * r_out, color);
-            mesh.colored_vertex(center + dir * r_in, color);
-        }
-        for s in 0..steps as u32 {
-            let i = s * 2;
-            mesh.add_triangle(i, i + 1, i + 2);
-            mesh.add_triangle(i + 1, i + 3, i + 2);
-        }
+        ring_segment(
+            &mut mesh,
+            center,
+            r_in,
+            r_out,
+            a0 + gap,
+            (a1 - gap).max(a0 + gap),
+            color,
+            feather,
+        );
         painter.add(mesh);
     }
     // Centre : total, ou la part survolée.
@@ -1093,6 +1092,54 @@ fn donut(
             name,
             pal.fg_dark,
         );
+    }
+}
+
+/// Part d'anneau entre les angles `a0` et `a1`, bords adoucis : une bande
+/// transparente de `feather` (un pixel physique) borde chaque côté, comme
+/// pour les formes d'egui (un maillage brut n'est pas anticrénelé).
+#[allow(clippy::too_many_arguments)]
+fn ring_segment(
+    mesh: &mut egui::Mesh,
+    center: Pos2,
+    r_in: f32,
+    r_out: f32,
+    a0: f32,
+    a1: f32,
+    color: Color32,
+    feather: f32,
+) {
+    let clear = Color32::TRANSPARENT;
+    let dir = |a: f32| vec2(a.cos(), a.sin());
+    // Un segment tous les ~2 points sur l'arc extérieur.
+    let steps = ((a1 - a0) * r_out / 2.0).ceil().max(2.0) as u32;
+    let base = mesh.vertices.len() as u32;
+    for s in 0..=steps {
+        let d = dir(a0 + (a1 - a0) * s as f32 / steps as f32);
+        mesh.colored_vertex(center + d * (r_in - feather), clear);
+        mesh.colored_vertex(center + d * r_in, color);
+        mesh.colored_vertex(center + d * r_out, color);
+        mesh.colored_vertex(center + d * (r_out + feather), clear);
+    }
+    for s in 0..steps {
+        let i = base + s * 4;
+        let j = i + 4;
+        for k in 0..3 {
+            mesh.add_triangle(i + k, i + k + 1, j + k);
+            mesh.add_triangle(i + k + 1, j + k + 1, j + k);
+        }
+    }
+    // Bords radiaux.
+    for (a, side) in [(a0, -1.0), (a1, 1.0)] {
+        let d = dir(a);
+        let t = vec2(-d.y, d.x) * side * feather;
+        let b = mesh.vertices.len() as u32;
+        mesh.colored_vertex(center + d * r_in, color);
+        mesh.colored_vertex(center + d * r_out, color);
+        mesh.colored_vertex(center + d * r_in + t, clear);
+        mesh.colored_vertex(center + d * r_out + t, clear);
+        mesh.add_triangle(b, b + 1, b + 2);
+        mesh.add_triangle(b + 1, b + 3, b + 2);
     }
 }
 

@@ -66,6 +66,8 @@ pub enum Command {
     ToggleHideOld,
     ToggleTranslucent,
     Theme(ThemePreference),
+    /// Thème de la galerie, par identifiant.
+    UseTheme(&'static str),
     NextAccount,
     PreviousAccount,
     SelectAccount(usize),
@@ -183,12 +185,9 @@ impl Command {
             Theme(ThemePreference::Dark),
             Theme(ThemePreference::Light),
             Theme(ThemePreference::System),
-            ToggleTranslucent,
-            Options,
-            Help,
-            About,
-            Quit,
         ]);
+        list.extend(crate::theme::THEMES.iter().map(|t| UseTheme(t.id)));
+        list.extend([ToggleTranslucent, Options, Help, About, Quit]);
         list
     }
 
@@ -741,25 +740,39 @@ impl Command {
             }
             Theme(ThemePreference::Dark) => info(
                 "Affichage",
-                "Thème : Tokyo Night",
+                "Mode sombre",
                 icon::MOON,
                 None,
-                "sombre nuit couleurs",
+                "thème nuit couleurs",
             ),
             Theme(ThemePreference::Light) => info(
                 "Affichage",
-                "Thème : Tokyo Night Day",
+                "Mode clair",
                 icon::SUN,
                 None,
-                "clair jour couleurs",
+                "thème jour couleurs",
             ),
             Theme(ThemePreference::System) => info(
                 "Affichage",
-                "Thème : suivre le système",
+                "Mode : suivre le système",
                 icon::DESKTOP,
                 None,
-                "automatique couleurs",
+                "thème automatique couleurs",
             ),
+            UseTheme(id) => {
+                let theme = crate::theme::by_id(id).unwrap_or(&crate::theme::THEMES[0]);
+                info(
+                    "Affichage",
+                    &format!("Thème : {}", theme.name),
+                    icon::PALETTE,
+                    None,
+                    if theme.dark {
+                        "couleurs apparence sombre"
+                    } else {
+                        "couleurs apparence clair"
+                    },
+                )
+            }
             NextAccount => info(
                 "Comptes",
                 "Compte suivant",
@@ -921,6 +934,7 @@ impl Command {
                     | Notes
                     | Calculator
                     | Theme(_)
+                    | UseTheme(_)
                     | ToggleTranslucent
                     | Palette
                     | Options

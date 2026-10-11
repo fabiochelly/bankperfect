@@ -1,8 +1,10 @@
-//! Thème visuel : police Inter, thèmes Tokyo Night (sombre, par défaut) et
-//! Tokyo Night Day (clair).
+//! Thème visuel : police Inter et galerie de thèmes (Tokyo Night par défaut,
+//! Catppuccin, Dracula, Nord… et « BankPerfect classic », repris des couleurs
+//! de l'ancienne version). Un thème sombre et un thème clair sont actifs à la
+//! fois : le mode (sombre, clair ou système) choisit lequel s'affiche.
 
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, RwLock};
 
 use egui::epaint::text::{FontTweak, VariationCoords};
 use egui::{
@@ -21,7 +23,7 @@ pub const SCROLLBAR_WIDTH: f32 = 14.0;
 pub const WHEEL_POINT_FACTOR: f32 = 3.0;
 const SEMIBOLD: &str = "inter-semibold";
 
-/// Couleurs d'une variante de Tokyo Night.
+/// Couleurs d'un thème.
 #[derive(Clone, Copy)]
 pub struct Palette {
     pub bg: Color32,
@@ -106,6 +108,589 @@ pub const DAY: Palette = Palette {
     teal: Color32::from_rgb(0x11, 0x8c, 0x74),
 };
 
+/// BankPerfect classic : couleurs par défaut de l'ancienne version (grille
+/// blanche et bleu-gris, sélection acier, panneaux bleu clair, montants
+/// négatifs rouges, trait rouge des changements de mois, coches sarcelle),
+/// sur des fenêtres grises façon Windows.
+pub const CLASSIC: Palette = Palette {
+    bg: rgb(0xffffff),
+    bg_dark: rgb(0xeef1f5),
+    bg_highlight: rgb(0xe1ebf5),
+    surface: rgb(0xcadceb),
+    border: rgb(0xa9b8c8),
+    fg: rgb(0x000000),
+    fg_dark: rgb(0x2b2b2b),
+    muted: rgb(0x6e6e6e),
+    accent: rgb(0x2f5f98),
+    on_accent: rgb(0xffffff),
+    selection: rgb(0x9fb3cc),
+    negative: rgb(0xe00000),
+    positive: rgb(0x2e7d32),
+    warning: rgb(0xa86400),
+    month_rule: rgb(0xcc0000),
+    future: rgb(0xcc5500),
+    pointed: rgb(0x408080),
+    reconciled: rgb(0x1f1f1f),
+    stripe: rgb(0xdce8ef),
+    violet: rgb(0x7b3fa0),
+    menu_bg: rgb(0xf0f0f0),
+    menu_hover: rgb(0xd5e3f0),
+    teal: rgb(0x008080),
+};
+
+const fn rgb(hex: u32) -> Color32 {
+    Color32::from_rgb((hex >> 16) as u8, (hex >> 8) as u8, hex as u8)
+}
+
+/// Mélange `pct` % de `b` dans `a`.
+const fn mix(a: u32, b: u32, pct: u32) -> Color32 {
+    const fn channel(a: u32, b: u32, shift: u32, pct: u32) -> u8 {
+        let a = (a >> shift) & 0xff;
+        let b = (b >> shift) & 0xff;
+        ((a * (100 - pct) + b * pct + 50) / 100) as u8
+    }
+    Color32::from_rgb(
+        channel(a, b, 16, pct),
+        channel(a, b, 8, pct),
+        channel(a, b, 0, pct),
+    )
+}
+
+/// Couleurs d'origine d'un thème publié ; les autres en sont déduites.
+struct Base {
+    dark: bool,
+    bg: u32,
+    /// Plus sombre que `bg` : panneau des comptes, champs de saisie.
+    bg_dark: u32,
+    surface: u32,
+    highlight: u32,
+    border: u32,
+    fg: u32,
+    fg_dark: u32,
+    muted: u32,
+    accent: u32,
+    on_accent: u32,
+    red: u32,
+    green: u32,
+    yellow: u32,
+    orange: u32,
+    cyan: u32,
+    violet: u32,
+    teal: u32,
+}
+
+const fn derive(b: Base) -> Palette {
+    Palette {
+        bg: rgb(b.bg),
+        bg_dark: rgb(b.bg_dark),
+        bg_highlight: rgb(b.highlight),
+        surface: rgb(b.surface),
+        border: rgb(b.border),
+        fg: rgb(b.fg),
+        fg_dark: rgb(b.fg_dark),
+        muted: rgb(b.muted),
+        accent: rgb(b.accent),
+        on_accent: rgb(b.on_accent),
+        selection: mix(b.bg, b.accent, if b.dark { 22 } else { 26 }),
+        negative: rgb(b.red),
+        positive: rgb(b.green),
+        // Le jaune des thèmes clairs est trop pâle pour du texte.
+        warning: if b.dark {
+            rgb(b.yellow)
+        } else {
+            mix(b.yellow, 0, 25)
+        },
+        month_rule: rgb(b.red),
+        future: rgb(b.orange),
+        pointed: rgb(b.cyan),
+        reconciled: rgb(b.green),
+        stripe: if b.dark {
+            mix(b.bg, b.surface, 35)
+        } else {
+            mix(b.bg, b.bg_dark, 45)
+        },
+        violet: rgb(b.violet),
+        menu_bg: if b.dark {
+            mix(b.bg_dark, 0, 15)
+        } else {
+            rgb(b.bg_dark)
+        },
+        menu_hover: if b.dark {
+            mix(b.bg_dark, 0, 50)
+        } else {
+            mix(b.bg_dark, b.fg, 15)
+        },
+        teal: rgb(b.teal),
+    }
+}
+
+/// Un thème de la galerie.
+pub struct ThemeDef {
+    /// Identifiant enregistré dans les réglages.
+    pub id: &'static str,
+    pub name: &'static str,
+    pub dark: bool,
+    pub palette: Palette,
+}
+
+pub const DEFAULT_DARK: &str = "tokyo-night";
+pub const DEFAULT_LIGHT: &str = "tokyo-night-day";
+
+/// Thèmes proposés : les sombres, puis les clairs.
+pub const THEMES: &[ThemeDef] = &[
+    ThemeDef {
+        id: DEFAULT_DARK,
+        name: "Tokyo Night",
+        dark: true,
+        palette: NIGHT,
+    },
+    ThemeDef {
+        id: "catppuccin-mocha",
+        name: "Catppuccin Mocha",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x1e1e2e,
+            bg_dark: 0x181825,
+            surface: 0x313244,
+            highlight: 0x3a3c51,
+            border: 0x45475a,
+            fg: 0xcdd6f4,
+            fg_dark: 0xbac2de,
+            muted: 0x7f849c,
+            accent: 0xcba6f7,
+            on_accent: 0x11111b,
+            red: 0xf38ba8,
+            green: 0xa6e3a1,
+            yellow: 0xf9e2af,
+            orange: 0xfab387,
+            cyan: 0x89dceb,
+            violet: 0x89b4fa,
+            teal: 0x94e2d5,
+        }),
+    },
+    ThemeDef {
+        id: "catppuccin-macchiato",
+        name: "Catppuccin Macchiato",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x24273a,
+            bg_dark: 0x1e2030,
+            surface: 0x363a4f,
+            highlight: 0x3f4359,
+            border: 0x494d64,
+            fg: 0xcad3f5,
+            fg_dark: 0xb8c0e0,
+            muted: 0x8087a2,
+            accent: 0xc6a0f6,
+            on_accent: 0x181926,
+            red: 0xed8796,
+            green: 0xa6da95,
+            yellow: 0xeed49f,
+            orange: 0xf5a97f,
+            cyan: 0x91d7e3,
+            violet: 0x8aadf4,
+            teal: 0x8bd5ca,
+        }),
+    },
+    ThemeDef {
+        id: "catppuccin-frappe",
+        name: "Catppuccin Frappé",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x303446,
+            bg_dark: 0x292c3c,
+            surface: 0x414559,
+            highlight: 0x494e63,
+            border: 0x51576d,
+            fg: 0xc6d0f5,
+            fg_dark: 0xb5bfe2,
+            muted: 0x8c93ad,
+            accent: 0xca9ee6,
+            on_accent: 0x232634,
+            red: 0xe78284,
+            green: 0xa6d189,
+            yellow: 0xe5c890,
+            orange: 0xef9f76,
+            cyan: 0x99d1db,
+            violet: 0x8caaee,
+            teal: 0x81c8be,
+        }),
+    },
+    ThemeDef {
+        id: "dracula",
+        name: "Dracula",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x282a36,
+            bg_dark: 0x21222c,
+            surface: 0x343746,
+            highlight: 0x3c3f51,
+            border: 0x44475a,
+            fg: 0xf8f8f2,
+            fg_dark: 0xdcdcd5,
+            muted: 0x7b88b8,
+            accent: 0xbd93f9,
+            on_accent: 0x21222c,
+            red: 0xff5555,
+            green: 0x50fa7b,
+            yellow: 0xf1fa8c,
+            orange: 0xffb86c,
+            cyan: 0x8be9fd,
+            violet: 0xff79c6,
+            teal: 0x6df1bc,
+        }),
+    },
+    ThemeDef {
+        id: "nord",
+        name: "Nord",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x2e3440,
+            bg_dark: 0x272c36,
+            surface: 0x3b4252,
+            highlight: 0x434c5e,
+            border: 0x4c566a,
+            fg: 0xe5e9f0,
+            fg_dark: 0xd8dee9,
+            muted: 0x8890a3,
+            accent: 0x88c0d0,
+            on_accent: 0x2e3440,
+            red: 0xbf616a,
+            green: 0xa3be8c,
+            yellow: 0xebcb8b,
+            orange: 0xd08770,
+            cyan: 0x81a1c1,
+            violet: 0xb48ead,
+            teal: 0x8fbcbb,
+        }),
+    },
+    ThemeDef {
+        id: "gruvbox",
+        name: "Gruvbox",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x282828,
+            bg_dark: 0x1d2021,
+            surface: 0x32302f,
+            highlight: 0x3c3836,
+            border: 0x504945,
+            fg: 0xebdbb2,
+            fg_dark: 0xd5c4a1,
+            muted: 0xa89984,
+            accent: 0xfe8019,
+            on_accent: 0x1d2021,
+            red: 0xfb4934,
+            green: 0xb8bb26,
+            yellow: 0xfabd2f,
+            orange: 0xfabd2f,
+            cyan: 0x83a598,
+            violet: 0xd3869b,
+            teal: 0x8ec07c,
+        }),
+    },
+    ThemeDef {
+        id: "rose-pine",
+        name: "Rosé Pine",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x191724,
+            bg_dark: 0x14121e,
+            surface: 0x1f1d2e,
+            highlight: 0x26233a,
+            border: 0x403d52,
+            fg: 0xe0def4,
+            fg_dark: 0xc4c1db,
+            muted: 0x908caa,
+            accent: 0xebbcba,
+            on_accent: 0x191724,
+            red: 0xeb6f92,
+            green: 0x9ccfd8,
+            yellow: 0xf6c177,
+            orange: 0xf6c177,
+            cyan: 0xc4a7e7,
+            violet: 0xc4a7e7,
+            teal: 0x3e8fb0,
+        }),
+    },
+    ThemeDef {
+        id: "one-dark",
+        name: "One Dark",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x282c34,
+            bg_dark: 0x21252b,
+            surface: 0x2c313a,
+            highlight: 0x333842,
+            border: 0x3e4451,
+            fg: 0xc8ccd4,
+            fg_dark: 0xabb2bf,
+            muted: 0x7f848e,
+            accent: 0x61afef,
+            on_accent: 0x21252b,
+            red: 0xe06c75,
+            green: 0x98c379,
+            yellow: 0xe5c07b,
+            orange: 0xd19a66,
+            cyan: 0x56b6c2,
+            violet: 0xc678dd,
+            teal: 0x56b6c2,
+        }),
+    },
+    ThemeDef {
+        id: "everforest",
+        name: "Everforest",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x2d353b,
+            bg_dark: 0x232a2e,
+            surface: 0x343f44,
+            highlight: 0x3d484d,
+            border: 0x475258,
+            fg: 0xd3c6aa,
+            fg_dark: 0xc0b597,
+            muted: 0x9da9a0,
+            accent: 0xa7c080,
+            on_accent: 0x232a2e,
+            red: 0xe67e80,
+            green: 0x83c092,
+            yellow: 0xdbbc7f,
+            orange: 0xe69875,
+            cyan: 0x7fbbb3,
+            violet: 0xd699b6,
+            teal: 0x7fbbb3,
+        }),
+    },
+    ThemeDef {
+        id: "kanagawa",
+        name: "Kanagawa",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x1f1f28,
+            bg_dark: 0x16161d,
+            surface: 0x2a2a37,
+            highlight: 0x2f2f3e,
+            border: 0x363646,
+            fg: 0xdcd7ba,
+            fg_dark: 0xc8c093,
+            muted: 0x8a8980,
+            accent: 0x7e9cd8,
+            on_accent: 0x16161d,
+            red: 0xe46876,
+            green: 0x98bb6c,
+            yellow: 0xe6c384,
+            orange: 0xffa066,
+            cyan: 0x7fb4ca,
+            violet: 0x957fb8,
+            teal: 0x7aa89f,
+        }),
+    },
+    ThemeDef {
+        id: "solarized-dark",
+        name: "Solarized",
+        dark: true,
+        palette: derive(Base {
+            dark: true,
+            bg: 0x002b36,
+            bg_dark: 0x00212b,
+            surface: 0x073642,
+            highlight: 0x0b3e4b,
+            border: 0x174652,
+            fg: 0x93a1a1,
+            fg_dark: 0x839496,
+            muted: 0x657b83,
+            accent: 0x268bd2,
+            on_accent: 0x002b36,
+            red: 0xdc322f,
+            green: 0x859900,
+            yellow: 0xb58900,
+            orange: 0xcb4b16,
+            cyan: 0x2aa198,
+            violet: 0x6c71c4,
+            teal: 0x2aa198,
+        }),
+    },
+    ThemeDef {
+        id: DEFAULT_LIGHT,
+        name: "Tokyo Night Day",
+        dark: false,
+        palette: DAY,
+    },
+    ThemeDef {
+        id: "bankperfect-classic",
+        name: "BankPerfect classic",
+        dark: false,
+        palette: CLASSIC,
+    },
+    ThemeDef {
+        id: "catppuccin-latte",
+        name: "Catppuccin Latte",
+        dark: false,
+        palette: derive(Base {
+            dark: false,
+            bg: 0xe6e9ef,
+            bg_dark: 0xdce0e8,
+            surface: 0xeff1f5,
+            highlight: 0xccd0da,
+            border: 0xbcc0cc,
+            fg: 0x4c4f69,
+            fg_dark: 0x5c5f77,
+            muted: 0x6c6f85,
+            accent: 0x8839ef,
+            on_accent: 0xffffff,
+            red: 0xd20f39,
+            green: 0x40a02b,
+            yellow: 0xdf8e1d,
+            orange: 0xfe640b,
+            cyan: 0x209fb5,
+            violet: 0x1e66f5,
+            teal: 0x179299,
+        }),
+    },
+    ThemeDef {
+        id: "rose-pine-dawn",
+        name: "Rosé Pine Dawn",
+        dark: false,
+        palette: derive(Base {
+            dark: false,
+            bg: 0xfaf4ed,
+            bg_dark: 0xf2e9e1,
+            surface: 0xfffaf3,
+            highlight: 0xe9e3df,
+            border: 0xcecacd,
+            fg: 0x575279,
+            fg_dark: 0x67627f,
+            muted: 0x797593,
+            accent: 0x907aa9,
+            on_accent: 0xffffff,
+            red: 0xb4637a,
+            green: 0x286983,
+            yellow: 0xea9d34,
+            orange: 0xd7827e,
+            cyan: 0x56949f,
+            violet: 0x907aa9,
+            teal: 0x56949f,
+        }),
+    },
+    ThemeDef {
+        id: "gruvbox-light",
+        name: "Gruvbox clair",
+        dark: false,
+        palette: derive(Base {
+            dark: false,
+            bg: 0xf2e5bc,
+            bg_dark: 0xebdbb2,
+            surface: 0xfbf1c7,
+            highlight: 0xe0cfa5,
+            border: 0xd5c4a1,
+            fg: 0x3c3836,
+            fg_dark: 0x504945,
+            muted: 0x7c6f64,
+            accent: 0xaf3a03,
+            on_accent: 0xfbf1c7,
+            red: 0x9d0006,
+            green: 0x79740e,
+            yellow: 0xd79921,
+            orange: 0xb57614,
+            cyan: 0x076678,
+            violet: 0x8f3f71,
+            teal: 0x427b58,
+        }),
+    },
+    ThemeDef {
+        id: "everforest-light",
+        name: "Everforest clair",
+        dark: false,
+        palette: derive(Base {
+            dark: false,
+            bg: 0xf4f0d9,
+            bg_dark: 0xe6e2cc,
+            surface: 0xfdf6e3,
+            highlight: 0xe0dcc7,
+            border: 0xbdc3af,
+            fg: 0x5c6a72,
+            fg_dark: 0x6b7a83,
+            muted: 0x829181,
+            accent: 0x35a77c,
+            on_accent: 0xffffff,
+            red: 0xf85552,
+            green: 0x6f8a00,
+            yellow: 0xdfa000,
+            orange: 0xf57d26,
+            cyan: 0x3a94c5,
+            violet: 0xdf69ba,
+            teal: 0x35a77c,
+        }),
+    },
+    ThemeDef {
+        id: "solarized-light",
+        name: "Solarized clair",
+        dark: false,
+        palette: derive(Base {
+            dark: false,
+            bg: 0xfdf6e3,
+            bg_dark: 0xeee8d5,
+            surface: 0xfffbef,
+            highlight: 0xe6dfc8,
+            border: 0xd9d2bc,
+            fg: 0x586e75,
+            fg_dark: 0x657b83,
+            muted: 0x7a8b8c,
+            accent: 0x268bd2,
+            on_accent: 0xffffff,
+            red: 0xdc322f,
+            green: 0x859900,
+            yellow: 0xb58900,
+            orange: 0xcb4b16,
+            cyan: 0x2aa198,
+            violet: 0x6c71c4,
+            teal: 0x2aa198,
+        }),
+    },
+];
+
+/// Thème d'identifiant `id`.
+pub fn by_id(id: &str) -> Option<&'static ThemeDef> {
+    THEMES.iter().find(|t| t.id == id)
+}
+
+/// Thème d'identifiant `id`, ou le thème par défaut de ce mode.
+pub fn find(id: &str, dark: bool) -> &'static ThemeDef {
+    by_id(id).filter(|t| t.dark == dark).unwrap_or_else(|| {
+        let default = if dark { DEFAULT_DARK } else { DEFAULT_LIGHT };
+        THEMES.iter().find(|t| t.id == default).unwrap()
+    })
+}
+
+/// Palettes actives : thème sombre, thème clair.
+static ACTIVE: RwLock<(Palette, Palette)> = RwLock::new((NIGHT, DAY));
+
+fn active() -> (Palette, Palette) {
+    *ACTIVE.read().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Choisit le thème sombre et le thème clair, et met à jour les couleurs.
+pub fn select(ctx: &egui::Context, dark_id: &str, light_id: &str) {
+    *ACTIVE.write().unwrap_or_else(|e| e.into_inner()) =
+        (find(dark_id, true).palette, find(light_id, false).palette);
+    apply_visuals(ctx);
+}
+
+fn apply_visuals(ctx: &egui::Context) {
+    let (dark, light) = active();
+    ctx.set_visuals_of(Theme::Dark, visuals(&dark, true));
+    ctx.set_visuals_of(Theme::Light, visuals(&light, false));
+}
+
 /// Fond de fenêtre translucide (le compositeur floute ce qu'il y a derrière,
 /// comme Hyprland). Ne vaut que si la surface a été créée transparente.
 static TRANSLUCENT: AtomicBool = AtomicBool::new(false);
@@ -134,8 +719,7 @@ pub fn surface_transparent() -> bool {
 /// Active ou non le fond translucide, et met à jour les couleurs.
 pub fn set_translucent(ctx: &egui::Context, on: bool) {
     TRANSLUCENT.store(on && surface_transparent(), Ordering::Relaxed);
-    ctx.set_visuals_of(Theme::Dark, visuals(&NIGHT, true));
-    ctx.set_visuals_of(Theme::Light, visuals(&DAY, false));
+    apply_visuals(ctx);
 }
 
 pub fn translucent() -> bool {
@@ -206,8 +790,7 @@ pub fn install(ctx: &egui::Context) {
         style.animation_time = 0.0;
         style.scroll_animation = egui::style::ScrollAnimation::none();
     });
-    ctx.set_visuals_of(Theme::Dark, visuals(&NIGHT, true));
-    ctx.set_visuals_of(Theme::Light, visuals(&DAY, false));
+    apply_visuals(ctx);
     ctx.set_theme(ThemePreference::Dark);
 }
 
@@ -348,17 +931,36 @@ pub fn category_color(p: &Palette, index: usize) -> Color32 {
     colors[index % colors.len()]
 }
 
+/// Couleur de la série ou de la part `index` d'un graphique.
+pub fn chart_color(p: &Palette, index: usize) -> Color32 {
+    let colors = [
+        p.accent,
+        p.violet,
+        p.positive,
+        p.warning,
+        p.negative,
+        p.pointed,
+        p.future,
+        p.teal,
+        p.violet.lerp_to_gamma(p.negative, 0.5),
+        p.pointed.lerp_to_gamma(p.accent, 0.5),
+    ];
+    colors[index % colors.len()]
+}
+
 /// Palette du thème courant.
 pub fn palette(ui: &egui::Ui) -> Palette {
-    if ui.visuals().dark_mode { NIGHT } else { DAY }
+    let (dark, light) = active();
+    if ui.visuals().dark_mode { dark } else { light }
 }
 
 /// Palette du thème courant, hors d'un `Ui`.
 pub fn palette_of(ctx: &egui::Context) -> Palette {
+    let (dark, light) = active();
     if ctx.theme() == Theme::Dark {
-        NIGHT
+        dark
     } else {
-        DAY
+        light
     }
 }
 

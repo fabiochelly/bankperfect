@@ -110,20 +110,6 @@ pub struct ChartsForm {
     message: Option<String>,
 }
 
-/// Teintes des séries et des parts d'anneau.
-const SLICES: [Color32; 10] = [
-    Color32::from_rgb(0x7a, 0xa2, 0xf7),
-    Color32::from_rgb(0xbb, 0x9a, 0xf7),
-    Color32::from_rgb(0x9e, 0xce, 0x6a),
-    Color32::from_rgb(0xe0, 0xaf, 0x68),
-    Color32::from_rgb(0xf7, 0x76, 0x8e),
-    Color32::from_rgb(0x7d, 0xcf, 0xff),
-    Color32::from_rgb(0xff, 0x9e, 0x64),
-    Color32::from_rgb(0x73, 0xda, 0xca),
-    Color32::from_rgb(0xc0, 0x9a, 0xd6),
-    Color32::from_rgb(0x2a, 0xc3, 0xde),
-];
-
 impl ChartsForm {
     pub fn new() -> Self {
         Self {
@@ -614,7 +600,7 @@ fn series_color(k: usize, count: usize, pal: &Palette) -> Color32 {
         // Pointé, à venir, solde : mêmes couleurs que les encadrés de solde.
         [pal.pointed, pal.future, pal.positive][k]
     } else {
-        SLICES[k % SLICES.len()]
+        crate::theme::chart_color(pal, k)
     }
 }
 
@@ -978,7 +964,7 @@ fn donut(
         if a1 <= a0 {
             continue;
         }
-        let color = SLICES[k % SLICES.len()];
+        let color = crate::theme::chart_color(pal, k);
         let (r_out, r_in) = if hovered == Some(k) {
             (radius + 6.0, inner - 2.0)
         } else {
@@ -1055,7 +1041,7 @@ fn donut(
         painter.rect_filled(
             Rect::from_center_size(pos2(legend_left + 6.0, cy), vec2(12.0, 12.0)),
             4.0,
-            SLICES[k % SLICES.len()],
+            crate::theme::chart_color(pal, k),
         );
         let pct = painter.layout_no_wrap(
             format!("{:.0} %", v / total * 100.0),

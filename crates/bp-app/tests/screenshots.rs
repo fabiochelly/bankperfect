@@ -297,6 +297,36 @@ fn screenshots() {
 /// Outils autonomes : simulateur de crédit, convertisseur de devises.
 #[test]
 #[ignore]
+fn theme_screenshots() {
+    for theme in bankperfect::theme::THEMES {
+        let mode = if theme.dark {
+            egui::Theme::Dark
+        } else {
+            egui::Theme::Light
+        };
+        render(&format!("theme-{}", theme.id), mode, |h| {
+            bankperfect::theme::select(&h.ctx, theme.id, theme.id);
+        });
+    }
+    for (name, mode) in [
+        ("theme-galerie-sombre", egui::Theme::Dark),
+        ("theme-galerie-clair", egui::Theme::Light),
+    ] {
+        render_sized(name, mode, egui::vec2(1440.0, 1000.0), |h| {
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Comma);
+            h.run_steps(2);
+            h.query_all_by_label("Affichage").last().unwrap().click();
+        });
+    }
+    bankperfect::theme::select(
+        &egui::Context::default(),
+        bankperfect::theme::DEFAULT_DARK,
+        bankperfect::theme::DEFAULT_LIGHT,
+    );
+}
+
+#[test]
+#[ignore]
 fn tool_screenshots() {
     render("61-credit", egui::Theme::Dark, |h| {
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::L);

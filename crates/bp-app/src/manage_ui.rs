@@ -605,9 +605,12 @@ impl ManageForm {
                     ui.end_row();
                     ui.label("Mode");
                     let mut mode = p.mode.clone();
-                    egui::ComboBox::from_id_salt("payee_mode").selected_text(mode.label().to_string()).width(320.0).show_ui(ui, |ui| {
+                    let (glyph, color) = crate::grid::mode_style(&doc.document, &mode, &pal);
+                    let selected = RichText::new(format!("{glyph}  {}", mode.label())).color(color);
+                    egui::ComboBox::from_id_salt("payee_mode").selected_text(selected).width(320.0).show_ui(ui, |ui| {
                         for m in doc.document.mode_list() {
-                            let label = m.label().to_string();
+                            let (glyph, color) = crate::grid::mode_style(&doc.document, &m, &pal);
+                            let label = RichText::new(format!("{glyph}  {}", m.label())).color(color);
                             ui.selectable_value(&mut mode, m, label);
                         }
                     });

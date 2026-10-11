@@ -1363,6 +1363,37 @@ pub fn legacy_mail_address(document: &Document) -> Option<String> {
     feature_bytes(document, "fabiobpmailaddress").map(decode_cp1252)
 }
 
+// ---------------------------------------------------------------------------
+// Passerelle vers les valeurs génériques des fonctionnalités
+// ---------------------------------------------------------------------------
+
+impl Value {
+    /// Conversion vers la valeur générique lue par les fonctionnalités
+    /// (budget, filtres, règles) : chaînes `str`/`unicode` confondues, entiers
+    /// longs en entier s'ils tiennent (sinon en texte), objets ignorés.
+    pub fn to_py(&self) -> crate::pyvalue::PyValue {
+        use crate::pyvalue::PyValue;
+        match self {
+            Value::None | Value::Global { .. } | Value::Object { .. } => PyValue::None,
+            Value::Bool(b) => PyValue::Bool(*b),
+            Value::Int(i) => PyValue::Int(*i),
+            Value::BigInt(text) => text.parse().map_or_else(|_| PyValue::Str(text.clone()), PyValue::Int),
+            Value::Float(f) => PyValue::Float(*f),
+            Value::Str(s) | Value::Unicode(s) => PyValue::Str(s.clone()),
+            Value::Bytes(b) => PyValue::Str(encoding_rs::WINDOWS_1252.decode(b).0.into_owned()),
+            Value::List(items) => PyValue::List(items.iter().map(Value::to_py).collect()),
+            Value::Tuple(items) => PyValue::Tuple(items.iter().map(Value::to_py).collect()),
+            Value::Dict(pairs) => PyValue::Dict(pairs.iter().map(|(k, v)| (k.to_py(), v.to_py())).collect()),
+        }
+    }
+}
+
+/// Décode un ancien pickle en valeur générique (`None` s'il est illisible) :
+/// c'est le `parse_pickle` attendu par les `load` des fonctionnalités.
+pub fn parse_py(bytes: &[u8]) -> Option<crate::pyvalue::PyValue> {
+    parse(bytes).ok().map(|v| v.to_py())
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;

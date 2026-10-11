@@ -44,7 +44,7 @@ pub struct Palette {
     pub stripe: Color32,
     pub violet: Color32,
     /// Fond des menus et fenêtres flottantes : plus sombre que la fenêtre,
-    /// légèrement transparent (93 % d'opacité).
+    /// opaque.
     pub menu_bg: Color32,
     /// Élément survolé dans un menu : encore plus sombre.
     pub menu_hover: Color32,
@@ -229,7 +229,7 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     };
     v.override_text_color = None;
     v.panel_fill = p.bg;
-    // Fenêtres et listes déroulantes opaques ; seuls les menus restent translucides.
+    // Fenêtres et listes déroulantes opaques.
     v.window_fill = p.menu_bg.to_opaque();
     v.window_stroke = Stroke::new(1.0, p.border);
     v.window_corner_radius = CornerRadius::same(12);

@@ -30,6 +30,8 @@ pub struct Editor {
     /// Tiers déjà utilisés dans le compte, pour l'auto-complétion.
     known_payees: Vec<String>,
     focus_requested: bool,
+    /// Le contenu dépasse la hauteur du panneau (barre de défilement).
+    overflow: bool,
 }
 
 pub enum EditorAction {
@@ -55,6 +57,7 @@ impl Editor {
             error: None,
             known_payees: known_payees(document, account),
             focus_requested: true,
+            overflow: false,
         }
     }
 
@@ -75,6 +78,7 @@ impl Editor {
             error: None,
             known_payees: known_payees(document, account),
             focus_requested: true,
+            overflow: false,
         }
     }
 
@@ -112,18 +116,19 @@ impl Editor {
                 }
             });
         });
-        ui.add_space(14.0);
+        ui.add_space(10.0);
 
         let footer_height = 64.0;
-        // Gouttière à droite pour la barre de défilement.
-        let card_width = ui.available_width() - 14.0;
-        egui::ScrollArea::vertical()
+        // Gouttière à droite pour la barre de défilement, seulement si le
+        // contenu dépassait à l'image précédente.
+        let card_width = ui.available_width() - if self.overflow { 14.0 } else { 0.0 };
+        let scroll = egui::ScrollArea::vertical()
             .max_height((ui.available_height() - footer_height).max(120.0))
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 ui.set_max_width(card_width);
                 self.amount_card(ui, doc, card_width);
-                ui.add_space(16.0);
+                ui.add_space(12.0);
 
                 section(
                     ui,
@@ -152,7 +157,6 @@ impl Editor {
                                         )),
                                 ),
                             ];
-                            field_label(&mut cols[0], "Date");
                             let width = cols[0].available_width();
                             let date = crate::datepicker::date_field(
                                 &mut cols[0],
@@ -174,7 +178,6 @@ impl Editor {
                                 self.date_keys(&cols[0]);
                             }
 
-                            field_label(&mut cols[1], "Mode de paiement");
                             let before = self.mode.clone();
                             let (glyph, color) =
                                 crate::grid::mode_style(document, &self.mode, &pal);
@@ -211,7 +214,6 @@ impl Editor {
                 );
 
                 section(ui, card_width, icon::USER, "Qui et pourquoi", |ui| {
-                    field_label(ui, "Tiers");
                     let response = ui.add(
                         crate::theme::field(&mut self.payee)
                             .hint_text("Commerçant, organisme, personne…")
@@ -221,7 +223,6 @@ impl Editor {
                         self.payee_suggestions(ui, document);
                     }
                     ui.add_space(10.0);
-                    field_label(ui, "Détail");
                     ui.add(
                         crate::theme::field(&mut self.details)
                             .hint_text("Note, référence, n° de chèque…")
@@ -230,7 +231,6 @@ impl Editor {
                 });
 
                 section(ui, card_width, icon::TAG, "Classement", |ui| {
-                    field_label(ui, "Catégorie");
                     let style = self
                         .category
                         .and_then(|id| doc.category_styles.get(&id).copied());
@@ -264,8 +264,7 @@ impl Editor {
                                 ui.selectable_value(&mut self.category, Some(c.id), text);
                             }
                         });
-                    ui.add_space(12.0);
-                    field_label(ui, "Pointage");
+                    ui.add_space(10.0);
                     segmented(
                         ui,
                         &mut self.tack,
@@ -274,7 +273,7 @@ impl Editor {
                             (Tack::Pointed, icon::CHECK, "Pointée", pal.pointed),
                             (Tack::Reconciled, icon::CHECKS, "Rapprochée", pal.reconciled),
                         ],
-                        34.0,
+                        32.0,
                     );
                 });
 
@@ -304,6 +303,7 @@ impl Editor {
                     );
                 }
             });
+        self.overflow = scroll.content_size.y > scroll.inner_rect.height() + 1.0;
 
         // Pied : erreur et boutons, toujours visibles en bas du panneau.
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
@@ -361,7 +361,7 @@ impl Editor {
             .fill(color.gamma_multiply(0.08))
             .stroke(egui::Stroke::new(1.0, color.gamma_multiply(0.35)))
             .corner_radius(14)
-            .inner_margin(egui::Margin::symmetric(16, 14))
+            .inner_margin(egui::Margin::symmetric(16, 12))
             .show(ui, |ui| {
                 ui.set_width(width);
                 ui.set_max_width(width);
@@ -372,25 +372,25 @@ impl Editor {
                         (false, icon::ARROW_UP_RIGHT, "Dépense", pal.negative),
                         (true, icon::ARROW_DOWN_LEFT, "Recette", pal.positive),
                     ],
-                    30.0,
+                    28.0,
                 );
-                ui.add_space(10.0);
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     let sign = if self.credit { "+" } else { "−" };
                     ui.label(
                         RichText::new(sign)
-                            .size(30.0)
+                            .size(28.0)
                             .family(crate::theme::semibold())
                             .color(color),
                     );
                     let currency = doc.current_account().currency.clone();
                     let currency_width = 30.0;
                     let edit = egui::TextEdit::singleline(&mut self.amount)
-                        .font(egui::FontId::new(32.0, crate::theme::semibold()))
+                        .font(egui::FontId::new(30.0, crate::theme::semibold()))
                         .text_color(color)
                         .hint_text(
                             RichText::new("0,00")
-                                .size(32.0)
+                                .size(30.0)
                                 .color(color.gamma_multiply(0.35)),
                         )
                         .frame(egui::Frame::NONE)
@@ -571,29 +571,19 @@ fn section(
             .family(crate::theme::semibold())
             .color(pal.muted),
     );
-    ui.add_space(6.0);
-    let width = outer_width - 2.0 * 14.0 - 2.0;
+    ui.add_space(4.0);
+    let width = outer_width - 2.0 * 12.0 - 2.0;
     egui::Frame::new()
         .fill(pal.bg)
         .stroke(egui::Stroke::new(1.0, pal.border.gamma_multiply(0.6)))
         .corner_radius(12)
-        .inner_margin(egui::Margin::same(14))
+        .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
             ui.set_width(width);
             ui.set_max_width(width);
             content(ui);
         });
-    ui.add_space(14.0);
-}
-
-fn field_label(ui: &mut egui::Ui, text: &str) {
-    ui.label(
-        RichText::new(text)
-            .size(12.5)
-            .family(crate::theme::medium())
-            .color(palette(ui).fg_dark),
-    );
-    ui.add_space(2.0);
+    ui.add_space(12.0);
 }
 
 /// Contrôle segmenté : choix de même largeur, l'option active teintée de sa

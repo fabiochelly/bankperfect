@@ -39,6 +39,10 @@ pub struct MenuBar {
 }
 
 const CLOSE_REQUEST: &str = "bp_menu_close_request";
+/// Rectangle du sous-menu ouvert (un appui dedans ne ferme pas le menu).
+const SUBMENU_RECT: &str = "bp_submenu_rect";
+/// Sous-menu ouvert.
+const SUBMENU_OPEN: &str = "bp_submenu_open";
 
 impl MenuBar {
     /// Dessine les titres et renvoie le menu ouvert avec la position de son titre.
@@ -90,8 +94,12 @@ impl MenuBar {
         });
 
         // Appui hors de la barre et du menu, ou Échap : fermeture.
+        let submenu: Option<egui::Rect> =
+            ui.ctx().data(|d| d.get_temp(egui::Id::new(SUBMENU_RECT)));
         let outside = |p: egui::Pos2| {
-            !bar_rect.contains(p) && !self.popup_rect.is_some_and(|r| r.contains(p))
+            !bar_rect.contains(p)
+                && !self.popup_rect.is_some_and(|r| r.contains(p))
+                && !submenu.is_some_and(|r| r.contains(p))
         };
         if self.open.is_some()
             && ((pressed && pointer.is_some_and(outside))
@@ -112,6 +120,7 @@ impl MenuBar {
         content: impl FnOnce(&mut Ui),
     ) {
         let pal = crate::theme::palette_of(ctx);
+        ctx.data_mut(|d| d.remove::<egui::Rect>(egui::Id::new(SUBMENU_RECT)));
         let response = egui::Area::new(egui::Id::new(("bp_menu", index)))
             .order(egui::Order::Foreground)
             .fixed_pos(anchor.left_bottom() + vec2(0.0, 4.0))
@@ -160,6 +169,89 @@ pub fn item_enabled(
     shortcut: Option<&str>,
 ) -> Response {
     row(ui, Gutter::Icon(glyph), label, shortcut, enabled)
+}
+
+/// Entrée qui ouvre un sous-menu à sa droite au survol ; il reste ouvert
+/// tant que le pointeur est sur l'entrée ou dans le sous-menu.
+pub fn submenu(ui: &mut Ui, glyph: Option<&str>, label: &str, content: impl FnOnce(&mut Ui)) {
+    let pal = palette(ui);
+    let ctx = ui.ctx().clone();
+    let id = ui.id().with(("bp_submenu", label));
+    let open_id = egui::Id::new(SUBMENU_OPEN);
+    let width = ui.available_width();
+    let (rect, response) = ui.allocate_exact_size(vec2(width, ITEM_HEIGHT), Sense::click());
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, label));
+    let pointer = ctx.input(|i| i.pointer.hover_pos());
+    let area_rect: Option<egui::Rect> = ctx.data(|d| d.get_temp(id.with("rect")));
+    let in_area = pointer.is_some_and(|p| area_rect.is_some_and(|r| r.expand(6.0).contains(p)));
+    let was_open = ctx.data(|d| d.get_temp::<egui::Id>(open_id)) == Some(id);
+    let open = response.hovered() || response.clicked() || (was_open && in_area);
+    if open {
+        ctx.data_mut(|d| d.insert_temp(open_id, id));
+    } else if was_open {
+        ctx.data_mut(|d| d.remove::<egui::Id>(open_id));
+    }
+    if open {
+        ui.painter().rect_filled(rect, 5.0, pal.menu_hover);
+    }
+    let color = if open { pal.fg } else { pal.fg_dark };
+    if let Some(glyph) = glyph {
+        ui.painter().text(
+            egui::pos2(rect.left() + GUTTER / 2.0, rect.center().y),
+            Align2::CENTER_CENTER,
+            glyph,
+            egui::FontId::proportional(16.0),
+            if open { pal.fg } else { pal.muted },
+        );
+    }
+    ui.painter().text(
+        egui::pos2(rect.left() + GUTTER, rect.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        egui::TextStyle::Body.resolve(ui.style()),
+        color,
+    );
+    ui.painter().text(
+        egui::pos2(rect.right() - 12.0, rect.center().y),
+        Align2::RIGHT_CENTER,
+        icon::CARET_RIGHT,
+        egui::FontId::proportional(14.0),
+        pal.muted,
+    );
+    if !open {
+        return;
+    }
+    let shown = egui::Area::new(id.with("area"))
+        .order(egui::Order::Tooltip)
+        .fixed_pos(rect.right_top() + vec2(8.0, -6.0))
+        .show(&ctx, |ui| {
+            egui::Frame::new()
+                .fill(pal.menu_bg)
+                .corner_radius(8)
+                .shadow(egui::Shadow {
+                    offset: [0, 6],
+                    blur: 18,
+                    spread: 0,
+                    color: egui::Color32::from_black_alpha(100),
+                })
+                .inner_margin(6)
+                .show(ui, |ui| {
+                    popup_style(ui.style_mut());
+                    begin(ui);
+                    content(ui);
+                });
+        })
+        .response
+        .rect;
+    // Le pont entre l'entrée et le sous-menu compte comme le sous-menu.
+    let bridge = shown.union(egui::Rect::from_min_max(
+        rect.right_top(),
+        shown.left_bottom(),
+    ));
+    ctx.data_mut(|d| {
+        d.insert_temp(id.with("rect"), bridge);
+        d.insert_temp(egui::Id::new(SUBMENU_RECT), bridge);
+    });
 }
 
 /// Entrée à cocher : une coche dans la gouttière quand elle est active.

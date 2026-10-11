@@ -37,6 +37,9 @@ pub struct Settings {
     pub amounts_in_cents: bool,
     /// Après l'ajout d'une opération, le formulaire reste ouvert et vidé.
     pub keep_entry_open: bool,
+    /// Saisie dans une barre permanente sous la grille (comme l'ancienne
+    /// version) au lieu du panneau de droite.
+    pub entry_at_bottom: bool,
     /// Mémoriser la colonne de tri entre deux sessions.
     pub remember_sort: bool,
     pub last_sort: Option<(String, bool)>,
@@ -73,6 +76,7 @@ impl Default for Settings {
             autocomplete: true,
             amounts_in_cents: false,
             keep_entry_open: false,
+            entry_at_bottom: false,
             remember_sort: false,
             last_sort: None,
             autosave_on_close: false,

@@ -116,7 +116,7 @@ pub fn segmented<T: PartialEq + Copy>(
             egui::vec2(segment, height - 6.0),
         );
         let response = ui
-            .interact(r, ui.id().with(("segment", label)), egui::Sense::click())
+            .interact(r, ui.id().with(("segment", k, label)), egui::Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand);
         let active = *value == option;
         response.widget_info(|| {

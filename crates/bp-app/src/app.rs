@@ -1086,7 +1086,7 @@ impl BankPerfectApp {
             return;
         }
         if index == 0 {
-            menu::begin(ui);
+            menu::begin_with_width(ui, 360.0);
             self.menu_command(ui, NewFile);
             self.menu_command(ui, Open);
             let recent: Vec<String> = self
@@ -1101,13 +1101,22 @@ impl BankPerfectApp {
                 })
                 .collect();
             if !recent.is_empty() {
-                menu::separator(ui);
-                menu::heading(ui, "Fichiers récents");
-                for (i, name) in recent.iter().enumerate() {
-                    if menu::item(ui, Some(icon::CLOCK), name, None).clicked() {
-                        let ctx = ui.ctx().clone();
-                        self.execute(&ctx, OpenRecent(i));
-                    }
+                let mut open_recent = None;
+                menu::submenu(
+                    ui,
+                    Some(icon::CLOCK_COUNTER_CLOCKWISE),
+                    "Fichiers récents",
+                    |ui| {
+                        for (i, name) in recent.iter().enumerate() {
+                            if menu::item(ui, Some(icon::FILE), name, None).clicked() {
+                                open_recent = Some(i);
+                            }
+                        }
+                    },
+                );
+                if let Some(i) = open_recent {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, OpenRecent(i));
                 }
             }
             menu::separator(ui);
@@ -1117,10 +1126,12 @@ impl BankPerfectApp {
                 self.menu_command(ui, SaveCopy);
                 menu::separator(ui);
                 self.menu_command(ui, Import);
+                menu::submenu(ui, Some(icon::EXPORT), "Exporter", |ui| {
+                    self.menu_command(ui, ExportXlsx);
+                    self.menu_command(ui, ExportCsv);
+                    self.menu_command(ui, ExportQif);
+                });
                 self.menu_command(ui, Print);
-                self.menu_command(ui, ExportCsv);
-                self.menu_command(ui, ExportXlsx);
-                self.menu_command(ui, ExportQif);
                 menu::separator(ui);
                 self.menu_command(ui, Protection);
                 self.menu_command(ui, Backups);
@@ -1185,6 +1196,17 @@ impl BankPerfectApp {
                     {
                         doc.set_show_mark_dates(marks);
                     }
+                }
+                if menu::toggle(
+                    ui,
+                    &mut self.settings.entry_at_bottom,
+                    "Saisie en bas de la fenêtre",
+                    None,
+                )
+                .clicked()
+                {
+                    self.editor = None;
+                    self.settings.save();
                 }
                 menu::separator(ui);
                 self.menu_command(ui, AutoFilters);
@@ -1508,6 +1530,9 @@ impl BankPerfectApp {
 
     /// Tiroir de saisie qui glisse par-dessus la grille, collé au bord droit.
     fn editor_drawer(&mut self, ctx: &egui::Context, content: egui::Rect, now: f64) {
+        if self.settings.entry_at_bottom {
+            return;
+        }
         let open = self.editor.is_some();
         if open && !self.drawer_open {
             self.drawer_opened_at = now;
@@ -1562,8 +1587,19 @@ impl BankPerfectApp {
                     .inner
             })
             .inner;
+        self.apply_editor_action(action, now);
+    }
+
+    /// Suite d'une action du formulaire de saisie (panneau ou barre du bas).
+    fn apply_editor_action(&mut self, action: EditorAction, now: f64) {
+        let Some(doc) = &mut self.doc else { return };
+        let bottom = self.settings.entry_at_bottom;
         match action {
             EditorAction::None => {}
+            // Barre du bas : elle reste affichée, vidée.
+            EditorAction::Close if bottom => {
+                self.editor = Some(Editor::new_operation(&doc.document, doc.account).quiet())
+            }
             EditorAction::Close => self.editor = None,
             EditorAction::Save(target, op) => {
                 let locked =
@@ -1576,8 +1612,19 @@ impl BankPerfectApp {
                     let date = op.date.to_string();
                     doc.upsert_operation(target, op);
                     // Saisie en série : formulaire vidé, même date.
-                    self.editor = (target.is_none() && self.settings.keep_entry_open)
-                        .then(|| Editor::new_operation(&doc.document, doc.account).with_date(date));
+                    self.editor = if bottom {
+                        let editor =
+                            Editor::new_operation(&doc.document, doc.account).with_date(date);
+                        Some(if target.is_some() {
+                            editor.quiet()
+                        } else {
+                            editor
+                        })
+                    } else {
+                        (target.is_none() && self.settings.keep_entry_open).then(|| {
+                            Editor::new_operation(&doc.document, doc.account).with_date(date)
+                        })
+                    };
                 }
             }
         }
@@ -2262,13 +2309,33 @@ impl BankPerfectApp {
             deferred = Some(command);
         }
 
+        // Saisie en bas (option) : barre permanente sous la grille.
+        let mut bar_action = None;
+        if self.settings.entry_at_bottom {
+            let editor = self
+                .editor
+                .get_or_insert_with(|| Editor::new_operation(&doc.document, doc.account).quiet());
+            bar_action = egui::Panel::bottom("entry_bar")
+                .frame(
+                    egui::Frame::side_top_panel(ui.style())
+                        .fill(palette(ui).surface)
+                        .inner_margin(egui::Margin::symmetric(18, 4)),
+                )
+                .show(ui, |ui| editor.show_bar(ui, doc))
+                .inner
+                .into();
+        }
+
         egui::CentralPanel::default_margins().show(ui, |ui| {
             let action = grid::show(ui, doc);
             if !matches!(action, GridAction::None) {
                 grid_action = action;
             }
         });
-        if self.editor.is_none() && floating_add_button(&ctx, content_rect) {
+        if self.editor.is_none()
+            && !self.settings.entry_at_bottom
+            && floating_add_button(&ctx, content_rect)
+        {
             grid_action = GridAction::New;
         }
         match grid_action {
@@ -2282,6 +2349,9 @@ impl BankPerfectApp {
             GridAction::Command(command) => deferred = Some(command),
         }
 
+        if let Some(action) = bar_action {
+            self.apply_editor_action(action, now);
+        }
         self.editor_drawer(&ctx, content_rect, now);
         if let Some(command) = deferred {
             self.execute(&ctx, command);

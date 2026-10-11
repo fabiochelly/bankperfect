@@ -1152,19 +1152,14 @@ impl NotesForm {
                     );
                 },
             );
-            ui.add_space(10.0);
-            if ui
-                .add(crate::theme::primary_button(
-                    ui,
-                    if self.on_open {
-                        "Fermer"
-                    } else {
-                        "Enregistrer et fermer"
-                    },
-                ))
-                .clicked()
-                || ui.input(|i| i.key_pressed(Key::Escape))
-            {
+            let label = if self.on_open {
+                "Fermer"
+            } else {
+                "Enregistrer et fermer"
+            };
+            let close =
+                crate::dialogs::footer(ui, |ui| crate::dialogs::primary(ui, label, true).clicked());
+            if close || ui.input(|i| i.key_pressed(Key::Escape)) {
                 if self.on_open {
                     outcome = Outcome::Close;
                 } else {
@@ -1250,7 +1245,7 @@ impl CalcForm {
     pub fn show_standalone(&mut self, ctx: &egui::Context) -> Outcome {
         let mut outcome = Outcome::Keep;
         crate::dialogs::modal(ctx, "tool_calc").show(ctx, |ui| {
-            ui.set_width(560.0);
+            ui.set_width(600.0);
             title(ui, icon::CALCULATOR, "Calculatrice");
             let pal = palette(ui);
             if let Some(previous) = &self.result {
@@ -1288,25 +1283,39 @@ impl CalcForm {
             ui.label(preview);
             ui.add_space(6.0);
             let mut pressed = None;
+            // Pavé sur toute la largeur de la fenêtre.
+            let key_width = (ui.available_width() - 7.0 * 8.0) / 8.0;
             egui::Grid::new("calc_keys")
+                .striped(false)
                 .num_columns(8)
-                .spacing([6.0, 6.0])
+                .spacing([8.0, 8.0])
                 .show(ui, |ui| {
                     for (i, key) in KEYS.iter().enumerate() {
                         let color = match *key {
-                            "AC" | "⌫" | "=" => pal.negative,
+                            "AC" | "⌫" => pal.negative,
                             "+" | "-" | "*" | "/" | "^" | "%" | "(" | ")" | "√" | "DMS" | "EE" => {
                                 pal.accent
                             }
                             k if k.chars().all(|c| c.is_ascii_digit()) || k == "," => pal.fg,
                             _ => pal.teal,
                         };
-                        let button = egui::Button::new(
-                            RichText::new(*key)
-                                .color(color)
-                                .family(crate::theme::medium()),
-                        );
-                        if ui.add_sized([62.0, 38.0], button).clicked() {
+                        let button = if *key == "=" {
+                            egui::Button::new(
+                                RichText::new(*key)
+                                    .size(17.0)
+                                    .color(pal.on_accent)
+                                    .family(crate::theme::semibold()),
+                            )
+                            .fill(pal.accent)
+                        } else {
+                            egui::Button::new(
+                                RichText::new(*key)
+                                    .size(15.0)
+                                    .color(color)
+                                    .family(crate::theme::medium()),
+                            )
+                        };
+                        if ui.add_sized([key_width, 44.0], button).clicked() {
                             pressed = Some(*key);
                         }
                         if i % 8 == 7 {
@@ -1317,8 +1326,10 @@ impl CalcForm {
             if let Some(key) = pressed {
                 self.press(key);
             }
-            ui.add_space(8.0);
-            if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+            let close = crate::dialogs::footer(ui, |ui| {
+                crate::dialogs::primary(ui, "Fermer", true).clicked()
+            });
+            if close || ui.input(|i| i.key_pressed(Key::Escape)) {
                 outcome = Outcome::Close;
             }
         });

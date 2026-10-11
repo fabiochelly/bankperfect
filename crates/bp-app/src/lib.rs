@@ -10,6 +10,7 @@ mod document;
 mod editor;
 mod format;
 mod grid;
+mod manage_ui;
 mod menu;
 mod notes;
 mod profiler;

@@ -4,9 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description.workspace = true
 
 [dependencies]
-bp-core = { version = "0.1.0", path = "../bp-core" }
+bp-core = { version = "9.0.0", path = "../bp-core" }
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 directories = "6.0.0"
 eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts"] }
@@ -28,3 +31,6 @@ ureq = "3.4.2"
 [dev-dependencies]
 egui_kittest = { version = "0.36", features = ["wgpu", "snapshot", "eframe"] }
 image = { version = "0.25", default-features = false, features = ["png"] }
+
+[build-dependencies]
+winresource = "0.1"

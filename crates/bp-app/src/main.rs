@@ -8,6 +8,7 @@ fn main() -> eframe::Result {
         viewport: egui::ViewportBuilder::default()
             .with_title("BankPerfect")
             .with_app_id("bankperfect")
+            .with_icon(std::sync::Arc::new(bankperfect::logo::window_icon()))
             .with_inner_size([1280.0, 800.0])
             .with_min_inner_size([800.0, 500.0]),
         // Une seule image en attente de présentation : latence minimale.

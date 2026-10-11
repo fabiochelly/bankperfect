@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <title>BankPerfect</title>
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#7aa2f7"/>
+      <stop offset="0.55" stop-color="#5a7fe0"/>
+      <stop offset="1" stop-color="#8b6fd6"/>
+    </linearGradient>
+    <linearGradient id="reflet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <rect x="16" y="16" width="480" height="480" rx="116" fill="url(#fond)"/>
+  <rect x="16" y="16" width="480" height="480" rx="116" fill="url(#reflet)"/>
+  <!-- « bp » liés : le côté droit de la panse du b est la tige du p -->
+  <g fill="none" stroke="#ffffff" stroke-width="40" stroke-linecap="round" stroke-linejoin="round"
+     transform="translate(256 256) skewX(-10) translate(-256 0)">
+    <path d="M132 -170 V-20"/>
+    <circle cx="194" cy="-20" r="62"/>
+    <path d="M256 -20 V170"/>
+    <circle cx="318" cy="-20" r="62"/>
+  </g>
+</svg>

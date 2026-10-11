@@ -12,6 +12,7 @@ mod document;
 mod editor;
 mod format;
 mod grid;
+pub mod logo;
 mod manage_ui;
 mod menu;
 mod notes;

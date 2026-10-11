@@ -1,0 +1,19 @@
+[package]
+name = "bankperfect"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+bp-core = { version = "0.1.0", path = "../bp-core" }
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts"] }
+egui = "0.36"
+egui-phosphor = "0.14.0"
+egui_extras = "0.36.2"
+rfd = "0.17.2"
+
+[dev-dependencies]
+egui_kittest = { version = "0.36", features = ["wgpu", "snapshot", "eframe"] }
+image = { version = "0.25", default-features = false, features = ["png"] }

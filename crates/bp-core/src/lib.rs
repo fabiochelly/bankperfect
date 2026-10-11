@@ -3,9 +3,11 @@
 pub mod codec_v5;
 pub mod error;
 pub mod file;
+pub mod filter;
 pub mod format_v6;
 pub mod model;
 pub mod v5_text;
+pub mod view;
 
 pub use error::{Error, Result};
 

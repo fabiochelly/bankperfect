@@ -371,7 +371,7 @@ impl OperationParser<'_> {
                 Date::today()
             }
         };
-        let value_date = fields
+        let mark_date = fields
             .get(7)
             .and_then(|s| s.trim().parse::<i32>().ok())
             .map(Date)
@@ -416,7 +416,7 @@ impl OperationParser<'_> {
         Some(Operation {
             uid,
             date,
-            value_date,
+            mark_date,
             tack,
             mode,
             payee: fields[3].to_string(),
@@ -615,7 +615,7 @@ TNSLPPBNTSOGPTQBC28067340119;R;42;GF;;-1;600,00\n";
         assert_eq!(ops[0].mode, Mode::Standard(StandardMode::ChequeEmis));
         assert_eq!(ops[0].cheque_number(), Some("3104512"));
         assert_eq!(ops[0].amount, Amount(-17_800));
-        assert_eq!(ops[0].value_date, Date(39445));
+        assert_eq!(ops[0].mark_date, Date(39445));
         assert_eq!(ops[1].mode, Mode::Custom("Carte FNAC".into()));
         assert_eq!(ops[1].tack, Tack::Pointed);
         assert_eq!(ops[1].extra("#sisterAccUid"), Some("uid-1"));
@@ -626,7 +626,7 @@ TNSLPPBNTSOGPTQBC28067340119;R;42;GF;;-1;600,00\n";
         // UId en double et UId manquant : nouveaux identifiants, les autres gardés.
         assert_eq!((ops[0].uid, ops[1].uid, ops[2].uid), (1, 2, 3));
         let a1_op = &doc.accounts[1].operations[0];
-        assert_eq!((a1_op.uid, a1_op.value_date), (4, Date(40119)));
+        assert_eq!((a1_op.uid, a1_op.mark_date), (4, Date(40119)));
         assert!(
             doc.accounts[2].operations.is_empty(),
             "dernier compte vide conservé"

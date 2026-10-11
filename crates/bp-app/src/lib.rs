@@ -21,5 +21,6 @@ mod settings;
 mod sidebar;
 pub mod theme;
 mod tools;
+mod ui_kit;
 
 pub use app::BankPerfectApp;

@@ -22,6 +22,7 @@ mod profiler;
 mod protection_ui;
 mod settings;
 mod sidebar;
+mod statement_pdf;
 pub mod theme;
 mod tools;
 mod ui_kit;

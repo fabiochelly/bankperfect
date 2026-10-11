@@ -33,6 +33,16 @@ pub struct OpenDoc {
     pub on_screen: Option<(usize, usize)>,
     /// Fenêtre de temps de la courbe du solde.
     pub chart_window: ChartWindow,
+    /// Lignes rapprochées verrouillées : ni dépointées, ni modifiées, ni
+    /// supprimées (réglage « Verrouiller les lignes rapprochées »).
+    pub locked: bool,
+    /// La colonne Date montre les dates de pointage (F11, pour la session).
+    pub show_mark_dates: bool,
+    /// Panneau des soldes et solde prévisionnel affichés (réglages).
+    pub show_balance_panel: bool,
+    pub show_forecast: bool,
+    /// Message à afficher (refus d'une action), repris par l'application.
+    pub notice: Option<String>,
     /// Opérations sélectionnées (indices dans le compte courant).
     pub selection: BTreeSet<usize>,
     /// Dernière ligne cliquée, pour les sélections avec Maj.
@@ -189,6 +199,11 @@ impl OpenDoc {
             category_styles: std::collections::HashMap::new(),
             on_screen: None,
             chart_window: ChartWindow::default(),
+            locked: false,
+            show_mark_dates: false,
+            show_balance_panel: true,
+            show_forecast: true,
+            notice: None,
             selection: BTreeSet::new(),
             anchor: None,
             cursor: None,
@@ -476,10 +491,27 @@ impl OpenDoc {
 
     /// Pointage (MARK-01) : non pointé → pointé → rapproché → non pointé. Seules
     /// les lignes dans le même état que la ligne de référence changent.
-    pub fn cycle_tack(&mut self) {
+    /// Une ligne sélectionnée est rapprochée alors que le verrou est actif.
+    pub fn selection_locked(&self) -> bool {
+        self.locked
+            && self.selection.iter().any(|&i| {
+                self.current_account()
+                    .operations
+                    .get(i)
+                    .is_some_and(|op| op.tack == Tack::Reconciled)
+            })
+    }
+
+    /// Change le pointage de la sélection ; refusé (faux) si des lignes
+    /// rapprochées verrouillées devraient être dépointées.
+    pub fn cycle_tack(&mut self) -> bool {
         let Some(&reference) = self.selection.iter().next() else {
-            return;
+            return true;
         };
+        if self.locked && self.current_account().operations[reference].tack == Tack::Reconciled {
+            self.notice = Some("Les lignes rapprochées sont verrouillées (menu Opérations)".into());
+            return false;
+        }
         self.snapshot("pointage");
         let ops = &mut self.document.accounts[self.account].operations;
         let from = ops[reference].tack;
@@ -496,6 +528,31 @@ impl OpenDoc {
             }
         }
         self.touch_tacks();
+        true
+    }
+
+    /// Date de pointage manuelle des lignes sélectionnées (MARK-05).
+    pub fn set_mark_date(&mut self, date: Date) {
+        if self.selection.is_empty() {
+            return;
+        }
+        self.snapshot("date de pointage");
+        let ops = &mut self.document.accounts[self.account].operations;
+        for &i in &self.selection {
+            ops[i].mark_date = date;
+        }
+        self.touch_tacks();
+    }
+
+    /// Affiche (ou non) les dates de pointage dans la colonne Date ; le tri
+    /// par date suit.
+    pub fn set_show_mark_dates(&mut self, on: bool) {
+        self.show_mark_dates = on;
+        self.sort = match (self.sort, on) {
+            (SortColumn::Date, true) => SortColumn::MarkDate,
+            (SortColumn::MarkDate, false) => SortColumn::Date,
+            (other, _) => other,
+        };
     }
 
     /// Rapprocher toutes les lignes pointées affichées (MARK-03).
@@ -551,6 +608,31 @@ impl OpenDoc {
         self.anchor = None;
         self.view.indexed_account = None;
         self.touch();
+    }
+
+    /// Copie des opérations sélectionnées (presse-papiers interne).
+    pub fn copy_selection(&self) -> Vec<Operation> {
+        let ops = &self.current_account().operations;
+        self.selection
+            .iter()
+            .filter_map(|&i| ops.get(i).cloned())
+            .collect()
+    }
+
+    /// Colle des opérations dans le compte courant et les sélectionne.
+    pub fn paste(&mut self, operations: &[Operation]) -> usize {
+        if operations.is_empty() {
+            return 0;
+        }
+        self.snapshot("coller");
+        let added = bp_core::edit::paste_operations(&mut self.document, self.account, operations);
+        self.view.indexed_account = None;
+        self.touch();
+        self.refresh();
+        self.selection = added.iter().copied().collect();
+        self.anchor = added.first().copied();
+        self.scroll_to = added.first().copied();
+        added.len()
     }
 
     /// Lignes sélectionnées et affichées, dans l'ordre d'affichage.

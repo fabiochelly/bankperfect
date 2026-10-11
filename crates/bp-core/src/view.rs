@@ -8,6 +8,8 @@ use crate::model::{Account, Amount, Document, Operation};
 pub enum SortColumn {
     #[default]
     Date,
+    /// Date de pointage (affichage des dates de pointage, F11).
+    MarkDate,
     Mode,
     Payee,
     Category,
@@ -64,6 +66,13 @@ fn compare(a: &Operation, b: &Operation, column: SortColumn) -> Ordering {
             .then_with(by_payee)
             .then_with(by_amount)
             .then_with(by_details),
+        SortColumn::MarkDate => a
+            .mark_date
+            .cmp(&b.mark_date)
+            .then_with(|| a.date.cmp(&b.date))
+            .then_with(by_mode)
+            .then_with(by_payee)
+            .then_with(by_amount),
         SortColumn::Mode => by_mode()
             .then_with(by_payee)
             .then_with(by_amount)

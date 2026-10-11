@@ -23,7 +23,8 @@ pub enum GridAction {
     None,
     Edit(usize),
     New,
-    Extra(usize),
+    /// Commande du menu contextuel.
+    Command(crate::commands::Command),
 }
 
 pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
@@ -35,7 +36,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let currency = doc.current_account().currency.clone();
     let scroll_to = doc.scroll_to.take();
     let visible = doc.visible();
-    let sort_by_date = doc.sort == SortColumn::Date;
+    let sort_by_date = matches!(doc.sort, SortColumn::Date | SortColumn::MarkDate);
+    let show_mark = doc.show_mark_dates;
 
     // Fenêtre étroite : colonnes plus compactes (disposition mémorisée à part).
     let narrow = ui.available_width() < 760.0;
@@ -138,8 +140,11 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 row.set_selected(doc.selection.contains(&index));
 
                 let new_month = sort_by_date && pos > 0 && {
-                    let prev = doc.operation(visible[pos - 1]).date.to_naive();
-                    let cur = op.date.to_naive();
+                    let date_of = |o: &bp_core::model::Operation| {
+                        if show_mark { o.mark_date } else { o.date }
+                    };
+                    let prev = date_of(doc.operation(visible[pos - 1])).to_naive();
+                    let cur = date_of(&op).to_naive();
                     (prev.year(), prev.month()) != (cur.year(), cur.month())
                 };
 
@@ -165,7 +170,12 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         // Marge avant le séparateur de colonne.
                         ui.add_space(14.0);
-                        ui.label(op.date.to_string());
+                        if show_mark {
+                            ui.label(RichText::new(op.mark_date.to_string()).color(pal.pointed))
+                                .on_hover_text(format!("Opération du {}", op.date));
+                        } else {
+                            ui.label(op.date.to_string());
+                        }
                     });
                 });
                 row.col(|ui| {
@@ -251,27 +261,35 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     doc.click_row(index, false, false);
                 }
                 response.context_menu(|ui| {
+                    use crate::commands::Command::*;
                     crate::menu::popup_style(ui.style_mut());
                     crate::menu::begin(ui);
-                    if crate::menu::item(ui, Some(icon::PENCIL_SIMPLE), "Modifier", Some("Entrée"))
+                    let mut entry = |ui: &mut egui::Ui, command: crate::commands::Command| {
+                        let info = command.info(Some(doc));
+                        if crate::menu::item_enabled(
+                            ui,
+                            info.enabled,
+                            Some(info.icon),
+                            &info.label,
+                            info.shortcut,
+                        )
                         .clicked()
-                    {
-                        action = GridAction::Edit(index);
-                    }
-                    if crate::menu::item(ui, Some(icon::CHECK), "Pointer", Some("Espace")).clicked()
-                    {
-                        doc.cycle_tack();
-                    }
-                    if crate::menu::item(
-                        ui,
-                        Some(icon::LIST_PLUS),
-                        "Champs supplémentaires…",
-                        Some("F3"),
-                    )
-                    .clicked()
-                    {
-                        action = GridAction::Extra(index);
-                    }
+                        {
+                            action = GridAction::Command(command);
+                        }
+                    };
+                    entry(ui, EditOperation);
+                    entry(ui, Tack);
+                    entry(ui, SetMarkDate);
+                    crate::menu::separator(ui);
+                    entry(ui, CutLines);
+                    entry(ui, CopyLines);
+                    entry(ui, PasteLines);
+                    crate::menu::separator(ui);
+                    entry(ui, AddToPayees);
+                    entry(ui, ExtraFields);
+                    crate::menu::separator(ui);
+                    entry(ui, Delete);
                 });
             });
         });
@@ -461,7 +479,11 @@ fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortCol
 fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     ui.vertical(|ui| {
         ui.add_space(2.0);
-        sort_title(ui, doc, "Date", SortColumn::Date);
+        if doc.show_mark_dates {
+            sort_title(ui, doc, "Pointage", SortColumn::MarkDate);
+        } else {
+            sort_title(ui, doc, "Date", SortColumn::Date);
+        }
         let active = doc.filters.date_from.is_some() || doc.filters.date_to.is_some();
         let label = if active {
             format!("{} Période", icon::FUNNEL)

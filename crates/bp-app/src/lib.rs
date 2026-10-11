@@ -8,6 +8,7 @@ mod editor;
 mod format;
 mod grid;
 mod menu;
+mod profiler;
 mod sidebar;
 pub mod theme;
 

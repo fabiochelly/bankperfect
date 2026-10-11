@@ -46,6 +46,7 @@ pub struct BankPerfectApp {
     drawer_open: bool,
     drawer_opened_at: f64,
     menus: menu::MenuBar,
+    profiler: crate::profiler::Profiler,
 }
 
 const DRAWER_WIDTH: f32 = 420.0;
@@ -68,6 +69,7 @@ impl BankPerfectApp {
             drawer_open: false,
             drawer_opened_at: 0.0,
             menus: menu::MenuBar::default(),
+            profiler: crate::profiler::Profiler::from_env(),
         };
         if let Some(path) = initial_file {
             app.open_path(path);
@@ -691,6 +693,7 @@ impl eframe::App for BankPerfectApp {
     /// une impression de mollesse. On convertit les crans en points et on
     /// passe par le chemin « tactile » d'egui, appliqué immédiatement.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        self.profiler.note_events(&raw_input.events);
         let mut events = Vec::with_capacity(raw_input.events.len() + 2);
         for event in raw_input.events.drain(..) {
             match event {
@@ -720,7 +723,17 @@ impl eframe::App for BankPerfectApp {
         raw_input.events = events;
     }
 
-    fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+    fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
+        let started = std::time::Instant::now();
+        let cpu_previous = frame.info().cpu_usage;
+        self.frame_ui(ui);
+        self.profiler.overlay(ui.ctx(), cpu_previous);
+        self.profiler.end_frame(started, cpu_previous);
+    }
+}
+
+impl BankPerfectApp {
+    fn frame_ui(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
         crate::theme::adapt_to_display(&ctx);
 

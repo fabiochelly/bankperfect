@@ -5,6 +5,7 @@
 use egui::ThemePreference;
 use egui_phosphor::regular as icon;
 
+use crate::budget_ui::BudgetTab;
 use crate::document::OpenDoc;
 use crate::manage_ui::Tab;
 use crate::reports_ui::ReportTab;
@@ -23,6 +24,7 @@ pub enum Command {
     ExportXlsx,
     Report(ReportTab),
     Charts,
+    Budget(BudgetTab),
     ExportQif,
     Print,
     Import,
@@ -130,6 +132,8 @@ impl Command {
                 Report(ReportTab::Payees),
                 Report(ReportTab::Statement),
                 Charts,
+                Budget(BudgetTab::Monthly),
+                Budget(BudgetTab::Annual),
                 AutoFilters,
                 SaveFilter,
                 ClearFilters,
@@ -300,6 +304,20 @@ impl Command {
                 icon::CHART_BAR,
                 Some("Ctrl+Maj+G"),
                 "camembert anneau barres courbe répartition évolution",
+            ),
+            Budget(BudgetTab::Monthly) => info(
+                "Rapports",
+                "Budget mensuel…",
+                icon::PIGGY_BANK,
+                Some("Ctrl+B"),
+                "prévu réel catégories dépenses",
+            ),
+            Budget(BudgetTab::Annual) => info(
+                "Rapports",
+                "Budgets annuels…",
+                icon::CALENDAR,
+                None,
+                "prévisions année tableau mois",
             ),
             ExportQif => info(
                 "Fichier",

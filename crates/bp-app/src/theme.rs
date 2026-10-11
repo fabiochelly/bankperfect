@@ -87,7 +87,7 @@ pub const DAY: Palette = Palette {
     surface: Color32::from_rgb(0xec, 0xed, 0xf1),
     border: Color32::from_rgb(0xb7, 0xbc, 0xd3),
     fg: Color32::from_rgb(0x34, 0x3b, 0x58),
-    fg_dark: Color32::from_rgb(0x37, 0x60, 0xbf),
+    fg_dark: Color32::from_rgb(0x4c, 0x54, 0x76),
     muted: Color32::from_rgb(0x68, 0x70, 0x9a),
     accent: Color32::from_rgb(0x2e, 0x7d, 0xe9),
     on_accent: Color32::WHITE,

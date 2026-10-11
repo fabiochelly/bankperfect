@@ -21,6 +21,7 @@ pub mod manage;
 pub mod model;
 pub mod multiple_input;
 pub mod pyvalue;
+pub mod quotes;
 pub mod reports;
 pub mod scheduler;
 pub mod split;

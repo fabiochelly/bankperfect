@@ -204,7 +204,24 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         (None, op.payee.as_str())
                     };
                     if let Some(glyph) = glyph {
-                        ui.label(RichText::new(glyph).color(pal.muted));
+                        let transfer = !op.payee.starts_with(AUTO_PREFIX);
+                        if transfer {
+                            // Icône de transfert : mène à la ligne liée.
+                            let link = ui
+                                .add(
+                                    egui::Label::new(RichText::new(glyph).color(pal.accent))
+                                        .sense(egui::Sense::click()),
+                                )
+                                .on_hover_cursor(egui::CursorIcon::PointingHand)
+                                .on_hover_text("Aller à la ligne liée");
+                            if link.clicked() {
+                                doc.selection.clear();
+                                doc.selection.insert(index);
+                                action = GridAction::Command(crate::commands::Command::GoToSister);
+                            }
+                        } else {
+                            ui.label(RichText::new(glyph).color(pal.muted));
+                        }
                     }
                     if !op.details.is_empty() {
                         ui.vertical(|ui| {
@@ -301,6 +318,12 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     entry(ui, AddToPayees);
                     entry(ui, AddToScheduler);
                     entry(ui, ExtraFields);
+                    entry(ui, SplitOperation);
+                    if doc.sister_of(index).is_some() {
+                        entry(ui, GoToSister);
+                    } else {
+                        entry(ui, ConvertToTransfer);
+                    }
                     crate::menu::separator(ui);
                     entry(ui, Delete);
                 });

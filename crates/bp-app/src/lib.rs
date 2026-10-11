@@ -36,6 +36,7 @@ mod spreadsheet;
 mod statement_pdf;
 pub mod theme;
 mod tools;
+mod transfer_ui;
 mod ui_kit;
 
 pub use app::BankPerfectApp;

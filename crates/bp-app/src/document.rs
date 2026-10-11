@@ -92,8 +92,10 @@ struct View {
 /// État d'un compte avant une action, pour Annuler/Refaire.
 struct UndoEntry {
     label: String,
+    /// Compte affiché après l'annulation.
     account: usize,
-    operations: Vec<Operation>,
+    /// Opérations des comptes touchés par l'action, avant elle.
+    accounts: Vec<(usize, Vec<Operation>)>,
 }
 
 /// Destination d'un déplacement clavier dans la grille.
@@ -626,6 +628,106 @@ impl OpenDoc {
         self.scroll_to = Some(index);
     }
 
+    /// Modifie le document par `edit` sur les comptes `accounts` (annulable,
+    /// sans trace si `edit` échoue).
+    pub fn edit_accounts<R, E>(
+        &mut self,
+        label: &str,
+        accounts: &[usize],
+        edit: impl FnOnce(&mut bp_core::model::Document) -> Result<R, E>,
+    ) -> Result<R, E> {
+        self.snapshot_accounts(label, self.account, accounts);
+        match edit(&mut self.document) {
+            Ok(result) => {
+                self.selection.clear();
+                self.anchor = None;
+                self.view.indexed_account = None;
+                self.view.series_key = None;
+                self.touch();
+                self.refresh();
+                Ok(result)
+            }
+            Err(e) => {
+                self.undo.pop();
+                Err(e)
+            }
+        }
+    }
+
+    /// Sélectionne des lignes du compte courant et fait défiler jusqu'à la
+    /// première.
+    pub fn select_lines(&mut self, lines: &[usize]) {
+        self.selection = lines.iter().copied().collect();
+        self.anchor = lines.first().copied();
+        self.scroll_to = lines.first().copied();
+    }
+
+    /// Ligne sœur (compte, ligne) d'une ligne de transfert du compte courant.
+    pub fn sister_of(&self, index: usize) -> Option<(usize, usize)> {
+        let op = self.current_account().operations.get(index)?;
+        bp_core::split::transfer_direction(&op.payee)?;
+        bp_core::split::find_sister(&self.document, self.account, index)
+            .filter(|(a, _)| *a != self.account)
+    }
+
+    /// Affiche le compte de la ligne sœur et la sélectionne.
+    pub fn go_to_sister(&mut self, index: usize) -> bool {
+        let Some((account, line)) = self.sister_of(index) else {
+            return false;
+        };
+        self.select_account(account);
+        self.refresh();
+        self.selection.clear();
+        self.selection.insert(line);
+        self.anchor = Some(line);
+        self.scroll_to = Some(line);
+        true
+    }
+
+    /// Modifie une ligne de transfert et, si `both`, recopie date, détail,
+    /// catégorie et montant dans sa ligne sœur (annulable sur les deux
+    /// comptes).
+    pub fn update_linked(&mut self, index: usize, op: Operation, both: bool) {
+        let Some(sister) = self.sister_of(index).filter(|_| both) else {
+            return self.upsert_operation(Some(index), op);
+        };
+        let account = self.account;
+        self.snapshot_accounts("modification du transfert", account, &[account, sister.0]);
+        let uid = self.current_account().operations[index].uid;
+        self.document.accounts[account].operations[index] = Operation { uid, ..op };
+        bp_core::split::copy_to_sister(&mut self.document, (account, index), sister);
+        self.view.indexed_account = None;
+        self.view.series_key = None;
+        self.touch();
+        self.refresh();
+        self.selection.clear();
+        self.selection.insert(index);
+        self.scroll_to = Some(index);
+    }
+
+    /// Supprime la ligne de transfert sélectionnée : avec sa sœur si `both`,
+    /// sinon la sœur est déliée (« Transfert » devient « Virement »).
+    pub fn delete_linked(&mut self, index: usize, both: bool) {
+        let Some(sister) = self.sister_of(index) else {
+            return self.delete_selection();
+        };
+        let account = self.account;
+        self.snapshot_accounts("suppression du transfert", account, &[account, sister.0]);
+        if both {
+            self.document.accounts[sister.0].operations.remove(sister.1);
+        } else {
+            bp_core::split::unlink_transfer(
+                &mut self.document.accounts[sister.0].operations[sister.1],
+            );
+        }
+        self.document.accounts[account].operations.remove(index);
+        self.selection.clear();
+        self.anchor = None;
+        self.view.indexed_account = None;
+        self.view.series_key = None;
+        self.touch();
+    }
+
     pub fn delete_selection(&mut self) {
         self.snapshot("suppression");
         let ops = &mut self.document.accounts[self.account].operations;
@@ -743,15 +845,7 @@ impl OpenDoc {
         if operations.is_empty() {
             return 0;
         }
-        self.undo.push(UndoEntry {
-            label: "import".into(),
-            account,
-            operations: self.document.accounts[account].operations.clone(),
-        });
-        while self.undo.len() > self.max_undo.max(1) {
-            self.undo.remove(0);
-        }
-        self.redo.clear();
+        self.snapshot_accounts("import", account, &[account]);
         let first = self.document.next_operation_uid();
         let target = &mut self.document.accounts[account].operations;
         let start = target.len();
@@ -884,10 +978,22 @@ impl OpenDoc {
 
     /// Mémorise l'état du compte courant avant une action.
     fn snapshot(&mut self, label: &str) {
+        self.snapshot_accounts(label, self.account, &[self.account]);
+    }
+
+    /// Mémorise l'état de plusieurs comptes avant une action (virements) ;
+    /// `shown` est le compte affiché après une annulation.
+    fn snapshot_accounts(&mut self, label: &str, shown: usize, accounts: &[usize]) {
+        let mut saved: Vec<(usize, Vec<Operation>)> = Vec::new();
+        for &a in accounts {
+            if a < self.document.accounts.len() && !saved.iter().any(|(k, _)| *k == a) {
+                saved.push((a, self.document.accounts[a].operations.clone()));
+            }
+        }
         self.undo.push(UndoEntry {
             label: label.to_string(),
-            account: self.account,
-            operations: self.document.accounts[self.account].operations.clone(),
+            account: shown,
+            accounts: saved,
         });
         while self.undo.len() > self.max_undo.max(1) {
             self.undo.remove(0);
@@ -923,10 +1029,12 @@ impl OpenDoc {
 
     /// Remet les opérations mémorisées et renvoie l'état remplacé.
     fn swap_in(&mut self, entry: UndoEntry) -> UndoEntry {
-        let current = std::mem::replace(
-            &mut self.document.accounts[entry.account].operations,
-            entry.operations,
-        );
+        let mut current = Vec::with_capacity(entry.accounts.len());
+        for (a, operations) in entry.accounts {
+            if let Some(account) = self.document.accounts.get_mut(a) {
+                current.push((a, std::mem::replace(&mut account.operations, operations)));
+            }
+        }
         self.account = entry.account;
         self.selection.clear();
         self.anchor = None;
@@ -936,7 +1044,7 @@ impl OpenDoc {
         UndoEntry {
             label: entry.label,
             account: entry.account,
-            operations: current,
+            accounts: current,
         }
     }
 
@@ -1096,6 +1204,74 @@ mod tests {
                 warnings: Vec::new(),
             },
         )
+    }
+
+    /// Document à deux comptes avec un transfert de 100 € de « Courant »
+    /// vers « Livret ».
+    fn doc_with_transfer() -> OpenDoc {
+        let mut d = doc();
+        let mut livret = d.document.accounts[0].clone_header();
+        livret.uid = "b".into();
+        livret.name = "Livret".into();
+        d.document.accounts.push(livret);
+        d.document.account_order.push(1);
+        let request = bp_core::split::TransferRequest {
+            date: Date(45010),
+            kind: bp_core::split::TransferKind::Transfer,
+            details: String::new(),
+            category: None,
+            amount: Amount::from_cents(10_000),
+            from: 0,
+            to: 1,
+        };
+        d.edit_accounts("transfert", &[0, 1], |doc| {
+            bp_core::split::create_transfer(doc, &request)
+        })
+        .unwrap();
+        d
+    }
+
+    #[test]
+    fn linked_transfer_edit_delete_and_undo() {
+        let mut d = doc_with_transfer();
+        let line = d.current_account().operations.len() - 1;
+        assert_eq!(d.sister_of(line), Some((1, 0)));
+        // Modification des deux lignes.
+        let mut op = d.operation(line).clone();
+        op.amount = Amount::from_cents(-15_000);
+        d.update_linked(line, op, true);
+        assert_eq!(
+            d.document.accounts[1].operations[0].amount,
+            Amount::from_cents(15_000)
+        );
+        // Annulation : les deux comptes reviennent.
+        assert!(d.undo());
+        assert_eq!(
+            d.document.accounts[0].operations[line].amount,
+            Amount::from_cents(-10_000)
+        );
+        assert_eq!(
+            d.document.accounts[1].operations[0].amount,
+            Amount::from_cents(10_000)
+        );
+        // Suppression d'une seule ligne : l'autre devient un virement.
+        d.delete_linked(line, false);
+        assert_eq!(d.current_account().operations.len(), 4);
+        assert!(
+            d.document.accounts[1].operations[0]
+                .payee
+                .starts_with("Virement depuis")
+        );
+        assert!(d.undo());
+        // Suppression des deux lignes.
+        d.delete_linked(line, true);
+        assert!(d.document.accounts[1].operations.is_empty());
+        assert_eq!(d.current_account().operations.len(), 4);
+        // Navigation vers la ligne sœur.
+        assert!(d.undo());
+        assert!(d.go_to_sister(line));
+        assert_eq!(d.account, 1);
+        assert_eq!(d.selection.iter().copied().collect::<Vec<_>>(), [0]);
     }
 
     #[test]

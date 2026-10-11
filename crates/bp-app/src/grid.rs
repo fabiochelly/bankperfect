@@ -225,7 +225,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 }
                 // Sélection dès l'appui, comme les listes natives (egui attend
                 // le relâchement pour `clicked`).
-                let (modifiers, pressed) = response.ctx.input(|i| (i.modifiers, i.pointer.primary_pressed()));
+                let (modifiers, pressed) = response
+                    .ctx
+                    .input(|i| (i.modifiers, i.pointer.primary_pressed()));
                 if tack_resp.hovered() && pressed {
                     if !doc.selection.contains(&index) {
                         doc.click_row(index, false, false);
@@ -360,10 +362,20 @@ fn date_bound(ui: &mut egui::Ui, label: &str, bound: &mut Option<Date>) {
         .data(|d| d.get_temp::<(String, Option<Date>)>(id))
         .filter(|(_, last)| last == bound)
         .unwrap_or_else(|| (bound.map(|d| d.to_string()).unwrap_or_default(), *bound));
-    let response = crate::datepicker::date_field(ui, label, &mut text, 266.0, crate::datepicker::Placement::Inline);
+    let response = crate::datepicker::date_field(
+        ui,
+        label,
+        &mut text,
+        266.0,
+        crate::datepicker::Placement::Inline,
+    );
     let mut new_bound = last;
     if response.changed() {
-        new_bound = if text.trim().is_empty() { None } else { Date::parse_fr(&text, Date::today()).or(last) };
+        new_bound = if text.trim().is_empty() {
+            None
+        } else {
+            Date::parse_fr(&text, Date::today()).or(last)
+        };
         *bound = new_bound;
     }
     ui.data_mut(|d| d.insert_temp(id, (text, new_bound)));

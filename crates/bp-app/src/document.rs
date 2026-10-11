@@ -4,6 +4,8 @@ use std::collections::BTreeSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+use chrono::Datelike;
+
 use bp_core::FileFormat;
 use bp_core::filter::{Filters, SearchIndex};
 use bp_core::format_v6::Protection;
@@ -25,6 +27,8 @@ pub struct OpenDoc {
     pub sort: SortColumn,
     pub ascending: bool,
     pub two_lines: bool,
+    /// Fenêtre de temps de la courbe du solde.
+    pub chart_window: ChartWindow,
     /// Opérations sélectionnées (indices dans le compte courant).
     pub selection: BTreeSet<usize>,
     /// Dernière ligne cliquée, pour les sélections avec Maj.
@@ -55,6 +59,72 @@ struct View {
     totals: Totals,
     /// Solde de chaque compte (barre latérale).
     account_balances: Vec<Amount>,
+    insights: Insights,
+    /// Compte et révision pour lesquels la courbe du solde est à jour.
+    series_key: Option<(usize, u64)>,
+}
+
+/// Fenêtre de temps affichée par la courbe du solde.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChartWindow {
+    Month,
+    SixMonths,
+    #[default]
+    Year,
+    FiveYears,
+    All,
+}
+
+impl ChartWindow {
+    pub const ALL: [ChartWindow; 5] = [
+        Self::Month,
+        Self::SixMonths,
+        Self::Year,
+        Self::FiveYears,
+        Self::All,
+    ];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Month => "1M",
+            Self::SixMonths => "6M",
+            Self::Year => "1A",
+            Self::FiveYears => "5A",
+            Self::All => "Tout",
+        }
+    }
+
+    /// Nombre de jours affichés, `None` pour tout l'historique.
+    pub fn days(self) -> Option<i32> {
+        match self {
+            Self::Month => Some(31),
+            Self::SixMonths => Some(183),
+            Self::Year => Some(366),
+            Self::FiveYears => Some(5 * 366),
+            Self::All => None,
+        }
+    }
+}
+
+/// Opérations non pointées d'un mois.
+#[derive(Debug, Clone, Copy)]
+pub struct PendingMonth {
+    pub year: i32,
+    pub month: u32,
+    pub total: Amount,
+    pub count: usize,
+}
+
+/// Données des mini-graphiques du tableau de bord.
+#[derive(Default, Clone)]
+pub struct Insights {
+    /// Solde en fin de journée, par date croissante (jours ayant des opérations).
+    pub series: Arc<[(Date, Amount)]>,
+    /// Non pointées, pointées, rapprochées : nombre et somme (tout le compte).
+    pub tack_counts: [usize; 3],
+    pub tack_sums: [Amount; 3],
+    /// Non pointées par mois, des 6 mois passés aux 2 mois à venir.
+    pub pending_months: Vec<PendingMonth>,
 }
 
 /// Totaux du panneau des soldes.
@@ -66,10 +136,6 @@ pub struct Totals {
     pub pending_count: usize,
     pub reconciled: Amount,
     pub last_reconciled: Option<Date>,
-    /// Solde au jour près 30 jours plus tôt, pour la tendance.
-    pub balance_30_days_ago: Amount,
-    pub month_income: Amount,
-    pub month_expenses: Amount,
 }
 
 impl OpenDoc {
@@ -91,6 +157,7 @@ impl OpenDoc {
             sort: SortColumn::Date,
             ascending: false,
             two_lines: false,
+            chart_window: ChartWindow::default(),
             selection: BTreeSet::new(),
             anchor: None,
             scroll_to: None,
@@ -126,6 +193,10 @@ impl OpenDoc {
             }
             self.view.account_balances =
                 self.document.accounts.iter().map(|a| a.balance()).collect();
+            if self.view.series_key != Some((self.account, self.revision)) {
+                self.view.insights.series = balance_series(account);
+                self.view.series_key = Some((self.account, self.revision));
+            }
             self.view.key = Some(key);
             self.view.filters = None;
         }
@@ -139,7 +210,55 @@ impl OpenDoc {
                 .into();
             self.view.filters = Some((self.filters.clone(), today));
             self.view.totals = self.compute_totals();
+            self.compute_tack_insights(today);
         }
+    }
+
+    pub fn insights(&self) -> &Insights {
+        &self.view.insights
+    }
+
+    /// Répartition du pointage et non pointées par mois (tout le compte, sans
+    /// tenir compte des filtres, pour que les graphiques restent stables).
+    fn compute_tack_insights(&mut self, today: Date) {
+        let ops = &self.document.accounts[self.account].operations;
+        let now = today.to_naive();
+        let month_index = |d: chrono::NaiveDate| d.year() * 12 + d.month0() as i32;
+        let first = month_index(now) - 6;
+        let mut months: Vec<PendingMonth> = (0..9)
+            .map(|k| {
+                let m = first + k;
+                PendingMonth {
+                    year: m.div_euclid(12),
+                    month: m.rem_euclid(12) as u32 + 1,
+                    total: Amount::ZERO,
+                    count: 0,
+                }
+            })
+            .collect();
+        let mut counts = [0usize; 3];
+        let mut sums = [Amount::ZERO; 3];
+        for op in ops {
+            let k = match op.tack {
+                Tack::None => 0,
+                Tack::Pointed => 1,
+                Tack::Reconciled => 2,
+            };
+            counts[k] += 1;
+            sums[k] = sums[k] + op.amount;
+            if k == 0 {
+                let m = month_index(op.date.to_naive()) - first;
+                if (0..9).contains(&m) {
+                    let slot = &mut months[m as usize];
+                    slot.total = slot.total + op.amount;
+                    slot.count += 1;
+                }
+            }
+        }
+        let insights = &mut self.view.insights;
+        insights.tack_counts = counts;
+        insights.tack_sums = sums;
+        insights.pending_months = months;
     }
 
     pub fn visible(&self) -> Arc<[usize]> {
@@ -183,27 +302,10 @@ impl OpenDoc {
 
     fn compute_totals(&self) -> Totals {
         let ops = &self.current_account().operations;
-        let today = Date::today();
-        let month_ago = Date(today.0 - 30);
-        let first_of_month = {
-            let d = today.to_naive();
-            Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1)
-                .unwrap_or(today)
-        };
         let mut totals = Totals::default();
         for &i in self.view.visible.iter() {
             let op = &ops[i];
             totals.balance = totals.balance + op.amount;
-            if op.date <= month_ago {
-                totals.balance_30_days_ago = totals.balance_30_days_ago + op.amount;
-            }
-            if op.date >= first_of_month && op.date <= today {
-                if op.amount.is_negative() {
-                    totals.month_expenses = totals.month_expenses + op.amount;
-                } else {
-                    totals.month_income = totals.month_income + op.amount;
-                }
-            }
             match op.tack {
                 Tack::None => {
                     totals.pending = totals.pending + op.amount;
@@ -381,6 +483,26 @@ impl OpenDoc {
         self.view.filters = None;
         self.dirty = true;
     }
+}
+
+/// Solde en fin de journée pour chaque jour ayant au moins une opération.
+fn balance_series(account: &bp_core::model::Account) -> Arc<[(Date, Amount)]> {
+    let mut by_date: Vec<(Date, Amount)> = account
+        .operations
+        .iter()
+        .map(|op| (op.date, op.amount))
+        .collect();
+    by_date.sort_unstable_by_key(|(d, _)| *d);
+    let mut series: Vec<(Date, Amount)> = Vec::new();
+    let mut balance = Amount::ZERO;
+    for (date, amount) in by_date {
+        balance = balance + amount;
+        match series.last_mut() {
+            Some(last) if last.0 == date => last.1 = balance,
+            _ => series.push((date, balance)),
+        }
+    }
+    series.into()
 }
 
 #[cfg(test)]

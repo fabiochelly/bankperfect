@@ -372,11 +372,10 @@ impl BankPerfectApp {
         }
     }
 
-    fn balance_strip(ui: &mut egui::Ui, doc: &OpenDoc) -> bool {
+    fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
         let pal = palette(ui);
         let account = doc.current_account();
-        let totals = doc.totals();
-        let currency = &account.currency;
+        let filtered = doc.filters.is_active();
         let mut new_operation = false;
         ui.add_space(12.0);
         ui.horizontal(|ui| {
@@ -398,74 +397,24 @@ impl BankPerfectApp {
                 if ui.add(button).on_hover_text("Inser").clicked() {
                     new_operation = true;
                 }
+                // Dans l'en-tête plutôt qu'en dessous : la grille ne bouge pas
+                // quand un filtre s'active.
+                if filtered {
+                    ui.add_space(12.0);
+                    ui.label(
+                        RichText::new(format!(
+                            "{}  soldes calculés sur les lignes filtrées",
+                            icon::FUNNEL
+                        ))
+                        .small()
+                        .color(pal.pointed),
+                    );
+                }
             });
         });
         ui.add_space(12.0);
-        let mut cards = Vec::new();
-        {
-            let trend = totals.balance + -totals.balance_30_days_ago;
-            cards.push(StatCard {
-                icon: icon::WALLET,
-                color: pal.accent,
-                label: "Solde",
-                value: totals.balance,
-                currency,
-                primary: true,
-                detail: Detail::Trend(trend, "sur 30 jours"),
-            });
-            cards.push(StatCard {
-                icon: icon::CALENDAR_BLANK,
-                color: pal.violet,
-                label: "Ce mois-ci",
-                value: totals.month_income + totals.month_expenses,
-                currency,
-                primary: false,
-                detail: Detail::InOut(totals.month_income, totals.month_expenses),
-            });
-            cards.push(StatCard {
-                icon: icon::CHECK,
-                color: pal.pointed,
-                label: "Pointé",
-                value: totals.pointed,
-                currency,
-                primary: false,
-                detail: Detail::Text("à comparer au relevé".into()),
-            });
-            cards.push(StatCard {
-                icon: icon::CLOCK,
-                color: pal.future,
-                label: "À venir",
-                value: totals.pending,
-                currency,
-                primary: false,
-                detail: Detail::Text(match totals.pending_count {
-                    0 => "aucune opération".into(),
-                    1 => "1 opération non pointée".into(),
-                    n => format!("{n} opérations non pointées"),
-                }),
-            });
-            if let Some(date) = totals.last_reconciled {
-                cards.push(StatCard {
-                    icon: icon::CHECKS,
-                    color: pal.reconciled,
-                    label: "Rapproché",
-                    value: totals.reconciled,
-                    currency,
-                    primary: false,
-                    detail: Detail::Text(format!("au {date}")),
-                });
-            }
-        }
-        stat_cards(ui, &pal, cards);
-        if doc.filters.is_active() {
-            ui.add_space(4.0);
-            ui.label(
-                RichText::new(format!("{}  calculé sur les lignes filtrées", icon::FUNNEL))
-                    .small()
-                    .color(pal.pointed),
-            );
-        }
-        ui.add_space(10.0);
+        crate::dashboard::cards(ui, doc);
+        ui.add_space(-4.0);
         new_operation
     }
 
@@ -476,8 +425,13 @@ impl BankPerfectApp {
             let total = doc.total_count();
             if doc.filters.is_active() {
                 ui.label(
-                    RichText::new(format!("{}  {shown} / {total} opérations", icon::FUNNEL))
-                        .color(pal.pointed),
+                    RichText::new(format!(
+                        "{}  {} / {} opérations",
+                        icon::FUNNEL,
+                        crate::format::count(shown),
+                        crate::format::count(total)
+                    ))
+                    .color(pal.pointed),
                 );
                 if ui
                     .small_button(format!("{}  Effacer les filtres", icon::FUNNEL_X))
@@ -488,7 +442,7 @@ impl BankPerfectApp {
                     doc.filters.hide_old_lines = hide;
                 }
             } else {
-                ui.label(format!("{total} opérations"));
+                ui.label(format!("{} opérations", crate::format::count(total)));
             }
             ui.separator();
             selection_summary(ui, doc);
@@ -832,162 +786,6 @@ impl BankPerfectApp {
         self.editor_drawer(&ctx, content_rect, now);
         self.modals(&ctx);
         self.update_title(&ctx);
-    }
-}
-
-/// Information secondaire d'une carte du tableau de bord.
-enum Detail {
-    /// Variation, avec flèche montante ou descendante.
-    Trend(Amount, &'static str),
-    /// Recettes et dépenses.
-    InOut(Amount, Amount),
-    Text(String),
-}
-
-struct StatCard<'a> {
-    icon: &'static str,
-    color: egui::Color32,
-    label: &'a str,
-    value: Amount,
-    currency: &'a str,
-    primary: bool,
-    detail: Detail,
-}
-
-const CARD_HEIGHT: f32 = 100.0;
-const CARD_MIN_WIDTH: f32 = 200.0;
-const CARD_GAP: f32 = 12.0;
-
-/// Dispose les cartes sur une grille régulière : même hauteur, largeur
-/// répartie selon la place disponible, passage à la ligne si nécessaire.
-fn stat_cards(ui: &mut egui::Ui, pal: &crate::theme::Palette, cards: Vec<StatCard<'_>>) {
-    let available = ui.available_width();
-    let columns = (((available + CARD_GAP) / (CARD_MIN_WIDTH + CARD_GAP)).floor() as usize)
-        .clamp(1, cards.len().max(1));
-    let width = (available - CARD_GAP * (columns - 1) as f32) / columns as f32;
-    let mut cards = cards.into_iter().peekable();
-    while cards.peek().is_some() {
-        ui.horizontal(|ui| {
-            ui.spacing_mut().item_spacing.x = CARD_GAP;
-            for card in cards.by_ref().take(columns) {
-                stat_card(ui, pal, card, width);
-            }
-        });
-        ui.add_space(CARD_GAP);
-    }
-}
-
-/// Carte du tableau de bord : liseré coloré à gauche, pastille d'icône en
-/// haut à droite, montant, et une ligne d'information (tendance,
-/// recettes/dépenses…). Taille fixe : le texte est tronqué, jamais replié.
-fn stat_card(ui: &mut egui::Ui, pal: &crate::theme::Palette, card: StatCard<'_>, width: f32) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, CARD_HEIGHT), egui::Sense::hover());
-    let painter = ui.painter();
-    painter.rect(
-        rect,
-        10.0,
-        pal.surface,
-        egui::Stroke::new(1.0, pal.border),
-        egui::StrokeKind::Inside,
-    );
-    painter.rect_filled(
-        egui::Rect::from_min_size(rect.min, egui::vec2(4.0, rect.height())),
-        egui::CornerRadius {
-            nw: 10,
-            sw: 10,
-            ne: 0,
-            se: 0,
-        },
-        card.color,
-    );
-    // Ligne 1 : libellé à gauche, pastille d'icône à droite. Puis montant et détail.
-    let badge = egui::Rect::from_min_size(
-        egui::pos2(rect.right() - 14.0 - 28.0, rect.top() + 12.0),
-        egui::vec2(28.0, 28.0),
-    );
-    painter.rect_filled(badge, 7.0, card.color.gamma_multiply(0.18));
-    painter.text(
-        badge.center(),
-        egui::Align2::CENTER_CENTER,
-        card.icon,
-        egui::FontId::proportional(16.0),
-        card.color,
-    );
-    painter.text(
-        egui::pos2(rect.left() + 20.0, badge.center().y),
-        egui::Align2::LEFT_CENTER,
-        card.label,
-        egui::FontId::new(12.5, crate::theme::medium()),
-        pal.muted,
-    );
-
-    let content = egui::Rect::from_min_max(
-        egui::pos2(rect.left() + 20.0, badge.bottom() + 4.0),
-        egui::pos2(rect.right() - 14.0, rect.bottom() - 8.0),
-    );
-    let mut ui = ui.new_child(
-        egui::UiBuilder::new()
-            .max_rect(content)
-            .layout(Layout::top_down(Align::Min)),
-    );
-    ui.spacing_mut().item_spacing.y = 2.0;
-    let line = |ui: &mut egui::Ui, text: RichText, max_width: f32| {
-        ui.allocate_ui(egui::vec2(max_width, 0.0), |ui| {
-            ui.add(egui::Label::new(text).truncate())
-        });
-    };
-    let value_color = if card.value.is_negative() {
-        pal.negative
-    } else {
-        pal.fg
-    };
-    let value = RichText::new(money(card.value, card.currency))
-        .size(if card.primary { 22.0 } else { 20.0 })
-        .family(crate::theme::semibold())
-        .color(value_color);
-    line(&mut ui, value, content.width());
-    match &card.detail {
-        Detail::Trend(delta, period) => {
-            let (glyph, color) = if delta.is_negative() {
-                (icon::TREND_DOWN, pal.negative)
-            } else {
-                (icon::TREND_UP, pal.positive)
-            };
-            let sign = if delta.is_negative() { "" } else { "+" };
-            let text = format!("{glyph}  {sign}{} {period}", money(*delta, card.currency));
-            line(
-                &mut ui,
-                RichText::new(text).small().color(color),
-                content.width(),
-            );
-        }
-        Detail::InOut(income, expenses) => {
-            let mut job = egui::text::LayoutJob::default();
-            let font = egui::TextStyle::Small.resolve(ui.style());
-            let fmt = |color| egui::TextFormat {
-                font_id: font.clone(),
-                color,
-                ..Default::default()
-            };
-            job.append(
-                &format!("{} +{}", icon::ARROW_UP, money(*income, card.currency)),
-                0.0,
-                fmt(pal.positive),
-            );
-            job.append(
-                &format!("{} {}", icon::ARROW_DOWN, money(*expenses, card.currency)),
-                12.0,
-                fmt(pal.negative),
-            );
-            ui.allocate_ui(egui::vec2(content.width(), 0.0), |ui| {
-                ui.add(egui::Label::new(job).truncate())
-            });
-        }
-        Detail::Text(text) => line(
-            &mut ui,
-            RichText::new(text).small().color(pal.muted),
-            content.width(),
-        ),
     }
 }
 

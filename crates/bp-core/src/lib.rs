@@ -6,6 +6,7 @@ pub mod backup;
 pub mod budget;
 pub mod calc;
 pub mod codec_v5;
+pub mod currencies;
 pub mod edit;
 pub mod error;
 pub mod export;

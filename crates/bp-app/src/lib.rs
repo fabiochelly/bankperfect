@@ -7,6 +7,7 @@ mod category_icons;
 mod charts_ui;
 mod command_palette;
 mod commands;
+mod currency_ui;
 mod dashboard;
 mod datepicker;
 mod dialogs;

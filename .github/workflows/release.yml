@@ -31,7 +31,7 @@ jobs:
           DIR="bankperfect-${VERSION}-linux-x86_64"
           mkdir -p "$DIR/icons"
           cp target/release/bankperfect LICENSE README.md "$DIR/"
-          cp packaging/linux/bankperfect.desktop packaging/linux/bankperfect-mime.xml "$DIR/"
+          cp packaging/linux/bankperfect.desktop packaging/linux/bankperfect-mime.xml packaging/linux/install.sh "$DIR/"
           for s in 16 32 48 64 128 256 512; do cp "crates/bp-app/assets/icon/bankperfect-$s.png" "$DIR/icons/"; done
           cp crates/bp-app/assets/icon/bankperfect.svg "$DIR/icons/"
           strip "$DIR/bankperfect"

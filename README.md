@@ -30,7 +30,9 @@ Les binaires sont publiés sur la page [Releases](https://github.com/fabiochelly
 | --- | --- |
 | Windows | `winget install FabioChelly.BankPerfect` |
 | macOS | `brew install --cask fabiochelly/bankperfect/bankperfect` |
-| Linux | archive `linux-x86_64.tar.gz` de la dernière release (paquet AUR à venir) |
+| Linux | archive `linux-x86_64.tar.gz` de la dernière release, puis `./install.sh` (paquet AUR à venir) |
+
+Sous Linux, `install.sh` installe BankPerfect pour l'utilisateur (dans `~/.local`) avec son entrée dans le menu des applications, ses icônes et l'ouverture des fichiers `.bp` ; `./install.sh --uninstall` le retire. Depuis le dépôt, après `cargo build --release`, lancez `packaging/linux/install.sh`.
 
 Les binaires ne sont pas signés : Windows peut afficher un avertissement SmartScreen (« Informations complémentaires », puis « Exécuter quand même »). Sous macOS, l'installation par Homebrew retire la mise en quarantaine ; avec l'archive, faites un clic droit sur l'application puis « Ouvrir » la première fois.
 

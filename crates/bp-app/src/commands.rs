@@ -398,7 +398,7 @@ impl Command {
             ToggleMarkDates => {
                 let on = doc.is_some_and(|d| d.show_mark_dates);
                 let label = if on {
-                    "Afficher les dates d'opération"
+                    "Masquer les dates de pointage"
                 } else {
                     "Afficher les dates de pointage"
                 };

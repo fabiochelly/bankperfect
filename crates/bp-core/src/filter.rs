@@ -115,7 +115,7 @@ fn index_operation(document: &Document, op: &Operation) -> IndexedOperation {
 }
 
 /// Filtre de pointage (panneau de la colonne P).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
 pub enum TackFilter {
     NotPointed,
     Pointed,

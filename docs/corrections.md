@@ -82,6 +82,7 @@ inventaires de `docs/inventaire/`.
 | C72 | Saisie d'un montant de budget : `100/3` donnait 33 (division entière Python 2). | Vraie division (33,3333). | 04 §4.1 |
 | C73 | Un détail contenant `m=` imposait comme mode de paiement les 15 caractères suivants (comportement hérité, source de modes fantaisistes). | Le mode est toujours celui de l'opération ; `m=` reste un texte ordinaire du détail. |
 | C74 | Date de pointage manuelle (Ctrl+Maj+P) : la grille n'était pas rafraîchie après la modification, et une date tapée au format `jj/mm/aa` seulement était acceptée. | Grille et soldes rafraîchis ; la date se saisit comme les autres (jj/mm/aaaa, jj/mm, calendrier). |
+| C75 | Export « Excel » : un fichier SYLK déguisé en `.xls` (Excel avertit que le format ne correspond pas à l’extension) ; un tableau croisé sur un compte sans opération plantait (`min()` sur une liste vide). | Vrai classeur `.xlsx` (montants numériques au format monétaire, en-tête figé, largeurs ajustées) ; rapports vides affichés normalement. | 04 §2.5 |
 
 ## À faire (fonctionnalités pas encore portées)
 

@@ -14,6 +14,7 @@ use crate::ui_kit;
 pub enum Tool {
     NewFile(crate::files_ui::NewFileForm),
     Rules(Box<crate::rules_ui::RulesForm>),
+    Reports(Box<crate::reports_ui::ReportsForm>),
     Filters(Box<crate::filters_ui::FiltersForm>),
     Scheduler(Box<crate::scheduler_ui::SchedulerForm>),
     Forecast(crate::scheduler_ui::ForecastForm),
@@ -53,6 +54,7 @@ impl Tool {
             }
             Tool::Manage(form) => form.show(ctx, doc),
             Tool::Rules(form) => form.show(ctx, doc),
+            Tool::Reports(form) => form.show(ctx, doc),
             Tool::Filters(form) => form.show(ctx, doc),
             Tool::Scheduler(form) => form.show(ctx, doc),
             Tool::Forecast(form) => form.show(ctx, doc),

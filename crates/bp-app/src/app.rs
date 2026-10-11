@@ -800,10 +800,13 @@ impl BankPerfectApp {
     }
 }
 
+/// Retire un filtre.
+type ClearFilter = fn(&mut bp_core::filter::Filters);
+
 /// Un badge par filtre actif ; un clic le retire.
 fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let f = &doc.filters;
-    let mut chips: Vec<(String, fn(&mut bp_core::filter::Filters))> = Vec::new();
+    let mut chips: Vec<(String, ClearFilter)> = Vec::new();
     if !f.mode.is_empty() {
         chips.push((format!("Mode : {}", f.mode), |f| f.mode.clear()));
     }

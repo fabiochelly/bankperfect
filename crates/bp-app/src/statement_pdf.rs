@@ -276,7 +276,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             let (logo_b, logo_p) = if bw {
                 (ink, muted)
             } else {
-                ([0x2a, 0xa1, 0x98], [0x8e, 0x6b, 0xd8])
+                ([0x5a, 0x7f, 0xe0], [0x8b, 0x6f, 0xd6])
             };
             p.symbol(left, y, 14.0, logo_b, logo_p);
             p.text(&account.name, 16.0, left + 18.0, y + 6.5, true, ink);

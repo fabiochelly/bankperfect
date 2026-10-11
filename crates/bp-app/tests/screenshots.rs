@@ -388,6 +388,13 @@ fn transfer_screenshots() {
         h.run_steps(4);
         h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
     });
+    render("76-synchro-config", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("synchroniser avec la banque".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+    });
     render("69-convertir", egui::Theme::Dark, |h| {
         h.key_press(egui::Key::ArrowDown);
         h.key_press(egui::Key::ArrowDown);

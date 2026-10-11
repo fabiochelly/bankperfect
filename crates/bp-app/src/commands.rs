@@ -25,6 +25,7 @@ pub enum Command {
     Report(ReportTab),
     Charts,
     UpdateQuotes,
+    BankSync,
     Transfer,
     ConvertToTransfer,
     SplitOperation,
@@ -144,6 +145,7 @@ impl Command {
                 Report(ReportTab::Statement),
                 Charts,
                 UpdateQuotes,
+                BankSync,
                 Transfer,
                 ConvertToTransfer,
                 SplitOperation,
@@ -316,6 +318,13 @@ impl Command {
                 };
                 info("Rapports", label, glyph, shortcut, keywords)
             }
+            BankSync => info(
+                "Fichier",
+                "Synchroniser avec la banque…",
+                icon::ARROWS_CLOCKWISE,
+                None,
+                "import automatique banque dsp2 enable banking agrégateur opérations",
+            ),
             UpdateQuotes => info(
                 "Comptes",
                 "Mettre à jour les cotations…",

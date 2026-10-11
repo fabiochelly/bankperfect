@@ -10,6 +10,7 @@ BankPerfect 9 est la réécriture complète en Rust du logiciel BankPerfect (Del
 
 - **Comptes et opérations** : saisie rapide avec suggestions, modes de paiement en couleur, pointage et rapprochement (avec dates de pointage), ventilation sur plusieurs catégories, transferts liés entre comptes, recherche et filtres instantanés, annulation et rétablissement.
 - **Imports** : relevés OFX, QIF et CSV, avec détection des doublons et règles de catégorisation automatique.
+- **Synchronisation bancaire** (expérimentale) : import direct des opérations par [Enable Banking](https://enablebanking.com), prestataire agréé DSP2, avec votre propre application Enable Banking (offre gratuite pour un usage personnel) ; authentification sur le site de la banque, identifiants jamais transmis à BankPerfect.
 - **Échéancier** : opérations récurrentes insérées automatiquement, solde prévisionnel.
 - **Rapports et graphiques** : totaux par catégorie et par tiers, relevé multicompte, graphiques en anneau, barres et courbes, export vers un tableur (`.xlsx`).
 - **Budgets** : budget mensuel par catégorie et tableaux de budget annuel.

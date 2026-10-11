@@ -3,6 +3,7 @@
 pub mod autofields;
 pub mod autofilters;
 pub mod backup;
+pub mod bank_sync;
 pub mod budget;
 pub mod calc;
 pub mod codec_v5;

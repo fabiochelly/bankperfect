@@ -35,7 +35,7 @@ impl PasswordPrompt {
                 ui.add(egui::TextEdit::multiline(&mut self.input).desired_rows(3).desired_width(f32::INFINITY))
             } else {
                 ui.label("Mot de passe :");
-                ui.add(egui::TextEdit::singleline(&mut self.input).password(true).desired_width(f32::INFINITY))
+                ui.add(crate::theme::field(&mut self.input).password(true).desired_width(f32::INFINITY))
             };
             response.request_focus();
             if let Some(error) = &self.error {
@@ -112,7 +112,7 @@ pub fn confirm(ctx: &egui::Context, id: &str, title: &str, message: &str, yes: &
         ui.label(message);
         ui.add_space(10.0);
         ui.horizontal(|ui| {
-            if ui.button(RichText::new(yes).strong()).clicked() {
+            if ui.button(RichText::new(yes).family(crate::theme::semibold())).clicked() {
                 choice = Choice::Yes;
             }
             if let Some(no) = no

@@ -238,8 +238,17 @@ impl BankPerfectApp {
                 ui.add(egui::Checkbox::new(&mut doc.two_lines, "Affichage sur 2 lignes (F4)"));
                 ui.add(egui::Checkbox::new(&mut doc.filters.hide_old_lines, "Cacher les lignes inutiles (Ctrl+H)"));
                 ui.separator();
-                ui.label("Thème");
-                egui::widgets::global_theme_preference_buttons(ui);
+                ui.label(RichText::new("Thème").small().color(palette(ui).muted));
+                let current = ui.ctx().options(|o| o.theme_preference);
+                for (preference, label) in [
+                    (egui::ThemePreference::Dark, "Tokyo Night (sombre)"),
+                    (egui::ThemePreference::Light, "Tokyo Night Day (clair)"),
+                    (egui::ThemePreference::System, "Suivre le système"),
+                ] {
+                    if ui.radio(current == preference, label).clicked() {
+                        ui.ctx().set_theme(preference);
+                    }
+                }
             });
             ui.menu_button("Comptes", |ui| {
                 for &i in &doc.document.account_order.clone() {
@@ -281,7 +290,7 @@ impl BankPerfectApp {
         ui.add_space(12.0);
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
-                ui.label(RichText::new(&account.name).size(22.0).strong());
+                ui.label(RichText::new(&account.name).size(22.0).family(crate::theme::semibold()));
                 let mut sub = account.bank_name.clone();
                 if !account.iban.trim().is_empty() {
                     sub = format!("{sub}  ·  {}", account.iban.trim());
@@ -289,8 +298,7 @@ impl BankPerfectApp {
                 ui.label(RichText::new(sub).small().color(pal.muted));
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                let button = egui::Button::new(RichText::new(format!("{}  Nouvelle opération", icon::PLUS)).strong())
-                    .fill(crate::theme::ACCENT);
+                let button = crate::theme::primary_button(ui, format!("{}  Nouvelle opération", icon::PLUS));
                 if ui.add(button).on_hover_text("Inser").clicked() {
                     new_operation = true;
                 }
@@ -341,8 +349,8 @@ impl BankPerfectApp {
     fn welcome(&mut self, ui: &mut egui::Ui) {
         ui.vertical_centered(|ui| {
             ui.add_space(ui.available_height() * 0.28);
-            ui.label(RichText::new(icon::PIGGY_BANK).size(56.0).color(crate::theme::ACCENT));
-            ui.label(RichText::new("BankPerfect").size(30.0).strong());
+            ui.label(RichText::new(icon::PIGGY_BANK).size(56.0).color(palette(ui).accent));
+            ui.label(RichText::new("BankPerfect").size(30.0).family(crate::theme::semibold()));
             ui.add_space(18.0);
             if ui.add(egui::Button::new(RichText::new(format!("{}  Ouvrir un fichier…", icon::FOLDER_OPEN)).size(15.0))).clicked() {
                 self.request(Pending::Open(None));
@@ -434,8 +442,17 @@ impl BankPerfectApp {
 }
 
 impl eframe::App for BankPerfectApp {
+    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        for event in &mut raw_input.events {
+            if let egui::Event::MouseWheel { unit: egui::MouseWheelUnit::Point, delta, .. } = event {
+                *delta *= crate::theme::WHEEL_POINT_FACTOR;
+            }
+        }
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
+        crate::theme::adapt_to_display(&ctx);
 
         if let Some(path) = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf()).filter(|p| !p.as_os_str().is_empty())) {
             self.request(Pending::Open(Some(path)));
@@ -475,7 +492,7 @@ impl eframe::App for BankPerfectApp {
         let doc = self.doc.as_mut().expect("document ouvert");
         egui::Panel::bottom("status").show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
 
-        let sidebar_fill = palette(ui).sidebar;
+        let sidebar_fill = palette(ui).bg_dark;
         egui::Panel::left("accounts")
             .resizable(true)
             .default_size(260.0)
@@ -530,7 +547,7 @@ impl eframe::App for BankPerfectApp {
 
 fn card(ui: &mut egui::Ui, pal: &crate::theme::Palette, label: &str, amount: Amount, currency: &str, primary: bool) {
     egui::Frame::new()
-        .fill(pal.card)
+        .fill(pal.surface)
         .corner_radius(8)
         .stroke(ui.visuals().widgets.noninteractive.bg_stroke)
         .inner_margin(egui::Margin::symmetric(14, 8))
@@ -538,7 +555,7 @@ fn card(ui: &mut egui::Ui, pal: &crate::theme::Palette, label: &str, amount: Amo
             ui.set_min_width(130.0);
             ui.vertical(|ui| {
                 ui.label(RichText::new(label).small().color(pal.muted));
-                let mut text = RichText::new(money(amount, currency)).size(if primary { 18.0 } else { 15.0 }).strong();
+                let mut text = RichText::new(money(amount, currency)).size(if primary { 18.0 } else { 15.0 }).family(crate::theme::semibold());
                 if amount.is_negative() {
                     text = text.color(pal.negative);
                 }
@@ -567,7 +584,7 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
             let total: Amount = ops.iter().map(|op| op.amount).sum();
             let credits: Amount = ops.iter().filter(|op| !op.amount.is_negative()).map(|op| op.amount).sum();
             let debits: Amount = ops.iter().filter(|op| op.amount.is_negative()).map(|op| op.amount).sum();
-            let mut text = RichText::new(format!("{n} lignes : {}", money(total, &currency))).strong();
+            let mut text = RichText::new(format!("{n} lignes : {}", money(total, &currency))).family(crate::theme::semibold());
             if total.is_negative() {
                 text = text.color(pal.negative);
             }

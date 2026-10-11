@@ -14,7 +14,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     ui.label(RichText::new(&doc.document.group_name).heading());
     ui.label(RichText::new(doc.file_name()).small().color(pal.muted));
     ui.add_space(12.0);
-    ui.label(RichText::new("COMPTES").small().strong().color(pal.muted));
+    ui.label(RichText::new("COMPTES").small().family(crate::theme::medium()).color(pal.muted));
     ui.add_space(2.0);
 
     let order = doc.document.account_order.clone();
@@ -51,10 +51,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     ui.add_space(8.0);
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Total").strong());
+        ui.label(RichText::new("Total").family(crate::theme::semibold()));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let color = if total.is_negative() { pal.negative } else { ui.visuals().strong_text_color() };
-            ui.label(RichText::new(money(total, "€")).strong().color(color));
+            ui.label(RichText::new(money(total, "€")).family(crate::theme::semibold()).color(color));
         });
     });
     ui.label(RichText::new("comptes réels uniquement").small().color(pal.muted));

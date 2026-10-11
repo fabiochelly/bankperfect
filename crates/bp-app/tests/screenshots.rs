@@ -11,7 +11,7 @@ fn render(name: &str, theme: egui::Theme, setup: impl FnOnce(&mut Harness<'_, ba
     let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
     let mut harness = Harness::builder()
         .with_size(egui::vec2(1440.0, 900.0))
-        .with_pixels_per_point(1.0)
+        .with_pixels_per_point(2.0)
         .with_theme(theme)
         .wgpu()
         .build_eframe(|cc| {

@@ -90,7 +90,7 @@ impl Editor {
 
         egui::Grid::new("editor").num_columns(2).spacing([10.0, 10.0]).show(ui, |ui| {
             ui.label("Date");
-            let date = ui.add(egui::TextEdit::singleline(&mut self.date).hint_text("jj/mm/aaaa").desired_width(120.0));
+            let date = ui.add(crate::theme::field(&mut self.date).hint_text("jj/mm/aaaa").desired_width(120.0));
             if self.focus_requested {
                 date.request_focus();
                 self.focus_requested = false;
@@ -114,7 +114,7 @@ impl Editor {
 
             ui.label("Tiers");
             ui.vertical(|ui| {
-                let response = ui.add(egui::TextEdit::singleline(&mut self.payee).desired_width(f32::INFINITY));
+                let response = ui.add(crate::theme::field(&mut self.payee).desired_width(f32::INFINITY));
                 if response.has_focus() && !self.payee.is_empty() {
                     self.payee_suggestions(ui, document);
                 }
@@ -122,7 +122,7 @@ impl Editor {
             ui.end_row();
 
             ui.label("Détail");
-            ui.add(egui::TextEdit::singleline(&mut self.details).desired_width(f32::INFINITY));
+            ui.add(crate::theme::field(&mut self.details).desired_width(f32::INFINITY));
             ui.end_row();
 
             ui.label("Catégorie");
@@ -135,7 +135,7 @@ impl Editor {
                     ui.selectable_value(&mut self.category, None, "(aucune)");
                     for c in &document.categories {
                         let label = if c.is_child { format!("      {}", c.name) } else { c.name.clone() };
-                        let text = if c.is_child { RichText::new(label) } else { RichText::new(label).strong() };
+                        let text = if c.is_child { RichText::new(label) } else { RichText::new(label).family(crate::theme::semibold()) };
                         ui.selectable_value(&mut self.category, Some(c.id), text);
                     }
                 });
@@ -143,7 +143,7 @@ impl Editor {
 
             ui.label("Montant");
             let hint = self.sign_hint(document);
-            ui.add(egui::TextEdit::singleline(&mut self.amount).hint_text(hint).desired_width(140.0));
+            ui.add(crate::theme::field(&mut self.amount).hint_text(hint).desired_width(140.0));
             ui.end_row();
 
             ui.label("Pointage");
@@ -158,7 +158,7 @@ impl Editor {
         let visible_extra: Vec<_> = self.extra.iter().filter(|(k, _)| !k.starts_with('#') && k != "freeicon").collect();
         if !visible_extra.is_empty() {
             ui.add_space(8.0);
-            ui.label(RichText::new("Champs supplémentaires").small().strong().color(pal.muted));
+            ui.label(RichText::new("Champs supplémentaires").small().family(crate::theme::medium()).color(pal.muted));
             for (k, v) in visible_extra {
                 ui.label(format!("{k} : {v}"));
             }
@@ -171,8 +171,7 @@ impl Editor {
 
         ui.add_space(14.0);
         ui.horizontal(|ui| {
-            let save = egui::Button::new(RichText::new(format!("{}  Enregistrer", icon::CHECK)).strong())
-                .fill(crate::theme::ACCENT);
+            let save = crate::theme::primary_button(ui, format!("{}  Enregistrer", icon::CHECK));
             if ui.add(save).on_hover_text("Ctrl+Entrée").clicked() {
                 action = self.validate(document);
             }

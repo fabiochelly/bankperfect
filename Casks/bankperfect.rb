@@ -2,7 +2,7 @@
 # (le dépôt sert de « tap » : brew tap fabiochelly/bankperfect https://github.com/fabiochelly/bankperfect)
 cask "bankperfect" do
   version "9.0.0"
-  sha256 "@SHA256_MACOS@"
+  sha256 "18d22c71e4fa92717c50324f685a30c9009ebdbe7afda23bec82626b41338504"
 
   url "https://github.com/fabiochelly/bankperfect/releases/download/v#{version}/BankPerfect-#{version}-macos-universal.zip"
   name "BankPerfect"

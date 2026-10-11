@@ -10,7 +10,7 @@ depends=('glibc' 'gcc-libs' 'libxkbcommon' 'wayland' 'libx11' 'vulkan-icd-loader
 provides=('bankperfect')
 conflicts=('bankperfect')
 source=("$url/releases/download/v$pkgver/bankperfect-$pkgver-linux-x86_64.tar.gz")
-sha256sums=('@SHA256_LINUX@')
+sha256sums=('bdb6af065003d7dbaed192b6ff28193264aac65dad0250a81b5880d6ee843dd4')
 
 package() {
   cd "bankperfect-$pkgver-linux-x86_64"

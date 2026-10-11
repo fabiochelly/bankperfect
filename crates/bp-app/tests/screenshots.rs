@@ -304,6 +304,18 @@ fn tool_screenshots() {
     render("62-credit-clair", egui::Theme::Light, |h| {
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::L);
     });
+    render("65-cotations", egui::Theme::Dark, |h| {
+        h.get_all_by_label_contains("Titres")
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(3);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("cotations".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+    });
     render("63-devises", egui::Theme::Dark, |h| {
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::D);
     });

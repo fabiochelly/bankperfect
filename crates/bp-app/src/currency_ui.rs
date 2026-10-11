@@ -493,8 +493,17 @@ impl CurrencyForm {
     }
 }
 
+/// Cours enregistrés par le convertisseur (vides si jamais téléchargés).
+pub fn saved_rates() -> Rates {
+    crate::settings::config_file(FILE)
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| serde_json::from_slice::<Saved>(&b).ok())
+        .map(|s| s.rates)
+        .unwrap_or_default()
+}
+
 /// Télécharge et lit le flux quotidien de la BCE.
-fn fetch_ecb() -> Result<Rates, String> {
+pub fn fetch_ecb() -> Result<Rates, String> {
     let xml = ureq::get(ECB_DAILY_URL)
         .call()
         .map_err(|e| e.to_string())?

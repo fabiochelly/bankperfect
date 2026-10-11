@@ -600,6 +600,11 @@ impl BankPerfectApp {
                     doc, tab,
                 ))))
             }
+            Command::UpdateQuotes => {
+                self.tool = Some(Tool::Quotes(Box::new(crate::quotes_ui::QuotesForm::new(
+                    doc,
+                ))))
+            }
             Command::Charts => {
                 self.tool = Some(Tool::Charts(Box::new(crate::charts_ui::ChartsForm::new())))
             }
@@ -1215,6 +1220,8 @@ impl BankPerfectApp {
                 ] {
                     self.menu_command(ui, Manage(tab));
                 }
+                menu::separator(ui);
+                self.menu_command(ui, UpdateQuotes);
             }
             _ => {
                 menu::begin_with_width(ui, 340.0);

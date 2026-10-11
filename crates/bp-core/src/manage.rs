@@ -464,6 +464,51 @@ pub fn new_document(name: &str, initial: Amount) -> Document {
     document
 }
 
+/// Inverse les monnaies d'un compte (CUR-03) : chaque montant est converti de
+/// la devise principale vers la secondaire (arrondi bancaire au centime), une
+/// ligne « Ajustement des arrondis de conversion » rattrape l'écart avec
+/// l'ancien solde converti, puis les deux devises sont échangées. Renvoie
+/// le montant de l'ajustement.
+pub fn reverse_currencies(document: &mut Document, index: usize) -> Amount {
+    let uid = document.next_operation_uid();
+    let account = &mut document.accounts[index];
+    let ratio = account.secondary_rate / account.currency_rate;
+    let convert = |amount: Amount| {
+        let cents = (amount.0 as f64 / 100.0 * ratio).round_ties_even();
+        Amount::from_cents(cents as i64)
+    };
+    let old_balance = account.balance();
+    let mut sum = Amount::ZERO;
+    for op in &mut account.operations {
+        op.amount = convert(op.amount);
+        sum = sum + op.amount;
+    }
+    let adjustment = convert(old_balance) + -sum;
+    if adjustment != Amount::ZERO {
+        let today = Date::today();
+        let mode = if adjustment.is_negative() {
+            StandardMode::Prelevement
+        } else {
+            StandardMode::VirementRecu
+        };
+        account.operations.push(Operation {
+            uid,
+            date: today,
+            mark_date: today,
+            tack: Tack::Reconciled,
+            mode: Mode::Standard(mode),
+            payee: "Ajustement des arrondis de conversion".into(),
+            details: format!("Solde: {} {}", old_balance.format(2, ','), account.currency),
+            category: None,
+            amount: adjustment,
+            extra: Vec::new(),
+        });
+    }
+    std::mem::swap(&mut account.currency, &mut account.secondary_currency);
+    std::mem::swap(&mut account.currency_rate, &mut account.secondary_rate);
+    adjustment
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -654,5 +699,33 @@ mod tests {
             doc.category_label(1).as_deref(),
             Some("Alimentation > Epicerie")
         );
+    }
+
+    #[test]
+    fn reversing_currencies_converts_and_swaps() {
+        let mut doc = new_document("Test", Amount::parse("100").unwrap());
+        let account = &mut doc.accounts[0];
+        account.currency_rate = 1.0;
+        account.secondary_rate = 6.55957;
+        let mut op = account.operations[0].clone();
+        op.amount = Amount::parse("-0,01").unwrap();
+        account.operations.push(op.clone());
+        account.operations.push(op);
+        reverse_currencies(&mut doc, 0);
+        let account = &doc.accounts[0];
+        assert_eq!(account.currency, "F");
+        assert_eq!(account.secondary_currency, "€");
+        assert_eq!(account.currency_rate, 6.55957);
+        // 100 € → 655,96 F ; −0,01 € → −0,07 F (×2) ; solde 99,98 € → 655,83 F.
+        assert_eq!(
+            account.operations[0].amount,
+            Amount::parse("655,96").unwrap()
+        );
+        assert_eq!(
+            account.operations[1].amount,
+            Amount::parse("-0,07").unwrap()
+        );
+        assert_eq!(account.balance(), Amount::parse("655,83").unwrap());
+        assert_eq!(account.operations.len(), 4, "ligne d'ajustement ajoutée");
     }
 }

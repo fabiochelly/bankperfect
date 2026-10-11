@@ -1,6 +1,6 @@
 //! Modifications en masse (ex-scripts `search_replace.py` et `modifygroup.py`).
 
-use crate::model::{Account, Amount, Date, Document, Mode, Tack};
+use crate::model::{Account, Amount, Date, Document, Mode, Operation, Tack};
 
 /// Remplace `find` par `replacement` dans le tiers et le détail des `lines`.
 /// Sensible à la casse ; un `;` du remplacement devient une espace. Renvoie le
@@ -121,6 +121,52 @@ pub fn apply_group_edit(
     changed
 }
 
+/// Numéro du prochain chèque : celui du dernier chèque émis (le plus récent
+/// en date) plus un, avec le même nombre de chiffres (`n°0124`), ou `n°` s'il
+/// n'y a encore aucun chèque.
+pub fn next_cheque_number(account: &Account) -> String {
+    let last = account
+        .operations
+        .iter()
+        .filter_map(|op| op.cheque_number().map(|n| (op.date, op.uid, n)))
+        .max_by_key(|(date, uid, _)| (*date, *uid));
+    let Some((_, _, number)) = last else {
+        return "n°".into();
+    };
+    let digits: String = number.chars().filter(|c| c.is_ascii_digit()).collect();
+    match digits.parse::<u64>() {
+        Ok(n) => format!("n°{:0width$}", n + 1, width = digits.len()),
+        Err(_) => "n°".into(),
+    }
+}
+
+/// Colle des opérations copiées dans un compte : nouvel identifiant pour
+/// chacune, catégorie retirée si elle n'existe pas dans ce fichier. Renvoie
+/// les positions des lignes ajoutées.
+pub fn paste_operations(
+    document: &mut Document,
+    account: usize,
+    operations: &[Operation],
+) -> Vec<usize> {
+    let mut uid = document.next_operation_uid();
+    let mut added = Vec::with_capacity(operations.len());
+    for op in operations {
+        let mut op = op.clone();
+        op.uid = uid;
+        uid += 1;
+        if op
+            .category
+            .is_some_and(|id| document.category(id).is_none())
+        {
+            op.category = None;
+        }
+        let target = &mut document.accounts[account].operations;
+        added.push(target.len());
+        target.push(op);
+    }
+    added
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -217,5 +263,34 @@ mod tests {
         );
         assert_eq!(ops[1].amount, Amount::from_cents(1234));
         assert!(ops.iter().all(|op| op.tack == Tack::Pointed));
+    }
+
+    #[test]
+    fn next_cheque_follows_the_most_recent_one() {
+        let mut a = account();
+        assert_eq!(next_cheque_number(&a), "n°");
+        let mut cheque = a.operations[0].clone();
+        cheque.mode = Mode::Standard(StandardMode::ChequeEmis);
+        cheque.details = "n°0123 loyer".into();
+        cheque.date = Date(45010);
+        a.operations.push(cheque.clone());
+        cheque.details = "n°0099".into();
+        cheque.date = Date(44000);
+        a.operations.push(cheque);
+        assert_eq!(next_cheque_number(&a), "n°0124");
+    }
+
+    #[test]
+    fn pasted_lines_get_new_uids_and_valid_categories() {
+        let mut doc = crate::manage::new_document("Test", Amount::ZERO);
+        let mut op = account().operations[0].clone();
+        op.category = Some(999);
+        let before = doc.next_operation_uid();
+        let added = paste_operations(&mut doc, 0, &[op.clone(), op]);
+        assert_eq!(added, vec![1, 2]);
+        let ops = &doc.accounts[0].operations;
+        assert_eq!(ops[1].uid, before);
+        assert_eq!(ops[2].uid, before + 1);
+        assert!(ops[1].category.is_none());
     }
 }

@@ -33,12 +33,20 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) {
             )
         })
         .collect();
-    let colors = [pal.pointed, pal.future, pal.accent];
+    // Bleu pour le pointé, orange pour l'à venir, vert pour le solde final.
+    let colors = [pal.accent, pal.future, pal.positive];
     for (block, color) in blocks.iter().zip(colors) {
         callout(ui, *block, color);
     }
     let series = doc.insights().series.clone();
-    let window = window_dates(&series, doc.chart_window);
+    let mut window = window_dates(&series, doc.chart_window);
+    // Sans solde prévisionnel : la fenêtre s'arrête aujourd'hui.
+    if !doc.show_forecast
+        && let Some((start, end)) = &mut window
+    {
+        *end = (*end).min(Date::today());
+        *start = (*start).min(*end);
+    }
     let inner = |r: Rect| {
         Rect::from_min_max(
             pos2(r.left() + 22.0, r.top() + 12.0),
@@ -249,7 +257,7 @@ fn pointed_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
         rect,
         icon::CHECKS,
         "Pointé",
-        pal.pointed,
+        pal.accent,
         totals.pointed,
         "pointed_value",
         &currency,
@@ -270,7 +278,7 @@ fn pointed_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
                 end.min(Date::today()),
                 &currency,
                 &pal,
-                pal.pointed,
+                pal.accent,
                 "pointed_chart",
             );
         }
@@ -422,7 +430,7 @@ fn balance_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
         rect,
         icon::WALLET,
         "Solde final",
-        pal.accent,
+        pal.positive,
         totals.balance,
         "balance_value",
         &currency,
@@ -446,7 +454,7 @@ fn balance_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
                 end,
                 &currency,
                 &pal,
-                pal.accent,
+                pal.positive,
                 "balance_chart",
             );
         }
@@ -509,13 +517,13 @@ fn window_chips(ui: &mut Ui, header: Rect, doc: &mut OpenDoc, pal: &Palette) {
         let selected = doc.chart_window == *window;
         if selected || response.hovered() {
             let fill = if selected {
-                pal.accent.gamma_multiply(0.22)
+                pal.positive.gamma_multiply(0.22)
             } else {
                 pal.bg_highlight
             };
             ui.painter().rect_filled(chip, 6.0, fill);
         }
-        let color = if selected { pal.accent } else { pal.muted };
+        let color = if selected { pal.positive } else { pal.muted };
         ui.painter()
             .galley(chip.center() - galley.size() / 2.0, galley, color);
         if response.clicked() {

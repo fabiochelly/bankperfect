@@ -21,6 +21,10 @@ pub struct Settings {
     /// Fond de fenêtre translucide et flouté par le compositeur (`None` :
     /// actif par défaut sous Linux seulement).
     pub translucent: Option<bool>,
+    /// Verrouiller les lignes rapprochées.
+    pub lock_reconciled: bool,
+    pub show_balance_panel: bool,
+    pub show_forecast: bool,
     /// Réglages lus sur disque : seuls ceux-là sont réenregistrés (les tests
     /// partent de réglages par défaut et n'écrivent rien).
     #[serde(skip)]
@@ -35,6 +39,9 @@ impl Default for Settings {
             backup_keep: bp_core::backup::DEFAULT_KEEP,
             recent_files: Vec::new(),
             translucent: None,
+            lock_reconciled: false,
+            show_balance_panel: true,
+            show_forecast: true,
             persist: false,
         }
     }

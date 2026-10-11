@@ -28,7 +28,17 @@ pub enum Command {
     NewOperation,
     EditOperation,
     Delete,
+    CutLines,
+    CopyLines,
+    PasteLines,
     Replace,
+    AddToPayees,
+    SetMarkDate,
+    ToggleLock,
+    ToggleMarkDates,
+    ToggleBalancePanel,
+    ToggleForecast,
+    ReverseCurrencies,
     ToggleHideOld,
     ToggleTranslucent,
     Theme(ThemePreference),
@@ -76,12 +86,22 @@ impl Command {
                 NewOperation,
                 EditOperation,
                 Delete,
+                CutLines,
+                CopyLines,
+                PasteLines,
                 Replace,
                 Tack,
+                SetMarkDate,
                 ReconcileAll,
+                ToggleLock,
                 ModifyGroup,
                 ExtraFields,
+                AddToPayees,
                 ToggleHideOld,
+                ToggleMarkDates,
+                ToggleBalancePanel,
+                ToggleForecast,
+                ReverseCurrencies,
                 NextAccount,
                 PreviousAccount,
             ]);
@@ -270,6 +290,133 @@ impl Command {
                 i.enabled = selection > 0;
                 i
             }
+            CutLines => {
+                let mut i = info(
+                    "Édition",
+                    "Couper",
+                    icon::SCISSORS,
+                    Some("Ctrl+X"),
+                    "déplacer lignes",
+                );
+                i.enabled = selection > 0;
+                i
+            }
+            CopyLines => {
+                let mut i = info(
+                    "Édition",
+                    "Copier",
+                    icon::COPY,
+                    Some("Ctrl+C"),
+                    "dupliquer lignes",
+                );
+                i.enabled = selection > 0;
+                i
+            }
+            PasteLines => {
+                let n = clipboard_len();
+                let label = match n {
+                    0 | 1 => "Coller".to_string(),
+                    n => format!("Coller {n} lignes"),
+                };
+                let mut i = info(
+                    "Édition",
+                    &label,
+                    icon::CLIPBOARD_TEXT,
+                    Some("Ctrl+V"),
+                    "lignes copiées",
+                );
+                i.enabled = n > 0;
+                i
+            }
+            AddToPayees => {
+                let mut i = info(
+                    "Opérations",
+                    "Ajouter aux tiers mémorisés…",
+                    icon::USER_PLUS,
+                    None,
+                    "tiers créer mémoriser",
+                );
+                i.enabled = selection == 1;
+                i
+            }
+            SetMarkDate => {
+                let mut i = info(
+                    "Opérations",
+                    "Date de pointage…",
+                    icon::CALENDAR_CHECK,
+                    Some("Ctrl+Maj+P"),
+                    "pointage date",
+                );
+                i.enabled = selection > 0;
+                i
+            }
+            ToggleLock => {
+                let locked = doc.is_some_and(|d| d.locked);
+                let label = if locked {
+                    "Déverrouiller les lignes rapprochées"
+                } else {
+                    "Verrouiller les lignes rapprochées"
+                };
+                info(
+                    "Opérations",
+                    label,
+                    icon::LOCK,
+                    None,
+                    "verrou protéger rapprochement",
+                )
+            }
+            ToggleMarkDates => {
+                let on = doc.is_some_and(|d| d.show_mark_dates);
+                let label = if on {
+                    "Afficher les dates d'opération"
+                } else {
+                    "Afficher les dates de pointage"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::CALENDAR_CHECK,
+                    Some("F11"),
+                    "pointage colonne date",
+                )
+            }
+            ToggleBalancePanel => {
+                let on = doc.is_none_or(|d| d.show_balance_panel);
+                let label = if on {
+                    "Masquer le panneau des soldes"
+                } else {
+                    "Afficher le panneau des soldes"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::SQUARES_FOUR,
+                    None,
+                    "soldes blocs pointé à venir",
+                )
+            }
+            ToggleForecast => {
+                let on = doc.is_none_or(|d| d.show_forecast);
+                let label = if on {
+                    "Masquer le solde prévisionnel"
+                } else {
+                    "Afficher le solde prévisionnel"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::CHART_LINE,
+                    None,
+                    "prévision futur",
+                )
+            }
+            ReverseCurrencies => info(
+                "Outils",
+                "Inverser les monnaies du compte…",
+                icon::ARROWS_LEFT_RIGHT,
+                None,
+                "devise convertir euro franc",
+            ),
             Replace => info(
                 "Édition",
                 "Remplacer…",
@@ -480,4 +627,16 @@ fn recent_name(index: usize) -> String {
                 .map(|n| n.to_string_lossy().into_owned())
         })
         .unwrap_or_default()
+}
+
+/// Nombre de lignes dans le presse-papiers interne (tenu à jour par
+/// l'application).
+static CLIPBOARD: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+pub fn set_clipboard_len(n: usize) {
+    CLIPBOARD.store(n, std::sync::atomic::Ordering::Relaxed);
+}
+
+fn clipboard_len() -> usize {
+    CLIPBOARD.load(std::sync::atomic::Ordering::Relaxed)
 }

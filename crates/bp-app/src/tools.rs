@@ -13,6 +13,7 @@ use crate::ui_kit;
 
 pub enum Tool {
     NewFile(crate::files_ui::NewFileForm),
+    MarkDate(MarkDateForm),
     Manage(crate::manage_ui::ManageForm),
     Protection(crate::protection_ui::ProtectionForm),
     Backups(BackupsForm),
@@ -43,6 +44,7 @@ impl Tool {
                 form.show_standalone(ctx, doc.path.parent().map(std::path::Path::to_path_buf))
             }
             Tool::Manage(form) => form.show(ctx, doc),
+            Tool::MarkDate(form) => form.show(ctx, doc),
             Tool::Protection(form) => form.show(ctx, doc),
             Tool::Backups(form) => form.show_standalone(ctx, doc.dirty),
             Tool::Calculator(form) => form.show_standalone(ctx),
@@ -78,6 +80,78 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool) -> Option<bool> {
         result = Some(true);
     }
     result
+}
+
+// ─────────────────────────────── Date de pointage ───────────────────────────────
+
+/// Date de pointage manuelle des lignes sélectionnées (MARK-05).
+pub struct MarkDateForm {
+    date: String,
+    lines: usize,
+    error: Option<String>,
+}
+
+impl MarkDateForm {
+    pub fn new(doc: &OpenDoc) -> Self {
+        let first = doc
+            .selection
+            .iter()
+            .next()
+            .map(|&i| doc.operation(i).mark_date);
+        Self {
+            date: first.unwrap_or_else(Date::today).to_string(),
+            lines: doc.selection.len(),
+            error: None,
+        }
+    }
+
+    fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
+        let mut outcome = Outcome::Keep;
+        crate::dialogs::modal(ctx, "tool_mark_date").show(ctx, |ui| {
+            ui.set_width(460.0);
+            let pal = palette(ui);
+            title(ui, icon::CALENDAR_CHECK, "Date de pointage");
+            let text = if self.lines == 1 {
+                "Date à laquelle la ligne sélectionnée a été pointée.".to_string()
+            } else {
+                format!(
+                    "Date à laquelle les {} lignes sélectionnées ont été pointées.",
+                    self.lines
+                )
+            };
+            ui_kit::subtitle(ui, text);
+            let field = crate::datepicker::date_field(
+                ui,
+                "mark_date",
+                &mut self.date,
+                240.0,
+                crate::datepicker::Placement::Popup,
+            );
+            if field.ctx.memory(|m| m.focused().is_none()) {
+                field.request_focus();
+            }
+            let enter = field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
+            if let Some(error) = &self.error {
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
+            }
+            let mut result = buttons(ui, &format!("{}  Appliquer", icon::CHECK), true);
+            if enter {
+                result = Some(true);
+            }
+            match result {
+                Some(true) => match Date::parse_fr(&self.date, Date::today()) {
+                    Some(date) => {
+                        doc.set_mark_date(date);
+                        outcome = Outcome::Done(format!("Date de pointage : {date}"));
+                    }
+                    None => self.error = Some("Date invalide (jj/mm/aaaa)".into()),
+                },
+                Some(false) => outcome = Outcome::Close,
+                None => {}
+            }
+        });
+        outcome
+    }
 }
 
 // ─────────────────────────────── Remplacer ───────────────────────────────

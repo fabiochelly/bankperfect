@@ -39,8 +39,13 @@ const SHORTCUT_NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND,
 const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F12);
 const SHORTCUT_CLOSE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
 const SHORTCUT_PALETTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
-const SHORTCUT_PALETTE_ALT: KeyboardShortcut =
+const SHORTCUT_MARK_DATE: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::P);
+const SHORTCUT_MARK_DATES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
+const SHORTCUT_CUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::X);
+const SHORTCUT_COPY: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
+const SHORTCUT_PASTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::V);
+const LOCKED_MESSAGE: &str = "Les lignes rapprochées sont verrouillées (menu Opérations)";
 const SHORTCUT_CALC: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::C);
 
@@ -62,6 +67,13 @@ pub struct BankPerfectApp {
     confirm_delete: bool,
     /// Fichier de comptes à mettre à la corbeille (confirmation).
     confirm_trash: Option<PathBuf>,
+    /// Presse-papiers interne des lignes (survit au changement de compte et
+    /// de fichier).
+    clipboard: Vec<bp_core::model::Operation>,
+    /// Ligne dont on veut faire un tiers mémorisé (confirmation).
+    confirm_payee: Option<usize>,
+    /// Confirmation de l'inversion des monnaies.
+    confirm_reverse: bool,
     tool: Option<crate::tools::Tool>,
     command_palette: Option<crate::command_palette::CommandPalette>,
     /// Commandes lancées récemment, la plus récente en premier.
@@ -112,6 +124,9 @@ impl BankPerfectApp {
             pending: None,
             confirm_delete: false,
             confirm_trash: None,
+            clipboard: Vec::new(),
+            confirm_payee: None,
+            confirm_reverse: false,
             tool: None,
             command_palette: None,
             recent_commands: Vec::new(),
@@ -240,9 +255,7 @@ impl BankPerfectApp {
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
         if ctx.input_mut(|i| {
-            i.consume_shortcut(&SHORTCUT_PALETTE)
-                || i.consume_shortcut(&SHORTCUT_PALETTE_ALT)
-                || i.consume_key(Modifiers::NONE, Key::F1)
+            i.consume_shortcut(&SHORTCUT_PALETTE) || i.consume_key(Modifiers::NONE, Key::F1)
         }) {
             self.execute(ctx, Command::Palette);
             return;
@@ -315,10 +328,52 @@ impl BankPerfectApp {
             ));
         }
 
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_MARK_DATE)) {
+            return self.execute(ctx, Command::SetMarkDate);
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_MARK_DATES)) {
+            return self.execute(ctx, Command::ToggleMarkDates);
+        }
         // Raccourcis de la grille, actifs quand aucun champ n'a le focus.
         if ctx.memory(|m| m.focused().is_some()) || self.menus.is_open() {
             return;
         }
+        // Couper / copier / coller des lignes. egui transforme Ctrl+X/C/V en
+        // événements presse-papiers : on les intercepte hors des champs.
+        let clipboard_event = ctx.input_mut(|i| {
+            let mut found = None;
+            i.events.retain(|e| match e {
+                egui::Event::Cut => {
+                    found = Some(Command::CutLines);
+                    false
+                }
+                egui::Event::Copy => {
+                    found = Some(Command::CopyLines);
+                    false
+                }
+                egui::Event::Paste(_) => {
+                    found = Some(Command::PasteLines);
+                    false
+                }
+                _ => true,
+            });
+            found
+        });
+        let shortcut = ctx.input_mut(|i| {
+            if i.consume_shortcut(&SHORTCUT_CUT) {
+                Some(Command::CutLines)
+            } else if i.consume_shortcut(&SHORTCUT_COPY) {
+                Some(Command::CopyLines)
+            } else if i.consume_shortcut(&SHORTCUT_PASTE) {
+                Some(Command::PasteLines)
+            } else {
+                None
+            }
+        });
+        if let Some(command) = clipboard_event.or(shortcut) {
+            return self.execute(ctx, command);
+        }
+        let Some(doc) = &mut self.doc else { return };
         let pressed = |key| ctx.input(|i| i.key_pressed(key));
         let (ctrl, shift) = ctx.input(|i| (i.modifiers.command, i.modifiers.shift));
         // Déplacements : flèches, pages, Début/Fin (écran), Ctrl+Début/Fin
@@ -446,7 +501,13 @@ impl BankPerfectApp {
                     self.editor = Some(Editor::edit(&doc.document, doc.account, index));
                 }
             }
-            Command::Delete => self.confirm_delete = !doc.selection.is_empty(),
+            Command::Delete => {
+                if doc.selection_locked() {
+                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                } else {
+                    self.confirm_delete = !doc.selection.is_empty();
+                }
+            }
             Command::Replace => self.tool = Some(Tool::Replace(Default::default())),
             Command::ToggleHideOld => doc.filters.hide_old_lines = !doc.filters.hide_old_lines,
             Command::NextAccount | Command::PreviousAccount => {
@@ -460,7 +521,65 @@ impl BankPerfectApp {
             Command::Manage(tab) => {
                 self.tool = Some(Tool::Manage(crate::manage_ui::ManageForm::new(doc, tab)));
             }
-            Command::Tack => doc.cycle_tack(),
+            Command::Tack => {
+                doc.cycle_tack();
+            }
+            Command::CutLines => {
+                if doc.selection_locked() {
+                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                } else if !doc.selection.is_empty() {
+                    self.clipboard = doc.copy_selection();
+                    doc.delete_selection();
+                    self.editor = None;
+                    self.toast = Some((
+                        format!("{} ligne(s) coupée(s)", self.clipboard.len()),
+                        now + 3.0,
+                    ));
+                }
+            }
+            Command::CopyLines => {
+                if !doc.selection.is_empty() {
+                    self.clipboard = doc.copy_selection();
+                    self.toast = Some((
+                        format!("{} ligne(s) copiée(s)", self.clipboard.len()),
+                        now + 3.0,
+                    ));
+                }
+            }
+            Command::PasteLines => {
+                let n = doc.paste(&self.clipboard);
+                if n > 0 {
+                    self.editor = None;
+                    self.toast = Some((format!("{n} ligne(s) collée(s)"), now + 3.0));
+                }
+            }
+            Command::AddToPayees => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    self.confirm_payee = Some(index);
+                }
+            }
+            Command::SetMarkDate => {
+                if doc.selection_locked() {
+                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                } else if !doc.selection.is_empty() {
+                    self.tool = Some(Tool::MarkDate(crate::tools::MarkDateForm::new(doc)));
+                }
+            }
+            Command::ToggleLock => {
+                self.settings.lock_reconciled = !self.settings.lock_reconciled;
+                self.settings.save();
+                doc.locked = self.settings.lock_reconciled;
+            }
+            Command::ToggleMarkDates => doc.set_show_mark_dates(!doc.show_mark_dates),
+            Command::ToggleBalancePanel => {
+                self.settings.show_balance_panel = !self.settings.show_balance_panel;
+                self.settings.save();
+            }
+            Command::ToggleForecast => {
+                self.settings.show_forecast = !self.settings.show_forecast;
+                self.settings.save();
+            }
+            Command::ReverseCurrencies => self.confirm_reverse = true,
             Command::ReconcileAll => doc.reconcile_all_pointed(),
             Command::ModifyGroup => {
                 self.tool = Some(Tool::ModifyGroup(crate::tools::GroupForm::new()))
@@ -625,20 +744,21 @@ impl BankPerfectApp {
         let opened = ui
             .horizontal(|ui| {
                 let opened = self.menus.titles(ui, titles);
-                // Nom et logo du logiciel, à droite de la barre de menus.
-                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_space(10.0);
-                    let pal = palette(ui);
-                    ui.label(
-                        RichText::new("BankPerfect")
-                            .size(15.0)
-                            .family(crate::theme::semibold())
-                            .color(pal.fg_dark),
-                    );
-                    let (rect, _) =
-                        ui.allocate_exact_size(egui::vec2(32.0, 32.0), egui::Sense::hover());
-                    crate::logo::paint_symbol(ui.painter(), rect, pal.accent, pal.violet);
-                });
+                // Symbole du logiciel en haut à droite, dessiné par-dessus la
+                // barre (il déborde un peu sous elle sans la grandir).
+                let pal = palette(ui);
+                let size = 40.0;
+                let right = ui.max_rect().right() - 18.0;
+                let top = ui.ctx().content_rect().top() + 10.0;
+                let rect = egui::Rect::from_min_size(
+                    egui::pos2(right - size, top),
+                    egui::vec2(size, size),
+                );
+                let painter = ui.ctx().layer_painter(egui::LayerId::new(
+                    egui::Order::Foreground,
+                    egui::Id::new("logo"),
+                ));
+                crate::logo::paint_symbol(&painter, rect, pal.accent, pal.violet);
                 opened
             })
             .inner;
@@ -704,6 +824,10 @@ impl BankPerfectApp {
             menu::separator(ui);
             self.menu_command(ui, Notes);
             self.menu_command(ui, Calculator);
+            if has_doc {
+                menu::separator(ui);
+                self.menu_command(ui, ReverseCurrencies);
+            }
             return;
         }
         match index {
@@ -714,6 +838,10 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, NewOperation);
                 self.menu_command(ui, EditOperation);
+                menu::separator(ui);
+                self.menu_command(ui, CutLines);
+                self.menu_command(ui, CopyLines);
+                self.menu_command(ui, PasteLines);
                 menu::separator(ui);
                 self.menu_command(ui, Delete);
                 menu::separator(ui);
@@ -728,6 +856,27 @@ impl BankPerfectApp {
                         "Cacher les lignes inutiles",
                         Some("Ctrl+H"),
                     );
+                    let mut marks = doc.show_mark_dates;
+                    if menu::toggle(
+                        ui,
+                        &mut marks,
+                        "Afficher les dates de pointage",
+                        Some("F11"),
+                    )
+                    .clicked()
+                    {
+                        doc.set_show_mark_dates(marks);
+                    }
+                }
+                let mut panel = self.settings.show_balance_panel;
+                if menu::toggle(ui, &mut panel, "Panneau des soldes", None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleBalancePanel);
+                }
+                let mut forecast = self.settings.show_forecast;
+                if menu::toggle(ui, &mut forecast, "Solde prévisionnel", None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleForecast);
                 }
                 menu::separator(ui);
                 menu::heading(ui, "Thème");
@@ -789,10 +938,19 @@ impl BankPerfectApp {
             _ => {
                 menu::begin_with_width(ui, 340.0);
                 self.menu_command(ui, Tack);
+                self.menu_command(ui, SetMarkDate);
                 self.menu_command(ui, ReconcileAll);
+                let mut locked = self.settings.lock_reconciled;
+                if menu::toggle(ui, &mut locked, "Verrouiller les lignes rapprochées", None)
+                    .clicked()
+                {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleLock);
+                }
                 menu::separator(ui);
                 self.menu_command(ui, ModifyGroup);
                 self.menu_command(ui, ExtraFields);
+                self.menu_command(ui, AddToPayees);
             }
         }
     }
@@ -861,7 +1019,9 @@ impl BankPerfectApp {
             });
         });
         ui.add_space(8.0);
-        crate::dashboard::cards(ui, doc);
+        if doc.show_balance_panel {
+            crate::dashboard::cards(ui, doc);
+        }
         ui.add_space(-4.0);
     }
 
@@ -1017,8 +1177,14 @@ impl BankPerfectApp {
             EditorAction::None => {}
             EditorAction::Close => self.editor = None,
             EditorAction::Save(target, op) => {
-                doc.upsert_operation(target, op);
-                self.editor = None;
+                let locked =
+                    doc.locked && target.is_some_and(|i| doc.operation(i).tack == Tack::Reconciled);
+                if locked {
+                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                } else {
+                    doc.upsert_operation(target, op);
+                    self.editor = None;
+                }
             }
         }
     }
@@ -1141,6 +1307,80 @@ impl BankPerfectApp {
                     self.confirm_delete = false;
                 }
                 Choice::No | Choice::Cancel => self.confirm_delete = false,
+            }
+        }
+        if let Some(index) = self.confirm_payee
+            && let Some(doc) = &mut self.doc
+        {
+            let op = doc.operation(index).clone();
+            let message = format!(
+                "Créer le tiers mémorisé « {} » ? La saisie le proposera avec ce mode, ce détail et cette catégorie.",
+                op.payee
+            );
+            match dialogs::confirm(
+                ctx,
+                "add_payee",
+                icon::USER_PLUS,
+                "Ajouter aux tiers mémorisés",
+                &message,
+                "Créer le tiers",
+                None,
+                false,
+            ) {
+                Choice::Pending => {}
+                Choice::Yes => {
+                    self.confirm_payee = None;
+                    let payee = bp_core::model::Payee {
+                        caption: op.payee.clone(),
+                        mode: op.mode.clone(),
+                        category: op.category,
+                        payee: op.payee.clone(),
+                        details: op.details.clone(),
+                        amount: String::new(),
+                    };
+                    let index = doc.edit_document(|d| {
+                        d.payees.push(payee);
+                        d.payees.len() - 1
+                    });
+                    self.tool = Some(crate::tools::Tool::Manage(
+                        crate::manage_ui::ManageForm::new(doc, crate::manage_ui::Tab::Payees)
+                            .with_payee(index),
+                    ));
+                }
+                Choice::No | Choice::Cancel => self.confirm_payee = None,
+            }
+        }
+        if self.confirm_reverse
+            && let Some(doc) = &mut self.doc
+        {
+            let account = doc.current_account();
+            let message = format!(
+                "Toutes les opérations du compte « {} » vont être converties de {} en {} (taux {} → {}). L'historique des annulations sera vidé.",
+                account.name,
+                account.currency,
+                account.secondary_currency,
+                account.currency_rate.to_string().replace('.', ","),
+                account.secondary_rate.to_string().replace('.', ",")
+            );
+            match dialogs::confirm(
+                ctx,
+                "reverse_currencies",
+                icon::ARROWS_LEFT_RIGHT,
+                "Inverser les monnaies",
+                &message,
+                "Convertir",
+                None,
+                false,
+            ) {
+                Choice::Pending => {}
+                Choice::Yes => {
+                    self.confirm_reverse = false;
+                    let index = doc.account;
+                    doc.edit_document(|d| bp_core::manage::reverse_currencies(d, index));
+                    let currency = doc.current_account().currency.clone();
+                    self.toast = Some((format!("Compte converti en {currency}"), now + 4.0));
+                }
+                Choice::No | Choice::Cancel => self.confirm_reverse = false,
             }
         }
         if let Some(path) = self.confirm_trash.clone() {
@@ -1400,8 +1640,17 @@ impl BankPerfectApp {
         // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
         let content_rect = ui.available_rect_before_wrap();
 
+        // Réglages d'affichage et de verrou repris à chaque image.
+        doc.locked = self.settings.lock_reconciled;
+        doc.show_balance_panel = self.settings.show_balance_panel;
+        doc.show_forecast = self.settings.show_forecast;
+        if let Some(notice) = doc.notice.take() {
+            self.toast = Some((notice, now + 4.0));
+        }
+        crate::commands::set_clipboard_len(self.clipboard.len());
         doc.refresh();
         let mut grid_action = GridAction::None;
+        let mut deferred = None;
         egui::Panel::top("balances")
             .frame(
                 egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
@@ -1425,14 +1674,13 @@ impl BankPerfectApp {
             GridAction::New => {
                 self.editor = Some(Editor::new_operation(&doc.document, doc.account))
             }
-            GridAction::Extra(index) => {
-                self.tool = Some(crate::tools::Tool::ExtraValues(
-                    crate::tools::ExtraForm::new(doc, index),
-                ))
-            }
+            GridAction::Command(command) => deferred = Some(command),
         }
 
         self.editor_drawer(&ctx, content_rect, now);
+        if let Some(command) = deferred {
+            self.execute(&ctx, command);
+        }
         self.modals(&ctx);
         self.update_title(&ctx);
     }

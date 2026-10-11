@@ -198,6 +198,12 @@ impl ManageForm {
         }
     }
 
+    /// Ouvre la fenêtre sur un tiers mémorisé.
+    pub fn with_payee(mut self, index: usize) -> Self {
+        self.payee = Some(index);
+        self
+    }
+
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let width = ui_kit::dialog_width(ctx, 0.8, 900.0, 1500.0);

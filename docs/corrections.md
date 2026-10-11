@@ -80,9 +80,9 @@ inventaires de `docs/inventaire/`.
 | C70 | Filtres prédéfinis : après suppression de tous les filtres, « Mois actuel » et « Mois précédent » réapparaissaient au chargement suivant. | Une liste vidée reste vide (un ancien fichier dont la liste est vide reçoit les filtres par défaut, comme avant). | 04 §2.6 Filters |
 | C71 | Filtres prédéfinis : une date dynamique invalide était ignorée sans message, et les constantes étaient remplacées dans le texte (`aa` devenait `20262026`). | Dates vérifiées à l'enregistrement (`AutoFilter::validate`) ; constantes reconnues comme des noms entiers. | 04 §2.6 Filters |
 | C72 | Saisie d'un montant de budget : `100/3` donnait 33 (division entière Python 2). | Vraie division (33,3333). | 04 §4.1 |
+| C73 | Un détail contenant `m=` imposait comme mode de paiement les 15 caractères suivants (comportement hérité, source de modes fantaisistes). | Le mode est toujours celui de l'opération ; `m=` reste un texte ordinaire du détail. |
+| C74 | Couper/coller : les lignes collées gardaient des liens de transfert et la date de pointage manuelle n'était pas rafraîchie à l'écran. | Collage avec nouvel identifiant et catégorie vérifiée ; tout changement de pointage rafraîchit la grille et les soldes. |
 
 ## À faire (fonctionnalités pas encore portées)
 
-- Un détail contenant `m=` imposait le mode de paiement.
-- Compteur des sauvegardes `.bp0` commun à tous les fichiers, 20 emplacements fixes (le manuel annonce 30, paramétrables).
 - Bugs des scripts relevés dans `docs/inventaire/04-scripts.md` restant à porter (`{count-1}` non remplacé…).

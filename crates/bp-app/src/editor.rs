@@ -8,6 +8,7 @@ use chrono::Months;
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
+use crate::document::OpenDoc;
 use crate::theme::palette;
 
 pub struct Editor {
@@ -20,6 +21,8 @@ pub struct Editor {
     category: Option<u32>,
     amount: String,
     tack: Tack,
+    /// Sens de l'opération : recette (positif) ou dépense.
+    credit: bool,
     /// Pointage d'origine : la date de pointage passe à aujourd'hui s'il change.
     original_tack: Option<Tack>,
     extra: Vec<(String, String)>,
@@ -46,6 +49,7 @@ impl Editor {
             category: None,
             amount: String::new(),
             tack: Tack::None,
+            credit: !mode_is_debit(document, &Mode::default()),
             original_tack: None,
             extra: Vec::new(),
             error: None,
@@ -63,8 +67,9 @@ impl Editor {
             payee: op.payee.clone(),
             details: op.details.clone(),
             category: op.category,
-            amount: op.amount.format(2, ','),
+            amount: op.amount.abs().format(2, ','),
             tack: op.tack,
+            credit: !op.amount.is_negative(),
             original_tack: Some(op.tack),
             extra: op.extra.clone(),
             error: None,
@@ -73,170 +78,260 @@ impl Editor {
         }
     }
 
-    pub fn show(&mut self, ui: &mut egui::Ui, document: &Document) -> EditorAction {
+    pub fn show(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) -> EditorAction {
+        let document = &doc.document;
         let pal = palette(ui);
         let mut action = EditorAction::None;
-        ui.add_space(10.0);
+
+        // En-tête : titre, compte, fermeture.
+        ui.add_space(12.0);
         ui.horizontal(|ui| {
-            let title = if self.target.is_some() {
-                "Modifier l'opération"
-            } else {
-                "Nouvelle opération"
-            };
-            ui.label(RichText::new(title).heading());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.button(icon::X).on_hover_text("Fermer (Échap)").clicked() {
+            ui.vertical(|ui| {
+                let title = if self.target.is_some() {
+                    "Modifier l'opération"
+                } else {
+                    "Nouvelle opération"
+                };
+                ui.label(
+                    RichText::new(title)
+                        .size(20.0)
+                        .family(crate::theme::semibold()),
+                );
+                ui.label(
+                    RichText::new(format!("{}  {}", icon::BANK, doc.current_account().name))
+                        .color(pal.muted),
+                );
+            });
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+                if ui
+                    .add(egui::Button::new(RichText::new(icon::X).size(16.0)).frame(false))
+                    .on_hover_text("Fermer (Échap)")
+                    .clicked()
+                {
                     action = EditorAction::Close;
                 }
             });
         });
-        ui.add_space(8.0);
+        ui.add_space(14.0);
 
-        egui::Grid::new("editor")
-            .num_columns(2)
-            .spacing([10.0, 10.0])
+        let footer_height = 64.0;
+        // Gouttière à droite pour la barre de défilement.
+        let card_width = ui.available_width() - 14.0;
+        egui::ScrollArea::vertical()
+            .max_height((ui.available_height() - footer_height).max(120.0))
+            .auto_shrink([false, true])
             .show(ui, |ui| {
-                ui.label("Date");
-                let date = crate::datepicker::date_field(
+                ui.set_max_width(card_width);
+                self.amount_card(ui, doc, card_width);
+                ui.add_space(16.0);
+
+                section(
                     ui,
-                    "date",
-                    &mut self.date,
-                    190.0,
-                    crate::datepicker::Placement::Popup,
+                    card_width,
+                    icon::CALENDAR_BLANK,
+                    "Quand et comment",
+                    |ui| {
+                        let half = (ui.available_width() - 12.0) / 2.0;
+                        ui.horizontal_top(|ui| {
+                            ui.spacing_mut().item_spacing.x = 12.0;
+                            let mut cols = [
+                                ui.new_child(
+                                    egui::UiBuilder::new()
+                                        .layout(egui::Layout::top_down(egui::Align::Min))
+                                        .max_rect(egui::Rect::from_min_size(
+                                            ui.cursor().min,
+                                            egui::vec2(half, 80.0),
+                                        )),
+                                ),
+                                ui.new_child(
+                                    egui::UiBuilder::new()
+                                        .layout(egui::Layout::top_down(egui::Align::Min))
+                                        .max_rect(egui::Rect::from_min_size(
+                                            ui.cursor().min + egui::vec2(half + 12.0, 0.0),
+                                            egui::vec2(half, 80.0),
+                                        )),
+                                ),
+                            ];
+                            field_label(&mut cols[0], "Date");
+                            let width = cols[0].available_width();
+                            let date = crate::datepicker::date_field(
+                                &mut cols[0],
+                                "date",
+                                &mut self.date,
+                                width,
+                                crate::datepicker::Placement::Popup,
+                            );
+                            let date = date.on_hover_text(format!(
+                                "{up}/{down} : ±1 jour   Ctrl+{up}/{down} : ±1 mois",
+                                up = icon::ARROW_UP,
+                                down = icon::ARROW_DOWN
+                            ));
+                            if self.focus_requested {
+                                date.request_focus();
+                                self.focus_requested = false;
+                            }
+                            if date.has_focus() {
+                                self.date_keys(&cols[0]);
+                            }
+
+                            field_label(&mut cols[1], "Mode de paiement");
+                            let before = self.mode.clone();
+                            let (glyph, color) =
+                                crate::grid::mode_style(document, &self.mode, &pal);
+                            let width = cols[1].available_width();
+                            egui::ComboBox::from_id_salt("mode")
+                                .selected_text(
+                                    RichText::new(format!("{glyph}  {}", self.mode.label()))
+                                        .color(color),
+                                )
+                                .width(width)
+                                .height(420.0)
+                                .show_ui(&mut cols[1], |ui| {
+                                    for mode in document.mode_list() {
+                                        let (glyph, color) =
+                                            crate::grid::mode_style(document, &mode, &pal);
+                                        let text =
+                                            RichText::new(format!("{glyph}  {}", mode.label()));
+                                        let text = if mode == self.mode {
+                                            text.color(color)
+                                        } else {
+                                            text
+                                        };
+                                        ui.selectable_value(&mut self.mode, mode, text);
+                                    }
+                                });
+                            if self.mode != before {
+                                self.credit = !mode_is_debit(document, &self.mode);
+                            }
+                            let height =
+                                cols[0].min_rect().height().max(cols[1].min_rect().height());
+                            ui.allocate_space(egui::vec2(2.0 * half + 12.0, height));
+                        });
+                    },
                 );
-                if self.focus_requested {
-                    date.request_focus();
-                    self.focus_requested = false;
-                }
-                if date.has_focus() {
-                    self.date_keys(ui);
-                }
-                ui.end_row();
 
-                ui.label("Mode");
-                egui::ComboBox::from_id_salt("mode")
-                    .selected_text(self.mode.label())
-                    .width(ui.available_width())
-                    .show_ui(ui, |ui| {
-                        for mode in document.mode_list() {
-                            let label = mode.label().to_string();
-                            ui.selectable_value(&mut self.mode, mode, label);
-                        }
-                    });
-                ui.end_row();
-
-                ui.label("Tiers");
-                ui.vertical(|ui| {
-                    let response =
-                        ui.add(crate::theme::field(&mut self.payee).desired_width(f32::INFINITY));
+                section(ui, card_width, icon::USER, "Qui et pourquoi", |ui| {
+                    field_label(ui, "Tiers");
+                    let response = ui.add(
+                        crate::theme::field(&mut self.payee)
+                            .hint_text("Commerçant, organisme, personne…")
+                            .desired_width(f32::INFINITY),
+                    );
                     if response.has_focus() && !self.payee.is_empty() {
                         self.payee_suggestions(ui, document);
                     }
+                    ui.add_space(10.0);
+                    field_label(ui, "Détail");
+                    ui.add(
+                        crate::theme::field(&mut self.details)
+                            .hint_text("Note, référence, n° de chèque…")
+                            .desired_width(f32::INFINITY),
+                    );
                 });
-                ui.end_row();
 
-                ui.label("Détail");
-                ui.add(crate::theme::field(&mut self.details).desired_width(f32::INFINITY));
-                ui.end_row();
-
-                ui.label("Catégorie");
-                let selected = self
-                    .category
-                    .and_then(|id| document.category_label(id))
-                    .unwrap_or_else(|| "(aucune)".into());
-                egui::ComboBox::from_id_salt("category")
-                    .selected_text(selected)
-                    .width(ui.available_width())
-                    .height(400.0)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.category, None, "(aucune)");
-                        for c in &document.categories {
-                            let label = if c.is_child {
-                                format!("      {}", c.name)
-                            } else {
-                                c.name.clone()
-                            };
-                            let text = if c.is_child {
-                                RichText::new(label)
-                            } else {
-                                RichText::new(label).family(crate::theme::semibold())
-                            };
-                            ui.selectable_value(&mut self.category, Some(c.id), text);
+                section(ui, card_width, icon::TAG, "Classement", |ui| {
+                    field_label(ui, "Catégorie");
+                    let style = self
+                        .category
+                        .and_then(|id| doc.category_styles.get(&id).copied());
+                    let selected = match self.category.and_then(|id| document.category_label(id)) {
+                        Some(label) => {
+                            let color = style
+                                .map_or(pal.fg, |s| crate::theme::category_color(&pal, s.color));
+                            let glyph = style.map_or(icon::TAG, |s| s.icon);
+                            RichText::new(format!("{glyph}  {label}")).color(color)
                         }
-                    });
-                ui.end_row();
-
-                ui.label("Montant");
-                let hint = self.sign_hint(document);
-                ui.add(
-                    crate::theme::field(&mut self.amount)
-                        .hint_text(hint)
-                        .desired_width(140.0),
-                );
-                ui.end_row();
-
-                ui.label("Pointage");
-                ui.horizontal(|ui| {
-                    // Contrôle segmenté : trois choix de même largeur.
-                    ui.spacing_mut().item_spacing.x = 4.0;
-                    let width = (ui.available_width() - 8.0) / 3.0;
-                    for (tack, label) in [
-                        (Tack::None, "Non".to_string()),
-                        (Tack::Pointed, format!("{} Pointée", icon::CHECK)),
-                        (Tack::Reconciled, format!("{} Rappr.", icon::CHECKS)),
-                    ] {
-                        let button = egui::Button::selectable(self.tack == tack, label);
-                        if ui
-                            .add_sized([width, 32.0], button)
-                            .on_hover_text(tack_label(tack))
-                            .clicked()
-                        {
-                            self.tack = tack;
-                        }
-                    }
+                        None => RichText::new("Aucune catégorie").color(pal.muted),
+                    };
+                    egui::ComboBox::from_id_salt("category")
+                        .selected_text(selected)
+                        .width(ui.available_width())
+                        .height(420.0)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut self.category, None, "Aucune catégorie");
+                            for c in &document.categories {
+                                let style = doc.category_styles.get(&c.id).copied();
+                                let glyph = style.map_or(icon::TAG, |s| s.icon);
+                                let indent = if c.is_child { "      " } else { "" };
+                                let mut text =
+                                    RichText::new(format!("{indent}{glyph}  {}", c.name));
+                                if !c.is_child {
+                                    text = text.family(crate::theme::semibold());
+                                }
+                                if let Some(s) = style {
+                                    text = text.color(crate::theme::category_color(&pal, s.color));
+                                }
+                                ui.selectable_value(&mut self.category, Some(c.id), text);
+                            }
+                        });
+                    ui.add_space(12.0);
+                    field_label(ui, "Pointage");
+                    segmented(
+                        ui,
+                        &mut self.tack,
+                        &[
+                            (Tack::None, icon::CIRCLE_DASHED, "À pointer", pal.fg),
+                            (Tack::Pointed, icon::CHECK, "Pointée", pal.pointed),
+                            (Tack::Reconciled, icon::CHECKS, "Rapprochée", pal.reconciled),
+                        ],
+                        34.0,
+                    );
                 });
-                ui.end_row();
+
+                let visible_extra: Vec<_> = self
+                    .extra
+                    .iter()
+                    .filter(|(k, _)| !k.starts_with('#') && k != "freeicon")
+                    .collect();
+                if !visible_extra.is_empty() {
+                    section(
+                        ui,
+                        card_width,
+                        icon::LIST_PLUS,
+                        "Champs supplémentaires",
+                        |ui| {
+                            egui::Grid::new("editor_extra")
+                                .num_columns(2)
+                                .spacing([12.0, 6.0])
+                                .show(ui, |ui| {
+                                    for (k, v) in visible_extra {
+                                        ui.label(RichText::new(k).color(pal.muted));
+                                        ui.label(v);
+                                        ui.end_row();
+                                    }
+                                });
+                        },
+                    );
+                }
             });
 
-        let visible_extra: Vec<_> = self
-            .extra
-            .iter()
-            .filter(|(k, _)| !k.starts_with('#') && k != "freeicon")
-            .collect();
-        if !visible_extra.is_empty() {
-            ui.add_space(8.0);
-            ui.label(
-                RichText::new("Champs supplémentaires")
-                    .small()
-                    .family(crate::theme::medium())
-                    .color(pal.muted),
-            );
-            for (k, v) in visible_extra {
-                ui.label(format!("{k} : {v}"));
-            }
-        }
-
-        if let Some(error) = &self.error {
-            ui.add_space(6.0);
-            ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
-        }
-
-        ui.add_space(14.0);
-        ui.horizontal(|ui| {
-            let save = crate::theme::primary_button(ui, format!("{}  Enregistrer", icon::CHECK));
-            if ui.add(save).on_hover_text("Ctrl+Entrée").clicked() {
-                action = self.validate(document);
-            }
-            if ui.button("Annuler").clicked() {
-                action = EditorAction::Close;
-            }
+        // Pied : erreur et boutons, toujours visibles en bas du panneau.
+        ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
+            ui.horizontal(|ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let save =
+                        crate::theme::primary_button(ui, format!("{}  Enregistrer", icon::CHECK))
+                            .min_size(egui::vec2(140.0, 38.0));
+                    if ui.add(save).on_hover_text("Ctrl+Entrée").clicked() {
+                        action = self.validate();
+                    }
+                    if ui
+                        .add(egui::Button::new("Annuler").min_size(egui::vec2(90.0, 38.0)))
+                        .clicked()
+                    {
+                        action = EditorAction::Close;
+                    }
+                    if let Some(error) = &self.error {
+                        ui.label(
+                            RichText::new(format!("{}  {error}", icon::WARNING))
+                                .color(pal.negative),
+                        );
+                    }
+                });
+            });
+            ui.add_space(4.0);
+            ui.separator();
         });
-        let help = format!(
-            "Ctrl+Entrée pour enregistrer, Échap pour fermer. Dans la date : {up}/{down} ±1 jour, Ctrl+{up}/{down} ±1 mois.",
-            up = icon::ARROW_UP,
-            down = icon::ARROW_DOWN
-        );
-        ui.label(RichText::new(help).small().color(pal.muted));
 
         let (enter, escape) = ui.input(|i| {
             (
@@ -245,19 +340,79 @@ impl Editor {
             )
         });
         if enter {
-            action = self.validate(document);
+            action = self.validate();
         } else if escape {
             action = EditorAction::Close;
         }
         action
     }
 
-    fn sign_hint(&self, document: &Document) -> &'static str {
-        if mode_is_debit(document, &self.mode) {
-            "dépense, ex. 12,50"
+    /// Carte du montant : sens (dépense / recette) et grand champ de saisie,
+    /// teintée de rouge ou de vert.
+    fn amount_card(&mut self, ui: &mut egui::Ui, doc: &OpenDoc, outer_width: f32) {
+        let pal = palette(ui);
+        let color = if self.credit {
+            pal.positive
         } else {
-            "recette, ex. 12,50"
-        }
+            pal.negative
+        };
+        let width = outer_width - 2.0 * 16.0 - 2.0;
+        egui::Frame::new()
+            .fill(color.gamma_multiply(0.08))
+            .stroke(egui::Stroke::new(1.0, color.gamma_multiply(0.35)))
+            .corner_radius(14)
+            .inner_margin(egui::Margin::symmetric(16, 14))
+            .show(ui, |ui| {
+                ui.set_width(width);
+                ui.set_max_width(width);
+                segmented(
+                    ui,
+                    &mut self.credit,
+                    &[
+                        (false, icon::ARROW_UP_RIGHT, "Dépense", pal.negative),
+                        (true, icon::ARROW_DOWN_LEFT, "Recette", pal.positive),
+                    ],
+                    30.0,
+                );
+                ui.add_space(10.0);
+                ui.horizontal(|ui| {
+                    let sign = if self.credit { "+" } else { "−" };
+                    ui.label(
+                        RichText::new(sign)
+                            .size(30.0)
+                            .family(crate::theme::semibold())
+                            .color(color),
+                    );
+                    let currency = doc.current_account().currency.clone();
+                    let currency_width = 30.0;
+                    let edit = egui::TextEdit::singleline(&mut self.amount)
+                        .font(egui::FontId::new(32.0, crate::theme::semibold()))
+                        .text_color(color)
+                        .hint_text(
+                            RichText::new("0,00")
+                                .size(32.0)
+                                .color(color.gamma_multiply(0.35)),
+                        )
+                        .frame(egui::Frame::NONE)
+                        .desired_width(ui.available_width() - currency_width);
+                    let response = ui.add(edit);
+                    if response.changed() {
+                        // Un signe tapé choisit le sens et disparaît du champ.
+                        if let Some(rest) = self.amount.strip_prefix('-') {
+                            self.credit = false;
+                            self.amount = rest.to_string();
+                        } else if let Some(rest) = self.amount.strip_prefix('+') {
+                            self.credit = true;
+                            self.amount = rest.to_string();
+                        }
+                    }
+                    ui.label(
+                        RichText::new(currency)
+                            .size(22.0)
+                            .color(color.gamma_multiply(0.8)),
+                    );
+                });
+            });
     }
 
     /// ↑/↓ (ou PgPréc/PgSuiv) : ±1 jour ; avec Ctrl : ±1 mois.
@@ -319,14 +474,15 @@ impl Editor {
                 {
                     self.payee = p.payee.clone();
                     self.mode = p.mode.clone();
+                    self.credit = !mode_is_debit(document, &self.mode);
                     if p.category.is_some() {
                         self.category = p.category;
                     }
                     if !p.details.is_empty() {
                         self.details = p.details.clone();
                     }
-                    if Amount::parse(&p.amount).is_some_and(|a| a != Amount::ZERO) {
-                        self.amount = p.amount.clone();
+                    if let Some(a) = Amount::parse(&p.amount).filter(|&a| a != Amount::ZERO) {
+                        self.amount = a.abs().format(2, ',');
                     }
                 }
             }
@@ -338,21 +494,22 @@ impl Editor {
         });
     }
 
-    fn validate(&mut self, document: &Document) -> EditorAction {
+    fn validate(&mut self) -> EditorAction {
         let today = Date::today();
         let Some(date) = Date::parse_fr(&self.date, today) else {
             self.error = Some("Date invalide (jj/mm/aaaa)".into());
             return EditorAction::None;
         };
         let text = self.amount.trim();
-        let Some(mut amount) = Amount::parse(text) else {
+        let Some(amount) = Amount::parse(text) else {
             self.error = Some("Montant invalide".into());
             return EditorAction::None;
         };
-        // Sans signe explicite, le signe vient du mode de paiement.
-        if !text.starts_with(['-', '+']) && mode_is_debit(document, &self.mode) {
-            amount = -amount;
-        }
+        let amount = if self.credit {
+            amount.abs()
+        } else {
+            -amount.abs()
+        };
         let payee = self.payee.replace(';', " ");
         let details = self.details.replace(';', " ");
         self.error = None;
@@ -377,14 +534,6 @@ impl Editor {
     }
 }
 
-fn tack_label(tack: Tack) -> &'static str {
-    match tack {
-        Tack::None => "Non pointée",
-        Tack::Pointed => "Pointée",
-        Tack::Reconciled => "Rapprochée",
-    }
-}
-
 fn mode_is_debit(document: &Document, mode: &Mode) -> bool {
     match mode {
         Mode::Standard(m) => m.is_debit(),
@@ -405,4 +554,96 @@ fn known_payees(document: &Document, account: usize) -> Vec<String> {
         .filter(|p| !p.is_empty())
         .collect();
     set.into_iter().map(str::to_string).collect()
+}
+
+/// Titre de section (icône et petites capitales) suivi d'une carte.
+fn section(
+    ui: &mut egui::Ui,
+    outer_width: f32,
+    glyph: &str,
+    title: &str,
+    content: impl FnOnce(&mut egui::Ui),
+) {
+    let pal = palette(ui);
+    ui.label(
+        RichText::new(format!("{glyph}  {}", title.to_uppercase()))
+            .size(11.5)
+            .family(crate::theme::semibold())
+            .color(pal.muted),
+    );
+    ui.add_space(6.0);
+    let width = outer_width - 2.0 * 14.0 - 2.0;
+    egui::Frame::new()
+        .fill(pal.bg)
+        .stroke(egui::Stroke::new(1.0, pal.border.gamma_multiply(0.6)))
+        .corner_radius(12)
+        .inner_margin(egui::Margin::same(14))
+        .show(ui, |ui| {
+            ui.set_width(width);
+            ui.set_max_width(width);
+            content(ui);
+        });
+    ui.add_space(14.0);
+}
+
+fn field_label(ui: &mut egui::Ui, text: &str) {
+    ui.label(
+        RichText::new(text)
+            .size(12.5)
+            .family(crate::theme::medium())
+            .color(palette(ui).fg_dark),
+    );
+    ui.add_space(2.0);
+}
+
+/// Contrôle segmenté : choix de même largeur, l'option active teintée de sa
+/// couleur.
+fn segmented<T: PartialEq + Copy>(
+    ui: &mut egui::Ui,
+    value: &mut T,
+    options: &[(T, &str, &str, egui::Color32)],
+    height: f32,
+) {
+    let pal = palette(ui);
+    let width = ui.available_width();
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+    ui.painter()
+        .rect_filled(rect, height / 2.0 - 4.0, pal.bg_dark);
+    let segment = (rect.width() - 6.0) / options.len() as f32;
+    for (k, &(option, glyph, label, color)) in options.iter().enumerate() {
+        let r = egui::Rect::from_min_size(
+            rect.min + egui::vec2(3.0 + k as f32 * segment, 3.0),
+            egui::vec2(segment, height - 6.0),
+        );
+        let response = ui
+            .interact(r, ui.id().with(("segment", label)), egui::Sense::click())
+            .on_hover_cursor(egui::CursorIcon::PointingHand);
+        let active = *value == option;
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(egui::WidgetType::Button, true, active, label)
+        });
+        if active {
+            ui.painter()
+                .rect_filled(r, r.height() / 2.0 - 3.0, color.gamma_multiply(0.22));
+        } else if response.hovered() {
+            ui.painter()
+                .rect_filled(r, r.height() / 2.0 - 3.0, pal.bg_highlight);
+        }
+        let text_color = if active { color } else { pal.fg_dark };
+        let family = if active {
+            crate::theme::semibold()
+        } else {
+            crate::theme::medium()
+        };
+        ui.painter().text(
+            r.center(),
+            egui::Align2::CENTER_CENTER,
+            format!("{glyph}  {label}"),
+            egui::FontId::new(13.0, family),
+            text_color,
+        );
+        if response.clicked() {
+            *value = option;
+        }
+    }
 }

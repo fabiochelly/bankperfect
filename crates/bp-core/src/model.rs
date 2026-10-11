@@ -91,6 +91,10 @@ impl Amount {
         self.0 < 0
     }
 
+    pub fn abs(self) -> Self {
+        Self(self.0.abs())
+    }
+
     pub fn as_f64(self) -> f64 {
         self.0 as f64 / Self::SCALE as f64
     }

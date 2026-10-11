@@ -549,7 +549,7 @@ impl BankPerfectApp {
             Command::About => return self.about = true,
             Command::Help => {
                 ctx.open_url(egui::OpenUrl::new_tab(
-                    "https://www.chelly.net/wiki/wiki/manuel",
+                    "https://github.com/fabiochelly/bankperfect#readme",
                 ));
                 return;
             }
@@ -1458,7 +1458,19 @@ impl BankPerfectApp {
             ui.separator();
             selection_summary(ui, doc);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(RichText::new("Enregistré").small().color(pal.muted));
+                if doc.dirty {
+                    ui.label(
+                        RichText::new(format!("{}  Modifications non enregistrées", icon::CIRCLE))
+                            .small()
+                            .color(pal.warning),
+                    );
+                } else {
+                    ui.label(
+                        RichText::new(format!("{}  Enregistré", icon::CHECK))
+                            .small()
+                            .color(pal.muted),
+                    );
+                }
                 if let Some(text) = toast {
                     ui.label(RichText::new(format!("{}  {text}", icon::CHECK)).color(pal.positive));
                 }
@@ -1720,8 +1732,15 @@ impl BankPerfectApp {
                     );
                     ui.add_space(10.0);
                     ui.label(
-                        RichText::new(format!("{}  Enregistré", icon::SEAL_CHECK))
-                            .color(pal.positive),
+                        RichText::new(format!(
+                            "{}  Logiciel libre — licence MIT",
+                            icon::SEAL_CHECK
+                        ))
+                        .color(pal.positive),
+                    );
+                    ui.hyperlink_to(
+                        format!("{}  github.com/fabiochelly/bankperfect", icon::GITHUB_LOGO),
+                        "https://github.com/fabiochelly/bankperfect",
                     );
                     ui.add_space(10.0);
                     if let Ok(exe) = std::env::current_exe() {

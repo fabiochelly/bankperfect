@@ -670,11 +670,7 @@ impl BankPerfectApp {
             ui.separator();
             selection_summary(ui, doc);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.label(
-                    RichText::new("Enregistré")
-                        .small()
-                        .color(pal.muted),
-                );
+                ui.label(RichText::new("Enregistré").small().color(pal.muted));
                 if let Some(text) = toast {
                     ui.label(RichText::new(format!("{}  {text}", icon::CHECK)).color(pal.positive));
                 }
@@ -1064,10 +1060,12 @@ impl BankPerfectApp {
         egui::Panel::bottom("status").show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
 
         let sidebar_fill = palette(ui).bg_dark;
+        // Panneau des comptes plus étroit sur les petits écrans.
+        let sidebar_width = (ui.available_width() * 0.2).clamp(190.0, 260.0);
         egui::Panel::left("accounts")
             .resizable(true)
-            .default_size(260.0)
-            .min_size(200.0)
+            .default_size(sidebar_width)
+            .min_size(170.0)
             .frame(
                 egui::Frame::side_top_panel(ui.style())
                     .fill(sidebar_fill)

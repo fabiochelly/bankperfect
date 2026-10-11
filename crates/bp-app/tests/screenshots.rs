@@ -15,9 +15,18 @@ fn render(
     theme: egui::Theme,
     setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
 ) {
+    render_sized(name, theme, egui::vec2(1440.0, 900.0), setup);
+}
+
+fn render_sized(
+    name: &str,
+    theme: egui::Theme,
+    size: egui::Vec2,
+    setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
+) {
     let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
     let mut harness = Harness::builder()
-        .with_size(egui::vec2(1440.0, 900.0))
+        .with_size(size)
         .with_pixels_per_point(2.0)
         .with_theme(theme)
         .wgpu()
@@ -165,6 +174,18 @@ fn screenshots() {
         h.run_steps(3);
         h.get_by_label("Sauvegardes…").click();
     });
+    render_sized(
+        "23-etroit-1000",
+        egui::Theme::Dark,
+        egui::vec2(1000.0, 700.0),
+        |_| {},
+    );
+    render_sized(
+        "24-etroit-820",
+        egui::Theme::Dark,
+        egui::vec2(820.0, 600.0),
+        |_| {},
+    );
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

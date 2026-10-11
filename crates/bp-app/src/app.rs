@@ -848,18 +848,39 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let font = egui::TextStyle::Small.resolve(ui.style());
     let mut remove = None;
     for (index, (label, _)) in chips.iter().enumerate() {
-        let text = format!("{label}   {}", icon::X);
-        let galley = ui.painter().layout_no_wrap(text, font.clone(), pal.fg);
-        let (rect, response) =
-            ui.allocate_exact_size(galley.size() + egui::vec2(20.0, 8.0), egui::Sense::click());
-        let fill = if response.hovered() {
-            pal.accent.gamma_multiply(0.32)
+        let text = ui
+            .painter()
+            .layout_no_wrap(label.clone(), font.clone(), pal.fg);
+        let cross = ui
+            .painter()
+            .layout_no_wrap(icon::X.to_string(), font.clone(), pal.fg);
+        let size = egui::vec2(text.size().x + cross.size().x + 30.0, text.size().y + 8.0);
+        let (rect, response) = ui.allocate_exact_size(size, egui::Sense::click());
+        let hovered = response.hovered();
+        let fill = if hovered {
+            pal.accent.gamma_multiply(0.28)
         } else {
             pal.accent.gamma_multiply(0.18)
         };
         ui.painter().rect_filled(rect, rect.height() / 2.0, fill);
-        ui.painter()
-            .galley(rect.center() - galley.size() / 2.0, galley, pal.fg);
+        ui.painter().galley(
+            egui::pos2(rect.left() + 10.0, rect.center().y - text.size().y / 2.0),
+            text,
+            pal.fg,
+        );
+        // La croix passe au rouge au survol : le clic retire le filtre.
+        let cross_center = egui::pos2(rect.right() - 10.0 - cross.size().x / 2.0, rect.center().y);
+        if hovered {
+            ui.painter()
+                .circle_filled(cross_center, 8.0, pal.negative.gamma_multiply(0.22));
+        }
+        ui.painter().text(
+            cross_center,
+            egui::Align2::CENTER_CENTER,
+            icon::X,
+            font.clone(),
+            if hovered { pal.negative } else { pal.muted },
+        );
         if response.on_hover_text("Retirer ce filtre").clicked() {
             remove = Some(index);
         }

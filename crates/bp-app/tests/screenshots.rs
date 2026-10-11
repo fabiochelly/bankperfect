@@ -58,14 +58,17 @@ fn screenshots() {
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        h.event(egui::Event::PointerMoved(egui::pos2(520.0, 165.0)));
-        h.event(press(egui::pos2(520.0, 165.0), true));
+        h.event(egui::Event::PointerMoved(egui::pos2(1275.0, 160.0)));
+        h.event(press(egui::pos2(1275.0, 160.0), true));
         h.run_steps(2);
-        for x in (530..=610).step_by(10) {
-            h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 165.0)));
+        for x in (1285..=1385).step_by(10) {
+            h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 160.0)));
             h.run_steps(1);
         }
-        h.event(press(egui::pos2(610.0, 165.0), false));
+        h.event(press(egui::pos2(1385.0, 160.0), false));
+        h.run_steps(3);
+        // Survol du badge de filtre : la croix passe au rouge.
+        h.event(egui::Event::PointerMoved(egui::pos2(440.0, 881.0)));
     });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();

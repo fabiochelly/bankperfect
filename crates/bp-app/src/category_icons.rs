@@ -130,7 +130,7 @@ const RULES: &[(&[&str], &str)] = &[
         ],
         icon::DEVICE_MOBILE,
     ),
-    (&["telephone", "phone", "telecom"], icon::PHONE),
+    (&["telephone", "telephoni", "phone", "telecom"], icon::PHONE),
     (
         &["internet", "box", "fibre", "adsl", "wifi"],
         icon::WIFI_HIGH,
@@ -148,7 +148,7 @@ const RULES: &[(&[&str], &str)] = &[
         icon::LAPTOP,
     ),
     (
-        &["hifi", "video", "tele", "tv", "television", "audio"],
+        &["hifi", "video", "televi", "tv", "television", "audio"],
         icon::TELEVISION,
     ),
     (&["photo", "camera"], icon::CAMERA),
@@ -500,7 +500,9 @@ pub fn styles(document: &Document) -> HashMap<u32, CategoryStyle> {
     map
 }
 
-/// Première règle dont un mot-clé correspond à un mot du libellé.
+/// Icône du premier mot du libellé reconnu par une règle : le premier mot
+/// est le plus significatif (« Impôt sur le revenu » est un impôt, « Rbt
+/// santé » un remboursement). Les mots-clés composés passent avant.
 pub fn icon_for(label: &str) -> Option<&'static str> {
     let normalized = normalize(label);
     let words: Vec<&str> = normalized
@@ -508,16 +510,19 @@ pub fn icon_for(label: &str) -> Option<&'static str> {
         .filter(|w| w.len() >= 2)
         .collect();
     let padded = format!(" {} ", words.join(" "));
-    // Les mots-clés composés (« loyer percu ») se cherchent dans le libellé entier.
     for (keywords, glyph) in RULES {
-        for keyword in *keywords {
-            let hit = if keyword.contains(' ') {
-                padded.contains(&format!(" {keyword}"))
-            } else {
-                words
-                    .iter()
-                    .any(|w| w.starts_with(keyword) && (keyword.len() >= 3 || *w == *keyword))
-            };
+        if keywords
+            .iter()
+            .any(|k| k.contains(' ') && padded.contains(&format!(" {k}")))
+        {
+            return Some(glyph);
+        }
+    }
+    for word in &words {
+        for (keywords, glyph) in RULES {
+            let hit = keywords
+                .iter()
+                .any(|k| !k.contains(' ') && word.starts_with(k) && (k.len() >= 3 || word == k));
             if hit {
                 return Some(glyph);
             }

@@ -35,6 +35,7 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_RULES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
@@ -231,7 +232,9 @@ impl BankPerfectApp {
                     let schedules = bp_core::scheduler::load(&opened.document)
                         .map(|l| l.schedules)
                         .unwrap_or_default();
-                    r.summary(&opened.document, &schedules)
+                    let lines: Vec<(usize, u64)> =
+                        r.inserted.iter().map(|l| (l.account, l.uid)).collect();
+                    (r.summary(&opened.document, &schedules), lines)
                 });
                 self.show_warnings = !opened.warnings.is_empty();
                 self.settings.remember(&path);
@@ -243,7 +246,16 @@ impl BankPerfectApp {
                     doc.sort = sort;
                     doc.ascending = *ascending;
                 }
-                if let Some(summary) = inserted {
+                if let Some((summary, lines)) = inserted {
+                    // Règles automatiques sur les échéances insérées.
+                    let changes: Vec<(usize, usize)> = lines
+                        .iter()
+                        .filter_map(|&(account, uid)| {
+                            let ops = &doc.document.accounts.get(account)?.operations;
+                            Some((account, ops.iter().position(|op| op.uid == uid)?))
+                        })
+                        .collect();
+                    doc.apply_auto_rules(&changes);
                     doc.dirty = true;
                     self.scheduler_notice = Some(summary);
                 }
@@ -370,6 +382,9 @@ impl BankPerfectApp {
             ));
         }
 
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_RULES)) {
+            return self.execute(ctx, Command::Rules);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_FILTERS)) {
             return self.execute(ctx, Command::AutoFilters);
         }
@@ -678,6 +693,9 @@ impl BankPerfectApp {
                 self.settings.save();
             }
             Command::ReverseCurrencies => self.confirm_reverse = true,
+            Command::Rules => {
+                self.tool = Some(Tool::Rules(Box::new(crate::rules_ui::RulesForm::new(doc))))
+            }
             Command::AutoFilters => {
                 self.tool = Some(Tool::Filters(Box::new(
                     crate::filters_ui::FiltersForm::new(doc, false),
@@ -1137,6 +1155,7 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, ModifyGroup);
                 self.menu_command(ui, ExtraFields);
+                self.menu_command(ui, Rules);
                 self.menu_command(ui, AddToPayees);
                 self.menu_command(ui, AddToScheduler);
             }

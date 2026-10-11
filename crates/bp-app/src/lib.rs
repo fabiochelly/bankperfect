@@ -22,6 +22,7 @@ mod notes;
 mod options_ui;
 mod profiler;
 mod protection_ui;
+mod rules_ui;
 mod scheduler_ui;
 mod settings;
 mod sidebar;

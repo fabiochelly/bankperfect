@@ -43,6 +43,7 @@ pub enum Command {
     ReverseCurrencies,
     Scheduler,
     Forecast,
+    Rules,
     AutoFilters,
     SaveFilter,
     ApplyFilter(usize),
@@ -118,6 +119,7 @@ impl Command {
                 ReverseCurrencies,
                 Scheduler,
                 Forecast,
+                Rules,
                 AutoFilters,
                 SaveFilter,
                 ClearFilters,
@@ -448,6 +450,13 @@ impl Command {
                     "prévision futur",
                 )
             }
+            Rules => info(
+                "Opérations",
+                "Règles automatiques…",
+                icon::MAGIC_WAND,
+                Some("Ctrl+F"),
+                "calcul automatique des champs catégoriser",
+            ),
             AutoFilters => info(
                 "Affichage",
                 "Filtres prédéfinis…",

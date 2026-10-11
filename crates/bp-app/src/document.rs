@@ -57,8 +57,13 @@ pub struct Totals {
     pub balance: Amount,
     pub pointed: Amount,
     pub pending: Amount,
+    pub pending_count: usize,
     pub reconciled: Amount,
     pub last_reconciled: Option<Date>,
+    /// Solde au jour près 30 jours plus tôt, pour la tendance.
+    pub balance_30_days_ago: Amount,
+    pub month_income: Amount,
+    pub month_expenses: Amount,
 }
 
 impl OpenDoc {
@@ -142,12 +147,31 @@ impl OpenDoc {
     /// l'ancienne version).
     pub fn totals(&self) -> Totals {
         let ops = &self.current_account().operations;
+        let today = Date::today();
+        let month_ago = Date(today.0 - 30);
+        let first_of_month = {
+            let d = today.to_naive();
+            Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1).unwrap_or(today)
+        };
         let mut totals = Totals::default();
         for &i in &self.view.visible {
             let op = &ops[i];
             totals.balance = totals.balance + op.amount;
+            if op.date <= month_ago {
+                totals.balance_30_days_ago = totals.balance_30_days_ago + op.amount;
+            }
+            if op.date >= first_of_month && op.date <= today {
+                if op.amount.is_negative() {
+                    totals.month_expenses = totals.month_expenses + op.amount;
+                } else {
+                    totals.month_income = totals.month_income + op.amount;
+                }
+            }
             match op.tack {
-                Tack::None => totals.pending = totals.pending + op.amount,
+                Tack::None => {
+                    totals.pending = totals.pending + op.amount;
+                    totals.pending_count += 1;
+                }
                 Tack::Pointed => totals.pointed = totals.pointed + op.amount,
                 Tack::Reconciled => {
                     totals.pointed = totals.pointed + op.amount;

@@ -85,6 +85,17 @@ fn screenshots() {
         h.run_steps(2);
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::M);
     });
+    render("11-champs", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press(egui::Key::F3);
+    });
+    render("12-notes", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::N,
+        );
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

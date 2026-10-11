@@ -11,6 +11,8 @@ use crate::theme::palette;
 
 pub enum Tool {
     Backups(BackupsForm),
+    ExtraValues(ExtraForm),
+    Notes(NotesForm),
     Replace(ReplaceForm),
     ModifyGroup(GroupForm),
     ExportCsv(CsvForm),
@@ -30,6 +32,8 @@ impl Tool {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         match self {
             Tool::Backups(form) => form.show(ctx, doc),
+            Tool::ExtraValues(form) => form.show(ctx, doc),
+            Tool::Notes(form) => form.show_standalone(ctx),
             Tool::Replace(form) => form.show(ctx, doc),
             Tool::ModifyGroup(form) => form.show(ctx, doc),
             Tool::ExportCsv(form) => form.show(ctx, doc),
@@ -602,6 +606,292 @@ impl BackupsForm {
             ui.add_space(10.0);
             if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                 outcome = Outcome::Close;
+            }
+        });
+        outcome
+    }
+}
+
+// ─────────────────────────── Champs supplémentaires ───────────────────────────
+
+/// Champs supplémentaires d'une opération : modifier, ajouter, supprimer.
+/// Les champs internes (`#…`, `freeicon`) sont affichés sans être modifiables.
+pub struct ExtraForm {
+    index: usize,
+    entries: Vec<(String, String)>,
+    new_key: String,
+    new_value: String,
+    error: Option<String>,
+}
+
+fn is_internal(key: &str) -> bool {
+    key.starts_with('#') || key == "freeicon"
+}
+
+impl ExtraForm {
+    pub fn new(doc: &OpenDoc, index: usize) -> Self {
+        Self {
+            index,
+            entries: doc.current_account().operations[index].extra.clone(),
+            new_key: String::new(),
+            new_value: String::new(),
+            error: None,
+        }
+    }
+
+    fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
+        let mut outcome = Outcome::Keep;
+        let op = doc.current_account().operations.get(self.index).cloned();
+        let Some(op) = op else { return Outcome::Close };
+        Modal::new(Id::new("tool_extra")).show(ctx, |ui| {
+            ui.set_width(520.0);
+            title(ui, icon::LIST_PLUS, "Champs supplémentaires");
+            let pal = palette(ui);
+            ui.label(
+                RichText::new(format!("{} · {} · ligne {}", op.date, op.payee, op.uid))
+                    .small()
+                    .color(pal.muted),
+            );
+            ui.add_space(8.0);
+            let mut remove = None;
+            for (i, (key, value)) in self.entries.iter_mut().enumerate() {
+                let internal = is_internal(key);
+                ui.horizontal(|ui| {
+                    let color = if internal { pal.muted } else { pal.fg };
+                    ui.add_sized(
+                        [130.0, 32.0],
+                        egui::Label::new(RichText::new(key.as_str()).color(color)).truncate(),
+                    );
+                    ui.add_enabled_ui(!internal, |ui| {
+                        ui.add_sized([300.0, 32.0], crate::theme::field(value))
+                    });
+                    if !internal
+                        && ui
+                            .button(icon::TRASH)
+                            .on_hover_text("Supprimer ce champ")
+                            .clicked()
+                    {
+                        remove = Some(i);
+                    }
+                });
+            }
+            ui.horizontal(|ui| {
+                ui.add_sized(
+                    [130.0, 32.0],
+                    crate::theme::field(&mut self.new_key).hint_text("nouveau nom"),
+                );
+                ui.add_sized(
+                    [300.0, 32.0],
+                    crate::theme::field(&mut self.new_value).hint_text("valeur"),
+                );
+                if ui.button(icon::PLUS).on_hover_text("Ajouter").clicked() {
+                    self.add();
+                }
+            });
+            if let Some(i) = remove {
+                self.entries.remove(i);
+            }
+            if let Some(error) = &self.error {
+                ui.label(RichText::new(error).color(pal.negative));
+            }
+            match buttons(ui, &format!("{}  Enregistrer", icon::CHECK), true) {
+                Some(true) => {
+                    if !self.new_key.trim().is_empty() {
+                        self.add();
+                    }
+                    if self.error.is_none() {
+                        let entries: Vec<(String, String)> = self
+                            .entries
+                            .iter()
+                            .filter(|(_, v)| !v.is_empty())
+                            .cloned()
+                            .collect();
+                        doc.set_extra(self.index, entries);
+                        outcome = Outcome::Done("Champs supplémentaires enregistrés".into());
+                    }
+                }
+                Some(false) => outcome = Outcome::Close,
+                None => {}
+            }
+        });
+        outcome
+    }
+
+    fn add(&mut self) {
+        let key = self.new_key.trim().replace([';', '='], " ");
+        if key.is_empty() || key == "UId" || is_internal(&key) {
+            self.error = Some("Nom de champ invalide ou réservé".into());
+            return;
+        }
+        match self
+            .entries
+            .iter_mut()
+            .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+        {
+            Some(entry) => entry.1 = self.new_value.clone(),
+            None => self.entries.push((key, self.new_value.clone())),
+        }
+        self.new_key.clear();
+        self.new_value.clear();
+        self.error = None;
+    }
+}
+
+// ─────────────────────────────── Notes ───────────────────────────────
+
+pub struct NotesForm {
+    notes: Vec<crate::notes::Note>,
+    current: Option<usize>,
+    /// Seulement les notes à afficher à l'ouverture (lecture).
+    on_open: bool,
+}
+
+impl NotesForm {
+    pub fn new() -> Self {
+        let notes = crate::notes::load();
+        let current = (!notes.is_empty()).then_some(0);
+        Self {
+            notes,
+            current,
+            on_open: false,
+        }
+    }
+
+    /// Notes marquées « afficher à l'ouverture », ou `None` s'il n'y en a pas.
+    pub fn on_open() -> Option<Self> {
+        let notes: Vec<_> = crate::notes::load()
+            .into_iter()
+            .filter(|n| n.show_on_open)
+            .collect();
+        (!notes.is_empty()).then_some(Self {
+            notes,
+            current: Some(0),
+            on_open: true,
+        })
+    }
+
+    /// Les notes ne dépendent d'aucun fichier ouvert.
+    pub fn show_standalone(&mut self, ctx: &egui::Context) -> Outcome {
+        let mut outcome = Outcome::Keep;
+        Modal::new(Id::new("tool_notes")).show(ctx, |ui| {
+            ui.set_width(680.0);
+            title(
+                ui,
+                icon::NOTE,
+                if self.on_open {
+                    "Notes à l'ouverture"
+                } else {
+                    "Notes"
+                },
+            );
+            let pal = palette(ui);
+            // Hauteur fixe : sans elle, le séparateur vertical étire la fenêtre.
+            ui.allocate_ui_with_layout(
+                egui::vec2(680.0, 380.0),
+                egui::Layout::left_to_right(egui::Align::Min),
+                |ui| {
+                    ui.vertical(|ui| {
+                        ui.set_width(200.0);
+                        egui::ScrollArea::vertical()
+                            .id_salt("notes_list")
+                            .max_height(320.0)
+                            .show(ui, |ui| {
+                                for (i, note) in self.notes.iter().enumerate() {
+                                    let label = if note.title.is_empty() {
+                                        "(sans titre)"
+                                    } else {
+                                        note.title.as_str()
+                                    };
+                                    if ui
+                                        .selectable_label(self.current == Some(i), label)
+                                        .clicked()
+                                    {
+                                        self.current = Some(i);
+                                    }
+                                }
+                            });
+                        if !self.on_open {
+                            ui.add_space(6.0);
+                            ui.horizontal(|ui| {
+                                if ui.button(format!("{}  Nouvelle", icon::PLUS)).clicked() {
+                                    self.notes.push(crate::notes::Note {
+                                        title: "Nouvelle note".into(),
+                                        ..Default::default()
+                                    });
+                                    self.current = Some(self.notes.len() - 1);
+                                }
+                                if let Some(i) = self.current
+                                    && ui
+                                        .button(icon::TRASH)
+                                        .on_hover_text("Supprimer la note")
+                                        .clicked()
+                                {
+                                    self.notes.remove(i);
+                                    self.current = if self.notes.is_empty() {
+                                        None
+                                    } else {
+                                        Some(i.min(self.notes.len() - 1))
+                                    };
+                                }
+                            });
+                        }
+                    });
+                    ui.separator();
+                    ui.vertical(
+                        |ui| match self.current.and_then(|i| self.notes.get_mut(i)) {
+                            Some(note) if self.on_open => {
+                                ui.label(
+                                    RichText::new(&note.title).family(crate::theme::semibold()),
+                                );
+                                ui.label(&note.text);
+                            }
+                            Some(note) => {
+                                ui.add(
+                                    crate::theme::field(&mut note.title)
+                                        .hint_text("Titre")
+                                        .desired_width(f32::INFINITY),
+                                );
+                                ui.add(
+                                    egui::TextEdit::multiline(&mut note.text)
+                                        .desired_rows(12)
+                                        .desired_width(f32::INFINITY),
+                                );
+                                ui.checkbox(
+                                    &mut note.show_on_open,
+                                    "Afficher à l'ouverture d'un fichier",
+                                );
+                            }
+                            None => {
+                                ui.label(
+                                    RichText::new("Aucune note. Créez-en une avec « Nouvelle ».")
+                                        .color(pal.muted),
+                                );
+                            }
+                        },
+                    );
+                },
+            );
+            ui.add_space(10.0);
+            if ui
+                .add(crate::theme::primary_button(
+                    ui,
+                    if self.on_open {
+                        "Fermer"
+                    } else {
+                        "Enregistrer et fermer"
+                    },
+                ))
+                .clicked()
+                || ui.input(|i| i.key_pressed(Key::Escape))
+            {
+                if self.on_open {
+                    outcome = Outcome::Close;
+                } else {
+                    outcome = match crate::notes::save(&self.notes) {
+                        Ok(()) => Outcome::Done("Notes enregistrées".into()),
+                        Err(e) => Outcome::Done(format!("Notes non enregistrées : {e}")),
+                    };
+                }
             }
         });
         outcome

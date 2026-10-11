@@ -598,6 +598,22 @@ impl OpenDoc {
         changed
     }
 
+    /// Remplace les champs supplémentaires d'une opération.
+    pub fn set_extra(&mut self, index: usize, extra: Vec<(String, String)>) {
+        if self
+            .current_account()
+            .operations
+            .get(index)
+            .is_none_or(|op| op.extra == extra)
+        {
+            return;
+        }
+        self.snapshot("champs supplémentaires");
+        self.document.accounts[self.account].operations[index].extra = extra;
+        self.view.indexed_account = None;
+        self.touch();
+    }
+
     /// Mémorise l'état du compte courant avant une action.
     fn snapshot(&mut self, label: &str) {
         self.undo.push(UndoEntry {

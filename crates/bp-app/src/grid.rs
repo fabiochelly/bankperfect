@@ -23,6 +23,7 @@ pub enum GridAction {
     None,
     Edit(usize),
     New,
+    Extra(usize),
 }
 
 pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
@@ -250,6 +251,16 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     if crate::menu::item(ui, Some(icon::CHECK), "Pointer", Some("Espace")).clicked()
                     {
                         doc.cycle_tack();
+                    }
+                    if crate::menu::item(
+                        ui,
+                        Some(icon::LIST_PLUS),
+                        "Champs supplémentaires…",
+                        Some("F3"),
+                    )
+                    .clicked()
+                    {
+                        action = GridAction::Extra(index);
                     }
                 });
             });

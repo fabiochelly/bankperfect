@@ -25,6 +25,31 @@ pub struct Settings {
     pub lock_reconciled: bool,
     pub show_balance_panel: bool,
     pub show_forecast: bool,
+    /// Niveaux d'annulation.
+    pub max_undo: usize,
+    /// Pointage sans rapprochement : une ligne est pointée ou non.
+    pub disable_reconcile: bool,
+    /// Soldes calculés sur toutes les lignes, même filtrées.
+    pub ignore_filter_totals: bool,
+    /// Suggestions de tiers pendant la saisie.
+    pub autocomplete: bool,
+    /// Un montant tapé sans virgule est en centimes (1250 → 12,50).
+    pub amounts_in_cents: bool,
+    /// Après l'ajout d'une opération, le formulaire reste ouvert et vidé.
+    pub keep_entry_open: bool,
+    /// Mémoriser la colonne de tri entre deux sessions.
+    pub remember_sort: bool,
+    pub last_sort: Option<(String, bool)>,
+    /// Enregistrer automatiquement à la fermeture, sans demander.
+    pub autosave_on_close: bool,
+    /// Dossier proposé pour ouvrir et créer les fichiers de comptes.
+    pub files_dir: Option<PathBuf>,
+    /// Dossier proposé pour les exports (CSV, QIF…).
+    pub export_dir: Option<PathBuf>,
+    /// Format des dates dans la grille.
+    pub date_format: DateFormat,
+    /// Taille du texte (zoom de l'interface).
+    pub text_scale: f32,
     /// Réglages lus sur disque : seuls ceux-là sont réenregistrés (les tests
     /// partent de réglages par défaut et n'écrivent rien).
     #[serde(skip)]
@@ -42,6 +67,19 @@ impl Default for Settings {
             lock_reconciled: false,
             show_balance_panel: true,
             show_forecast: true,
+            max_undo: 30,
+            disable_reconcile: false,
+            ignore_filter_totals: false,
+            autocomplete: true,
+            amounts_in_cents: false,
+            keep_entry_open: false,
+            remember_sort: false,
+            last_sort: None,
+            autosave_on_close: false,
+            files_dir: None,
+            export_dir: None,
+            date_format: DateFormat::default(),
+            text_scale: 1.0,
             persist: false,
         }
     }
@@ -116,5 +154,95 @@ impl Settings {
         }
         .into();
         self.save();
+    }
+}
+
+/// Formats de date proposés pour la grille.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub enum DateFormat {
+    /// 31/01/2026
+    #[default]
+    Long,
+    /// 31/01/26
+    Short,
+    /// sam. 31/01/26
+    WithDay,
+    /// 31 janv. 2026
+    Text,
+}
+
+impl DateFormat {
+    pub const ALL: [DateFormat; 4] = [
+        DateFormat::Long,
+        DateFormat::Short,
+        DateFormat::WithDay,
+        DateFormat::Text,
+    ];
+
+    pub fn format(self, date: bp_core::model::Date) -> String {
+        const DAYS: [&str; 7] = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
+        const MONTHS: [&str; 12] = [
+            "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.",
+            "nov.", "déc.",
+        ];
+        use chrono::Datelike;
+        let d = date.to_naive();
+        match self {
+            DateFormat::Long => date.to_string(),
+            DateFormat::Short => d.format("%d/%m/%y").to_string(),
+            DateFormat::WithDay => format!(
+                "{} {}",
+                DAYS[d.weekday().num_days_from_monday() as usize],
+                d.format("%d/%m/%y")
+            ),
+            DateFormat::Text => format!("{} {} {}", d.day(), MONTHS[d.month0() as usize], d.year()),
+        }
+    }
+}
+
+/// Réglages consultés partout sans les faire circuler (dossier d'export,
+/// format des dates) ; recopiés depuis les réglages à chaque image.
+pub mod shared {
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    static STATE: Mutex<(Option<PathBuf>, super::DateFormat)> =
+        Mutex::new((None, super::DateFormat::Long));
+    static AUTOCOMPLETE: AtomicBool = AtomicBool::new(true);
+    static CENTS: AtomicBool = AtomicBool::new(false);
+
+    pub fn set(settings: &super::Settings) {
+        if let Ok(mut state) = STATE.lock()
+            && (state.0 != settings.export_dir || state.1 != settings.date_format)
+        {
+            *state = (settings.export_dir.clone(), settings.date_format);
+        }
+        AUTOCOMPLETE.store(settings.autocomplete, Ordering::Relaxed);
+        CENTS.store(settings.amounts_in_cents, Ordering::Relaxed);
+    }
+
+    /// Suggestions de tiers pendant la saisie.
+    pub fn autocomplete() -> bool {
+        AUTOCOMPLETE.load(Ordering::Relaxed)
+    }
+
+    /// Montants tapés sans virgule lus en centimes.
+    pub fn amounts_in_cents() -> bool {
+        CENTS.load(Ordering::Relaxed)
+    }
+
+    /// Dossier d'export choisi, sinon celui du fichier de comptes.
+    pub fn export_dir(fallback: &std::path::Path) -> PathBuf {
+        STATE
+            .lock()
+            .ok()
+            .and_then(|s| s.0.clone())
+            .unwrap_or_else(|| fallback.to_path_buf())
+    }
+
+    pub fn date(date: bp_core::model::Date) -> String {
+        STATE.lock().map(|s| s.1).unwrap_or_default().format(date)
     }
 }

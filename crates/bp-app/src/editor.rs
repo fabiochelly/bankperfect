@@ -82,6 +82,12 @@ impl Editor {
         }
     }
 
+    /// Saisie en série : la nouvelle opération reprend la date précédente.
+    pub fn with_date(mut self, date: String) -> Self {
+        self.date = date;
+        self
+    }
+
     pub fn show(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) -> EditorAction {
         let document = &doc.document;
         let pal = palette(ui);
@@ -225,7 +231,10 @@ impl Editor {
                             .hint_text("Commerçant, organisme, personne…")
                             .desired_width(f32::INFINITY),
                     );
-                    if response.has_focus() && !self.payee.is_empty() {
+                    if response.has_focus()
+                        && !self.payee.is_empty()
+                        && crate::settings::shared::autocomplete()
+                    {
                         self.payee_suggestions(ui, document);
                     }
                     ui.add_space(14.0);
@@ -584,10 +593,14 @@ impl Editor {
             return EditorAction::None;
         };
         let text = self.amount.trim();
-        let Some(amount) = Amount::parse(text) else {
+        let Some(mut amount) = Amount::parse(text) else {
             self.error = Some("Montant invalide".into());
             return EditorAction::None;
         };
+        // Option « montants en centimes » : 1250 tapé donne 12,50.
+        if crate::settings::shared::amounts_in_cents() && !text.contains([',', '.']) {
+            amount = Amount(amount.0 / 100);
+        }
         let amount = if self.credit {
             amount.abs()
         } else {

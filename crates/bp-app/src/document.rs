@@ -41,6 +41,12 @@ pub struct OpenDoc {
     /// Panneau des soldes et solde prévisionnel affichés (réglages).
     pub show_balance_panel: bool,
     pub show_forecast: bool,
+    /// Niveaux d'annulation gardés.
+    pub max_undo: usize,
+    /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
+    pub disable_reconcile: bool,
+    /// Soldes calculés sur toutes les lignes, même filtrées.
+    ignore_filter_totals: bool,
     /// Message à afficher (refus d'une action), repris par l'application.
     pub notice: Option<String>,
     /// Opérations sélectionnées (indices dans le compte courant).
@@ -83,7 +89,6 @@ struct View {
 }
 
 /// Nombre d'actions annulables conservées (`MaxUndo` de l'ancienne version).
-const MAX_UNDO: usize = 30;
 
 /// État d'un compte avant une action, pour Annuler/Refaire.
 struct UndoEntry {
@@ -203,6 +208,9 @@ impl OpenDoc {
             show_mark_dates: false,
             show_balance_panel: true,
             show_forecast: true,
+            max_undo: 30,
+            disable_reconcile: false,
+            ignore_filter_totals: false,
             notice: None,
             selection: BTreeSet::new(),
             anchor: None,
@@ -366,7 +374,14 @@ impl OpenDoc {
     fn compute_totals(&self) -> Totals {
         let ops = &self.current_account().operations;
         let mut totals = Totals::default();
-        for &i in self.view.visible.iter() {
+        let all: Vec<usize>;
+        let lines: &[usize] = if self.ignore_filter_totals {
+            all = (0..ops.len()).collect();
+            &all
+        } else {
+            &self.view.visible
+        };
+        for &i in lines {
             let op = &ops[i];
             totals.balance = totals.balance + op.amount;
             match op.tack {
@@ -515,10 +530,14 @@ impl OpenDoc {
         self.snapshot("pointage");
         let ops = &mut self.document.accounts[self.account].operations;
         let from = ops[reference].tack;
-        let to = match from {
-            Tack::None => Tack::Pointed,
-            Tack::Pointed => Tack::Reconciled,
-            Tack::Reconciled => Tack::None,
+        let to = match (from, self.disable_reconcile) {
+            // Pointage simple : la ligne pointée est enregistrée « rapprochée »,
+            // comme dans l'ancienne version.
+            (Tack::None, true) => Tack::Reconciled,
+            (_, true) => Tack::None,
+            (Tack::None, false) => Tack::Pointed,
+            (Tack::Pointed, false) => Tack::Reconciled,
+            (Tack::Reconciled, false) => Tack::None,
         };
         let today = Date::today();
         for &i in &self.selection {
@@ -724,7 +743,7 @@ impl OpenDoc {
             account: self.account,
             operations: self.document.accounts[self.account].operations.clone(),
         });
-        if self.undo.len() > MAX_UNDO {
+        while self.undo.len() > self.max_undo.max(1) {
             self.undo.remove(0);
         }
         self.redo.clear();
@@ -779,6 +798,18 @@ impl OpenDoc {
     fn touch(&mut self) {
         self.revision += 1;
         self.dirty = true;
+    }
+
+    pub fn ignore_filter_totals(&self) -> bool {
+        self.ignore_filter_totals
+    }
+
+    /// Soldes sur toutes les lignes (option), recalculés si le réglage change.
+    pub fn set_ignore_filter_totals(&mut self, on: bool) {
+        if self.ignore_filter_totals != on {
+            self.ignore_filter_totals = on;
+            self.view.filters = None;
+        }
     }
 
     /// Seul le pointage a changé : ni l'index, ni le tri, ni le solde

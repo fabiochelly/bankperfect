@@ -171,10 +171,13 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         // Marge avant le séparateur de colonne.
                         ui.add_space(14.0);
                         if show_mark {
-                            ui.label(RichText::new(op.mark_date.to_string()).color(pal.pointed))
-                                .on_hover_text(format!("Opération du {}", op.date));
+                            ui.label(
+                                RichText::new(crate::settings::shared::date(op.mark_date))
+                                    .color(pal.pointed),
+                            )
+                            .on_hover_text(format!("Opération du {}", op.date));
                         } else {
-                            ui.label(op.date.to_string());
+                            ui.label(crate::settings::shared::date(op.date));
                         }
                     });
                 });

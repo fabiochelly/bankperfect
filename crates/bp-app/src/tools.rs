@@ -704,11 +704,9 @@ impl CsvForm {
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let start_dir = doc
-            .path
-            .parent()
-            .map(|p| p.to_path_buf())
-            .unwrap_or_default();
+        let start_dir = crate::settings::shared::export_dir(
+            doc.path.parent().unwrap_or(std::path::Path::new(".")),
+        );
         let write = |path: &std::path::Path, text: String| {
             // UTF-8 avec BOM : reconnu par Excel et LibreOffice.
             std::fs::write(path, [b"\xEF\xBB\xBF".as_slice(), text.as_bytes()].concat())
@@ -762,7 +760,9 @@ pub fn export_qif(doc: &OpenDoc) -> Option<String> {
     let account = doc.current_account();
     let path = rfd::FileDialog::new()
         .set_title("Exporter vers un fichier QIF")
-        .set_directory(doc.path.parent().unwrap_or(std::path::Path::new(".")))
+        .set_directory(crate::settings::shared::export_dir(
+            doc.path.parent().unwrap_or(std::path::Path::new(".")),
+        ))
         .set_file_name(bp_core::export::suggested_file_name(&stem, account, "qif"))
         .add_filter("QIF", &["qif"])
         .save_file()?;

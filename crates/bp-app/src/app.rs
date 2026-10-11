@@ -35,6 +35,7 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_OPTIONS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
 const SHORTCUT_NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
 const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F12);
 const SHORTCUT_CLOSE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
@@ -74,6 +75,8 @@ pub struct BankPerfectApp {
     confirm_payee: Option<usize>,
     /// Confirmation de l'inversion des monnaies.
     confirm_reverse: bool,
+    options: Option<crate::options_ui::OptionsForm>,
+    about: bool,
     tool: Option<crate::tools::Tool>,
     command_palette: Option<crate::command_palette::CommandPalette>,
     /// Commandes lancées récemment, la plus récente en premier.
@@ -127,6 +130,8 @@ impl BankPerfectApp {
             clipboard: Vec::new(),
             confirm_payee: None,
             confirm_reverse: false,
+            options: None,
+            about: false,
             tool: None,
             command_palette: None,
             recent_commands: Vec::new(),
@@ -161,11 +166,13 @@ impl BankPerfectApp {
         match action {
             Pending::Open(Some(path)) => self.open_path(path),
             Pending::Open(None) => {
-                if let Some(path) = rfd::FileDialog::new()
+                let mut dialog = rfd::FileDialog::new()
                     .set_title("Ouvrir un fichier BankPerfect")
-                    .add_filter("Comptes BankPerfect", &["bp", "bp0"])
-                    .pick_file()
-                {
+                    .add_filter("Comptes BankPerfect", &["bp", "bp0"]);
+                if let Some(dir) = &self.settings.files_dir {
+                    dialog = dialog.set_directory(dir);
+                }
+                if let Some(path) = dialog.pick_file() {
                     self.open_path(path);
                 }
             }
@@ -208,7 +215,15 @@ impl BankPerfectApp {
             Ok(opened) => {
                 self.show_warnings = !opened.warnings.is_empty();
                 self.settings.remember(&path);
-                self.doc = Some(OpenDoc::new(path, opened));
+                let mut doc = OpenDoc::new(path, opened);
+                if self.settings.remember_sort
+                    && let Some((column, ascending)) = &self.settings.last_sort
+                    && let Some(sort) = sort_from_name(column)
+                {
+                    doc.sort = sort;
+                    doc.ascending = *ascending;
+                }
+                self.doc = Some(doc);
                 if self.interactive
                     && self.tool.is_none()
                     && let Some(notes) = crate::tools::NotesForm::on_open()
@@ -262,6 +277,9 @@ impl BankPerfectApp {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPEN)) {
             self.request(Pending::Open(None));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPTIONS)) {
+            return self.execute(ctx, Command::Options);
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_NEW)) {
             return self.execute(ctx, Command::NewFile);
@@ -436,6 +454,18 @@ impl BankPerfectApp {
                 return;
             }
             Command::NewFile => return self.request(Pending::NewFile),
+            Command::Options => {
+                let theme = ctx.options(|o| o.theme_preference);
+                self.options = Some(crate::options_ui::OptionsForm::new(&self.settings, theme));
+                return;
+            }
+            Command::About => return self.about = true,
+            Command::Help => {
+                ctx.open_url(egui::OpenUrl::new_tab(
+                    "https://www.chelly.net/wiki/wiki/manuel",
+                ));
+                return;
+            }
             Command::DeleteFile => return self.delete_file(),
             Command::Quit => return ctx.send_viewport_cmd(egui::ViewportCommand::Close),
             Command::Notes => return self.tool = Some(Tool::Notes(crate::tools::NotesForm::new())),
@@ -569,6 +599,16 @@ impl BankPerfectApp {
                 self.settings.lock_reconciled = !self.settings.lock_reconciled;
                 self.settings.save();
                 doc.locked = self.settings.lock_reconciled;
+                doc.max_undo = self.settings.max_undo;
+                doc.disable_reconcile = self.settings.disable_reconcile;
+                doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
+                if self.settings.remember_sort {
+                    let current = (sort_name(doc.sort).to_string(), doc.ascending);
+                    if self.settings.last_sort.as_ref() != Some(&current) {
+                        self.settings.last_sort = Some(current);
+                        self.settings.save();
+                    }
+                }
             }
             Command::ToggleMarkDates => doc.set_show_mark_dates(!doc.show_mark_dates),
             Command::ToggleBalancePanel => {
@@ -597,6 +637,9 @@ impl BankPerfectApp {
             | Command::Theme(_)
             | Command::ToggleTranslucent
             | Command::OpenRecent(_)
+            | Command::Options
+            | Command::About
+            | Command::Help
             | Command::NewFile
             | Command::DeleteFile
             | Command::SaveAs
@@ -695,11 +738,11 @@ impl BankPerfectApp {
         let mut dialog = rfd::FileDialog::new()
             .set_title("Fichier de comptes à mettre à la corbeille")
             .add_filter("Comptes BankPerfect", &["bp"]);
-        if let Some(dir) = self
-            .doc
-            .as_ref()
-            .and_then(|d| d.path.parent().map(Path::to_path_buf))
-        {
+        if let Some(dir) = self.settings.files_dir.clone().or_else(|| {
+            self.doc
+                .as_ref()
+                .and_then(|d| d.path.parent().map(Path::to_path_buf))
+        }) {
             dialog = dialog.set_directory(dir);
         }
         let Some(path) = dialog.pick_file() else {
@@ -737,9 +780,10 @@ impl BankPerfectApp {
                 "Comptes",
                 "Opérations",
                 "Outils",
+                "Aide",
             ]
         } else {
-            &["Fichier", "Outils"]
+            &["Fichier", "Outils", "Aide"]
         };
         let opened = ui
             .horizontal(|ui| {
@@ -783,6 +827,14 @@ impl BankPerfectApp {
         use Command::*;
         let has_doc = self.doc.is_some();
         let tools_index = if has_doc { 5 } else { 1 };
+        if index == tools_index + 1 {
+            menu::begin(ui);
+            self.menu_command(ui, Palette);
+            self.menu_command(ui, Help);
+            menu::separator(ui);
+            self.menu_command(ui, About);
+            return;
+        }
         if index == 0 {
             menu::begin(ui);
             self.menu_command(ui, NewFile);
@@ -837,6 +889,8 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, ReverseCurrencies);
             }
+            menu::separator(ui);
+            self.menu_command(ui, Options);
             return;
         }
         match index {
@@ -966,7 +1020,7 @@ impl BankPerfectApp {
 
     fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc, compact: bool) {
         let pal = palette(ui);
-        let filtered = doc.filters.is_active();
+        let filtered = doc.filters.is_active() && !doc.ignore_filter_totals();
         // En-tête compact sur une ligne : nom du compte, banque et IBAN.
         ui.add_space(8.0);
         ui.horizontal(|ui| {
@@ -1191,8 +1245,11 @@ impl BankPerfectApp {
                 if locked {
                     self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
                 } else {
+                    let date = op.date.to_string();
                     doc.upsert_operation(target, op);
-                    self.editor = None;
+                    // Saisie en série : formulaire vidé, même date.
+                    self.editor = (target.is_none() && self.settings.keep_entry_open)
+                        .then(|| Editor::new_operation(&doc.document, doc.account).with_date(date));
                 }
             }
         }
@@ -1200,6 +1257,76 @@ impl BankPerfectApp {
 
     fn modals(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
+        if let Some(options) = &mut self.options {
+            use crate::options_ui::OptionsOutcome;
+            match options.show(ctx) {
+                OptionsOutcome::Keep => {}
+                OptionsOutcome::Cancel => self.options = None,
+                OptionsOutcome::Apply(settings, theme) => {
+                    self.options = None;
+                    let translucent_before = self.settings.translucent();
+                    self.settings = *settings;
+                    self.settings.save();
+                    ctx.set_theme(theme);
+                    self.settings.set_theme(theme);
+                    if self.settings.translucent() != translucent_before {
+                        crate::theme::set_translucent(ctx, self.settings.translucent());
+                        if self.settings.translucent() && !crate::theme::surface_transparent() {
+                            self.toast = Some((
+                                "Le fond translucide sera actif au prochain démarrage".into(),
+                                now + 5.0,
+                            ));
+                        }
+                    }
+                    if self.toast.is_none() {
+                        self.toast = Some(("Options enregistrées".into(), now + 3.0));
+                    }
+                }
+            }
+        }
+        if self.about {
+            dialogs::modal(ctx, "about").show(ctx, |ui| {
+                ui.set_width(440.0);
+                let pal = palette(ui);
+                ui.vertical_centered(|ui| {
+                    let (rect, _) =
+                        ui.allocate_exact_size(egui::vec2(96.0, 96.0), egui::Sense::hover());
+                    crate::logo::paint_symbol(ui.painter(), rect, pal.accent, pal.violet);
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new("BankPerfect")
+                            .size(26.0)
+                            .family(crate::theme::semibold()),
+                    );
+                    ui.label(
+                        RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION")))
+                            .color(pal.muted),
+                    );
+                    ui.add_space(10.0);
+                    ui.label(
+                        RichText::new(format!("{}  Enregistré", icon::SEAL_CHECK))
+                            .color(pal.positive),
+                    );
+                    ui.add_space(10.0);
+                    if let Ok(exe) = std::env::current_exe() {
+                        ui.label(
+                            RichText::new(format!("Emplacement : {}", exe.display()))
+                                .size(12.0)
+                                .color(pal.muted),
+                        );
+                    }
+                });
+                dialogs::footer(ui, |ui| {
+                    if dialogs::primary(ui, "Fermer", true).clicked()
+                        || ui.input(|i| {
+                            i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Enter)
+                        })
+                    {
+                        self.about = false;
+                    }
+                });
+            });
+        }
         if let Some(palette) = &mut self.command_palette {
             use crate::command_palette::PaletteResult;
             match palette.show(ctx, self.doc.as_ref(), &self.recent_commands) {
@@ -1215,13 +1342,13 @@ impl BankPerfectApp {
             let result = match (&mut self.doc, tool) {
                 (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),
                 (_, crate::tools::Tool::Calculator(form)) => Some(form.show_standalone(ctx)),
-                (doc, crate::tools::Tool::NewFile(form)) => Some(
-                    form.show_standalone(
-                        ctx,
+                (doc, crate::tools::Tool::NewFile(form)) => Some(form.show_standalone(
+                    ctx,
+                    self.settings.files_dir.clone().or_else(|| {
                         doc.as_ref()
-                            .and_then(|d| d.path.parent().map(Path::to_path_buf)),
-                    ),
-                ),
+                            .and_then(|d| d.path.parent().map(Path::to_path_buf))
+                    }),
+                )),
                 (doc, crate::tools::Tool::Backups(form)) => {
                     Some(form.show_standalone(ctx, doc.as_ref().is_some_and(|d| d.dirty)))
                 }
@@ -1586,8 +1713,15 @@ impl BankPerfectApp {
             && !self.allow_close
             && self.doc.as_ref().is_some_and(|d| d.dirty)
         {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.pending = Some(Pending::Quit);
+            if self.settings.autosave_on_close {
+                // Option « enregistrer à la fermeture » : sans question.
+                let now = ctx.input(|i| i.time);
+                self.save(now);
+            }
+            if self.doc.as_ref().is_some_and(|d| d.dirty) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+                self.pending = Some(Pending::Quit);
+            }
         }
         if self.allow_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -1604,6 +1738,10 @@ impl BankPerfectApp {
             self.handle_shortcuts(&ctx);
         }
         crate::commands::set_recent(&self.settings.recent_files);
+        crate::settings::shared::set(&self.settings);
+        if (ctx.zoom_factor() - self.settings.text_scale).abs() > 0.001 {
+            ctx.set_zoom_factor(self.settings.text_scale);
+        }
         let now = ctx.input(|i| i.time);
         if self.toast.as_ref().is_some_and(|(_, until)| now > *until) {
             self.toast = None;
@@ -1954,4 +2092,29 @@ fn backup_v5_original(path: &Path) -> std::io::Result<()> {
         std::fs::copy(path, backup)?;
     }
     Ok(())
+}
+
+fn sort_name(sort: bp_core::view::SortColumn) -> &'static str {
+    use bp_core::view::SortColumn::*;
+    match sort {
+        Date => "date",
+        MarkDate => "pointage",
+        Mode => "mode",
+        Payee => "tiers",
+        Category => "categorie",
+        Amount => "montant",
+    }
+}
+
+fn sort_from_name(name: &str) -> Option<bp_core::view::SortColumn> {
+    use bp_core::view::SortColumn::*;
+    Some(match name {
+        "date" => Date,
+        "pointage" => MarkDate,
+        "mode" => Mode,
+        "tiers" => Payee,
+        "categorie" => Category,
+        "montant" => Amount,
+        _ => return None,
+    })
 }

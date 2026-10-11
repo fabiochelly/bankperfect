@@ -148,12 +148,11 @@ pub fn paste_operations(
     account: usize,
     operations: &[Operation],
 ) -> Vec<usize> {
-    let mut uid = document.next_operation_uid();
+    let first_uid = document.next_operation_uid();
     let mut added = Vec::with_capacity(operations.len());
-    for op in operations {
+    for (uid, op) in (first_uid..).zip(operations) {
         let mut op = op.clone();
         op.uid = uid;
-        uid += 1;
         if op
             .category
             .is_some_and(|id| document.category(id).is_none())

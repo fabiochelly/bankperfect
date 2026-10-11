@@ -81,7 +81,7 @@ inventaires de `docs/inventaire/`.
 | C71 | Filtres prédéfinis : une date dynamique invalide était ignorée sans message, et les constantes étaient remplacées dans le texte (`aa` devenait `20262026`). | Dates vérifiées à l'enregistrement (`AutoFilter::validate`) ; constantes reconnues comme des noms entiers. | 04 §2.6 Filters |
 | C72 | Saisie d'un montant de budget : `100/3` donnait 33 (division entière Python 2). | Vraie division (33,3333). | 04 §4.1 |
 | C73 | Un détail contenant `m=` imposait comme mode de paiement les 15 caractères suivants (comportement hérité, source de modes fantaisistes). | Le mode est toujours celui de l'opération ; `m=` reste un texte ordinaire du détail. |
-| C74 | Couper/coller : les lignes collées gardaient des liens de transfert et la date de pointage manuelle n'était pas rafraîchie à l'écran. | Collage avec nouvel identifiant et catégorie vérifiée ; tout changement de pointage rafraîchit la grille et les soldes. |
+| C74 | Date de pointage manuelle (Ctrl+Maj+P) : la grille n'était pas rafraîchie après la modification, et une date tapée au format `jj/mm/aa` seulement était acceptée. | Grille et soldes rafraîchis ; la date se saisit comme les autres (jj/mm/aaaa, jj/mm, calendrier). |
 
 ## À faire (fonctionnalités pas encore portées)
 

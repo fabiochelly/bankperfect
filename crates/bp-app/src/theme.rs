@@ -112,11 +112,16 @@ static TRANSLUCENT: AtomicBool = AtomicBool::new(false);
 /// La fenêtre a été créée avec une surface transparente.
 static SURFACE_TRANSPARENT: AtomicBool = AtomicBool::new(false);
 
-/// Opacité du fond de la fenêtre (grille, menus, barre d'état) : assez pour
-/// que les chiffres restent lisibles sur un bureau chargé.
-const BACKDROP_ALPHA: f32 = 0.80;
-/// Opacité du panneau des comptes, un peu plus vitré.
-pub const SIDEBAR_ALPHA: f32 = 0.70;
+/// Opacité du fond de la fenêtre (grille, menus, barre d'état) : le thème
+/// sombre est plus couvrant pour rester lisible sur un bureau très clair.
+fn backdrop_alpha(dark: bool) -> f32 {
+    if dark { 0.88 } else { 0.80 }
+}
+
+/// Opacité du panneau des comptes, un peu plus vitré que le reste.
+pub fn sidebar_alpha(dark: bool) -> f32 {
+    if dark { 0.82 } else { 0.70 }
+}
 
 pub fn set_surface_transparent(on: bool) {
     SURFACE_TRANSPARENT.store(on, Ordering::Relaxed);
@@ -269,7 +274,7 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
         Visuals::light()
     };
     v.override_text_color = None;
-    v.panel_fill = backdrop(p.bg, BACKDROP_ALPHA);
+    v.panel_fill = backdrop(p.bg, backdrop_alpha(dark));
     // Fenêtres et listes déroulantes opaques.
     v.window_fill = p.menu_bg.to_opaque();
     v.window_stroke = Stroke::new(1.0, p.border);
@@ -288,7 +293,9 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     };
     v.menu_corner_radius = CornerRadius::same(8);
     v.extreme_bg_color = p.bg_dark;
-    v.faint_bg_color = backdrop(p.stripe, BACKDROP_ALPHA);
+    // Bandes de la grille : peintes par-dessus le fond déjà translucide, elles
+    // restent très légères pour ne pas créer de rayures marquées.
+    v.faint_bg_color = backdrop(p.stripe, 0.35);
     v.code_bg_color = p.bg_dark;
     v.hyperlink_color = p.accent;
     v.warn_fg_color = p.warning;

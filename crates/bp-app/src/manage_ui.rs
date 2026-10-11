@@ -204,6 +204,8 @@ impl ManageForm {
         let height = ui_kit::dialog_height(ctx, 0.8).max(560.0);
         crate::dialogs::modal(ctx, "tool_manage").show(ctx, |ui| {
             ui.set_width(width);
+            // Hauteur fixe : la fenêtre, centrée, ne bouge pas d'un onglet à l'autre.
+            ui.set_height(height);
             let pal = palette(ui);
             ui.horizontal(|ui| {
                 ui.allocate_ui_with_layout(

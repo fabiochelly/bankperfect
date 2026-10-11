@@ -40,9 +40,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     // Fenêtre étroite : colonnes plus compactes (disposition mémorisée à part).
     let narrow = ui.available_width() < 760.0;
     let (date_w, mode_w, amount_w, balance_w) = if narrow {
-        (100.0, 92.0, 96.0, 108.0)
+        (112.0, 92.0, 96.0, 108.0)
     } else {
-        (120.0, 136.0, 108.0, 130.0)
+        (134.0, 136.0, 108.0, 130.0)
     };
     let mut table = TableBuilder::new(ui)
         .id_salt(("grid", narrow))
@@ -51,7 +51,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         .sense(Sense::click())
         .cell_layout(Layout::left_to_right(Align::Center))
         .column(Column::exact(28.0))
-        .column(Column::initial(date_w).at_least(96.0))
+        .column(Column::initial(date_w).at_least(108.0))
         .column(Column::initial(mode_w).at_least(44.0).clip(true))
         .column(
             Column::remainder()
@@ -163,6 +163,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         );
                     }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        // Marge avant le séparateur de colonne.
+                        ui.add_space(14.0);
                         ui.label(op.date.to_string());
                     });
                 });

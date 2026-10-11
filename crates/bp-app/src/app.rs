@@ -1122,7 +1122,10 @@ impl BankPerfectApp {
         let doc = self.doc.as_mut().expect("document ouvert");
         egui::Panel::bottom("status").show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
 
-        let sidebar_fill = crate::theme::backdrop(palette(ui).bg_dark, crate::theme::SIDEBAR_ALPHA);
+        let sidebar_fill = crate::theme::backdrop(
+            palette(ui).bg_dark,
+            crate::theme::sidebar_alpha(ui.visuals().dark_mode),
+        );
         // Fenêtre étroite (tuile) : pas de panneau des comptes, le nom du
         // compte devient un sélecteur.
         let compact = ui.available_width() < 860.0;

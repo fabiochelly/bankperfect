@@ -96,6 +96,18 @@ fn screenshots() {
             egui::Key::N,
         );
     });
+    render("13-calculatrice", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::C,
+        );
+        h.run_steps(2);
+        h.get_by_label("7").click();
+        h.get_by_label("*").click();
+        h.get_by_label("cos").click();
+        h.get_by_label("0").click();
+        h.get_by_label(")").click();
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

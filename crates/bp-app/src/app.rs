@@ -32,6 +32,8 @@ const SHORTCUT_GROUP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAN
 const SHORTCUT_EXTRA: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F3);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_CALC: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::C);
 
 /// Action différée en attendant la réponse à « Enregistrer les modifications ? ».
 enum Pending {
@@ -212,6 +214,9 @@ impl BankPerfectApp {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_NOTES)) {
             self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CALC)) {
+            self.tool = Some(crate::tools::Tool::Calculator(crate::tools::CalcForm::new()));
         }
         let Some(doc) = &mut self.doc else { return };
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SAVE)) {
@@ -394,6 +399,16 @@ impl BankPerfectApp {
             menu::begin(ui);
             if menu::item(ui, Some(icon::NOTE), "Notes", Some("Ctrl+Maj+N")).clicked() {
                 self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
+            }
+            if menu::item(
+                ui,
+                Some(icon::CALCULATOR),
+                "Calculatrice",
+                Some("Ctrl+Maj+C"),
+            )
+            .clicked()
+            {
+                self.tool = Some(crate::tools::Tool::Calculator(crate::tools::CalcForm::new()));
             }
             return;
         }
@@ -788,6 +803,7 @@ impl BankPerfectApp {
         if let Some(tool) = &mut self.tool {
             let result = match (&mut self.doc, tool) {
                 (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),
+                (_, crate::tools::Tool::Calculator(form)) => Some(form.show_standalone(ctx)),
                 (Some(doc), tool) => Some(tool.show(ctx, doc)),
                 (None, _) => None,
             };

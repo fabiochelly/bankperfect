@@ -11,6 +11,7 @@ use crate::theme::palette;
 
 pub enum Tool {
     Backups(BackupsForm),
+    Calculator(CalcForm),
     ExtraValues(ExtraForm),
     Notes(NotesForm),
     Replace(ReplaceForm),
@@ -32,6 +33,7 @@ impl Tool {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         match self {
             Tool::Backups(form) => form.show(ctx, doc),
+            Tool::Calculator(form) => form.show_standalone(ctx),
             Tool::ExtraValues(form) => form.show(ctx, doc),
             Tool::Notes(form) => form.show_standalone(ctx),
             Tool::Replace(form) => form.show(ctx, doc),
@@ -892,6 +894,151 @@ impl NotesForm {
                         Err(e) => Outcome::Done(format!("Notes non enregistrées : {e}")),
                     };
                 }
+            }
+        });
+        outcome
+    }
+}
+
+// ─────────────────────────────── Calculatrice ───────────────────────────────
+
+#[derive(Default)]
+pub struct CalcForm {
+    expression: String,
+    /// Dernier résultat validé (Entrée ou =).
+    result: Option<String>,
+    focus: bool,
+}
+
+/// Touches du pavé, dans la disposition de l'original (8 colonnes).
+const KEYS: [&str; 40] = [
+    "AC", "⌫", "√", "DMS", "EE", "cos", "acos", "cosh", //
+    "7", "8", "9", "/", "%", "sin", "asin", "sinh", //
+    "4", "5", "6", "*", "^", "tan", "atan", "tanh", //
+    "1", "2", "3", "-", "(", "deg", "rad", "π", //
+    ",", "0", "=", "+", ")", "ln", "log", "e",
+];
+
+impl CalcForm {
+    pub fn new() -> Self {
+        Self {
+            focus: true,
+            ..Default::default()
+        }
+    }
+
+    fn press(&mut self, key: &str) {
+        match key {
+            "AC" => {
+                self.expression.clear();
+                self.result = None;
+            }
+            "⌫" => {
+                self.expression.pop();
+            }
+            "=" => self.validate(),
+            "DMS" => {
+                // Ajoute l'unité suivante : °, puis ', puis ".
+                let next = if self.expression.contains('\'') {
+                    "\""
+                } else if self.expression.contains('°') {
+                    "'"
+                } else {
+                    "°"
+                };
+                self.expression.push_str(next);
+            }
+            "EE" => self.expression.push('E'),
+            "√" => self.expression.push_str("sqrt("),
+            "π" => self.expression.push_str("pi"),
+            k if k.len() > 1 && k.chars().all(|c| c.is_ascii_alphabetic()) && k != "pi" => {
+                self.expression.push_str(k);
+                self.expression.push('(');
+            }
+            k => self.expression.push_str(k),
+        }
+        self.focus = true;
+    }
+
+    fn validate(&mut self) {
+        if let Ok((value, dms)) = crate::calculator::evaluate(&self.expression) {
+            let text = crate::calculator::format(value, dms);
+            self.result = Some(format!("{} =", self.expression));
+            self.expression = text;
+        }
+    }
+
+    pub fn show_standalone(&mut self, ctx: &egui::Context) -> Outcome {
+        let mut outcome = Outcome::Keep;
+        Modal::new(Id::new("tool_calc")).show(ctx, |ui| {
+            ui.set_width(560.0);
+            title(ui, icon::CALCULATOR, "Calculatrice");
+            let pal = palette(ui);
+            if let Some(previous) = &self.result {
+                ui.label(RichText::new(previous).small().color(pal.muted));
+            }
+            let field = ui.add(
+                egui::TextEdit::singleline(&mut self.expression)
+                    .font(egui::FontId::new(22.0, crate::theme::medium()))
+                    .margin(egui::Margin::symmetric(12, 10))
+                    .desired_width(f32::INFINITY),
+            );
+            if std::mem::take(&mut self.focus) {
+                field.request_focus();
+                // Curseur en fin de saisie après un clic sur une touche du pavé.
+                if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), field.id) {
+                    let end = egui::text::CCursor::new(self.expression.chars().count());
+                    state.cursor.set_char_range(Some(egui::text::CCursorRange::one(end)));
+                    state.store(ui.ctx(), field.id);
+                }
+            }
+            if field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                self.validate();
+                self.focus = true;
+            }
+            let preview = match crate::calculator::evaluate(&self.expression) {
+                Ok((value, dms)) if !self.expression.is_empty() => {
+                    RichText::new(format!("= {}", crate::calculator::format(value, dms)))
+                        .color(pal.accent)
+                }
+                Err(e) if !self.expression.is_empty() => RichText::new(e).color(pal.muted),
+                _ => RichText::new(" "),
+            };
+            ui.label(preview);
+            ui.add_space(6.0);
+            let mut pressed = None;
+            egui::Grid::new("calc_keys")
+                .num_columns(8)
+                .spacing([6.0, 6.0])
+                .show(ui, |ui| {
+                    for (i, key) in KEYS.iter().enumerate() {
+                        let color = match *key {
+                            "AC" | "⌫" | "=" => pal.negative,
+                            "+" | "-" | "*" | "/" | "^" | "%" | "(" | ")" | "√" | "DMS" | "EE" => {
+                                pal.accent
+                            }
+                            k if k.chars().all(|c| c.is_ascii_digit()) || k == "," => pal.fg,
+                            _ => pal.teal,
+                        };
+                        let button = egui::Button::new(
+                            RichText::new(*key)
+                                .color(color)
+                                .family(crate::theme::medium()),
+                        );
+                        if ui.add_sized([62.0, 38.0], button).clicked() {
+                            pressed = Some(*key);
+                        }
+                        if i % 8 == 7 {
+                            ui.end_row();
+                        }
+                    }
+                });
+            if let Some(key) = pressed {
+                self.press(key);
+            }
+            ui.add_space(8.0);
+            if ui.button("Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                outcome = Outcome::Close;
             }
         });
         outcome

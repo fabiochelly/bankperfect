@@ -1749,7 +1749,20 @@ impl BankPerfectApp {
                 .map(|f| f.path().to_path_buf())
                 .filter(|p| !p.as_os_str().is_empty())
         }) {
-            self.request(Pending::Open(Some(path)));
+            let statement = path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(str::to_lowercase)
+                .is_some_and(|e| matches!(e.as_str(), "ofx" | "qfx" | "qif" | "csv" | "tsv"));
+            if statement && self.doc.is_some() {
+                // Relevé bancaire déposé : import dans le fichier ouvert.
+                match crate::import_ui::ImportForm::new(path) {
+                    Ok(form) => self.tool = Some(crate::tools::Tool::Import(Box::new(form))),
+                    Err(e) => self.error = Some(e),
+                }
+            } else {
+                self.request(Pending::Open(Some(path)));
+            }
         }
         if ctx.input(|i| i.viewport().close_requested())
             && !self.allow_close

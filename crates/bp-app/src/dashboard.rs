@@ -168,8 +168,12 @@ fn truncated(
     ui.painter().layout_job(job)
 }
 
-/// Largeur en dessous de laquelle le mini-graphique d'un bloc est masqué.
-const CHART_MIN_BLOCK: f32 = 330.0;
+/// Largeur en dessous de laquelle le mini-graphique d'un bloc est masqué
+/// (petites fenêtres seulement).
+const CHART_MIN_BLOCK: f32 = 200.0;
+/// Largeur en dessous de laquelle les boutons de période (1M, 6M…) sont
+/// masqués.
+const CHIPS_MIN_BLOCK: f32 = 330.0;
 
 /// Largeur laissée au texte : un peu plus de la moitié si le graphique est
 /// affiché, tout le bloc sinon.
@@ -401,7 +405,7 @@ fn balance_block(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, window: Option<(Dat
         pos2(rect.center().x, rect.top() - 3.0),
         pos2(rect.right(), rect.top() + 17.0),
     );
-    if rect.width() >= CHART_MIN_BLOCK {
+    if rect.width() >= CHIPS_MIN_BLOCK {
         window_chips(ui, chips, doc, &pal);
     }
     let mut lines = Vec::new();

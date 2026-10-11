@@ -3,6 +3,8 @@
 mod app;
 mod calculator;
 mod category_icons;
+mod command_palette;
+mod commands;
 mod dashboard;
 mod datepicker;
 mod dialogs;

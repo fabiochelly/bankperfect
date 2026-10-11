@@ -130,9 +130,24 @@ fn screenshots() {
     render("17-protection", egui::Theme::Dark, |h| {
         h.get_by_label("Fichier").click();
         h.run_steps(3);
-        h.get_by_label("Protection…").click();
+        h.get_by_label("Protection du fichier…").click();
         h.run_steps(2);
         h.get_by_label("Protéger").click();
+    });
+    render("18-palette", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    });
+    render("19-palette-recherche", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("categ".into()));
+    });
+    render("20-palette-clair", egui::Theme::Light, |h| {
+        h.key_press(egui::Key::F1);
+        h.run_steps(2);
+        h.event(egui::Event::Text("compte".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::ArrowDown);
     });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();

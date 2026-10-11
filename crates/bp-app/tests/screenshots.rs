@@ -294,6 +294,20 @@ fn screenshots() {
     });
 }
 
+/// Encadrés de solde à plusieurs largeurs de fenêtre.
+#[test]
+#[ignore]
+fn dashboard_widths() {
+    for width in [1280.0, 1100.0, 1000.0, 820.0] {
+        render_sized(
+            &format!("60-largeur-{width}"),
+            egui::Theme::Dark,
+            egui::vec2(width, 700.0),
+            |_| {},
+        );
+    }
+}
+
 /// Rapports, graphiques et budgets (lancés seuls pendant la mise au point).
 #[test]
 #[ignore]

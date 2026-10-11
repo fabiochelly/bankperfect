@@ -24,6 +24,7 @@ pub enum Command {
     ExportXlsx,
     Report(ReportTab),
     Charts,
+    UpdateQuotes,
     Budget(BudgetTab),
     ExportQif,
     Print,
@@ -134,6 +135,7 @@ impl Command {
                 Report(ReportTab::Payees),
                 Report(ReportTab::Statement),
                 Charts,
+                UpdateQuotes,
                 Budget(BudgetTab::Monthly),
                 Budget(BudgetTab::Annual),
                 AutoFilters,
@@ -302,6 +304,13 @@ impl Command {
                 };
                 info("Rapports", label, glyph, shortcut, keywords)
             }
+            UpdateQuotes => info(
+                "Comptes",
+                "Mettre à jour les cotations…",
+                icon::TREND_UP,
+                None,
+                "titres bourse actions isin cours portefeuille",
+            ),
             Charts => info(
                 "Rapports",
                 "Graphiques…",

@@ -685,6 +685,35 @@ impl OpenDoc {
         (changed, errors)
     }
 
+    /// Remplace des montants du compte courant (annulable). Les lignes
+    /// rapprochées verrouillées sont laissées telles quelles. Renvoie le
+    /// nombre de lignes modifiées.
+    pub fn set_amounts(&mut self, changes: &[(usize, Amount)], label: &str) -> usize {
+        if changes.is_empty() {
+            return 0;
+        }
+        self.snapshot(label);
+        let locked = self.locked;
+        let operations = &mut self.document.accounts[self.account].operations;
+        let mut changed = 0;
+        for &(line, amount) in changes {
+            if let Some(op) = operations.get_mut(line)
+                && op.amount != amount
+                && !(locked && op.tack == Tack::Reconciled)
+            {
+                op.amount = amount;
+                changed += 1;
+            }
+        }
+        if changed == 0 {
+            self.undo.pop();
+        } else {
+            self.view.series_key = None;
+            self.touch();
+        }
+        changed
+    }
+
     /// Règles « appliquer automatiquement » sur des lignes ajoutées ou
     /// modifiées : (compte, opération).
     pub fn apply_auto_rules(&mut self, changes: &[(usize, usize)]) {

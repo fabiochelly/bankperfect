@@ -2,7 +2,10 @@
 
 pub mod codec_v5;
 pub mod error;
+pub mod file;
 pub mod format_v6;
+pub mod model;
+pub mod v5_text;
 
 pub use error::{Error, Result};
 

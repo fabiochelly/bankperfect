@@ -148,13 +148,20 @@ impl Protection {
         let compressed = zstd::bulk::compress(plaintext, ZSTD_LEVEL)?;
         let nonce: [u8; NONCE_LEN] = random_bytes()?;
 
-        let mut out = Vec::with_capacity(self.header.len() + 1 + NONCE_LEN + compressed.len() + TAG_LEN);
+        let mut out =
+            Vec::with_capacity(self.header.len() + 1 + NONCE_LEN + compressed.len() + TAG_LEN);
         out.extend_from_slice(&self.header);
         out.push(CODEC_ZSTD);
         out.extend_from_slice(&nonce);
 
         let ciphertext = cipher(&self.dek)
-            .encrypt(&XNonce::from(nonce), Payload { msg: &compressed, aad: &out })
+            .encrypt(
+                &XNonce::from(nonce),
+                Payload {
+                    msg: &compressed,
+                    aad: &out,
+                },
+            )
             .map_err(|_| Error::Crypto("chiffrement impossible".into()))?;
         out.extend_from_slice(&ciphertext);
         Ok(out)
@@ -195,8 +202,9 @@ impl Protection {
                         unwrap_key(&kek, password_slot, AAD_PASSWORD_SLOT, &salt)?
                     }
                     Unlock::RecoveryKey(phrase) => {
-                        let mnemonic = Mnemonic::parse_in(Language::French, normalize_phrase(phrase))
-                            .map_err(|e| Error::InvalidRecoveryKey(e.to_string()))?;
+                        let mnemonic =
+                            Mnemonic::parse_in(Language::French, normalize_phrase(phrase))
+                                .map_err(|e| Error::InvalidRecoveryKey(e.to_string()))?;
                         let entropy = Zeroizing::new(mnemonic.to_entropy());
                         let kek = derive_recovery_key(&entropy, &salt)?;
                         unwrap_key(&kek, recovery_slot, AAD_RECOVERY_SLOT, &salt)?
@@ -214,7 +222,13 @@ impl Protection {
         let nonce: [u8; NONCE_LEN] = reader.array()?;
         let aad = &data[..reader.pos];
         let compressed = cipher(&dek)
-            .decrypt(&XNonce::from(nonce), Payload { msg: &data[reader.pos..], aad })
+            .decrypt(
+                &XNonce::from(nonce),
+                Payload {
+                    msg: &data[reader.pos..],
+                    aad,
+                },
+            )
             .map_err(|_| Error::Corrupted)?;
         let plaintext = zstd::stream::decode_all(compressed.as_slice())?;
 
@@ -239,7 +253,10 @@ pub fn is_v6(data: &[u8]) -> bool {
 /// `fsync`, puis renommage. Un plantage pendant l'écriture ne peut pas
 /// laisser un fichier à moitié écrit.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
-    let dir = path.parent().filter(|p| !p.as_os_str().is_empty()).unwrap_or(Path::new("."));
+    let dir = path
+        .parent()
+        .filter(|p| !p.as_os_str().is_empty())
+        .unwrap_or(Path::new("."));
     let mut tmp = tempfile_in(dir, path)?;
     let result = (|| {
         tmp.1.write_all(bytes)?;
@@ -256,17 +273,26 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn tempfile_in(dir: &Path, target: &Path) -> Result<(std::path::PathBuf, fs::File)> {
-    let name = target.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = target
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     for _ in 0..16 {
         let suffix = u32::from_le_bytes(random_bytes()?);
         let tmp = dir.join(format!(".{name}.{suffix:08x}.tmp"));
-        match fs::OpenOptions::new().write(true).create_new(true).open(&tmp) {
+        match fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp)
+        {
             Ok(file) => return Ok((tmp, file)),
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             Err(e) => return Err(e.into()),
         }
     }
-    Err(Error::Io(std::io::Error::other("impossible de créer un fichier temporaire")))
+    Err(Error::Io(std::io::Error::other(
+        "impossible de créer un fichier temporaire",
+    )))
 }
 
 fn cipher(key: &[u8; KEY_LEN]) -> XChaCha20Poly1305 {
@@ -291,11 +317,22 @@ fn derive_recovery_key(entropy: &[u8], salt: &[u8]) -> Result<Key> {
     Ok(key)
 }
 
-fn wrap_key(kek: &[u8; KEY_LEN], dek: &[u8; KEY_LEN], label: &[u8], salt: &[u8]) -> Result<Vec<u8>> {
+fn wrap_key(
+    kek: &[u8; KEY_LEN],
+    dek: &[u8; KEY_LEN],
+    label: &[u8],
+    salt: &[u8],
+) -> Result<Vec<u8>> {
     let nonce: [u8; NONCE_LEN] = random_bytes()?;
     let aad = [label, salt].concat();
     let wrapped = cipher(kek)
-        .encrypt(&XNonce::from(nonce), Payload { msg: dek, aad: &aad })
+        .encrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: dek,
+                aad: &aad,
+            },
+        )
         .map_err(|_| Error::Crypto("chiffrement de la clé impossible".into()))?;
     Ok([nonce.as_slice(), &wrapped].concat())
 }
@@ -306,7 +343,13 @@ fn unwrap_key(kek: &[u8; KEY_LEN], slot: &[u8], label: &[u8], salt: &[u8]) -> Re
     let aad = [label, salt].concat();
     let dek = Zeroizing::new(
         cipher(kek)
-            .decrypt(&XNonce::from(nonce), Payload { msg: wrapped, aad: &aad })
+            .decrypt(
+                &XNonce::from(nonce),
+                Payload {
+                    msg: wrapped,
+                    aad: &aad,
+                },
+            )
             .map_err(|_| Error::WrongPassword)?,
     );
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
@@ -316,7 +359,11 @@ fn unwrap_key(kek: &[u8; KEY_LEN], slot: &[u8], label: &[u8], salt: &[u8]) -> Re
 
 /// Tolère majuscules, espaces multiples et retours à la ligne dans la saisie.
 fn normalize_phrase(phrase: &str) -> String {
-    phrase.split_whitespace().map(str::to_lowercase).collect::<Vec<_>>().join(" ")
+    phrase
+        .split_whitespace()
+        .map(str::to_lowercase)
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn random_key() -> Result<Key> {
@@ -342,7 +389,10 @@ impl<'a> Reader<'a> {
     }
 
     fn take(&mut self, n: usize) -> Result<&'a [u8]> {
-        let slice = self.data.get(self.pos..self.pos + n).ok_or(Error::Corrupted)?;
+        let slice = self
+            .data
+            .get(self.pos..self.pos + n)
+            .ok_or(Error::Corrupted)?;
         self.pos += n;
         Ok(slice)
     }
@@ -386,8 +436,14 @@ mod tests {
         let (protection, _) = fast_password("secret");
         let file = protection.seal(CONTENT).unwrap();
         assert!(requires_password(&file).unwrap());
-        assert!(matches!(Protection::open(&file, Unlock::None), Err(Error::PasswordRequired)));
-        assert!(matches!(Protection::open(&file, Unlock::Password("faux")), Err(Error::WrongPassword)));
+        assert!(matches!(
+            Protection::open(&file, Unlock::None),
+            Err(Error::PasswordRequired)
+        ));
+        assert!(matches!(
+            Protection::open(&file, Unlock::Password("faux")),
+            Err(Error::WrongPassword)
+        ));
 
         let (content, reopened) = Protection::open(&file, Unlock::Password("secret")).unwrap();
         assert_eq!(content, CONTENT);
@@ -415,7 +471,10 @@ mod tests {
         let mut file = protection.seal(CONTENT).unwrap();
         let last = file.len() - 1;
         file[last] ^= 1;
-        assert!(matches!(Protection::open(&file, Unlock::None), Err(Error::Corrupted)));
+        assert!(matches!(
+            Protection::open(&file, Unlock::None),
+            Err(Error::Corrupted)
+        ));
     }
 
     #[test]
@@ -430,7 +489,10 @@ mod tests {
     #[test]
     fn nonces_differ_between_saves() {
         let protection = Protection::none().unwrap();
-        assert_ne!(protection.seal(CONTENT).unwrap(), protection.seal(CONTENT).unwrap());
+        assert_ne!(
+            protection.seal(CONTENT).unwrap(),
+            protection.seal(CONTENT).unwrap()
+        );
     }
 
     #[test]

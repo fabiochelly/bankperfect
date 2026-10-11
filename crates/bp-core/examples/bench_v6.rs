@@ -11,7 +11,11 @@ fn main() {
 
     let t = Instant::now();
     let text = bp_core::codec_v5::decode(&raw).unwrap();
-    println!("lecture v5          : {:>8.2?}  ({} octets)", t.elapsed(), raw.len());
+    println!(
+        "lecture v5          : {:>8.2?}  ({} octets)",
+        t.elapsed(),
+        raw.len()
+    );
 
     let t = Instant::now();
     let (protection, _recovery) = Protection::with_password("mot de passe de test").unwrap();
@@ -26,7 +30,11 @@ fn main() {
         size = sealed.len();
         write_atomic(&out, &sealed).unwrap();
     }
-    println!("sauvegarde v6       : {:>8.2?}  par écriture, fsync compris ({} octets)", t.elapsed() / runs, size);
+    println!(
+        "sauvegarde v6       : {:>8.2?}  par écriture, fsync compris ({} octets)",
+        t.elapsed() / runs,
+        size
+    );
 
     let t = Instant::now();
     let sealed = std::fs::read(&out).unwrap();

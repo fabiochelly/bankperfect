@@ -29,6 +29,9 @@ const SHORTCUT_REDO_ALT: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::Z);
 const SHORTCUT_REPLACE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::R);
 const SHORTCUT_GROUP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::M);
+const SHORTCUT_EXTRA: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F3);
+const SHORTCUT_NOTES: KeyboardShortcut =
+    KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
 
 /// Action différée en attendant la réponse à « Enregistrer les modifications ? ».
 enum Pending {
@@ -56,6 +59,8 @@ pub struct BankPerfectApp {
     settings: crate::settings::Settings,
     /// Le thème des réglages reste à appliquer (première image).
     theme_pending: bool,
+    /// Vraie application (pas un test) : notes affichées à l'ouverture.
+    interactive: bool,
 }
 
 const DRAWER_WIDTH: f32 = 420.0;
@@ -64,8 +69,12 @@ const DRAWER_SLIDE_SECONDS: f64 = 0.15;
 impl BankPerfectApp {
     /// Application avec les réglages enregistrés de l'utilisateur.
     pub fn new(initial_file: Option<PathBuf>) -> Self {
-        let mut app = Self::with_settings(initial_file, crate::settings::Settings::load());
+        let mut app = Self::with_settings(None, crate::settings::Settings::load());
         app.theme_pending = true;
+        app.interactive = true;
+        if let Some(path) = initial_file {
+            app.open_path(path);
+        }
         app
     }
 
@@ -93,6 +102,7 @@ impl BankPerfectApp {
             profiler: crate::profiler::Profiler::from_env(),
             settings,
             theme_pending: false,
+            interactive: false,
         };
         if let Some(path) = initial_file {
             app.open_path(path);
@@ -152,6 +162,12 @@ impl BankPerfectApp {
                 self.show_warnings = !opened.warnings.is_empty();
                 self.settings.remember(&path);
                 self.doc = Some(OpenDoc::new(path, opened));
+                if self.interactive
+                    && self.tool.is_none()
+                    && let Some(notes) = crate::tools::NotesForm::on_open()
+                {
+                    self.tool = Some(crate::tools::Tool::Notes(notes));
+                }
                 self.editor = None;
                 self.prompt = None;
             }
@@ -194,6 +210,9 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPEN)) {
             self.request(Pending::Open(None));
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_NOTES)) {
+            self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
+        }
         let Some(doc) = &mut self.doc else { return };
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SAVE)) {
             self.save(now);
@@ -224,6 +243,13 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_GROUP)) {
             self.tool = Some(crate::tools::Tool::ModifyGroup(
                 crate::tools::GroupForm::new(),
+            ));
+        }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_EXTRA))
+            && let Some(&index) = doc.selection.iter().next()
+        {
+            self.tool = Some(crate::tools::Tool::ExtraValues(
+                crate::tools::ExtraForm::new(doc, index),
             ));
         }
 
@@ -292,9 +318,16 @@ impl BankPerfectApp {
 
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let titles: &[&str] = if self.doc.is_some() {
-            &["Fichier", "Édition", "Affichage", "Comptes", "Opérations"]
+            &[
+                "Fichier",
+                "Édition",
+                "Affichage",
+                "Comptes",
+                "Opérations",
+                "Outils",
+            ]
         } else {
-            &["Fichier"]
+            &["Fichier", "Outils"]
         };
         if let Some((index, anchor)) = self.menus.titles(ui, titles) {
             let ctx = ui.ctx().clone();
@@ -354,6 +387,14 @@ impl BankPerfectApp {
                 ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
             }
 
+            return;
+        }
+        let tools_index = if self.doc.is_some() { 5 } else { 1 };
+        if index == tools_index {
+            menu::begin(ui);
+            if menu::item(ui, Some(icon::NOTE), "Notes", Some("Ctrl+Maj+N")).clicked() {
+                self.tool = Some(crate::tools::Tool::Notes(crate::tools::NotesForm::new()));
+            }
             return;
         }
         let Some(doc) = &mut self.doc else { return };
@@ -518,6 +559,20 @@ impl BankPerfectApp {
                 {
                     self.tool = Some(crate::tools::Tool::ModifyGroup(
                         crate::tools::GroupForm::new(),
+                    ));
+                }
+                if menu::item_enabled(
+                    ui,
+                    doc.selection.len() == 1,
+                    Some(icon::LIST_PLUS),
+                    "Champs supplémentaires…",
+                    Some("F3"),
+                )
+                .clicked()
+                    && let Some(&index) = doc.selection.iter().next()
+                {
+                    self.tool = Some(crate::tools::Tool::ExtraValues(
+                        crate::tools::ExtraForm::new(doc, index),
                     ));
                 }
             }
@@ -730,8 +785,17 @@ impl BankPerfectApp {
 
     fn modals(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
-        if let (Some(tool), Some(doc)) = (&mut self.tool, &mut self.doc) {
-            match tool.show(ctx, doc) {
+        if let Some(tool) = &mut self.tool {
+            let result = match (&mut self.doc, tool) {
+                (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),
+                (Some(doc), tool) => Some(tool.show(ctx, doc)),
+                (None, _) => None,
+            };
+            let Some(result) = result else {
+                self.tool = None;
+                return;
+            };
+            match result {
                 crate::tools::Outcome::Keep => {}
                 crate::tools::Outcome::Close => self.tool = None,
                 crate::tools::Outcome::Done(message) => {
@@ -740,7 +804,9 @@ impl BankPerfectApp {
                 }
                 crate::tools::Outcome::Reopen(path, message) => {
                     self.tool = None;
-                    doc.dirty = false;
+                    if let Some(doc) = &mut self.doc {
+                        doc.dirty = false;
+                    }
                     self.open_path(path);
                     self.toast = Some((message, now + 4.0));
                 }
@@ -974,6 +1040,11 @@ impl BankPerfectApp {
             }
             GridAction::New => {
                 self.editor = Some(Editor::new_operation(&doc.document, doc.account))
+            }
+            GridAction::Extra(index) => {
+                self.tool = Some(crate::tools::Tool::ExtraValues(
+                    crate::tools::ExtraForm::new(doc, index),
+                ))
             }
         }
 

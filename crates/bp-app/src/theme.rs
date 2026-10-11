@@ -2,6 +2,7 @@
 //! Tokyo Night Day (clair).
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use egui::epaint::text::{FontTweak, VariationCoords};
 use egui::{
@@ -104,6 +105,46 @@ pub const DAY: Palette = Palette {
     menu_hover: Color32::from_rgb(0xb4, 0xb9, 0xcd),
     teal: Color32::from_rgb(0x11, 0x8c, 0x74),
 };
+
+/// Fond de fenêtre translucide (le compositeur floute ce qu'il y a derrière,
+/// comme Hyprland). Ne vaut que si la surface a été créée transparente.
+static TRANSLUCENT: AtomicBool = AtomicBool::new(false);
+/// La fenêtre a été créée avec une surface transparente.
+static SURFACE_TRANSPARENT: AtomicBool = AtomicBool::new(false);
+
+/// Opacité du fond de la fenêtre (grille, menus, barre d'état) : assez pour
+/// que les chiffres restent lisibles sur un bureau chargé.
+const BACKDROP_ALPHA: f32 = 0.80;
+/// Opacité du panneau des comptes, un peu plus vitré.
+pub const SIDEBAR_ALPHA: f32 = 0.70;
+
+pub fn set_surface_transparent(on: bool) {
+    SURFACE_TRANSPARENT.store(on, Ordering::Relaxed);
+}
+
+pub fn surface_transparent() -> bool {
+    SURFACE_TRANSPARENT.load(Ordering::Relaxed)
+}
+
+/// Active ou non le fond translucide, et met à jour les couleurs.
+pub fn set_translucent(ctx: &egui::Context, on: bool) {
+    TRANSLUCENT.store(on && surface_transparent(), Ordering::Relaxed);
+    ctx.set_visuals_of(Theme::Dark, visuals(&NIGHT, true));
+    ctx.set_visuals_of(Theme::Light, visuals(&DAY, false));
+}
+
+pub fn translucent() -> bool {
+    TRANSLUCENT.load(Ordering::Relaxed)
+}
+
+/// Couleur de fond, rendue translucide si le fond vitré est actif.
+pub fn backdrop(color: Color32, alpha: f32) -> Color32 {
+    if translucent() {
+        color.gamma_multiply(alpha)
+    } else {
+        color
+    }
+}
 
 pub fn install(ctx: &egui::Context) {
     ctx.set_fonts(fonts());
@@ -228,7 +269,7 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
         Visuals::light()
     };
     v.override_text_color = None;
-    v.panel_fill = p.bg;
+    v.panel_fill = backdrop(p.bg, BACKDROP_ALPHA);
     // Fenêtres et listes déroulantes opaques.
     v.window_fill = p.menu_bg.to_opaque();
     v.window_stroke = Stroke::new(1.0, p.border);
@@ -247,7 +288,7 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     };
     v.menu_corner_radius = CornerRadius::same(8);
     v.extreme_bg_color = p.bg_dark;
-    v.faint_bg_color = p.stripe;
+    v.faint_bg_color = backdrop(p.stripe, BACKDROP_ALPHA);
     v.code_bg_color = p.bg_dark;
     v.hyperlink_color = p.accent;
     v.warn_fg_color = p.warning;

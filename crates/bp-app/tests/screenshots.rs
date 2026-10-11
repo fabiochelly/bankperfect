@@ -186,6 +186,12 @@ fn screenshots() {
         egui::vec2(820.0, 600.0),
         |_| {},
     );
+    render_sized(
+        "25-tuile-700",
+        egui::Theme::Dark,
+        egui::vec2(700.0, 850.0),
+        |_| {},
+    );
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

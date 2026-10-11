@@ -9,6 +9,7 @@ use bp_core::model::{Amount, Tack};
 use egui::{Align, Key, KeyboardShortcut, Layout, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 
+use crate::budget_ui::BudgetTab;
 use crate::commands::Command;
 use crate::dialogs::{self, Choice, PasswordPrompt, PromptResult};
 use crate::document::{CursorTarget, OpenDoc};
@@ -41,6 +42,7 @@ const SHORTCUT_CATEGORY_TOTALS: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::T);
 const SHORTCUT_CHARTS: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::G);
+const SHORTCUT_BUDGET: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::B);
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
@@ -393,6 +395,9 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_RULES)) {
             return self.execute(ctx, Command::Rules);
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_BUDGET)) {
+            return self.execute(ctx, Command::Budget(BudgetTab::Monthly));
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CATEGORY_TOTALS)) {
             return self.execute(ctx, Command::Report(ReportTab::Categories));
         }
@@ -573,6 +578,11 @@ impl BankPerfectApp {
                 if let Some(message) = crate::spreadsheet::save_dialog(&dir, &name, &name, &rows) {
                     doc.notice = Some(message);
                 }
+            }
+            Command::Budget(tab) => {
+                self.tool = Some(Tool::Budget(Box::new(crate::budget_ui::BudgetForm::new(
+                    doc, tab,
+                ))))
             }
             Command::Charts => {
                 self.tool = Some(Tool::Charts(Box::new(crate::charts_ui::ChartsForm::new())))
@@ -997,6 +1007,9 @@ impl BankPerfectApp {
             self.menu_command(ui, Report(ReportTab::Statement));
             menu::separator(ui);
             self.menu_command(ui, Charts);
+            menu::separator(ui);
+            self.menu_command(ui, Budget(BudgetTab::Monthly));
+            self.menu_command(ui, Budget(BudgetTab::Annual));
             menu::separator(ui);
             self.menu_command(ui, ExportXlsx);
             return;

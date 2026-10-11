@@ -340,6 +340,44 @@ fn report_screenshots() {
         charts(h);
         h.get_by_label_contains("Par jour du mois").click();
     });
+    render("54-budget-mensuel", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::B);
+        h.run_steps(3);
+        h.get_by_label("Tout").click();
+    });
+    render("56-budget-saisie", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::B);
+        h.run_steps(3);
+        h.get_by_label("Tout").click();
+        h.run_steps(3);
+        h.get_all_by_label("—").nth(1).unwrap().click();
+        h.run_steps(3);
+        h.event(egui::Event::Text("-120".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        h.get_all_by_label("—").nth(3).unwrap().click();
+        h.run_steps(3);
+        h.event(egui::Event::Text("+15".into()));
+        h.run_steps(2);
+    });
+    render("55-budget-annuel", egui::Theme::Light, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::B);
+        h.run_steps(3);
+        h.get_by_label("Budgets annuels").click();
+    });
+    render("57-budget-annuel-ligne", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::B);
+        h.run_steps(3);
+        h.get_by_label("Budgets annuels").click();
+        h.run_steps(3);
+        h.get_by_label_contains("  Alimentation").click();
+        h.run_steps(3);
+        h.get_all_by_label("·").next().unwrap().click();
+        h.run_steps(3);
+        h.event(egui::Event::Text("-300".into()));
+        h.run_steps(2);
+    });
 }
 
 /// Temps CPU d'une image (passe egui complète, sans rendu GPU), en faisant

@@ -43,7 +43,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         .cell_layout(Layout::left_to_right(Align::Center))
         .column(Column::exact(28.0))
         .column(Column::initial(120.0).at_least(110.0))
-        .column(Column::initial(104.0).at_least(60.0).clip(true))
+        .column(Column::initial(136.0).at_least(70.0).clip(true))
         .column(
             Column::remainder()
                 .at_least(90.0)
@@ -158,7 +158,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     });
                 });
                 row.col(|ui| {
-                    ui.add(egui::Label::new(op.mode_label()).truncate());
+                    mode_badge(ui, doc, &op, &pal);
                 });
                 row.col(|ui| {
                     let (glyph, payee) = if let Some(rest) = op.payee.strip_prefix(AUTO_PREFIX) {
@@ -267,6 +267,68 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     action
 }
 
+/// Mode de paiement dans un badge : bleu pour la carte bancaire, rouge ou
+/// orange pour les autres dépenses, vert pour l'argent reçu.
+fn mode_badge(
+    ui: &mut egui::Ui,
+    doc: &OpenDoc,
+    op: &bp_core::model::Operation,
+    pal: &crate::theme::Palette,
+) {
+    use bp_core::model::{Mode, StandardMode as S};
+    let (glyph, color) = match &op.mode {
+        Mode::Standard(m) => match m {
+            S::Carte => (icon::CREDIT_CARD, pal.accent),
+            S::RetraitDab => (icon::MONEY, pal.future),
+            S::ChequeEmis => (icon::FILE_TEXT, pal.future),
+            S::Prelevement => (icon::ARROWS_CLOCKWISE, pal.negative),
+            S::VirementEmis => (icon::ARROW_UP_RIGHT, pal.negative),
+            S::Tip => (icon::RECEIPT, pal.future),
+            S::Versement => (icon::HAND_COINS, pal.positive),
+            S::DepotCheque => (icon::BANK, pal.positive),
+            S::VirementRecu => (icon::ARROW_DOWN_LEFT, pal.positive),
+            S::Titre => (icon::CHART_LINE_UP, pal.positive),
+        },
+        Mode::Custom(name) => {
+            let debit = doc
+                .document
+                .custom_modes
+                .iter()
+                .find(|m| &m.name == name)
+                .is_none_or(|m| m.debit);
+            let glyph = crate::category_icons::icon_for(name).unwrap_or(icon::TAG);
+            (glyph, if debit { pal.future } else { pal.positive })
+        }
+    };
+    pill(ui, glyph, &op.mode_label(), color, 9.0);
+}
+
+/// Badge arrondi teinté : icône et libellé dans la couleur donnée.
+fn pill(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32, top_space: f32) {
+    ui.vertical(|ui| {
+        if top_space > 0.0 {
+            ui.add_space(top_space);
+        }
+        let font = egui::TextStyle::Small.resolve(ui.style());
+        let galley = ui.painter().layout_no_wrap(
+            format!("{glyph}  {label}"),
+            egui::FontId::new(12.5, font.family),
+            color,
+        );
+        let size = egui::vec2((galley.size().x + 16.0).min(ui.available_width()), 22.0);
+        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+        ui.painter()
+            .rect_filled(rect, 11.0, color.gamma_multiply(0.16));
+        ui.painter()
+            .with_clip_rect(rect.shrink2(egui::vec2(8.0, 0.0)))
+            .galley(
+                egui::pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
+                galley,
+                color,
+            );
+    });
+}
+
 /// Catégorie dans un badge coloré avec son icône ; la famille (catégorie
 /// parente) en petit dessous.
 fn category_badge(
@@ -291,26 +353,13 @@ fn category_badge(
     };
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing.y = 1.0;
-        if parent.is_none() {
-            ui.add_space(9.0);
-        }
-        let font = egui::TextStyle::Small.resolve(ui.style());
-        let text = format!("{glyph}  {}", cat.name);
-        let galley =
-            ui.painter()
-                .layout_no_wrap(text, egui::FontId::new(12.5, font.family.clone()), color);
-        let max_width = ui.available_width();
-        let size = egui::vec2((galley.size().x + 16.0).min(max_width), 22.0);
-        let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
-        ui.painter()
-            .rect_filled(rect, 11.0, color.gamma_multiply(0.16));
-        ui.painter()
-            .with_clip_rect(rect.shrink2(egui::vec2(8.0, 0.0)))
-            .galley(
-                egui::pos2(rect.left() + 8.0, rect.center().y - galley.size().y / 2.0),
-                galley,
-                color,
-            );
+        pill(
+            ui,
+            glyph,
+            &cat.name,
+            color,
+            if parent.is_none() { 9.0 } else { 0.0 },
+        );
         if let Some(parent) = parent {
             ui.add(egui::Label::new(RichText::new(parent).small().color(pal.muted)).truncate());
         }

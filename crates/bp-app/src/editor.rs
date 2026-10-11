@@ -201,6 +201,16 @@ impl Editor {
                                 });
                             if self.mode != before {
                                 self.credit = !mode_is_debit(document, &self.mode);
+                                // Chèque émis sur une nouvelle opération : numéro
+                                // du chèque suivant proposé dans le détail.
+                                if self.target.is_none()
+                                    && self.details.trim().is_empty()
+                                    && self.mode
+                                        == Mode::Standard(bp_core::model::StandardMode::ChequeEmis)
+                                {
+                                    self.details =
+                                        bp_core::edit::next_cheque_number(doc.current_account());
+                                }
                             }
                             let height =
                                 cols[0].min_rect().height().max(cols[1].min_rect().height());
@@ -330,12 +340,20 @@ impl Editor {
             ui.separator();
         });
 
-        let (enter, escape) = ui.input(|i| {
+        let (enter, escape, load, clear) = ui.input_mut(|i| {
             (
                 i.modifiers.command && i.key_pressed(Key::Enter),
                 i.key_pressed(Key::Escape),
+                i.consume_key(egui::Modifiers::NONE, Key::F10),
+                i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
             )
         });
+        if load {
+            self.load_payee(doc);
+        }
+        if clear {
+            self.clear(document);
+        }
         if enter {
             action = self.validate();
         } else if escape {
@@ -440,6 +458,84 @@ impl Editor {
         }
     }
 
+    /// Remplit la saisie depuis un tiers mémorisé (champs non vides).
+    fn fill_from_payee(&mut self, document: &Document, p: &bp_core::model::Payee) {
+        self.payee = if p.payee.is_empty() {
+            p.caption.clone()
+        } else {
+            p.payee.clone()
+        };
+        self.mode = p.mode.clone();
+        self.credit = !mode_is_debit(document, &self.mode);
+        if p.category.is_some() {
+            self.category = p.category;
+        }
+        if !p.details.is_empty() {
+            self.details = p.details.clone();
+        }
+        if let Some(a) = Amount::parse(&p.amount).filter(|&a| a != Amount::ZERO) {
+            self.amount = a.abs().format(2, ',');
+        }
+    }
+
+    /// Charger un tiers (F10) : d'abord parmi les tiers mémorisés, sinon la
+    /// dernière opération du compte dont le tiers ou le détail contient le
+    /// texte saisi (mode, détail, catégorie et montant recopiés).
+    fn load_payee(&mut self, doc: &OpenDoc) {
+        let needle = bp_core::filter::normalize(&self.payee);
+        let needle = needle.trim();
+        if needle.is_empty() {
+            self.error = Some("Saisissez du texte dans le champ Tiers, puis F10".into());
+            return;
+        }
+        if let Some(p) = doc
+            .document
+            .payees
+            .iter()
+            .find(|p| bp_core::filter::normalize(&p.caption).contains(needle))
+            .cloned()
+        {
+            self.fill_from_payee(&doc.document, &p);
+            self.error = None;
+            return;
+        }
+        let found = doc
+            .current_account()
+            .operations
+            .iter()
+            .filter(|op| {
+                bp_core::filter::normalize(&format!("{} {}", op.payee, op.details)).contains(needle)
+            })
+            .max_by_key(|op| (op.date, op.uid))
+            .cloned();
+        match found {
+            Some(op) => {
+                self.payee = op.payee;
+                self.mode = op.mode;
+                self.details = op.details;
+                self.category = op.category;
+                self.credit = !op.amount.is_negative();
+                self.amount = op.amount.abs().format(2, ',');
+                self.error = None;
+            }
+            None => self.error = Some("Aucun tiers ne contient ce texte".into()),
+        }
+    }
+
+    /// Vider la saisie (Ctrl+0) : date du jour, mode Carte, champs vides.
+    fn clear(&mut self, document: &Document) {
+        self.date = Date::today().to_string();
+        self.mode = Mode::default();
+        self.credit = !mode_is_debit(document, &self.mode);
+        self.payee.clear();
+        self.details.clear();
+        self.category = None;
+        self.amount.clear();
+        self.tack = Tack::None;
+        self.error = None;
+        self.focus_requested = true;
+    }
+
     fn payee_suggestions(&mut self, ui: &mut egui::Ui, document: &Document) {
         let needle = bp_core::filter::normalize(&self.payee);
         let needle = needle.trim();
@@ -470,18 +566,7 @@ impl Editor {
                     )
                     .clicked()
                 {
-                    self.payee = p.payee.clone();
-                    self.mode = p.mode.clone();
-                    self.credit = !mode_is_debit(document, &self.mode);
-                    if p.category.is_some() {
-                        self.category = p.category;
-                    }
-                    if !p.details.is_empty() {
-                        self.details = p.details.clone();
-                    }
-                    if let Some(a) = Amount::parse(&p.amount).filter(|&a| a != Amount::ZERO) {
-                        self.amount = a.abs().format(2, ',');
-                    }
+                    self.fill_from_payee(document, &p);
                 }
             }
             for name in used {

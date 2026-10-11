@@ -14,7 +14,7 @@ macos="$(sum_of "BankPerfect-${version}-macos-universal.zip")"
 sed -i -E "s/^  version \".*\"/  version \"${version}\"/; s/^  sha256 \".*\"/  sha256 \"${macos}\"/" "$root/Casks/bankperfect.rb"
 sed -i -E "s/^pkgver=.*/pkgver=${version}/; s/^pkgrel=.*/pkgrel=1/; s/^sha256sums=.*/sha256sums=('${linux}')/" "$root/packaging/aur/PKGBUILD"
 for f in "$root"/packaging/winget/*.yaml; do
-  sed -i -E "s/^PackageVersion: .*/PackageVersion: ${version}/; s#download/v[^/]+/bankperfect-[^/]+-windows#download/v${version}/bankperfect-${version}-windows#; s/InstallerSha256: .*/InstallerSha256: '${windows}'/" "$f"
+  sed -i -E "s/^PackageVersion: .*/PackageVersion: ${version}/; s#download/v[^/]+/bankperfect-[^/]+-windows#download/v${version}/bankperfect-${version}-windows#; s/InstallerSha256: .*/InstallerSha256: '${windows}'/; s#releases/tag/v[^ ]+#releases/tag/v${version}#" "$f"
 done
 echo "Manifestes mis à jour pour ${version}."
 echo "AUR : cd packaging/aur && makepkg --printsrcinfo > .SRCINFO, puis pousser vers aur.archlinux.org/bankperfect-bin.git"

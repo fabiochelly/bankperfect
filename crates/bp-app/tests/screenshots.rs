@@ -278,6 +278,12 @@ fn screenshots() {
     render("41-dates-pointage", egui::Theme::Dark, |h| {
         h.key_press(egui::Key::F11);
     });
+    render("42-filtres-predefinis", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::F7);
+    });
+    render("43-menu-filtres", egui::Theme::Dark, |h| {
+        h.get_by_label_contains("Filtres").click();
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

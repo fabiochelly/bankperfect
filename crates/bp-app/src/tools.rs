@@ -13,6 +13,8 @@ use crate::ui_kit;
 
 pub enum Tool {
     NewFile(crate::files_ui::NewFileForm),
+    Scheduler(Box<crate::scheduler_ui::SchedulerForm>),
+    Forecast(crate::scheduler_ui::ForecastForm),
     Import(Box<crate::import_ui::ImportForm>),
     Print(PrintForm),
     MarkDate(MarkDateForm),
@@ -37,6 +39,8 @@ pub enum Outcome {
     Reopen(std::path::PathBuf, String),
     /// Fermer et montrer la nouvelle clé de secours.
     Protected(String),
+    /// Remplacer cette fenêtre par une autre.
+    Switch(Box<Tool>),
 }
 
 impl Tool {
@@ -46,6 +50,8 @@ impl Tool {
                 form.show_standalone(ctx, doc.path.parent().map(std::path::Path::to_path_buf))
             }
             Tool::Manage(form) => form.show(ctx, doc),
+            Tool::Scheduler(form) => form.show(ctx, doc),
+            Tool::Forecast(form) => form.show(ctx, doc),
             Tool::Import(form) => form.show(ctx, doc),
             Tool::Print(form) => form.show(ctx, doc),
             Tool::MarkDate(form) => form.show(ctx, doc),

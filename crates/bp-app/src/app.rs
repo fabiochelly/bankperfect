@@ -35,6 +35,7 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
 const SHORTCUT_PRINT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::P);
 const SHORTCUT_OPTIONS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
@@ -77,6 +78,8 @@ pub struct BankPerfectApp {
     confirm_payee: Option<usize>,
     /// Confirmation de l'inversion des monnaies.
     confirm_reverse: bool,
+    /// Résumé des échéances insérées automatiquement à l'ouverture.
+    scheduler_notice: Option<String>,
     options: Option<crate::options_ui::OptionsForm>,
     about: bool,
     tool: Option<crate::tools::Tool>,
@@ -132,6 +135,7 @@ impl BankPerfectApp {
             clipboard: Vec::new(),
             confirm_payee: None,
             confirm_reverse: false,
+            scheduler_notice: None,
             options: None,
             about: false,
             tool: None,
@@ -214,7 +218,20 @@ impl BankPerfectApp {
 
     fn finish_open(&mut self, path: PathBuf, data: &[u8], unlock: Unlock<'_>) {
         match file::open_bytes(data, unlock) {
-            Ok(opened) => {
+            Ok(mut opened) => {
+                // Échéances à insertion automatique arrivées à terme.
+                let inserted = bp_core::scheduler::auto_insert(
+                    &mut opened.document,
+                    bp_core::model::Date::today(),
+                )
+                .ok()
+                .filter(|r| !r.inserted.is_empty())
+                .map(|r| {
+                    let schedules = bp_core::scheduler::load(&opened.document)
+                        .map(|l| l.schedules)
+                        .unwrap_or_default();
+                    r.summary(&opened.document, &schedules)
+                });
                 self.show_warnings = !opened.warnings.is_empty();
                 self.settings.remember(&path);
                 let mut doc = OpenDoc::new(path, opened);
@@ -224,6 +241,10 @@ impl BankPerfectApp {
                 {
                     doc.sort = sort;
                     doc.ascending = *ascending;
+                }
+                if let Some(summary) = inserted {
+                    doc.dirty = true;
+                    self.scheduler_notice = Some(summary);
                 }
                 self.doc = Some(doc);
                 if self.interactive
@@ -348,6 +369,9 @@ impl BankPerfectApp {
             ));
         }
 
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SCHEDULER)) {
+            return self.execute(ctx, Command::Scheduler);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_IMPORT)) {
             return self.execute(ctx, Command::Import);
         }
@@ -650,6 +674,34 @@ impl BankPerfectApp {
                 self.settings.save();
             }
             Command::ReverseCurrencies => self.confirm_reverse = true,
+            Command::Scheduler => {
+                self.tool = Some(Tool::Scheduler(Box::new(
+                    crate::scheduler_ui::SchedulerForm::new(doc, None),
+                )));
+            }
+            Command::Forecast => {
+                self.tool = Some(Tool::Forecast(crate::scheduler_ui::ForecastForm::new()))
+            }
+            Command::AddToScheduler => {
+                if let Some(&index) = doc.selection.iter().next() {
+                    let op = doc.operation(index).clone();
+                    if let Some(schedule) =
+                        bp_core::scheduler::schedule_from_operation(&doc.document, doc.account, &op)
+                    {
+                        let mut schedules = bp_core::scheduler::load(&doc.document)
+                            .map(|l| l.schedules)
+                            .unwrap_or_default();
+                        schedules.push(schedule);
+                        if bp_core::scheduler::save(&mut doc.document, &schedules).is_ok() {
+                            doc.dirty = true;
+                        }
+                        let last = schedules.len() - 1;
+                        self.tool = Some(Tool::Scheduler(Box::new(
+                            crate::scheduler_ui::SchedulerForm::new(doc, Some(last)),
+                        )));
+                    }
+                }
+            }
             Command::ReconcileAll => doc.reconcile_all_pointed(),
             Command::ModifyGroup => {
                 self.tool = Some(Tool::ModifyGroup(crate::tools::GroupForm::new()))
@@ -1026,6 +1078,9 @@ impl BankPerfectApp {
                 self.menu_command(ui, NextAccount);
                 self.menu_command(ui, PreviousAccount);
                 menu::separator(ui);
+                self.menu_command(ui, Scheduler);
+                self.menu_command(ui, Forecast);
+                menu::separator(ui);
                 for tab in [
                     crate::manage_ui::Tab::Accounts,
                     crate::manage_ui::Tab::Categories,
@@ -1051,6 +1106,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, ModifyGroup);
                 self.menu_command(ui, ExtraFields);
                 self.menu_command(ui, AddToPayees);
+                self.menu_command(ui, AddToScheduler);
             }
         }
     }
@@ -1321,6 +1377,42 @@ impl BankPerfectApp {
                 }
             }
         }
+        if let Some(summary) = self.scheduler_notice.clone() {
+            let mut close = false;
+            dialogs::modal(ctx, "scheduler_notice").show(ctx, |ui| {
+                ui.set_width(560.0);
+                let pal = palette(ui);
+                dialogs::header(ui, icon::CALENDAR_CHECK, pal.accent, "Échéances insérées");
+                ui.label(
+                    RichText::new(
+                        "Les échéances arrivées à terme ont été ajoutées à vos comptes :",
+                    )
+                    .color(pal.fg_dark),
+                );
+                ui.add_space(8.0);
+                egui::ScrollArea::vertical()
+                    .max_height(320.0)
+                    .show(ui, |ui| {
+                        for line in summary.lines().skip(1).filter(|l| !l.trim().is_empty()) {
+                            let refused = line.contains("refusées") || line.contains("...");
+                            let color = if refused { pal.warning } else { pal.fg };
+                            ui.label(RichText::new(line).color(color));
+                        }
+                    });
+                dialogs::footer(ui, |ui| {
+                    if dialogs::primary(ui, "OK", true).clicked()
+                        || ui.input(|i| {
+                            i.key_pressed(egui::Key::Enter) || i.key_pressed(egui::Key::Escape)
+                        })
+                    {
+                        close = true;
+                    }
+                });
+            });
+            if close {
+                self.scheduler_notice = None;
+            }
+        }
         if self.about {
             dialogs::modal(ctx, "about").show(ctx, |ui| {
                 ui.set_width(440.0);
@@ -1416,6 +1508,7 @@ impl BankPerfectApp {
                         now + 6.0,
                     ));
                 }
+                crate::tools::Outcome::Switch(tool) => self.tool = Some(*tool),
                 crate::tools::Outcome::Reopen(path, message) => {
                     self.tool = None;
                     if let Some(doc) = &mut self.doc {

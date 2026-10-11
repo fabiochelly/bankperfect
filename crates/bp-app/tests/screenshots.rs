@@ -251,6 +251,30 @@ fn screenshots() {
         }
         unsafe { std::env::remove_var("BP_IMPORT_FILE") };
     }
+    render("38-echeancier-vide", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::E);
+    });
+    render("39-echeance-depuis-operation", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("ajouter à l'échéancier".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+    });
+    render("40-previsionnel", egui::Theme::Light, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("ajouter à l'échéancier".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        h.get_by_label_contains("Solde prévisionnel").click();
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

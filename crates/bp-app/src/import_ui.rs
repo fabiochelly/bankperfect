@@ -690,7 +690,7 @@ impl ImportForm {
                         {
                             v[k] = include;
                         }
-                        cell(
+                        ui_kit::cell(
                             ui,
                             92.0,
                             egui::Align::Min,
@@ -703,8 +703,8 @@ impl ImportForm {
                             format!("{}  ·  {}", op.payee, op.details)
                         };
                         let color = if include { pal.fg } else { pal.muted };
-                        cell(ui, w, egui::Align::Min, RichText::new(text).color(color));
-                        cell(
+                        ui_kit::cell(ui, w, egui::Align::Min, RichText::new(text).color(color));
+                        ui_kit::cell(
                             ui,
                             130.0,
                             egui::Align::Min,
@@ -715,7 +715,7 @@ impl ImportForm {
                         } else {
                             pal.positive
                         };
-                        cell(
+                        ui_kit::cell(
                             ui,
                             110.0,
                             egui::Align::Max,
@@ -954,18 +954,4 @@ fn columns_from_fields(fields: &[CsvField]) -> CsvColumns {
         credit: find(CsvField::Credit),
         tack: find(CsvField::Tack),
     }
-}
-
-/// Cellule de largeur fixe, texte aligné à gauche (`Min`) ou à droite (`Max`)
-/// et coupé avec « … » s'il déborde.
-fn cell(ui: &mut egui::Ui, width: f32, align: egui::Align, text: RichText) {
-    let layout = if align == egui::Align::Max {
-        egui::Layout::right_to_left(egui::Align::Center)
-    } else {
-        egui::Layout::left_to_right(egui::Align::Center)
-    };
-    ui.allocate_ui_with_layout(egui::vec2(width, 22.0), layout, |ui| {
-        ui.set_min_width(width);
-        ui.add(egui::Label::new(text).truncate());
-    });
 }

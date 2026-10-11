@@ -290,6 +290,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     entry(ui, PasteLines);
                     crate::menu::separator(ui);
                     entry(ui, AddToPayees);
+                    entry(ui, AddToScheduler);
                     entry(ui, ExtraFields);
                     crate::menu::separator(ui);
                     entry(ui, Delete);

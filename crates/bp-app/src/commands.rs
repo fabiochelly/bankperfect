@@ -41,6 +41,9 @@ pub enum Command {
     ToggleBalancePanel,
     ToggleForecast,
     ReverseCurrencies,
+    Scheduler,
+    Forecast,
+    AddToScheduler,
     ToggleHideOld,
     ToggleTranslucent,
     Theme(ThemePreference),
@@ -109,6 +112,9 @@ impl Command {
                 ToggleBalancePanel,
                 ToggleForecast,
                 ReverseCurrencies,
+                Scheduler,
+                Forecast,
+                AddToScheduler,
                 NextAccount,
                 PreviousAccount,
             ]);
@@ -433,6 +439,31 @@ impl Command {
                     None,
                     "prévision futur",
                 )
+            }
+            Scheduler => info(
+                "Comptes",
+                "Échéancier…",
+                icon::CALENDAR_DOTS,
+                Some("Ctrl+E"),
+                "échéances prélèvements récurrents abonnements",
+            ),
+            Forecast => info(
+                "Comptes",
+                "Solde prévisionnel…",
+                icon::CHART_LINE_UP,
+                None,
+                "prévision futur échéances",
+            ),
+            AddToScheduler => {
+                let mut i = info(
+                    "Opérations",
+                    "Ajouter à l'échéancier…",
+                    icon::CALENDAR_PLUS,
+                    None,
+                    "récurrent mensuel échéance",
+                );
+                i.enabled = selection == 1;
+                i
             }
             ReverseCurrencies => info(
                 "Outils",

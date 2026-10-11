@@ -60,7 +60,6 @@ pub fn date_field(ui: &mut Ui, id_salt: impl std::hash::Hash + std::fmt::Debug, 
                             let pal = palette(ui);
                             egui::Frame::new()
                                 .fill(pal.menu_bg)
-                                .stroke(egui::Stroke::new(1.0, pal.border))
                                 .corner_radius(10)
                                 .shadow(egui::Shadow {
                                     offset: [0, 8],

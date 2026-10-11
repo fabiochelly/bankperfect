@@ -331,3 +331,89 @@ pub fn primary_button(ui: &egui::Ui, text: impl Into<String>) -> egui::Button<'s
     )
     .fill(p.accent)
 }
+
+/// Case à cocher façon Bootstrap : carré à coins arrondis, fond d'accent et
+/// coche blanche une fois cochée ; le libellé est cliquable.
+pub fn checkbox(
+    ui: &mut egui::Ui,
+    checked: &mut bool,
+    text: impl Into<egui::WidgetText>,
+) -> egui::Response {
+    let p = palette(ui);
+    let text: egui::WidgetText = text.into();
+    const BOX: f32 = 17.0;
+    const GAP: f32 = 8.0;
+    let galley = text.into_galley(
+        ui,
+        Some(egui::TextWrapMode::Extend),
+        f32::INFINITY,
+        egui::TextStyle::Body,
+    );
+    let size = egui::vec2(BOX + GAP + galley.size().x, galley.size().y.max(BOX + 2.0));
+    let (rect, mut response) = ui.allocate_exact_size(size, egui::Sense::click());
+    if response.clicked() {
+        *checked = !*checked;
+        response.mark_changed();
+    }
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            ui.is_enabled(),
+            *checked,
+            galley.text(),
+        )
+    });
+    if !ui.is_rect_visible(rect) {
+        return response;
+    }
+    let enabled = ui.is_enabled();
+    let box_rect = egui::Rect::from_center_size(
+        egui::pos2(rect.left() + BOX / 2.0, rect.center().y),
+        egui::vec2(BOX, BOX),
+    );
+    let painter = ui.painter();
+    if response.has_focus() {
+        painter.rect_filled(box_rect.expand(3.0), 6.0, p.accent.gamma_multiply(0.3));
+    }
+    if *checked {
+        let fill = if response.hovered() {
+            p.accent.gamma_multiply(0.85)
+        } else {
+            p.accent
+        };
+        painter.rect_filled(box_rect, 4.0, fill);
+        let c = box_rect.center();
+        let s = BOX / 17.0;
+        painter.line(
+            vec![
+                c + egui::vec2(-4.2 * s, 0.2 * s),
+                c + egui::vec2(-1.3 * s, 3.1 * s),
+                c + egui::vec2(4.3 * s, -3.0 * s),
+            ],
+            Stroke::new(2.0, p.on_accent),
+        );
+    } else {
+        let border = if response.hovered() {
+            p.accent
+        } else {
+            p.muted
+        };
+        painter.rect(
+            box_rect,
+            4.0,
+            p.bg_dark,
+            Stroke::new(1.5, border),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let color = if enabled { p.fg } else { p.muted };
+    painter.galley(
+        egui::pos2(
+            box_rect.right() + GAP,
+            rect.center().y - galley.size().y / 2.0,
+        ),
+        galley,
+        color,
+    );
+    response
+}

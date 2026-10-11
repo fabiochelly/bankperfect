@@ -5,7 +5,7 @@
 
 use bp_core::manage;
 use bp_core::model::{Amount, Mode, Payee, StandardMode};
-use egui::{Id, Key, Modal, RichText};
+use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
 use crate::document::OpenDoc;
@@ -63,7 +63,7 @@ impl ManageForm {
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
 
-        Modal::new(Id::new("tool_manage")).show(ctx, |ui| {
+        crate::dialogs::modal(ctx, "tool_manage").show(ctx, |ui| {
             ui.set_width(860.0);
             ui.set_height(560.0);
             ui.horizontal(|ui| {
@@ -99,7 +99,7 @@ impl ManageForm {
                 ui.label(RichText::new(message).color(palette(ui).warning));
             }
             ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
-                if ui.add(crate::theme::primary_button(ui, "Fermer")).clicked()
+                if crate::dialogs::primary(ui, "Fermer", true).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
@@ -376,22 +376,22 @@ impl ManageForm {
             });
         ui.add_space(6.0);
         let mut is_virtual = a.is_virtual;
-        if ui
-            .checkbox(
-                &mut is_virtual,
-                "Ne pas inclure ce compte dans les totaux et statistiques (compte virtuel)",
-            )
-            .changed()
+        if crate::theme::checkbox(
+            ui,
+            &mut is_virtual,
+            "Ne pas inclure ce compte dans les totaux et statistiques (compte virtuel)",
+        )
+        .changed()
         {
             doc.edit_document(|d| d.accounts[i].is_virtual = is_virtual);
         }
         let mut disabled = a.disabled;
-        if ui
-            .checkbox(
-                &mut disabled,
-                "Compte inactif (masqué de la liste des comptes)",
-            )
-            .changed()
+        if crate::theme::checkbox(
+            ui,
+            &mut disabled,
+            "Compte inactif (masqué de la liste des comptes)",
+        )
+        .changed()
         {
             doc.edit_document(|d| d.accounts[i].disabled = disabled);
         }
@@ -489,7 +489,7 @@ impl ManageForm {
                         self.category = doc.edit_document(|d| manage::move_category(d, pos, false, with)).or(Some(pos));
                     }
                 });
-                ui.checkbox(&mut self.with_children, "Déplacer avec les sous-catégories");
+                crate::theme::checkbox(ui, &mut self.with_children, "Déplacer avec les sous-catégories");
                 ui.add_space(6.0);
                 if ui.button(format!("{}  Trier par nom", icon::SORT_ASCENDING)).clicked() {
                     doc.edit_document(manage::sort_categories);
@@ -703,8 +703,7 @@ impl ManageForm {
                         Some("Nom refusé : vide, déjà utilisé ou nom d'un mode standard.".into());
                 }
                 let mut credit = !m.debit;
-                if ui
-                    .checkbox(&mut credit, "Mode de recette (montants positifs)")
+                if crate::theme::checkbox(ui, &mut credit, "Mode de recette (montants positifs)")
                     .changed()
                 {
                     doc.edit_document(|d| d.custom_modes[i].debit = !credit);

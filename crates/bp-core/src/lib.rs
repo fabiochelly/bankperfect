@@ -1,19 +1,25 @@
 //! Cœur de BankPerfect : formats de fichiers, modèle de données et calculs.
 
+pub mod autofields;
+pub mod autofilters;
 pub mod backup;
+pub mod budget;
 pub mod calc;
 pub mod codec_v5;
 pub mod edit;
 pub mod error;
 pub mod export;
+pub mod feature_store;
 pub mod file;
 pub mod filter;
 pub mod format_v6;
+pub mod formula;
 pub mod import;
 pub mod legacy_pickle;
 pub mod manage;
 pub mod model;
 pub mod multiple_input;
+pub mod pyvalue;
 pub mod reports;
 pub mod scheduler;
 pub mod split;

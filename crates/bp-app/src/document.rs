@@ -602,6 +602,7 @@ impl OpenDoc {
                 ops.len() - 1
             }
         };
+        self.apply_auto_rules(&[(self.account, index)]);
         let account = &self.document.accounts[self.account];
         self.view.index.update(&self.document, account, index);
         self.touch();
@@ -622,6 +623,76 @@ impl OpenDoc {
         self.anchor = None;
         self.view.indexed_account = None;
         self.touch();
+    }
+
+    /// Applique des règles de calcul automatique aux lignes affichées du
+    /// compte courant (annulable) : toutes les actives, ou la règle `only`.
+    /// Renvoie le nombre de lignes modifiées et les erreurs rencontrées.
+    pub fn apply_rules(
+        &mut self,
+        rules: &bp_core::autofields::AutoFieldRules,
+        only: Option<usize>,
+    ) -> (usize, Vec<String>) {
+        let lines: Vec<usize> = self.view.visible.to_vec();
+        self.snapshot("règles automatiques");
+        let bp_core::model::Document {
+            categories,
+            accounts,
+            ..
+        } = &mut self.document;
+        let account = &mut accounts[self.account];
+        let (changed, errors) = match only {
+            Some(k) => match rules
+                .rules
+                .get(k)
+                .map(|r| r.apply(categories, account, &lines))
+            {
+                Some(Ok(outcome)) => (
+                    outcome.changed.len(),
+                    outcome.errors.iter().map(|e| e.message.clone()).collect(),
+                ),
+                Some(Err(e)) => (0, vec![e.to_string()]),
+                None => (0, Vec::new()),
+            },
+            None => {
+                let batch = rules.apply_active(categories, account, &lines);
+                (
+                    batch.changed.len(),
+                    batch.errors.iter().map(|(_, e)| e.to_string()).collect(),
+                )
+            }
+        };
+        if changed == 0 {
+            self.undo.pop();
+        } else {
+            self.view.indexed_account = None;
+            self.view.series_key = None;
+            self.touch();
+        }
+        (changed, errors)
+    }
+
+    /// Règles « appliquer automatiquement » sur des lignes ajoutées ou
+    /// modifiées : (compte, opération).
+    pub fn apply_auto_rules(&mut self, changes: &[(usize, usize)]) {
+        if changes.is_empty() {
+            return;
+        }
+        let Ok(rules) = bp_core::autofields::AutoFieldRules::load(
+            &self.document,
+            &bp_core::legacy_pickle::parse_py,
+        ) else {
+            return;
+        };
+        if !rules.rules.iter().any(|r| r.active && r.auto_apply) {
+            return;
+        }
+        let results = rules.apply_to_new_lines_in_document(&mut self.document, changes);
+        if results.iter().any(|(_, b)| !b.changed.is_empty()) {
+            self.view.indexed_account = None;
+            self.view.series_key = None;
+            self.touch();
+        }
     }
 
     /// Ajoute des opérations importées à un compte (annulable) ; les lignes
@@ -648,6 +719,8 @@ impl OpenDoc {
         }
         let added: Vec<usize> = (start..target.len()).collect();
         let n = added.len();
+        let changes: Vec<(usize, usize)> = added.iter().map(|&l| (account, l)).collect();
+        self.apply_auto_rules(&changes);
         self.view.indexed_account = None;
         self.view.series_key = None;
         self.touch();

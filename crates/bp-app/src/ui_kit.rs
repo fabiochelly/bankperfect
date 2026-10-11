@@ -310,3 +310,21 @@ pub fn cell(ui: &mut egui::Ui, width: f32, align: egui::Align, text: RichText) {
         ui.add(egui::Label::new(text).truncate());
     });
 }
+
+/// Texte sur une seule ligne, coupé avec « … » au-delà de `max_width`.
+pub fn one_line(
+    ui: &egui::Ui,
+    text: String,
+    font: egui::FontId,
+    color: Color32,
+    max_width: f32,
+) -> std::sync::Arc<egui::Galley> {
+    let mut job = egui::text::LayoutJob::simple_singleline(text, font, color);
+    job.wrap = egui::text::TextWrapping {
+        max_width: max_width.max(10.0),
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    ui.painter().layout_job(job)
+}

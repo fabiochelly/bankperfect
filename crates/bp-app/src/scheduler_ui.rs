@@ -581,6 +581,15 @@ impl SchedulerForm {
                     let _ = scheduler::save(d, &schedules);
                     report
                 });
+                let changes: Vec<(usize, usize)> = report
+                    .inserted
+                    .iter()
+                    .filter_map(|l| {
+                        let ops = &doc.document.accounts.get(l.account)?.operations;
+                        Some((l.account, ops.iter().position(|op| op.uid == l.uid)?))
+                    })
+                    .collect();
+                doc.apply_auto_rules(&changes);
                 let mut summary = format!("{} opération(s) insérée(s)", report.inserted.len());
                 if !report.refused.is_empty() {
                     summary.push_str(&format!(

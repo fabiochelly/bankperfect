@@ -284,6 +284,9 @@ fn screenshots() {
     render("43-menu-filtres", egui::Theme::Dark, |h| {
         h.get_by_label_contains("Filtres").click();
     });
+    render("44-regles", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::F);
+    });
     render("05-menu-survol", egui::Theme::Dark, |h| {
         h.get_by_label("Édition").click();
         h.run_steps(3);

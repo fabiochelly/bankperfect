@@ -33,6 +33,29 @@ impl Date {
     pub fn from_ymd(year: i32, month: u32, day: u32) -> Option<Self> {
         NaiveDate::from_ymd_opt(year, month, day).map(Self::from_naive)
     }
+
+    /// Analyse une date saisie : `jj/mm/aaaa`, `jj/mm/aa`, `jj/mm` (année de
+    /// `today`) ou `jj` (mois de `today`). Séparateurs `/`, `.`, `-` ou espace.
+    pub fn parse_fr(text: &str, today: Date) -> Option<Self> {
+        let parts: Vec<u32> = text
+            .split(['/', '.', '-', ' '])
+            .filter(|s| !s.is_empty())
+            .map(|s| s.parse().ok())
+            .collect::<Option<_>>()?;
+        let now = today.to_naive();
+        let (day, month, year) = match parts[..] {
+            [d] => (d, now.month(), now.year()),
+            [d, m] => (d, m, now.year()),
+            [d, m, y] if y < 100 => {
+                let century = now.year() / 100 * 100;
+                let year = century + y as i32;
+                (d, m, if year > now.year() + 20 { year - 100 } else { year })
+            }
+            [d, m, y] => (d, m, y as i32),
+            _ => return None,
+        };
+        Self::from_ymd(year, month, day)
+    }
 }
 
 impl fmt::Display for Date {
@@ -278,7 +301,9 @@ pub struct Operation {
     /// Identifiant unique dans le fichier, tous comptes confondus (≥ 1).
     pub uid: u64,
     pub date: Date,
-    pub value_date: Date,
+    /// Date de pointage : date de l'opération à la saisie, date du jour à
+    /// chaque changement de pointage.
+    pub mark_date: Date,
     pub tack: Tack,
     pub mode: Mode,
     /// Tiers.
@@ -297,6 +322,14 @@ impl Operation {
             .iter()
             .find(|(k, _)| k == key)
             .map(|(_, v)| v.as_str())
+    }
+
+    /// Libellé affiché dans la colonne Mode : `Chq 1234` pour un chèque numéroté.
+    pub fn mode_label(&self) -> String {
+        match self.cheque_number() {
+            Some(number) => format!("Chq {number}"),
+            None => self.mode.label().to_string(),
+        }
     }
 
     /// Numéro de chèque, porté par le détail sous la forme `n°1234`.
@@ -453,6 +486,14 @@ mod tests {
         assert_eq!(Date(2).to_string(), "01/01/1900");
         assert_eq!(Date(61).to_string(), "01/03/1900");
         assert_eq!(Date::from_ymd(2011, 1, 31), Some(Date(40574)));
+        let today = Date::from_ymd(2026, 10, 11).unwrap();
+        assert_eq!(Date::parse_fr("31/01/2011", today), Some(Date(40574)));
+        assert_eq!(Date::parse_fr("31.01.11", today), Some(Date(40574)));
+        assert_eq!(Date::parse_fr("5/3", today), Date::from_ymd(2026, 3, 5));
+        assert_eq!(Date::parse_fr("12", today), Date::from_ymd(2026, 10, 12));
+        assert_eq!(Date::parse_fr("1/1/86", today), Date::from_ymd(1986, 1, 1));
+        assert_eq!(Date::parse_fr("31/02/2020", today), None);
+        assert_eq!(Date::parse_fr("abc", today), None);
     }
 
     #[test]

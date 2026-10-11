@@ -15,7 +15,7 @@ use crate::document::{ChartWindow, OpenDoc};
 use crate::format::{money, money_compact};
 use crate::theme::{Palette, palette};
 
-const STRIP_HEIGHT: f32 = 92.0;
+const STRIP_HEIGHT: f32 = 104.0;
 /// Durée de l'animation des montants quand les données changent.
 const COUNT_UP_SECONDS: f64 = 0.28;
 
@@ -23,28 +23,52 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) {
     let pal = palette(ui);
     let available = ui.available_width();
     let (strip, _) = ui.allocate_exact_size(vec2(available, STRIP_HEIGHT), Sense::hover());
-    let width = strip.width() / 3.0;
+    let gap = 14.0;
+    let width = (strip.width() - 2.0 * gap) / 3.0;
     let blocks: Vec<Rect> = (0..3)
         .map(|k| {
             Rect::from_min_size(
-                pos2(strip.left() + width * k as f32, strip.top()),
+                pos2(strip.left() + (width + gap) * k as f32, strip.top()),
                 vec2(width, STRIP_HEIGHT),
             )
         })
         .collect();
-    for block in &blocks[1..] {
-        ui.painter().vline(
-            block.left(),
-            strip.y_range().shrink(10.0),
-            Stroke::new(1.0, pal.border),
-        );
+    let colors = [pal.pointed, pal.future, pal.accent];
+    for (block, color) in blocks.iter().zip(colors) {
+        callout(ui, *block, color);
     }
     let series = doc.insights().series.clone();
     let window = window_dates(&series, doc.chart_window);
-    pointed_block(ui, blocks[0].shrink2(vec2(20.0, 6.0)), doc, window);
-    pending_block(ui, blocks[1].shrink2(vec2(20.0, 6.0)), doc);
-    balance_block(ui, blocks[2].shrink2(vec2(20.0, 6.0)), doc, window);
-    ui.add_space(10.0);
+    let inner = |r: Rect| {
+        Rect::from_min_max(
+            pos2(r.left() + 22.0, r.top() + 12.0),
+            pos2(r.right() - 14.0, r.bottom() - 10.0),
+        )
+    };
+    pointed_block(ui, inner(blocks[0]), doc, window);
+    pending_block(ui, inner(blocks[1]), doc);
+    balance_block(ui, inner(blocks[2]), doc, window);
+    ui.add_space(12.0);
+}
+
+/// Encadré : fond légèrement teinté de la couleur du bloc et bordure gauche
+/// épaisse de cette couleur.
+fn callout(ui: &Ui, rect: Rect, color: Color32) {
+    let pal = palette(ui);
+    let radius = egui::CornerRadius::same(10);
+    ui.painter().rect_filled(rect, radius, pal.surface);
+    ui.painter()
+        .rect_filled(rect, radius, color.gamma_multiply(0.06));
+    ui.painter().rect_filled(
+        Rect::from_min_size(rect.min, vec2(5.0, rect.height())),
+        egui::CornerRadius {
+            nw: 10,
+            sw: 10,
+            ne: 0,
+            se: 0,
+        },
+        color,
+    );
 }
 
 /// Partie gauche d'un bloc : libellé (avec icône), nombre principal animé et

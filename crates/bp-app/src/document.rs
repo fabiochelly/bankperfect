@@ -88,7 +88,6 @@ struct View {
     series_key: Option<(usize, u64)>,
 }
 
-
 /// État d'un compte avant une action, pour Annuler/Refaire.
 struct UndoEntry {
     label: String,

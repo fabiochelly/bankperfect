@@ -35,6 +35,7 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
+const SHORTCUT_PRINT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::P);
 const SHORTCUT_OPTIONS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
 const SHORTCUT_NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
 const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F12);
@@ -346,6 +347,9 @@ impl BankPerfectApp {
             ));
         }
 
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_PRINT)) {
+            return self.execute(ctx, Command::Print);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_MARK_DATE)) {
             return self.execute(ctx, Command::SetMarkDate);
         }
@@ -502,6 +506,7 @@ impl BankPerfectApp {
         let Some(doc) = &mut self.doc else { return };
         match command {
             Command::ExportCsv => self.tool = Some(Tool::ExportCsv(crate::tools::CsvForm::new())),
+            Command::Print => self.tool = Some(Tool::Print(Default::default())),
             Command::ExportQif => {
                 if let Some(message) = crate::tools::export_qif(doc) {
                     self.toast = Some((message, now + 4.0));
@@ -866,6 +871,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, SaveAs);
                 self.menu_command(ui, SaveCopy);
                 menu::separator(ui);
+                self.menu_command(ui, Print);
                 self.menu_command(ui, ExportCsv);
                 self.menu_command(ui, ExportQif);
                 menu::separator(ui);

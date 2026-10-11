@@ -13,6 +13,7 @@ use crate::ui_kit;
 
 pub enum Tool {
     NewFile(crate::files_ui::NewFileForm),
+    Print(PrintForm),
     MarkDate(MarkDateForm),
     Manage(crate::manage_ui::ManageForm),
     Protection(crate::protection_ui::ProtectionForm),
@@ -44,6 +45,7 @@ impl Tool {
                 form.show_standalone(ctx, doc.path.parent().map(std::path::Path::to_path_buf))
             }
             Tool::Manage(form) => form.show(ctx, doc),
+            Tool::Print(form) => form.show(ctx, doc),
             Tool::MarkDate(form) => form.show(ctx, doc),
             Tool::Protection(form) => form.show(ctx, doc),
             Tool::Backups(form) => form.show_standalone(ctx, doc.dirty),
@@ -80,6 +82,120 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool) -> Option<bool> {
         result = Some(true);
     }
     result
+}
+
+// ─────────────────────────────── Impression ───────────────────────────────
+
+/// « Imprimer le relevé » : PDF des lignes affichées, ouvert dans la
+/// visionneuse du système (aperçu et impression) ou enregistré.
+pub struct PrintForm {
+    black_and_white: bool,
+    details: bool,
+    error: Option<String>,
+}
+
+impl Default for PrintForm {
+    fn default() -> Self {
+        Self {
+            black_and_white: false,
+            details: true,
+            error: None,
+        }
+    }
+}
+
+impl PrintForm {
+    fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
+        let mut outcome = Outcome::Keep;
+        let width = ui_kit::dialog_width(ctx, 0.4, 560.0, 640.0);
+        crate::dialogs::modal(ctx, "tool_print").show(ctx, |ui| {
+            ui.set_width(width);
+            let pal = palette(ui);
+            title(ui, icon::PRINTER, "Imprimer le relevé");
+            let n = doc.visible_len();
+            ui_kit::subtitle(
+                ui,
+                format!(
+                    "Relevé du compte « {} » : {n} ligne(s) affichée(s), dans l'ordre et avec les filtres de la grille.",
+                    doc.current_account().name
+                ),
+            );
+            ui_kit::section(ui, width, icon::SLIDERS_HORIZONTAL, "Présentation", |ui| {
+                crate::theme::checkbox(ui, &mut self.details, "Afficher le détail sous le tiers");
+                ui.add_space(8.0);
+                crate::theme::checkbox(ui, &mut self.black_and_white, "Noir et blanc");
+            });
+            if let Some(error) = &self.error {
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
+            }
+            let options = crate::statement_pdf::StatementOptions {
+                black_and_white: self.black_and_white,
+                details: self.details,
+            };
+            crate::dialogs::footer(ui, |ui| {
+                if crate::dialogs::primary(ui, &format!("{}  Ouvrir pour imprimer", icon::PRINTER), n > 0).clicked() {
+                    match open_statement(doc, options) {
+                        Ok(message) => outcome = Outcome::Done(message),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                if crate::dialogs::button(ui, format!("{}  Enregistrer en PDF…", icon::FILE_PDF)).clicked() {
+                    match save_statement(doc, options) {
+                        Ok(Some(message)) => outcome = Outcome::Done(message),
+                        Ok(None) => {}
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+                if crate::dialogs::button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                    outcome = Outcome::Close;
+                }
+            });
+        });
+        outcome
+    }
+}
+
+fn statement_name(doc: &OpenDoc) -> String {
+    format!(
+        "Relevé {} {}.pdf",
+        bp_core::manage::clean(&doc.current_account().name).replace(['/', '\\'], "-"),
+        chrono::Local::now().format("%Y-%m-%d")
+    )
+}
+
+/// Écrit le relevé dans le dossier temporaire et l'ouvre.
+fn open_statement(
+    doc: &OpenDoc,
+    options: crate::statement_pdf::StatementOptions,
+) -> Result<String, String> {
+    let bytes = crate::statement_pdf::build(doc, options)?;
+    let dir = std::env::temp_dir().join("bankperfect");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join(statement_name(doc));
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    open::that_detached(&path).map_err(|e| format!("Impossible d'ouvrir le PDF : {e}"))?;
+    Ok("Relevé ouvert dans la visionneuse PDF".into())
+}
+
+/// Enregistre le relevé à l'emplacement choisi ; `None` si annulé.
+fn save_statement(
+    doc: &OpenDoc,
+    options: crate::statement_pdf::StatementOptions,
+) -> Result<Option<String>, String> {
+    let dir =
+        crate::settings::shared::export_dir(doc.path.parent().unwrap_or(std::path::Path::new(".")));
+    let Some(path) = rfd::FileDialog::new()
+        .set_title("Enregistrer le relevé en PDF")
+        .set_directory(dir)
+        .set_file_name(statement_name(doc))
+        .add_filter("PDF", &["pdf"])
+        .save_file()
+    else {
+        return Ok(None);
+    };
+    let bytes = crate::statement_pdf::build(doc, options)?;
+    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+    Ok(Some(format!("Relevé enregistré : {}", path.display())))
 }
 
 // ─────────────────────────────── Date de pointage ───────────────────────────────

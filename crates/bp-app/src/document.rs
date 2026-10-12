@@ -1109,6 +1109,7 @@ impl OpenDoc {
             visible,
             locked: self.locked,
             merge_tag,
+            filters: self.filters.clone(),
             document: &mut self.document,
         }
     }
@@ -1161,6 +1162,11 @@ impl OpenDoc {
             self.touch();
         } else if effects.feature_changed {
             self.dirty = true;
+        }
+        if let Some(filters) = &effects.filters {
+            let hide = self.filters.hide_old_lines;
+            self.filters = filters.clone();
+            self.filters.hide_old_lines = hide;
         }
         if let Some((account, uids)) = &effects.select
             && *account < self.document.accounts.len()

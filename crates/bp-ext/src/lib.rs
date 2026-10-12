@@ -186,6 +186,8 @@ pub struct Effects {
     pub feature_changed: bool,
     /// Compte à afficher et lignes à sélectionner (identifiants).
     pub select: Option<(usize, Vec<u64>)>,
+    /// Filtres à appliquer à la grille (`bp.filter`).
+    pub filters: Option<bp_core::filter::Filters>,
     pub toasts: Vec<String>,
     /// Erreurs à montrer (extension, message).
     pub errors: Vec<String>,
@@ -711,6 +713,9 @@ impl Engine {
             let mut session = session;
             fx.feature_changed |= session.feature_changed();
             fx.select = session.select.take().or(fx.select.take());
+            if session.filters_changed {
+                fx.filters = Some(session.filters.clone());
+            }
             if let Some(ctx) = ctx {
                 session.finish(ctx);
             }
@@ -961,6 +966,7 @@ impl Engine {
             all.changes.extend(fx.changes);
             all.feature_changed |= fx.feature_changed;
             all.select = fx.select.or(all.select);
+            all.filters = fx.filters.or(all.filters);
             all.toasts.extend(fx.toasts);
             all.errors.extend(fx.errors);
         }

@@ -53,6 +53,7 @@ impl Fixture {
             visible: (0..n).collect(),
             locked: true,
             merge_tag: None,
+            filters: Default::default(),
         }
     }
 
@@ -759,6 +760,29 @@ fn schedules_budget_and_rules() {
 }
 
 #[test]
+fn grid_filter() {
+    let mut f = Fixture::new(
+        r#"
+        bp.command{ title = "x", run = function()
+            assert(not bp.filter().active)
+            bp.filter{ payee = "edf", tack = "none", from = "01/01/2026" }
+            local current = bp.filter()
+            assert(current.payee == "edf" and current.tack == "none" and current.active)
+        end }
+        bp.command{ title = "y", run = function() bp.filter(false) end }
+        "#,
+    );
+    let fx = f.run(0);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    let filters = fx.filters.expect("filtres");
+    assert_eq!(filters.payee, "edf");
+    assert_eq!(filters.tack, bp_core::filter::TackFilter::NotPointed);
+    assert!(filters.date_from.is_some());
+    let fx = f.run(1);
+    assert_eq!(fx.filters.map(|f| f.is_active()), Some(false));
+}
+
+#[test]
 fn store_is_restored_on_error() {
     let mut f = Fixture::new(
         r#"
@@ -901,6 +925,7 @@ fn bundled_examples_load_and_open() {
                 visible: (0..n).collect(),
                 locked: false,
                 merge_tag: None,
+            filters: Default::default(),
             };
             let fx = engine.run_command(ext, command, Some(&mut ctx));
             assert!(
@@ -934,6 +959,7 @@ fn bundled_examples_load_and_open() {
         visible: vec![],
         locked: false,
         merge_tag: None,
+            filters: Default::default(),
     };
     engine.run_command(arrondis, 0, Some(&mut ctx));
     engine.window_event(
@@ -975,6 +1001,7 @@ fn bundled_examples_load_and_open() {
         visible: vec![],
         locked: false,
         merge_tag: Some(3),
+        filters: Default::default(),
     };
     let fx = engine.fire(Event::OperationAdded, &[EventItem::line(0, 500)], ctx);
     assert!(fx.errors.is_empty(), "{:?}", fx.errors);

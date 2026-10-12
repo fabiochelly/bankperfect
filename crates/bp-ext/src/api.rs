@@ -464,6 +464,90 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         })?,
     )?;
 
+    bp.set(
+        "filter",
+        lua.create_function(|lua, spec: Value| {
+            use bp_core::filter::{Filters, TackFilter};
+            let tack_name = |t: TackFilter| match t {
+                TackFilter::NotPointed => "none",
+                TackFilter::Pointed => "pointed",
+                TackFilter::Reconciled => "reconciled",
+                TackFilter::PointedOrReconciled => "marked",
+                TackFilter::All => "all",
+            };
+            match spec {
+                // bp.filter() : filtres actuels.
+                Value::Nil => with_session(lua, |s| {
+                    let f = &s.filters;
+                    let t = lua.create_table()?;
+                    t.set("payee", f.payee.clone())?;
+                    t.set("mode", f.mode.clone())?;
+                    t.set("category", f.category.clone())?;
+                    t.set("amount", f.amount.clone())?;
+                    t.set("tack", tack_name(f.tack))?;
+                    t.set("from", f.date_from.map(|d| crate::date::date_value(lua, d)).transpose()?)?;
+                    t.set("to", f.date_to.map(|d| crate::date::date_value(lua, d)).transpose()?)?;
+                    t.set("active", f.is_active())?;
+                    Ok(Value::Table(t))
+                }),
+                // bp.filter(false) : plus de filtre.
+                Value::Boolean(false) => with_session(lua, |s| {
+                    s.filters = Filters {
+                        hide_old_lines: s.filters.hide_old_lines,
+                        ..Default::default()
+                    };
+                    s.filters_changed = true;
+                    Ok(Value::Nil)
+                }),
+                Value::Table(t) => {
+                    let text = |key: &str| -> mlua::Result<String> {
+                        Ok(match t.get::<Value>(key)? {
+                            Value::Nil => String::new(),
+                            v => crate::ui::display(&v)?,
+                        })
+                    };
+                    let date = |key: &str| -> mlua::Result<Option<Date>> {
+                        match t.get::<Value>(key)? {
+                            Value::Nil => Ok(None),
+                            v => to_date(lua, &v).map(Some),
+                        }
+                    };
+                    let tack = match t.get::<Option<String>>("tack")?.as_deref() {
+                        None | Some("all") => TackFilter::All,
+                        Some("none") => TackFilter::NotPointed,
+                        Some("pointed") => TackFilter::Pointed,
+                        Some("reconciled") => TackFilter::Reconciled,
+                        Some("marked") => TackFilter::PointedOrReconciled,
+                        Some(other) => {
+                            return Err(runtime(format!(
+                                "bp.filter : tack « {other} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\" ou \"all\")"
+                            )));
+                        }
+                    };
+                    let filters = Filters {
+                        payee: text("payee")?,
+                        mode: text("mode")?,
+                        category: text("category")?,
+                        amount: text("amount")?,
+                        tack,
+                        date_from: date("from")?,
+                        date_to: date("to")?,
+                        hide_old_lines: false,
+                    };
+                    with_session(lua, |s| {
+                        s.filters = Filters {
+                            hide_old_lines: s.filters.hide_old_lines,
+                            ..filters
+                        };
+                        s.filters_changed = true;
+                        Ok(Value::Nil)
+                    })
+                }
+                _ => Err(runtime("bp.filter{ … }, bp.filter(false) ou bp.filter()")),
+            }
+        })?,
+    )?;
+
     // ─────────────────────── Référentiels ───────────────────────
     bp.set(
         "categories",

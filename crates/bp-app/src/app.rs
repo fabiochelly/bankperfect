@@ -368,7 +368,7 @@ impl BankPerfectApp {
 
     fn apply_effects(&mut self, fx: bp_ext::Effects, now: f64) {
         if let Some(doc) = &mut self.doc
-            && (fx.modified() || fx.select.is_some())
+            && (fx.modified() || fx.select.is_some() || fx.filters.is_some())
         {
             doc.apply_extension(&fx);
         }

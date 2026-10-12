@@ -29,6 +29,9 @@ pub enum Error {
     #[error("erreur cryptographique : {0}")]
     Crypto(String),
 
+    #[error("export JSON : {0}")]
+    Json(String),
+
     #[error("donnée « {key} » illisible : {message}")]
     InvalidFeatureData { key: String, message: String },
 }

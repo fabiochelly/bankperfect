@@ -191,7 +191,7 @@ impl ProtectionForm {
 
 /// Protection effective du fichier ouvert (un fichier v5 avec mot de passe
 /// sera chiffré au premier enregistrement).
-fn is_protected(doc: &OpenDoc) -> bool {
+pub fn is_protected(doc: &OpenDoc) -> bool {
     match &doc.protection {
         Some(p) => p.is_password_protected(),
         None => doc.legacy_password.is_some(),

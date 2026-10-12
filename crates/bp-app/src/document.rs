@@ -56,13 +56,27 @@ pub struct OpenDoc {
     /// Extrémité mobile d'une sélection étendue au clavier (Maj).
     pub cursor: Option<usize>,
     pub scroll_to: Option<usize>,
+    /// Identifiant de cette ouverture (les extensions refusent les objets
+    /// d'un autre fichier).
+    pub file_id: u64,
+    /// Évènements à transmettre aux extensions (évènement, lignes, ajout à
+    /// la dernière étape d'annulation).
+    pub ext_events: Vec<ExtEvent>,
 
     view: View,
     undo: Vec<UndoEntry>,
     redo: Vec<UndoEntry>,
     /// Incrémenté à chaque modification des opérations.
     revision: u64,
+    /// Dernière étiquette d'étape d'annulation attribuée.
+    undo_tag: u64,
 }
+
+/// Évènement pour les extensions : évènement, lignes (compte, identifiant),
+/// ajout à la dernière étape d'annulation.
+pub type ExtEvent = (bp_ext::Event, Vec<(usize, u64)>, bool);
+
+static FILE_IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
 /// Vue calculée du compte courant. L'index de recherche, le tri et les soldes
 /// ne sont recalculés que si le compte, le tri ou les données changent ;
@@ -96,6 +110,11 @@ struct UndoEntry {
     account: usize,
     /// Opérations des comptes touchés par l'action, avant elle.
     accounts: Vec<(usize, Vec<Operation>)>,
+    /// Référentiels avant l'action, s'ils ont changé (extensions).
+    referentials: Option<bp_core::model::Referentials>,
+    /// Étiquette de l'étape : les crochets d'extension et les suites d'un
+    /// même lancement s'ajoutent à l'étape qui porte la leur.
+    tag: u64,
 }
 
 /// Destination d'un déplacement clavier dans la grille.
@@ -217,10 +236,13 @@ impl OpenDoc {
             anchor: None,
             cursor: None,
             scroll_to: None,
+            file_id: FILE_IDS.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+            ext_events: Vec::new(),
             view: View::default(),
             undo: Vec::new(),
             redo: Vec::new(),
             revision: 0,
+            undo_tag: 0,
         };
         doc.category_styles = crate::category_icons::styles(&doc.document);
         doc.refresh();
@@ -618,6 +640,14 @@ impl OpenDoc {
             }
         };
         self.apply_auto_rules(&[(self.account, index)]);
+        let event = if target.is_some() {
+            bp_ext::Event::OperationChanged
+        } else {
+            bp_ext::Event::OperationAdded
+        };
+        let uid = self.document.accounts[self.account].operations[index].uid;
+        self.ext_events
+            .push((event, vec![(self.account, uid)], true));
         let account = &self.document.accounts[self.account];
         self.view.index.update(&self.document, account, index);
         self.touch();
@@ -857,6 +887,13 @@ impl OpenDoc {
         let n = added.len();
         let changes: Vec<(usize, usize)> = added.iter().map(|&l| (account, l)).collect();
         self.apply_auto_rules(&changes);
+        let ops = &self.document.accounts[account].operations;
+        let lines = added
+            .iter()
+            .filter_map(|&l| ops.get(l).map(|o| (account, o.uid)))
+            .collect();
+        self.ext_events
+            .push((bp_ext::Event::OperationAdded, lines, true));
         self.view.indexed_account = None;
         self.view.series_key = None;
         self.touch();
@@ -990,15 +1027,105 @@ impl OpenDoc {
                 saved.push((a, self.document.accounts[a].operations.clone()));
             }
         }
+        self.undo_tag += 1;
         self.undo.push(UndoEntry {
             label: label.to_string(),
             account: shown,
             accounts: saved,
+            referentials: None,
+            tag: self.undo_tag,
         });
         while self.undo.len() > self.max_undo.max(1) {
             self.undo.remove(0);
         }
         self.redo.clear();
+    }
+
+    /// Étiquette de la dernière étape d'annulation.
+    pub fn last_undo_tag(&self) -> Option<u64> {
+        self.undo.last().map(|e| e.tag)
+    }
+
+    /// Document prêté à une extension, avec le compte affiché, la sélection
+    /// et les lignes affichées.
+    pub fn extension_context(&mut self, merge_tag: Option<u64>) -> bp_ext::DocContext<'_> {
+        let selection = self.selected_visible();
+        let visible = self.view.visible.to_vec();
+        bp_ext::DocContext {
+            file_id: self.file_id,
+            path: self.path.clone(),
+            account: self.account,
+            selection,
+            visible,
+            locked: self.locked,
+            merge_tag,
+            document: &mut self.document,
+        }
+    }
+
+    /// Inscrit les modifications d'une extension dans l'historique (une
+    /// étape par lancement) et met la vue à jour.
+    pub fn apply_extension(&mut self, effects: &bp_ext::Effects) {
+        let mut referentials = false;
+        for changes in &effects.changes {
+            referentials |= changes.referentials.is_some() || changes.accounts_added;
+            match self.undo.last_mut() {
+                Some(last) if last.tag == changes.tag => {
+                    for (a, operations) in &changes.accounts {
+                        if !last.accounts.iter().any(|(k, _)| k == a) {
+                            last.accounts.push((*a, operations.clone()));
+                        }
+                    }
+                    if last.referentials.is_none() {
+                        last.referentials = changes.referentials.clone();
+                    }
+                }
+                _ => {
+                    self.undo.push(UndoEntry {
+                        label: changes.label.clone(),
+                        account: self.account,
+                        accounts: changes.accounts.clone(),
+                        referentials: changes.referentials.clone(),
+                        tag: changes.tag,
+                    });
+                    while self.undo.len() > self.max_undo.max(1) {
+                        self.undo.remove(0);
+                    }
+                }
+            }
+            self.redo.clear();
+        }
+        if self.account >= self.document.accounts.len() {
+            self.account = self.document.account_order.first().copied().unwrap_or(0);
+        }
+        if referentials {
+            self.category_styles = crate::category_icons::styles(&self.document);
+        }
+        if !effects.changes.is_empty() {
+            self.selection.clear();
+            self.anchor = None;
+            self.cursor = None;
+            self.view.indexed_account = None;
+            self.view.series_key = None;
+            self.touch();
+        } else if effects.feature_changed {
+            self.dirty = true;
+        }
+        if let Some((account, uids)) = &effects.select
+            && *account < self.document.accounts.len()
+        {
+            if *account != self.account {
+                self.select_account(*account);
+            }
+            self.refresh();
+            let ops = &self.document.accounts[self.account].operations;
+            let lines: Vec<usize> = uids
+                .iter()
+                .filter_map(|uid| ops.iter().position(|o| o.uid == *uid))
+                .collect();
+            self.select_lines(&lines);
+        }
+        self.refresh();
     }
 
     pub fn undo_label(&self) -> Option<&str> {
@@ -1035,6 +1162,11 @@ impl OpenDoc {
                 current.push((a, std::mem::replace(&mut account.operations, operations)));
             }
         }
+        let referentials = entry.referentials.map(|saved| {
+            let current = self.document.swap_referentials(saved);
+            self.category_styles = crate::category_icons::styles(&self.document);
+            current
+        });
         self.account = entry.account;
         self.selection.clear();
         self.anchor = None;
@@ -1045,6 +1177,8 @@ impl OpenDoc {
             label: entry.label,
             account: entry.account,
             accounts: current,
+            referentials,
+            tag: entry.tag,
         }
     }
 
@@ -1353,5 +1487,94 @@ mod tests {
         d.refresh();
         assert!(d.visible().is_empty());
         assert_eq!(d.current_account().operations.len(), 4);
+    }
+
+    struct NoServices;
+
+    impl bp_ext::Services for NoServices {
+        fn pick_open(&self, _: &str, _: &[(String, Vec<String>)]) -> Option<PathBuf> {
+            None
+        }
+        fn pick_save(&self, _: &str, _: &str, _: &[(String, Vec<String>)]) -> Option<PathBuf> {
+            None
+        }
+        fn open_url(&self, _: &str) {}
+    }
+
+    fn engine(source: &str) -> bp_ext::Engine {
+        let dir = std::env::temp_dir().join(format!(
+            "bp-ext-doc-{}-{}",
+            std::process::id(),
+            source.len()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("essai.luau"), source).unwrap();
+        let mut engine =
+            bp_ext::Engine::new(dir.clone(), dir.join("d"), std::rc::Rc::new(NoServices));
+        engine.load_all(&[]);
+        assert_eq!(engine.extensions[0].error, None);
+        engine
+    }
+
+    #[test]
+    fn extension_changes_are_one_undo_step_with_referentials() {
+        let mut doc = doc();
+        let mut engine = engine(
+            r#"
+            bp.command{ title = "Ranger…", run = function()
+                local c = bp.add_category("Courses")
+                for _, op in bp.current_account():operations{ payee = "carrefour" } do
+                    if op.tack ~= "reconciled" then op.category = c end
+                end
+                bp.current_account():add{ payee = "Nouveau", amount = -3 }
+            end }
+            "#,
+        );
+        let fx = engine.run_command(0, 0, Some(&mut doc.extension_context(None)));
+        assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+        doc.apply_extension(&fx);
+        assert!(doc.dirty);
+        assert_eq!(doc.document.categories.len(), 1);
+        assert_eq!(doc.current_account().operations.len(), 5);
+        assert_eq!(doc.current_account().operations[3].category, Some(0));
+        assert_eq!(doc.undo_label(), Some("Ranger"));
+        assert!(doc.undo());
+        assert!(doc.document.categories.is_empty(), "catégorie retirée");
+        assert_eq!(doc.current_account().operations.len(), 4);
+        assert_eq!(doc.current_account().operations[3].category, None);
+        assert!(doc.redo());
+        assert_eq!(doc.document.categories.len(), 1);
+        assert_eq!(doc.current_account().operations.len(), 5);
+    }
+
+    #[test]
+    fn hooks_join_the_entry_step() {
+        let mut doc = doc();
+        let mut engine = engine(
+            r#"
+            bp.on("operation_added", function(op)
+                op.details = "vu par l'extension"
+            end)
+            "#,
+        );
+        let mut new = op(0, 9, "Boulangerie", -450, Tack::None);
+        new.uid = 0;
+        doc.upsert_operation(None, new);
+        let events = std::mem::take(&mut doc.ext_events);
+        assert_eq!(events.len(), 1);
+        let (event, lines, merge) = &events[0];
+        assert!(*merge);
+        let tag = doc.last_undo_tag();
+        let fx = engine.fire(*event, lines, doc.extension_context(tag));
+        assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+        doc.apply_extension(&fx);
+        assert_eq!(
+            doc.current_account().operations[4].details,
+            "vu par l'extension"
+        );
+        assert_eq!(doc.undo_label(), Some("ajout"), "pas d'étape en plus");
+        assert!(doc.undo());
+        assert_eq!(doc.current_account().operations.len(), 4);
+        assert!(doc.undo_label().is_none());
     }
 }

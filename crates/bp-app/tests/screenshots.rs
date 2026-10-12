@@ -24,6 +24,16 @@ fn render_sized(
     size: egui::Vec2,
     setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
 ) {
+    render_full(name, theme, size, None, setup);
+}
+
+fn render_full(
+    name: &str,
+    theme: egui::Theme,
+    size: egui::Vec2,
+    extensions: Option<PathBuf>,
+    setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
+) {
     let file = std::env::var("BP_SCREENSHOT_OVERRIDE")
         .or_else(|_| std::env::var("BP_SCREENSHOT_FILE"))
         .map(PathBuf::from)
@@ -35,7 +45,12 @@ fn render_sized(
         .wgpu()
         .build_eframe(|cc| {
             bankperfect::theme::install(&cc.egui_ctx);
-            bankperfect::BankPerfectApp::with_settings(Some(file), Default::default())
+            let mut app = bankperfect::BankPerfectApp::with_settings(None, Default::default());
+            if let Some(dir) = extensions {
+                app.load_extensions(dir);
+            }
+            app.open_file(file);
+            app
         });
     harness.run_steps(4);
     setup(&mut harness);
@@ -609,4 +624,48 @@ fn robustness() {
         harness.key_press(egui::Key::Escape);
         harness.run_steps(3);
     }
+}
+
+fn render_extension(
+    name: &str,
+    theme: egui::Theme,
+    setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
+) {
+    let examples = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extensions");
+    render_full(
+        name,
+        theme,
+        egui::vec2(1440.0, 900.0),
+        Some(examples),
+        setup,
+    );
+}
+
+#[test]
+#[ignore]
+fn extension_screenshots() {
+    let open_menu = |h: &mut Harness<'_, bankperfect::BankPerfectApp>, item: &str| {
+        h.get_by_label("Extensions").click();
+        h.run_steps(3);
+        h.get_by_label_contains(item).click();
+        h.run_steps(3);
+    };
+    render_extension("80-ext-menu", egui::Theme::Dark, |h| {
+        h.get_by_label("Extensions").click();
+    });
+    render_extension("81-ext-doublons", egui::Theme::Dark, |h| {
+        open_menu(h, "Rechercher les doublons");
+    });
+    render_extension("82-ext-synthese", egui::Theme::Dark, |h| {
+        open_menu(h, "Synthèse du mois");
+    });
+    render_extension("83-ext-arrondis", egui::Theme::Dark, |h| {
+        open_menu(h, "Épargne par arrondis");
+    });
+    render_extension("84-ext-export", egui::Theme::Light, |h| {
+        open_menu(h, "Exporter en JSON");
+    });
+    render_extension("85-ext-gestion", egui::Theme::Dark, |h| {
+        open_menu(h, "Gérer les extensions");
+    });
 }

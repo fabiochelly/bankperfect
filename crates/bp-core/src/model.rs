@@ -449,7 +449,7 @@ pub struct FeatureData {
     pub value: Vec<u8>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Document {
     /// Nom du fichier/groupe de comptes (`utilisateur`).
     pub group_name: String,
@@ -533,6 +533,42 @@ impl Document {
         }
     }
 
+    /// Copie des référentiels (catégories, tiers, modes, informations des
+    /// comptes), pour annuler une modification qui les touche.
+    pub fn referentials(&self) -> Referentials {
+        Referentials {
+            categories: self.categories.clone(),
+            payees: self.payees.clone(),
+            custom_modes: self.custom_modes.clone(),
+            headers: self.accounts.iter().map(Account::clone_header).collect(),
+            account_order: self.account_order.clone(),
+            default_account: self.default_account,
+        }
+    }
+
+    /// Remet des référentiels et renvoie ceux qui étaient en place. Les
+    /// comptes créés depuis la copie gardent leurs informations.
+    pub fn swap_referentials(&mut self, saved: Referentials) -> Referentials {
+        let current = self.referentials();
+        self.categories = saved.categories;
+        self.payees = saved.payees;
+        self.custom_modes = saved.custom_modes;
+        for (account, header) in self.accounts.iter_mut().zip(saved.headers) {
+            let operations = std::mem::take(&mut account.operations);
+            *account = Account {
+                operations,
+                ..header
+            };
+        }
+        if saved.account_order.len() == self.accounts.len() {
+            self.account_order = saved.account_order;
+        }
+        if saved.default_account < self.accounts.len() {
+            self.default_account = saved.default_account;
+        }
+        current
+    }
+
     pub fn next_operation_uid(&self) -> u64 {
         self.accounts
             .iter()
@@ -542,6 +578,18 @@ impl Document {
             .unwrap_or(0)
             + 1
     }
+}
+
+/// Référentiels d'un document (tout sauf les opérations).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Referentials {
+    pub categories: Vec<Category>,
+    pub payees: Vec<Payee>,
+    pub custom_modes: Vec<CustomMode>,
+    /// Informations des comptes, sans leurs opérations.
+    pub headers: Vec<Account>,
+    pub account_order: Vec<usize>,
+    pub default_account: usize,
 }
 
 #[cfg(test)]

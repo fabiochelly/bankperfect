@@ -94,3 +94,42 @@ fn legacy_features_of_sample_file() {
     assert!(!monthly.entries.is_empty());
     bp_core::autofilters::AutoFilters::load(d, p).expect("filtres");
 }
+
+/// Export JSON des fichiers de l'ancien dossier : réimporté à l'identique,
+/// données des fonctionnalités v6 lisibles en JSON (pas en base64).
+#[test]
+fn legacy_files_survive_json_roundtrip() {
+    let p = &bp_core::legacy_pickle::parse_py;
+    for path in legacy_files() {
+        let raw = std::fs::read(&path).unwrap();
+        if bp_core::file::requires_password(&raw).unwrap() {
+            continue;
+        }
+        let mut doc = bp_core::file::open(&path, None).unwrap().document;
+        let json = bp_core::json::to_json(&doc).unwrap();
+        assert_eq!(bp_core::json::from_json(&json).unwrap(), doc, "{path:?}");
+
+        // Fonctionnalités converties au format v6, comme après un enregistrement.
+        if let Ok(rules) = bp_core::autofields::AutoFieldRules::load(&doc, p) {
+            rules.save(&mut doc).unwrap();
+        }
+        if let Ok(budget) = bp_core::budget::MonthlyBudget::load(&doc, p) {
+            budget.save(&mut doc).unwrap();
+        }
+        if let Ok(budgets) = bp_core::budget::AnnualBudgets::load(&doc, p) {
+            budgets.save(&mut doc).unwrap();
+        }
+        if let Ok(filters) = bp_core::autofilters::AutoFilters::load(&doc, p) {
+            filters.save(&mut doc).unwrap();
+        }
+        let json = bp_core::json::to_json(&doc).unwrap();
+        assert_eq!(bp_core::json::from_json(&json).unwrap(), doc, "{path:?}");
+        let value: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        for feature in value["features"].as_array().unwrap() {
+            let key = feature["key"].as_str().unwrap();
+            if key.ends_with(".v6") {
+                assert!(feature.get("data").is_some(), "{key} en base64 : {path:?}");
+            }
+        }
+    }
+}

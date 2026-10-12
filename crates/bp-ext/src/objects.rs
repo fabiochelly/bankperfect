@@ -612,6 +612,69 @@ pub(crate) fn operation_copy(
     Ok(t)
 }
 
+/// `{ index, count, total, payee }` d'une ligne issue d'une ventilation
+/// (tiers « [2/3] Tiers », détail « … (Total: -120,00) »), ou `nil`.
+fn split_info(lua: &Lua, op: &Operation) -> mlua::Result<Value> {
+    let payee = op.payee.as_str();
+    let rest = bp_core::view::payee_without_ventilation(payee);
+    if rest.len() == payee.len() {
+        return Ok(Value::Nil);
+    }
+    let prefix = &payee[1..payee.len() - rest.len() - 1];
+    let Some((index, count)) = prefix
+        .split_once('/')
+        .and_then(|(i, n)| Some((i.trim().parse::<u32>().ok()?, n.trim().parse::<u32>().ok()?)))
+    else {
+        return Ok(Value::Nil);
+    };
+    let total = op
+        .details
+        .rfind("(Total: ")
+        .and_then(|start| {
+            let text = &op.details[start + 8..];
+            Amount::parse(text.trim_end_matches(')'))
+        })
+        .map(amount_to_f64);
+    let t = lua.create_table()?;
+    t.set("index", index)?;
+    t.set("count", count)?;
+    t.set("total", total)?;
+    t.set("payee", rest.trim_start().to_string())?;
+    Ok(Value::Table(t))
+}
+
+/// Parts de `op:split{ … }` : `{ amount, category, details }` ; une part
+/// sans montant reçoit le reste. Les montants sont pris en valeur absolue.
+fn split_parts(
+    document: &Document,
+    original: &Operation,
+    parts: &Table,
+) -> mlua::Result<Vec<bp_core::split::SplitPart>> {
+    let mut out = Vec::new();
+    let mut rest_at = None;
+    for (i, part) in parts.sequence_values::<Table>().enumerate() {
+        let part = part.map_err(|_| runtime("op:split : chaque part est une table { amount, category, details }"))?;
+        let amount = match part.get::<Value>("amount")? {
+            Value::Nil => {
+                if rest_at.replace(i).is_some() {
+                    return Err(runtime("op:split : une seule part peut omettre son montant"));
+                }
+                Amount::ZERO
+            }
+            v => Amount(amount_from_value(&v)?.0.abs()),
+        };
+        out.push(bp_core::split::SplitPart {
+            details: part.get::<Option<String>>("details")?.unwrap_or_default(),
+            category: resolve_category(document, &part.get::<Value>("category")?)?,
+            amount,
+        });
+    }
+    if let Some(i) = rest_at {
+        out[i].amount = bp_core::split::remaining_to_split(original.amount, &out);
+    }
+    Ok(out)
+}
+
 fn check_unlocked(s: &Session, op: &Operation) -> mlua::Result<()> {
     if s.locked && op.tack == Tack::Reconciled {
         return Err(runtime(
@@ -737,6 +800,10 @@ impl UserData for OpRef {
                 Ok(bp_core::split::transfer_direction(&op.payee).is_some())
             })
         });
+        fields.add_field_method_get("split_info", |lua, o| {
+            let op = o.get(lua, |_, op| Ok(op.clone()))?;
+            split_info(lua, &op)
+        });
     }
 
     fn add_methods<M: UserDataMethods<Self>>(methods: &mut M) {
@@ -808,6 +875,24 @@ impl UserData for OpRef {
                 ops.push(op);
                 Ok(OpRef::new(file, to, uid, ops.len() - 1))
             })
+        });
+        methods.add_method("split", |lua, o, parts: Table| {
+            let refs = with_session(lua, |s| {
+                let (a, k) = o.locate(s)?;
+                let original = s.document.accounts[a].operations[k].clone();
+                check_unlocked(s, &original)?;
+                let parts = split_parts(&s.document, &original, &parts)?;
+                s.operations_mut(a);
+                let lines = bp_core::split::split_operation(&mut s.document, a, k, &parts)
+                    .map_err(|e| runtime(format!("ventilation impossible : {e}")))?;
+                s.reset_uid();
+                let ops = &s.document.accounts[a].operations;
+                Ok(lines
+                    .into_iter()
+                    .map(|l| OpRef::new(s.file_id, a, ops[l].uid, l))
+                    .collect::<Vec<_>>())
+            })?;
+            lua.create_sequence_from(refs)
         });
         methods.add_method("sister", |lua, o, ()| {
             with_session(lua, |s| {

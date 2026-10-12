@@ -167,6 +167,14 @@ impl Session {
         })
     }
 
+    /// Le document a été modifié pendant le segment en cours.
+    pub fn has_changes(&self) -> bool {
+        !self.originals.is_empty()
+            || self.referentials.is_some()
+            || !self.store_backup.is_empty()
+            || self.document.accounts.len() > self.accounts_before
+    }
+
     /// Défait les modifications du segment (erreur dans l'extension).
     pub fn rollback(&mut self, before_accounts: usize) {
         for (a, operations) in std::mem::take(&mut self.originals) {

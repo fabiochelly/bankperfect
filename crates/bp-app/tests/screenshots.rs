@@ -707,6 +707,14 @@ fn extension_screenshots() {
         h.run_steps(3);
         h.get_by_label_contains("Total de la sélection").click();
     });
+    // BP_IMPORT_FILE : relevé lu par le format d'import d'une extension.
+    if std::env::var_os("BP_IMPORT_FILE").is_some() {
+        render_extension("90-ext-import", egui::Theme::Dark, |h| {
+            h.get_by_label("Fichier").click();
+            h.run_steps(3);
+            h.get_by_label_contains("Importer des opérations").click();
+        });
+    }
 }
 
 /// Clic droit à une position (menus contextuels).

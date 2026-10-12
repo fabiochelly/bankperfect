@@ -606,6 +606,104 @@ fn event_arguments() {
 }
 
 #[test]
+fn split_operations() {
+    let mut f = Fixture::new(
+        r#"
+        bp.command{ title = "x", run = function()
+            local op = bp.current_account():add{ payee = "Hyper", amount = -120 }
+            assert(op.split_info == nil)
+            local parts = op:split({
+                { amount = 80, category = "Courses", details = "nourriture" },
+                { details = "maison" },
+            })
+            assert(#parts == 2)
+            assert(parts[1].amount == -80 and parts[2].amount == -40)
+            local info = parts[2].split_info
+            assert(info.index == 2 and info.count == 2 and info.total == -120 and info.payee == "Hyper")
+            assert(parts[1].category == "Courses")
+            assert(not pcall(function() parts[1]:split({ { amount = 1 } }) end))
+        end }
+        bp.command{ title = "y", run = function()
+            bp.add_category("Courses")
+        end }
+        "#,
+    );
+    let fx = f.run(1);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    let fx = f.run(0);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    assert_eq!(fx.changes.len(), 1);
+    assert_eq!(f.document.accounts[0].operations.len(), 3);
+}
+
+#[test]
+fn importers_read_files() {
+    let mut f = Fixture::new(
+        r#"
+        bp.importer{
+            name = "Banque Test",
+            extensions = { "csv" },
+            detect = function(file) return file.text:sub(1, 5) == "date;" end,
+            parse = function(file)
+                local ops = {}
+                for line in file.text:gmatch("[^\n]+") do
+                    local date, label, amount = line:match("^(.-);(.-);(.-)$")
+                    if date ~= "date" then
+                        table.insert(ops, { date = date, payee = label, amount = amount, category = "Loisirs > Cinéma", id = "x" .. #ops })
+                    end
+                end
+                return { number = "123", operations = ops }
+            end,
+        }
+        bp.importer{
+            name = "Fautif",
+            extensions = "bad",
+            parse = function() bp.current_account():add{ amount = 1 } return {} end,
+        }
+        "#,
+    );
+    assert_eq!(f.engine.extensions[0].error, None);
+    let mut engine = std::mem::replace(
+        &mut f.engine,
+        Engine::new(PathBuf::new(), PathBuf::new(), Rc::new(NoServices)),
+    );
+    let data = b"date;libelle;montant
+01/02/2026;Cinema;-12,50
+;Sans date;3
+02/02/2026;Salaire;1500";
+    let (name, parsed) = engine
+        .import_file(std::path::Path::new("/tmp/releve.CSV"), data, &mut f.ctx())
+        .expect("format reconnu");
+    assert_eq!(name, "Banque Test");
+    let parsed = parsed.expect("lu");
+    assert_eq!(parsed.accounts.len(), 1);
+    assert_eq!(parsed.accounts[0].account_id.as_deref(), Some("123"));
+    let ops = &parsed.accounts[0].operations;
+    assert_eq!(ops.len(), 2);
+    assert_eq!(ops[0].amount, Amount::from_cents(-1250));
+    assert_eq!(ops[0].category.as_deref(), Some("Loisirs"));
+    assert_eq!(ops[0].subcategory.as_deref(), Some("Cinéma"));
+    assert_eq!(ops[1].fitid.as_deref(), Some("x2"));
+    assert_eq!(parsed.rejected.len(), 1);
+
+    // Pas reconnu : l'import de BankPerfect prend le relais.
+    assert!(engine
+        .import_file(std::path::Path::new("a.csv"), b"autre", &mut f.ctx())
+        .is_none());
+    assert!(engine
+        .import_file(std::path::Path::new("a.qif"), data, &mut f.ctx())
+        .is_none());
+
+    // Un format qui modifie les comptes est refusé et défait.
+    let n = f.document.accounts[0].operations.len();
+    let (_, result) = engine
+        .import_file(std::path::Path::new("a.bad"), b"", &mut f.ctx())
+        .unwrap();
+    assert!(result.is_err());
+    assert_eq!(f.document.accounts[0].operations.len(), n);
+}
+
+#[test]
 fn store_is_restored_on_error() {
     let mut f = Fixture::new(
         r#"
@@ -731,7 +829,7 @@ fn bundled_examples_load_and_open() {
     let data = tempfile::tempdir().unwrap();
     let mut engine = Engine::new(dir, data.path().to_path_buf(), Rc::new(NoServices));
     engine.load_all(&[]);
-    assert_eq!(engine.extensions.len(), 5);
+    assert_eq!(engine.extensions.len(), 6);
     let mut document = bp_core::manage::new_document("Test", Amount::from_cents(100_000));
     bp_core::manage::add_account(&mut document, "Livret", Amount::ZERO);
     for ext in 0..engine.extensions.len() {

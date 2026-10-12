@@ -39,6 +39,10 @@ pub const EXAMPLES: &[(&str, &str)] = &[
         "selection.luau",
         include_str!("../../../extensions/selection.luau"),
     ),
+    (
+        "import-debit-credit.luau",
+        include_str!("../../../extensions/import-debit-credit.luau"),
+    ),
 ];
 
 struct AppServices;
@@ -519,13 +523,23 @@ impl Manager {
         }
         let events = ext.events();
         let permissions = ext.permissions();
-        if !events.is_empty() || !permissions.is_empty() {
+        let importers = ext.importers();
+        if !events.is_empty() || !permissions.is_empty() || !importers.is_empty() {
             ui_kit::section(
                 ui,
                 width - 4.0,
                 icon::SHIELD_CHECK,
                 "Fonctionnement",
                 |ui| {
+                    for (name, extensions) in &importers {
+                        let suffixes: Vec<String> =
+                            extensions.iter().map(|e| format!(".{e}")).collect();
+                        ui.label(format!(
+                            "{}  Importe « {name} » ({})",
+                            icon::DOWNLOAD_SIMPLE,
+                            suffixes.join(", ")
+                        ));
+                    }
                     for e in events {
                         ui.label(format!("{}  Réagit {}", icon::LIGHTNING, event_label(e)));
                     }

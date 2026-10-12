@@ -111,6 +111,9 @@ pub struct ImportForm {
     /// Opérations fournies déjà lues (synchronisation bancaire) : libellé de
     /// la source, rien à relire.
     source: Option<String>,
+    /// Pastille du format (format d'une extension) ; par défaut QIF, OFX,
+    /// CSV ou Banque.
+    format_name: Option<String>,
 }
 
 impl ImportForm {
@@ -150,6 +153,7 @@ impl ImportForm {
             reparse: true,
             recheck: true,
             source: None,
+            format_name: None,
             data,
         };
         match format {
@@ -237,7 +241,34 @@ impl ImportForm {
             reparse: false,
             recheck: true,
             source: Some(source),
+            format_name: None,
         }
+    }
+
+    /// Aperçu d'opérations lues par le format d'import d'une extension.
+    pub fn from_extension(
+        path: PathBuf,
+        format_name: String,
+        parsed: ParsedImport,
+        doc: &OpenDoc,
+    ) -> Self {
+        let targets = parsed
+            .accounts
+            .iter()
+            .enumerate()
+            .map(|(k, a)| {
+                import::match_account(&doc.document, a)
+                    .or_else(|| (parsed.accounts.len() == 1 || k == 0).then_some(doc.account))
+            })
+            .collect();
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut form = Self::from_parsed(name, parsed, targets);
+        form.path = path;
+        form.format_name = Some(format_name);
+        form
     }
 
     fn parse(&mut self, doc: &OpenDoc) {
@@ -330,6 +361,7 @@ impl ImportForm {
             ui.set_height(height);
             let pal = palette(ui);
             let format_label = match self.format {
+                _ if self.format_name.is_some() => self.format_name.as_deref().unwrap_or_default(),
                 _ if self.source.is_some() => "Banque",
                 ImportFormat::Qif => "QIF",
                 ImportFormat::Ofx => "OFX",

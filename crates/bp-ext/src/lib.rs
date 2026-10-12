@@ -14,6 +14,7 @@
 
 mod api;
 mod date;
+mod import;
 mod objects;
 mod session;
 pub mod ui;
@@ -289,6 +290,18 @@ impl Extension {
         events
     }
 
+    /// Formats d'import : (nom, extensions de fichier).
+    pub fn importers(&self) -> Vec<(String, Vec<String>)> {
+        self.registry()
+            .map(|r| {
+                r.importers
+                    .iter()
+                    .map(|i| (i.name.clone(), i.extensions.clone()))
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
     /// Dernières lignes écrites par `print`.
     pub fn log(&self) -> Vec<String> {
         self.registry().map(|r| r.log.clone()).unwrap_or_default()
@@ -297,6 +310,34 @@ impl Extension {
     pub fn is_loaded(&self) -> bool {
         self.vm.is_some()
     }
+}
+
+/// Format d'import déclaré par une extension (`bp.importer`).
+#[derive(Debug, Clone)]
+pub struct ImporterInfo {
+    pub name: String,
+    /// Nom de l'extension.
+    pub extension: String,
+    /// Extensions de fichier, sans le point.
+    pub extensions: Vec<String>,
+}
+
+/// `detect` puis `parse` d'un format d'import ; `None` si `detect` refuse.
+fn run_importer(
+    lua: &Lua,
+    spec: &import::ImporterSpec,
+    path: &Path,
+    data: &[u8],
+) -> mlua::Result<Option<bp_core::import::ParsedImport>> {
+    let file = import::file_table(lua, path, data)?;
+    if let Some(detect) = &spec.detect
+        && !detect.call::<bool>(file.clone())?
+    {
+        return Ok(None);
+    }
+    let value: Value = spec.parse.call(file)?;
+    let parsed = objects::with_session(lua, |s| import::parsed_import(lua, &s.document, value))?;
+    Ok(Some(parsed))
 }
 
 /// Arguments d'une réaction à un évènement.
@@ -540,6 +581,71 @@ impl Engine {
             }
         }
         out
+    }
+
+    /// Formats d'import des extensions actives.
+    pub fn importers(&self) -> Vec<ImporterInfo> {
+        let mut out = Vec::new();
+        for ext in self.extensions.iter().filter(|e| e.enabled) {
+            if let Some(r) = ext.registry() {
+                for i in &r.importers {
+                    out.push(ImporterInfo {
+                        name: i.name.clone(),
+                        extension: ext.name(),
+                        extensions: i.extensions.clone(),
+                    });
+                }
+            }
+        }
+        out
+    }
+
+    /// Lit un fichier avec le premier format d'import d'extension qui le
+    /// reconnaît (extension du fichier, puis `detect`). `None` : aucun ;
+    /// sinon le nom du format et les opérations lues, ou l'erreur.
+    pub fn import_file(
+        &mut self,
+        path: &Path,
+        data: &[u8],
+        ctx: &mut DocContext<'_>,
+    ) -> Option<(String, Result<bp_core::import::ParsedImport, String>)> {
+        let suffix = path
+            .extension()
+            .map(|e| e.to_string_lossy().to_lowercase())
+            .unwrap_or_default();
+        for ext in 0..self.extensions.len() {
+            let specs: Vec<import::ImporterSpec> = match self.extensions[ext].registry() {
+                Some(r) if self.extensions[ext].enabled => r
+                    .importers
+                    .iter()
+                    .filter(|i| i.extensions.contains(&suffix))
+                    .cloned()
+                    .collect(),
+                _ => continue,
+            };
+            for spec in specs {
+                let mut outcome: Option<Result<bp_core::import::ParsedImport, String>> = None;
+                let name = self.extensions[ext].name();
+                self.with_doc(ext, Some(ctx), |_, lua, _| {
+                    outcome = run_importer(lua, &spec, path, data)
+                        .map_err(|e| format!("{name} : {}", error_text(&e)))
+                        .transpose();
+                    if let Some(mut s) = lua.app_data_mut::<Session>()
+                        && s.has_changes()
+                    {
+                        let before = s.accounts_before();
+                        s.rollback(before);
+                        outcome = Some(Err(format!(
+                            "{name} : un format d'import lit le fichier sans modifier les comptes"
+                        )));
+                    }
+                });
+                if let Some(result) = outcome {
+                    return Some((spec.name, result));
+                }
+            }
+        }
+        None
     }
 
     pub fn has_hooks(&self, event: Event) -> bool {

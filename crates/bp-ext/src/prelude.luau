@@ -99,6 +99,7 @@ ui.columns = element("columns")
 ui.table = element("table")
 ui.stat = element("stat")
 ui.bars = element("bars")
+ui.chart = element("chart")
 
 function ui.pill(text, color)
 	return { type = "pill", text, color = color }

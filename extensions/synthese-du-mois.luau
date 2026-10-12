@@ -39,6 +39,21 @@ local function summary(account, month)
 	return spent, earned, bars, biggest
 end
 
+local SHORT_MONTHS = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
+
+-- Dépenses et recettes des six mois qui finissent par `month`, pour ui.chart.
+local function six_months(account, month)
+	local labels, spent, earned = {}, {}, {}
+	for i = 5, 0, -1 do
+		local m = month:add_months(-i)
+		local s, e = summary(account, m)
+		table.insert(labels, SHORT_MONTHS[m.month])
+		table.insert(spent, s)
+		table.insert(earned, e)
+	end
+	return labels, spent, earned
+end
+
 bp.command({
 	id = "synthese",
 	title = "Synthèse du mois…",
@@ -107,6 +122,22 @@ bp.command({
 							}),
 							ui.text("Double-cliquez pour retrouver l'opération dans la grille.", { style = "small" }),
 						}),
+					}),
+					ui.section({
+						title = "Sur six mois",
+						icon = "chart-bar",
+						(function()
+							local labels, spent6, earned6 = six_months(account, s.month)
+							return ui.chart({
+								style = "columns",
+								labels = labels,
+								series = {
+									{ name = "Dépenses", values = spent6 },
+									{ name = "Recettes", values = earned6 },
+								},
+								height = 220,
+							})
+						end)(),
 					}),
 				}
 			end,

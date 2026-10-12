@@ -572,6 +572,46 @@ impl OpRef {
     }
 }
 
+/// Copie d'une opération en table simple (état d'avant une modification,
+/// opération supprimée) : mêmes champs que l'objet opération, en lecture.
+pub(crate) fn operation_copy(
+    lua: &Lua,
+    file: u64,
+    account: usize,
+    op: &Operation,
+) -> mlua::Result<Table> {
+    let t = lua.create_table()?;
+    t.set("uid", op.uid)?;
+    t.set("account", AccountRef {
+        file,
+        index: account,
+    })?;
+    t.set("date", date_value(lua, op.date)?)?;
+    t.set("mark_date", date_value(lua, op.mark_date)?)?;
+    t.set("payee", op.payee.clone())?;
+    t.set("details", op.details.clone())?;
+    t.set("amount", amount_to_f64(op.amount))?;
+    t.set("mode", op.mode.label().to_string())?;
+    let category = op.category.and_then(|id| {
+        lua.app_data_ref::<Session>()
+            .and_then(|s| s.document.category_label(id))
+    });
+    t.set("category", category)?;
+    t.set("category_id", op.category)?;
+    t.set("tack", tack_name(op.tack))?;
+    t.set("cheque", op.cheque_number().map(str::to_string))?;
+    t.set(
+        "is_transfer",
+        bp_core::split::transfer_direction(&op.payee).is_some(),
+    )?;
+    let fields = lua.create_table()?;
+    for (k, v) in op.extra.iter().filter(|(k, _)| !k.starts_with('#')) {
+        fields.set(k.clone(), v.clone())?;
+    }
+    t.set("fields", fields)?;
+    Ok(t)
+}
+
 fn check_unlocked(s: &Session, op: &Operation) -> mlua::Result<()> {
     if s.locked && op.tack == Tack::Reconciled {
         return Err(runtime(

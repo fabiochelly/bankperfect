@@ -97,11 +97,54 @@ pub const MENUS: &[(&str, &str)] = &[
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Event {
     FileOpened,
-    /// Opération saisie ou importée (reçoit l'opération).
+    /// Opération ajoutée par l'utilisateur : saisie, import, collage,
+    /// ventilation… (reçoit l'opération).
     OperationAdded,
-    /// Opération modifiée dans le formulaire de saisie.
+    /// Opération modifiée par l'utilisateur (reçoit l'opération et une copie
+    /// de son état d'avant).
     OperationChanged,
+    /// Opération supprimée par l'utilisateur (reçoit une copie).
+    OperationDeleted,
     BeforeSave,
+    AfterSave,
+    /// Un autre compte est affiché (reçoit le compte).
+    AccountSelected,
+    /// La sélection de la grille a changé.
+    SelectionChanged,
+}
+
+impl Event {
+    /// Nom donné à `bp.on`.
+    pub const NAMES: &[(&str, Event)] = &[
+        ("file_opened", Event::FileOpened),
+        ("operation_added", Event::OperationAdded),
+        ("operation_changed", Event::OperationChanged),
+        ("operation_deleted", Event::OperationDeleted),
+        ("before_save", Event::BeforeSave),
+        ("after_save", Event::AfterSave),
+        ("account_selected", Event::AccountSelected),
+        ("selection_changed", Event::SelectionChanged),
+    ];
+}
+
+/// Sujet d'un évènement : opération (compte, identifiant) et, pour une
+/// modification ou une suppression, son état d'avant ; compte affiché pour
+/// `AccountSelected`.
+#[derive(Debug, Clone)]
+pub struct EventItem {
+    pub account: usize,
+    pub uid: u64,
+    pub before: Option<bp_core::model::Operation>,
+}
+
+impl EventItem {
+    pub fn line(account: usize, uid: u64) -> Self {
+        Self {
+            account,
+            uid,
+            before: None,
+        }
+    }
 }
 
 /// Boîte de dialogue demandée par une extension.
@@ -254,6 +297,37 @@ impl Extension {
     pub fn is_loaded(&self) -> bool {
         self.vm.is_some()
     }
+}
+
+/// Arguments d'une réaction à un évènement.
+fn event_args(lua: &Lua, event: Event, file: u64, item: &EventItem) -> mlua::Result<MultiValue> {
+    let op = || -> mlua::Result<Value> {
+        Ok(Value::UserData(lua.create_userdata(objects::OpRef::new(
+            file,
+            item.account,
+            item.uid,
+            0,
+        ))?))
+    };
+    let before = || -> mlua::Result<Value> {
+        let before = item
+            .before
+            .as_ref()
+            .ok_or_else(|| objects::runtime("état d'avant manquant"))?;
+        objects::operation_copy(lua, file, item.account, before).map(Value::Table)
+    };
+    Ok(match event {
+        Event::OperationAdded => MultiValue::from_iter([op()?]),
+        Event::OperationChanged => MultiValue::from_iter([op()?, before()?]),
+        Event::OperationDeleted => MultiValue::from_iter([before()?]),
+        Event::AccountSelected => {
+            MultiValue::from_iter([Value::UserData(lua.create_userdata(objects::AccountRef {
+                file,
+                index: item.account,
+            })?)])
+        }
+        _ => MultiValue::new(),
+    })
 }
 
 /// Poignée `win` passée aux gestionnaires d'une fenêtre.
@@ -720,12 +794,13 @@ impl Engine {
         })
     }
 
-    /// Prévient les extensions d'un évènement. `lines` : opérations concernées
-    /// (compte, identifiant) pour les évènements d'opération.
+    /// Prévient les extensions d'un évènement. `items` : opérations
+    /// concernées pour les évènements d'opération (une réaction par
+    /// opération), compte pour `AccountSelected`.
     pub fn fire(
         &mut self,
         event: Event,
-        lines: &[(usize, u64)],
+        items: &[EventItem],
         mut ctx: DocContext<'_>,
     ) -> Effects {
         let mut all = Effects::default();
@@ -748,16 +823,17 @@ impl Engine {
             let fx = self.with_doc(ext, Some(&mut ctx), |me, lua, fx| {
                 for hook in hooks {
                     let calls: Vec<MultiValue> = match event {
-                        Event::OperationAdded | Event::OperationChanged => lines
+                        Event::OperationAdded
+                        | Event::OperationChanged
+                        | Event::OperationDeleted
+                        | Event::AccountSelected => items
                             .iter()
-                            .filter_map(|&(a, uid)| {
-                                let op = objects::OpRef::new(file_id, a, uid, 0);
-                                lua.create_userdata(op)
-                                    .ok()
-                                    .map(|ud| MultiValue::from_iter([Value::UserData(ud)]))
-                            })
+                            .filter_map(|item| event_args(lua, event, file_id, item).ok())
                             .collect(),
-                        Event::FileOpened | Event::BeforeSave => vec![MultiValue::new()],
+                        Event::FileOpened
+                        | Event::BeforeSave
+                        | Event::AfterSave
+                        | Event::SelectionChanged => vec![MultiValue::new()],
                     };
                     for args in calls {
                         match lua.create_thread(hook.clone()) {

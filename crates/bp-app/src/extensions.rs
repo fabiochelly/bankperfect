@@ -230,7 +230,11 @@ fn event_label(event: bp_ext::Event) -> &'static str {
         bp_ext::Event::FileOpened => "à l'ouverture du fichier",
         bp_ext::Event::OperationAdded => "à chaque opération ajoutée",
         bp_ext::Event::OperationChanged => "à chaque opération modifiée",
+        bp_ext::Event::OperationDeleted => "à chaque opération supprimée",
         bp_ext::Event::BeforeSave => "avant chaque enregistrement",
+        bp_ext::Event::AfterSave => "après chaque enregistrement",
+        bp_ext::Event::AccountSelected => "au changement de compte",
+        bp_ext::Event::SelectionChanged => "au changement de sélection",
     }
 }
 

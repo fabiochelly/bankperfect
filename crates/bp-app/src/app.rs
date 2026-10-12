@@ -167,6 +167,9 @@ pub struct BankPerfectApp {
     ext_manager: Option<crate::extensions::Manager>,
     /// Erreurs des extensions à montrer.
     ext_errors: Vec<String>,
+    /// Fichier, compte affiché et sélection vus par les extensions
+    /// (évènements `account_selected` et `selection_changed`).
+    ext_watch: Option<(u64, usize, std::collections::BTreeSet<usize>)>,
 }
 
 const DRAWER_WIDTH: f32 = 460.0;
@@ -225,6 +228,7 @@ impl BankPerfectApp {
             extensions: crate::extensions::engine(None, &[]),
             ext_manager: None,
             ext_errors: Vec::new(),
+            ext_watch: None,
         };
         if let Some(path) = initial_file {
             app.open_path(path);
@@ -269,7 +273,7 @@ impl BankPerfectApp {
     fn fire_extensions(
         &mut self,
         event: bp_ext::Event,
-        lines: &[(usize, u64)],
+        lines: &[bp_ext::EventItem],
         merge: bool,
         now: f64,
     ) {
@@ -282,6 +286,50 @@ impl BankPerfectApp {
             .extensions
             .fire(event, lines, doc.extension_context(tag));
         self.apply_effects(fx, now);
+    }
+
+    /// Évènements des extensions en attente : ceux mis de côté par le
+    /// document, opérations touchées par les actions de l'utilisateur,
+    /// changement de compte et de sélection.
+    fn extension_events(&mut self, now: f64) {
+        let Some(doc) = &mut self.doc else {
+            self.ext_watch = None;
+            return;
+        };
+        let mut events = std::mem::take(&mut doc.ext_events);
+        let wanted = [
+            bp_ext::Event::OperationAdded,
+            bp_ext::Event::OperationChanged,
+            bp_ext::Event::OperationDeleted,
+        ]
+        .into_iter()
+        .any(|e| self.extensions.has_hooks(e));
+        events.extend(doc.take_operation_events(wanted));
+        let selection = if self.extensions.has_hooks(bp_ext::Event::SelectionChanged) {
+            doc.selection.clone()
+        } else {
+            Default::default()
+        };
+        let watch = (doc.file_id, doc.account, selection);
+        match &self.ext_watch {
+            Some((file, account, selection)) if *file == watch.0 => {
+                if *account != watch.1 {
+                    events.push((
+                        bp_ext::Event::AccountSelected,
+                        vec![bp_ext::EventItem::line(watch.1, 0)],
+                        false,
+                    ));
+                }
+                if *selection != watch.2 && !(selection.is_empty() && watch.2.is_empty()) {
+                    events.push((bp_ext::Event::SelectionChanged, Vec::new(), false));
+                }
+            }
+            _ => {}
+        }
+        self.ext_watch = Some(watch);
+        for (event, items, merge) in events {
+            self.fire_extensions(event, &items, merge, now);
+        }
     }
 
     fn apply_effects(&mut self, fx: bp_ext::Effects, now: f64) {
@@ -509,6 +557,8 @@ impl BankPerfectApp {
             Ok(recovery) => {
                 self.recovery_phrase = recovery;
                 self.toast = Some((format!("{} enregistré", doc.file_name()), now + 3.0));
+                doc.ext_events
+                    .push((bp_ext::Event::AfterSave, Vec::new(), false));
             }
             Err(e) => self.error = Some(format!("Enregistrement impossible : {e}")),
         }
@@ -2773,13 +2823,7 @@ impl BankPerfectApp {
             ctx.set_zoom_factor(self.settings.text_scale);
         }
         let now = ctx.input(|i| i.time);
-        if let Some(doc) = &mut self.doc
-            && !doc.ext_events.is_empty()
-        {
-            for (event, lines, merge) in std::mem::take(&mut doc.ext_events) {
-                self.fire_extensions(event, &lines, merge, now);
-            }
-        }
+        self.extension_events(now);
         if self.toast.as_ref().is_some_and(|(_, until)| now > *until) {
             self.toast = None;
         }

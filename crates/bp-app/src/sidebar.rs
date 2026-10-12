@@ -4,11 +4,13 @@ use bp_core::model::Amount;
 use egui::{Align, Layout, RichText, Sense};
 use egui_phosphor::regular as icon;
 
+use crate::commands::Command;
 use crate::document::OpenDoc;
 use crate::format::money;
 use crate::theme::palette;
 
-pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+/// Renvoie la commande choisie dans le menu contextuel d'un compte.
+pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
     let pal = palette(ui);
     ui.add_space(10.0);
     ui.label(RichText::new(&doc.document.group_name).heading());
@@ -24,6 +26,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
 
     let order = doc.document.account_order.clone();
     let mut clicked = None;
+    let mut command = None;
     let mut total = Amount::ZERO;
     for &i in order
         .iter()
@@ -34,9 +37,11 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         if !account.counts_as_virtual() {
             total = total + balance;
         }
-        if account_row(ui, account, balance, i == doc.account, &pal) {
+        let (pressed, response) = account_row(ui, account, balance, i == doc.account, &pal);
+        if pressed || response.secondary_clicked() {
             clicked = Some(i);
         }
+        response.context_menu(|ui| command = account_menu(ui, doc));
     }
     let disabled: Vec<usize> = order
         .iter()
@@ -50,9 +55,13 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
             .show(ui, |ui| {
                 for i in disabled {
                     let account = &doc.document.accounts[i];
-                    if account_row(ui, account, doc.account_balance(i), i == doc.account, &pal) {
+                    let balance = doc.account_balance(i);
+                    let (pressed, response) =
+                        account_row(ui, account, balance, i == doc.account, &pal);
+                    if pressed || response.secondary_clicked() {
                         clicked = Some(i);
                     }
+                    response.context_menu(|ui| command = account_menu(ui, doc));
                 }
             });
     }
@@ -87,6 +96,38 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         ui.add_space(8.0);
         protection_badge(ui, doc);
     });
+    command
+}
+
+/// Menu contextuel d'un compte (le compte est affiché dès le clic droit).
+fn account_menu(ui: &mut egui::Ui, doc: &OpenDoc) -> Option<Command> {
+    use crate::commands::Command::*;
+    crate::menu::popup_style(ui.style_mut());
+    crate::menu::begin(ui);
+    let mut chosen = None;
+    let mut entry = |ui: &mut egui::Ui, command: Command| {
+        let info = command.info(Some(doc));
+        if crate::menu::item_enabled(ui, info.enabled, Some(info.icon), &info.label, info.shortcut)
+            .clicked()
+        {
+            chosen = Some(command);
+        }
+    };
+    entry(ui, Manage(crate::manage_ui::Tab::Accounts));
+    crate::menu::separator(ui);
+    entry(ui, Report(crate::reports_ui::ReportTab::Statement));
+    entry(ui, Charts);
+    entry(ui, Scheduler);
+    entry(ui, ExportXlsx);
+    // Commandes d'extension placées ici (`menu = "account"`).
+    let placed = crate::extensions::placed("account");
+    if !placed.is_empty() {
+        crate::menu::separator(ui);
+        for (i, _) in placed {
+            entry(ui, Extension(i));
+        }
+    }
+    chosen
 }
 
 fn account_row(
@@ -95,7 +136,7 @@ fn account_row(
     balance: Amount,
     selected: bool,
     pal: &crate::theme::Palette,
-) -> bool {
+) -> (bool, egui::Response) {
     let height = 34.0;
     let (rect, response) =
         ui.allocate_exact_size(egui::vec2(ui.available_width(), height), Sense::click());
@@ -137,8 +178,8 @@ fn account_row(
     });
     // Sélection dès l'appui, comme une liste native.
     let pressed = response.hovered() && ui.input(|i| i.pointer.primary_pressed());
-    response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban));
-    pressed
+    let response = response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban));
+    (pressed, response)
 }
 
 fn protection_badge(ui: &mut egui::Ui, doc: &OpenDoc) {

@@ -324,6 +324,14 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     } else {
                         entry(ui, ConvertToTransfer);
                     }
+                    // Commandes d'extension placées ici (`menu = "grid"`).
+                    let placed = crate::extensions::placed("grid");
+                    if !placed.is_empty() {
+                        crate::menu::separator(ui);
+                        for (i, _) in placed {
+                            entry(ui, Extension(i));
+                        }
+                    }
                     crate::menu::separator(ui);
                     entry(ui, Delete);
                 });

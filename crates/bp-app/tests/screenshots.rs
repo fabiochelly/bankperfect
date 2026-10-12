@@ -644,28 +644,82 @@ fn render_extension(
 #[test]
 #[ignore]
 fn extension_screenshots() {
-    let open_menu = |h: &mut Harness<'_, bankperfect::BankPerfectApp>, item: &str| {
-        h.get_by_label("Extensions").click();
+    let open_in = |h: &mut Harness<'_, bankperfect::BankPerfectApp>, menu: &str, item: &str| {
+        h.get_by_label(menu).click();
         h.run_steps(3);
         h.get_by_label_contains(item).click();
         h.run_steps(3);
+    };
+    let open_menu = |h: &mut Harness<'_, bankperfect::BankPerfectApp>, item: &str| {
+        open_in(h, "Extensions", item);
     };
     render_extension("80-ext-menu", egui::Theme::Dark, |h| {
         h.get_by_label("Extensions").click();
     });
     render_extension("81-ext-doublons", egui::Theme::Dark, |h| {
-        open_menu(h, "Rechercher les doublons");
+        open_in(h, "Opérations", "Rechercher les doublons");
     });
     render_extension("82-ext-synthese", egui::Theme::Dark, |h| {
-        open_menu(h, "Synthèse du mois");
+        open_in(h, "Rapports", "Synthèse du mois");
     });
     render_extension("83-ext-arrondis", egui::Theme::Dark, |h| {
         open_menu(h, "Épargne par arrondis");
     });
     render_extension("84-ext-export", egui::Theme::Light, |h| {
-        open_menu(h, "Exporter en JSON");
+        h.get_by_label("Fichier").click();
+        h.run_steps(3);
+        h.get_by_label("Exporter").hover();
+        h.run_steps(3);
+        h.get_by_label_contains("Exporter des opérations en JSON").click();
+        h.run_steps(3);
     });
     render_extension("85-ext-gestion", egui::Theme::Dark, |h| {
         open_menu(h, "Gérer les extensions");
     });
+    render_extension("86-ext-menu-operations", egui::Theme::Dark, |h| {
+        h.get_by_label("Opérations").click();
+    });
+    render_extension("87-ext-clic-droit-grille", egui::Theme::Dark, |h| {
+        right_click(h, egui::pos2(760.0, 330.0));
+    });
+    render_extension("88-ext-clic-droit-compte", egui::Theme::Dark, |h| {
+        right_click(h, egui::pos2(120.0, 245.0));
+    });
+    render_extension("89-ext-total-selection", egui::Theme::Dark, |h| {
+        // Plusieurs lignes : clic, Maj+clic, puis la commande du clic droit.
+        h.event(egui::Event::PointerMoved(egui::pos2(760.0, 330.0)));
+        h.run_steps(2);
+        for (pos, modifiers) in [
+            (egui::pos2(760.0, 330.0), egui::Modifiers::NONE),
+            (egui::pos2(760.0, 640.0), egui::Modifiers::SHIFT),
+        ] {
+            for pressed in [true, false] {
+                h.event(egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers,
+                });
+                h.step();
+            }
+        }
+        right_click(h, egui::pos2(760.0, 640.0));
+        h.run_steps(3);
+        h.get_by_label_contains("Total de la sélection").click();
+    });
+}
+
+/// Clic droit à une position (menus contextuels).
+fn right_click(h: &mut Harness<'_, bankperfect::BankPerfectApp>, pos: egui::Pos2) {
+    h.event(egui::Event::PointerMoved(pos));
+    h.run_steps(2);
+    for pressed in [true, false] {
+        h.event(egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Secondary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        });
+        h.step();
+    }
 }

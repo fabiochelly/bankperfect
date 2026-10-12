@@ -201,6 +201,25 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                         )));
                     }
                 };
+                let mut menus: Vec<String> = match spec.get::<Value>("menu")? {
+                    Value::Nil => Vec::new(),
+                    Value::String(s) => vec![s.to_str()?.to_string()],
+                    Value::Table(t) => t.sequence_values::<String>().collect::<mlua::Result<_>>()?,
+                    _ => return Err(runtime("bp.command : menu est un texte ou une liste de textes")),
+                };
+                for m in &menus {
+                    if !crate::MENUS.iter().any(|(id, _)| id == m) {
+                        let known: Vec<&str> = crate::MENUS.iter().map(|(id, _)| *id).collect();
+                        return Err(runtime(format!(
+                            "bp.command : menu « {m} » inconnu ({})",
+                            known.join(", ")
+                        )));
+                    }
+                }
+                menus.dedup();
+                if menus.is_empty() {
+                    menus.push("extensions".into());
+                }
                 let info = CommandInfo {
                     id: spec.get::<Option<String>>("id")?.unwrap_or_else(|| title.clone()),
                     title,
@@ -208,6 +227,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     shortcut: spec.get("shortcut")?,
                     description: spec.get("description")?,
                     needs,
+                    menus,
                 };
                 r.commands.push((info, run));
                 Ok(())

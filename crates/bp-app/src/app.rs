@@ -1188,6 +1188,24 @@ impl BankPerfectApp {
         }
     }
 
+    /// Commandes d'extension placées dans un menu (`menu = …`), à la fin,
+    /// après un séparateur.
+    fn extension_items(&mut self, ui: &mut egui::Ui, place: &str) {
+        let has_doc = self.doc.is_some();
+        let placed: Vec<usize> = crate::extensions::placed(place)
+            .into_iter()
+            .filter(|(_, e)| has_doc || e.needs == bp_ext::Needs::Nothing)
+            .map(|(i, _)| i)
+            .collect();
+        if placed.is_empty() {
+            return;
+        }
+        menu::separator(ui);
+        for i in placed {
+            self.menu_command(ui, Command::Extension(i));
+        }
+    }
+
     /// Enregistrer sous (F12) : le fichier enregistré devient le fichier courant.
     fn save_as(&mut self, now: f64) {
         let Some(doc) = &mut self.doc else { return };
@@ -1455,20 +1473,24 @@ impl BankPerfectApp {
             self.menu_command(ui, Budget(BudgetTab::Annual));
             menu::separator(ui);
             self.menu_command(ui, ExportXlsx);
+            self.extension_items(ui, "reports");
             return;
         }
         if index == tools_index + 1 {
             menu::begin_with_width(ui, 340.0);
-            let entries = crate::extensions::entries();
+            // Seulement les commandes qui ne sont pas placées ailleurs.
+            let entries: Vec<(usize, crate::extensions::Entry)> =
+                crate::extensions::placed("extensions")
+                    .into_iter()
+                    .filter(|(_, e)| has_doc || e.needs == bp_ext::Needs::Nothing)
+                    .collect();
             // Titre d'extension seulement pour celles qui ont plusieurs
             // commandes ; séparateur entre deux extensions.
-            let count = |group: &str| entries.iter().filter(|e| e.group == group).count();
+            let count = |group: &str| entries.iter().filter(|(_, e)| e.group == group).count();
             let mut last_group = None;
             let mut shown = false;
-            for (i, entry) in entries.iter().enumerate() {
-                if !has_doc && entry.needs != bp_ext::Needs::Nothing {
-                    continue;
-                }
+            for (i, entry) in entries.iter() {
+                let i = *i;
                 if last_group != Some(entry.group) {
                     let several = count(entry.group) > 1;
                     let previous_several = last_group.is_some_and(|g| count(g) > 1);
@@ -1548,6 +1570,7 @@ impl BankPerfectApp {
                     self.menu_command(ui, ExportQif);
                     menu::separator(ui);
                     self.menu_command(ui, ExportJson);
+                    self.extension_items(ui, "export");
                 });
                 self.menu_command(ui, Print);
                 menu::separator(ui);
@@ -1557,6 +1580,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, CloseFile);
             }
             self.menu_command(ui, DeleteFile);
+            self.extension_items(ui, "file");
             menu::separator(ui);
             self.menu_command(ui, Quit);
             return;
@@ -1573,6 +1597,7 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, ReverseCurrencies);
             }
+            self.extension_items(ui, "tools");
             menu::separator(ui);
             self.menu_command(ui, Options);
             return;
@@ -1594,6 +1619,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, Delete);
                 menu::separator(ui);
                 self.menu_command(ui, Replace);
+                self.extension_items(ui, "edit");
             }
             2 => {
                 menu::begin(ui);
@@ -1694,6 +1720,7 @@ impl BankPerfectApp {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleTranslucent);
                 }
+                self.extension_items(ui, "view");
             }
             3 => {
                 menu::begin(ui);
@@ -1729,6 +1756,7 @@ impl BankPerfectApp {
                 }
                 menu::separator(ui);
                 self.menu_command(ui, UpdateQuotes);
+                self.extension_items(ui, "accounts");
             }
             _ => {
                 menu::begin_with_width(ui, 340.0);
@@ -1754,6 +1782,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, Rules);
                 self.menu_command(ui, AddToPayees);
                 self.menu_command(ui, AddToScheduler);
+                self.extension_items(ui, "operations");
             }
         }
     }
@@ -2780,8 +2809,9 @@ impl BankPerfectApp {
         let compact = ui.available_width() < 860.0;
         // Panneau des comptes plus étroit sur les petits écrans.
         let sidebar_width = (ui.available_width() * 0.2).clamp(190.0, 260.0);
+        let mut sidebar_command = None;
         if !compact {
-            egui::Panel::left("accounts")
+            sidebar_command = egui::Panel::left("accounts")
                 .resizable(true)
                 .default_size(sidebar_width)
                 .min_size(170.0)
@@ -2790,7 +2820,8 @@ impl BankPerfectApp {
                         .fill(sidebar_fill)
                         .inner_margin(12),
                 )
-                .show(ui, |ui| sidebar::show(ui, doc));
+                .show(ui, |ui| sidebar::show(ui, doc))
+                .inner;
         }
 
         // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
@@ -2814,7 +2845,7 @@ impl BankPerfectApp {
         }
         doc.refresh();
         let mut grid_action = GridAction::None;
-        let mut deferred = None;
+        let mut deferred = sidebar_command;
         let header_command = egui::Panel::top("balances")
             .frame(
                 egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),

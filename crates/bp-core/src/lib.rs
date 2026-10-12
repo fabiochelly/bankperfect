@@ -17,6 +17,7 @@ pub mod filter;
 pub mod format_v6;
 pub mod formula;
 pub mod import;
+pub mod json;
 pub mod legacy_pickle;
 pub mod manage;
 pub mod model;

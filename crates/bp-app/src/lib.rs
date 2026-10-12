@@ -14,6 +14,8 @@ mod datepicker;
 mod dialogs;
 mod document;
 mod editor;
+mod ext_ui;
+mod extensions;
 mod files_ui;
 mod filters_ui;
 mod format;

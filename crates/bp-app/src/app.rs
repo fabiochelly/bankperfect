@@ -67,10 +67,53 @@ const LOCKED_MESSAGE: &str = "Les lignes rapprochées sont verrouillées (menu O
 const SHORTCUT_CALC: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::C);
 
+/// Raccourcis de l'application : une extension ne peut pas les prendre.
+const BUILTIN_SHORTCUTS: &[KeyboardShortcut] = &[
+    SHORTCUT_OPEN,
+    SHORTCUT_SAVE,
+    SHORTCUT_NEXT_ACCOUNT,
+    SHORTCUT_PREV_ACCOUNT,
+    SHORTCUT_HIDE_OLD,
+    SHORTCUT_UNDO,
+    SHORTCUT_REDO,
+    SHORTCUT_REDO_ALT,
+    SHORTCUT_REPLACE,
+    SHORTCUT_GROUP,
+    SHORTCUT_EXTRA,
+    SHORTCUT_ACCOUNTS,
+    SHORTCUT_PAYEES,
+    SHORTCUT_NOTES,
+    SHORTCUT_RULES,
+    SHORTCUT_CATEGORY_TOTALS,
+    SHORTCUT_CHARTS,
+    SHORTCUT_BUDGET,
+    SHORTCUT_CURRENCIES,
+    SHORTCUT_LOAN,
+    SHORTCUT_TRANSFER,
+    SHORTCUT_SPLIT,
+    SHORTCUT_FILTERS,
+    SHORTCUT_SCHEDULER,
+    SHORTCUT_IMPORT,
+    SHORTCUT_PRINT,
+    SHORTCUT_OPTIONS,
+    SHORTCUT_NEW,
+    SHORTCUT_SAVE_AS,
+    SHORTCUT_CLOSE,
+    SHORTCUT_PALETTE,
+    SHORTCUT_MARK_DATE,
+    SHORTCUT_MARK_DATES,
+    SHORTCUT_CUT,
+    SHORTCUT_COPY,
+    SHORTCUT_PASTE,
+    SHORTCUT_CALC,
+];
+
 /// Action différée en attendant la réponse à « Enregistrer les modifications ? ».
 enum Pending {
     Open(Option<PathBuf>),
     NewFile,
+    /// Importer un export JSON dans un nouveau fichier.
+    ImportJson,
     Close,
     Quit,
 }
@@ -94,6 +137,8 @@ pub struct BankPerfectApp {
     confirm_payee: Option<usize>,
     /// Confirmation de l'inversion des monnaies.
     confirm_reverse: bool,
+    /// Export JSON (non chiffré) d'un fichier protégé : à confirmer.
+    confirm_json_export: bool,
     /// Résumé des échéances insérées automatiquement à l'ouverture.
     scheduler_notice: Option<String>,
     options: Option<crate::options_ui::OptionsForm>,
@@ -117,6 +162,11 @@ pub struct BankPerfectApp {
     theme_pending: bool,
     /// Vraie application (pas un test) : notes affichées à l'ouverture.
     interactive: bool,
+    /// Extensions Luau chargées.
+    extensions: bp_ext::Engine,
+    ext_manager: Option<crate::extensions::Manager>,
+    /// Erreurs des extensions à montrer.
+    ext_errors: Vec<String>,
 }
 
 const DRAWER_WIDTH: f32 = 460.0;
@@ -128,6 +178,7 @@ impl BankPerfectApp {
         let mut app = Self::with_settings(None, crate::settings::Settings::load());
         app.theme_pending = true;
         app.interactive = true;
+        app.load_extensions(crate::extensions::user_dir());
         if let Some(path) = initial_file {
             app.open_path(path);
         }
@@ -152,6 +203,7 @@ impl BankPerfectApp {
             clipboard: Vec::new(),
             confirm_payee: None,
             confirm_reverse: false,
+            confirm_json_export: false,
             scheduler_notice: None,
             options: None,
             about: false,
@@ -170,11 +222,149 @@ impl BankPerfectApp {
             settings,
             theme_pending: false,
             interactive: false,
+            extensions: crate::extensions::engine(None, &[]),
+            ext_manager: None,
+            ext_errors: Vec::new(),
         };
         if let Some(path) = initial_file {
             app.open_path(path);
         }
         app
+    }
+
+    /// Ouvre un fichier de comptes (tests).
+    pub fn open_file(&mut self, path: PathBuf) {
+        self.open_path(path);
+    }
+
+    /// Charge les extensions d'un dossier (application : dossier de
+    /// l'utilisateur ; tests : exemples).
+    pub fn load_extensions(&mut self, dir: PathBuf) {
+        self.extensions = crate::extensions::engine(Some(dir), &self.settings.disabled_extensions);
+        crate::extensions::refresh(&self.extensions);
+    }
+
+    /// Lance une commande d'extension.
+    fn run_extension(&mut self, ctx: &egui::Context, index: usize) {
+        let Some(entry) = crate::extensions::entry(index) else {
+            return;
+        };
+        let now = ctx.input(|i| i.time);
+        if entry.needs == bp_ext::Needs::Selection
+            && self.doc.as_ref().is_none_or(|d| d.selection.is_empty())
+        {
+            self.toast = Some(("Sélectionnez d'abord des lignes".into(), now + 3.0));
+            return;
+        }
+        let mut context = self.doc.as_mut().map(|d| d.extension_context(None));
+        let fx = self
+            .extensions
+            .run_command(entry.ext, entry.command, context.as_mut());
+        drop(context);
+        self.apply_effects(fx, now);
+    }
+
+    /// Prévient les extensions d'un évènement ; `merge` : leurs modifications
+    /// rejoignent la dernière étape d'annulation (l'action qui a déclenché).
+    fn fire_extensions(
+        &mut self,
+        event: bp_ext::Event,
+        lines: &[(usize, u64)],
+        merge: bool,
+        now: f64,
+    ) {
+        if !self.extensions.has_hooks(event) {
+            return;
+        }
+        let Some(doc) = &mut self.doc else { return };
+        let tag = if merge { doc.last_undo_tag() } else { None };
+        let fx = self
+            .extensions
+            .fire(event, lines, doc.extension_context(tag));
+        self.apply_effects(fx, now);
+    }
+
+    fn apply_effects(&mut self, fx: bp_ext::Effects, now: f64) {
+        if let Some(doc) = &mut self.doc
+            && (fx.modified() || fx.select.is_some())
+        {
+            doc.apply_extension(&fx);
+        }
+        if let Some(toast) = fx.toasts.last() {
+            self.toast = Some((toast.clone(), now + 4.0));
+        }
+        self.ext_errors.extend(fx.errors);
+    }
+
+    /// Fenêtres des extensions, fenêtre de gestion et erreurs.
+    fn extension_modals(&mut self, ctx: &egui::Context) {
+        let now = ctx.input(|i| i.time);
+        if self.extensions.has_frames() {
+            let frames: Vec<bp_ext::FrameMut<'_>> = self.extensions.frames_mut().collect();
+            let reply = crate::ext_ui::show(ctx, frames, self.doc.as_ref());
+            if let Some(reply) = reply {
+                let mut context = self.doc.as_mut().map(|d| d.extension_context(None));
+                let fx = match reply {
+                    crate::ext_ui::Reply::Answer(a) => self.extensions.answer(a, context.as_mut()),
+                    crate::ext_ui::Reply::Event(e) => {
+                        self.extensions.window_event(e, context.as_mut())
+                    }
+                };
+                drop(context);
+                self.apply_effects(fx, now);
+                ctx.request_repaint();
+            }
+        }
+        if let Some(manager) = &mut self.ext_manager {
+            use crate::extensions::ManagerAction;
+            match manager.show(ctx, &self.extensions) {
+                ManagerAction::None => {}
+                ManagerAction::Close => self.ext_manager = None,
+                ManagerAction::Toggle(index, enabled) => {
+                    self.extensions.set_enabled(index, enabled);
+                    let id = self.extensions.extensions[index].id.clone();
+                    self.settings.disabled_extensions.retain(|d| *d != id);
+                    if !enabled {
+                        self.settings.disabled_extensions.push(id);
+                    }
+                    self.settings.save();
+                    crate::extensions::refresh(&self.extensions);
+                }
+                ManagerAction::Reload => {
+                    self.extensions.load_all(&self.settings.disabled_extensions);
+                    crate::extensions::refresh(&self.extensions);
+                    self.toast = Some(("Extensions rechargées".into(), now + 3.0));
+                }
+                ManagerAction::OpenFolder => {
+                    let _ = open::that(self.extensions.dir());
+                }
+                ManagerAction::InstallExamples => {
+                    let n = crate::extensions::install_examples(self.extensions.dir());
+                    self.extensions.load_all(&self.settings.disabled_extensions);
+                    crate::extensions::refresh(&self.extensions);
+                    self.toast = Some((
+                        match n {
+                            0 => "Les exemples sont déjà installés".to_string(),
+                            1 => "1 exemple installé".to_string(),
+                            n => format!("{n} exemples installés"),
+                        },
+                        now + 4.0,
+                    ));
+                }
+                ManagerAction::Docs => {
+                    ctx.open_url(egui::OpenUrl::new_tab(crate::extensions::DOCS_URL));
+                }
+            }
+        }
+        if !self.ext_errors.is_empty()
+            && dialogs::alert(
+                ctx,
+                "Erreur dans une extension",
+                &self.ext_errors.join("\n\n"),
+            )
+        {
+            self.ext_errors.clear();
+        }
     }
 
     fn request(&mut self, action: Pending) {
@@ -202,10 +392,12 @@ impl BankPerfectApp {
             Pending::NewFile => {
                 self.tool = Some(crate::tools::Tool::NewFile(Default::default()));
             }
+            Pending::ImportJson => self.import_json(),
             Pending::Close => {
                 self.doc = None;
                 self.editor = None;
                 self.tool = None;
+                self.extensions.abandon();
             }
             Pending::Quit => self.allow_close = true,
         }
@@ -274,6 +466,9 @@ impl BankPerfectApp {
                     doc.dirty = true;
                     self.scheduler_notice = Some(summary);
                 }
+                doc.ext_events
+                    .push((bp_ext::Event::FileOpened, Vec::new(), false));
+                self.extensions.abandon();
                 self.doc = Some(doc);
                 if self.interactive
                     && self.tool.is_none()
@@ -298,6 +493,7 @@ impl BankPerfectApp {
     }
 
     fn save(&mut self, now: f64) {
+        self.fire_extensions(bp_ext::Event::BeforeSave, &[], false, now);
         let Some(doc) = &mut self.doc else { return };
         if let Err(e) = bp_core::backup::backup_before_save(
             &doc.path,
@@ -358,6 +554,14 @@ impl BankPerfectApp {
         }
         if self.doc.is_some() && ctx.input_mut(|i| i.consume_key(Modifiers::SHIFT, Key::Enter)) {
             return self.execute(ctx, Command::ModifySelected);
+        }
+        for (index, entry) in crate::extensions::entries().iter().enumerate() {
+            if let Some(keys) = entry.keys
+                && !BUILTIN_SHORTCUTS.contains(&keys)
+                && ctx.input_mut(|i| i.consume_shortcut(&keys))
+            {
+                return self.execute(ctx, Command::Extension(index));
+            }
         }
         let Some(doc) = &mut self.doc else { return };
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_SAVE)) {
@@ -547,12 +751,38 @@ impl BankPerfectApp {
                 return;
             }
             Command::NewFile => return self.request(Pending::NewFile),
+            Command::ImportJson => return self.request(Pending::ImportJson),
+            Command::ExportJson => {
+                if self
+                    .doc
+                    .as_ref()
+                    .is_some_and(crate::protection_ui::is_protected)
+                {
+                    self.confirm_json_export = true;
+                } else {
+                    self.export_json(now);
+                }
+                return;
+            }
             Command::Options => {
                 let theme = ctx.options(|o| o.theme_preference);
                 self.options = Some(crate::options_ui::OptionsForm::new(&self.settings, theme));
                 return;
             }
             Command::About => return self.about = true,
+            Command::Extension(index) => return self.run_extension(ctx, index),
+            Command::ManageExtensions => {
+                self.ext_manager = Some(Default::default());
+                return;
+            }
+            Command::ExtensionsFolder => {
+                let _ = open::that(self.extensions.dir());
+                return;
+            }
+            Command::ExtensionsDocs => {
+                ctx.open_url(egui::OpenUrl::new_tab(crate::extensions::DOCS_URL));
+                return;
+            }
             Command::Help => {
                 ctx.open_url(egui::OpenUrl::new_tab(
                     "https://github.com/fabiochelly/bankperfect#readme",
@@ -926,7 +1156,13 @@ impl BankPerfectApp {
             | Command::Options
             | Command::About
             | Command::Help
+            | Command::Extension(_)
+            | Command::ManageExtensions
+            | Command::ExtensionsFolder
+            | Command::ExtensionsDocs
             | Command::NewFile
+            | Command::ImportJson
+            | Command::ExportJson
             | Command::DeleteFile
             | Command::SaveAs
             | Command::SaveCopy
@@ -1019,6 +1255,92 @@ impl BankPerfectApp {
         }
     }
 
+    /// Exporte le fichier complet (comptes, référentiels, données des
+    /// fonctionnalités) en JSON lisible, réimportable sans perte.
+    fn export_json(&mut self, now: f64) {
+        let Some(doc) = &self.doc else { return };
+        let stem = doc
+            .path
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let Some(mut path) = rfd::FileDialog::new()
+            .set_title("Exporter le fichier complet en JSON")
+            .set_directory(crate::settings::shared::export_dir(
+                doc.path.parent().unwrap_or(Path::new(".")),
+            ))
+            .set_file_name(format!("{stem}.json"))
+            .add_filter("JSON", &["json"])
+            .save_file()
+        else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("json");
+        }
+        let result = bp_core::json::to_json(&doc.document)
+            .and_then(|bytes| bp_core::format_v6::write_atomic(&path, &bytes));
+        match result {
+            Ok(()) => {
+                self.toast = Some((format!("Fichier {} créé", path.display()), now + 4.0));
+            }
+            Err(e) => self.error = Some(format!("Export JSON impossible : {e}")),
+        }
+    }
+
+    /// Importe un export JSON : crée un nouveau fichier de comptes (sans mot
+    /// de passe) à l'emplacement choisi, puis l'ouvre.
+    fn import_json(&mut self) {
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("Export JSON à importer")
+            .add_filter("JSON", &["json"]);
+        if let Some(dir) = &self.settings.export_dir {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(source) = dialog.pick_file() else {
+            return;
+        };
+        let document = match std::fs::read(&source)
+            .map_err(bp_core::Error::from)
+            .and_then(|data| bp_core::json::from_json(&data))
+        {
+            Ok(document) => document,
+            Err(e) => return self.error = Some(format!("Import impossible : {e}")),
+        };
+        let stem = source
+            .file_stem()
+            .map(|s| s.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        let mut dialog = rfd::FileDialog::new()
+            .set_title("Enregistrer le fichier de comptes importé")
+            .set_file_name(format!("{stem}.bp"))
+            .add_filter("Comptes BankPerfect", &["bp"]);
+        if let Some(dir) = &self.settings.files_dir {
+            dialog = dialog.set_directory(dir);
+        }
+        let Some(mut path) = dialog.save_file() else {
+            return;
+        };
+        if path.extension().is_none() {
+            path.set_extension("bp");
+        }
+        if path.exists() {
+            self.error = Some("Ce fichier existe déjà : choisissez un autre nom.".into());
+            return;
+        }
+        if let Err(e) = Protection::none().and_then(|p| file::save(&path, &document, &p)) {
+            self.error = Some(format!("Enregistrement impossible : {e}"));
+            return;
+        }
+        self.open_path(path);
+        if let Some(doc) = &mut self.doc {
+            doc.notice = Some(
+                "Export JSON importé. Le fichier n'a pas de mot de passe (Fichier › Protection du fichier)"
+                    .into(),
+            );
+        }
+    }
+
     /// Supprimer un fichier de comptes : il part à la corbeille du système.
     fn delete_file(&mut self) {
         let mut dialog = rfd::FileDialog::new()
@@ -1067,10 +1389,11 @@ impl BankPerfectApp {
                 "Opérations",
                 "Rapports",
                 "Outils",
+                "Extensions",
                 "Aide",
             ]
         } else {
-            &["Fichier", "Outils", "Aide"]
+            &["Fichier", "Outils", "Extensions", "Aide"]
         };
         let opened = ui
             .horizontal(|ui| {
@@ -1135,6 +1458,40 @@ impl BankPerfectApp {
             return;
         }
         if index == tools_index + 1 {
+            menu::begin_with_width(ui, 340.0);
+            let entries = crate::extensions::entries();
+            // Titre d'extension seulement pour celles qui ont plusieurs
+            // commandes ; séparateur entre deux extensions.
+            let count = |group: &str| entries.iter().filter(|e| e.group == group).count();
+            let mut last_group = None;
+            let mut shown = false;
+            for (i, entry) in entries.iter().enumerate() {
+                if !has_doc && entry.needs != bp_ext::Needs::Nothing {
+                    continue;
+                }
+                if last_group != Some(entry.group) {
+                    let several = count(entry.group) > 1;
+                    let previous_several = last_group.is_some_and(|g| count(g) > 1);
+                    if last_group.is_some() && (several || previous_several) {
+                        menu::separator(ui);
+                    }
+                    if several {
+                        menu::heading(ui, entry.group);
+                    }
+                    last_group = Some(entry.group);
+                }
+                self.menu_command(ui, Extension(i));
+                shown = true;
+            }
+            if shown {
+                menu::separator(ui);
+            }
+            self.menu_command(ui, ManageExtensions);
+            self.menu_command(ui, ExtensionsFolder);
+            self.menu_command(ui, ExtensionsDocs);
+            return;
+        }
+        if index == tools_index + 2 {
             menu::begin(ui);
             self.menu_command(ui, Palette);
             self.menu_command(ui, Help);
@@ -1176,6 +1533,7 @@ impl BankPerfectApp {
                     self.execute(&ctx, OpenRecent(i));
                 }
             }
+            self.menu_command(ui, ImportJson);
             menu::separator(ui);
             self.menu_command(ui, Save);
             if has_doc {
@@ -1188,6 +1546,8 @@ impl BankPerfectApp {
                     self.menu_command(ui, ExportXlsx);
                     self.menu_command(ui, ExportCsv);
                     self.menu_command(ui, ExportQif);
+                    menu::separator(ui);
+                    self.menu_command(ui, ExportJson);
                 });
                 self.menu_command(ui, Print);
                 menu::separator(ui);
@@ -2117,6 +2477,29 @@ impl BankPerfectApp {
                 Choice::No | Choice::Cancel => self.confirm_reverse = false,
             }
         }
+        if self.confirm_json_export {
+            let name = self.doc.as_ref().map(|d| d.file_name()).unwrap_or_default();
+            let message = format!(
+                "« {name} » est protégé par un mot de passe, mais l'export JSON n'est pas chiffré : toute personne qui accède au fichier exporté pourra lire vos comptes. Conservez-le en lieu sûr ou supprimez-le après usage."
+            );
+            match dialogs::confirm(
+                ctx,
+                "json_export",
+                icon::LOCK_OPEN,
+                "Export non chiffré",
+                &message,
+                "Exporter quand même",
+                None,
+                true,
+            ) {
+                Choice::Pending => {}
+                Choice::Yes => {
+                    self.confirm_json_export = false;
+                    self.export_json(now);
+                }
+                Choice::No | Choice::Cancel => self.confirm_json_export = false,
+            }
+        }
         if let Some(path) = self.confirm_trash.clone() {
             let name = path
                 .file_name()
@@ -2348,7 +2731,10 @@ impl BankPerfectApp {
             || self.confirm_linked_edit.is_some()
             || self.options.is_some()
             || self.about
-            || self.tool.is_some();
+            || self.tool.is_some()
+            || self.extensions.has_frames()
+            || self.ext_manager.is_some()
+            || !self.ext_errors.is_empty();
         if !modal_open {
             self.handle_shortcuts(&ctx);
         }
@@ -2358,6 +2744,13 @@ impl BankPerfectApp {
             ctx.set_zoom_factor(self.settings.text_scale);
         }
         let now = ctx.input(|i| i.time);
+        if let Some(doc) = &mut self.doc
+            && !doc.ext_events.is_empty()
+        {
+            for (event, lines, merge) in std::mem::take(&mut doc.ext_events) {
+                self.fire_extensions(event, &lines, merge, now);
+            }
+        }
         if self.toast.as_ref().is_some_and(|(_, until)| now > *until) {
             self.toast = None;
         }
@@ -2369,6 +2762,7 @@ impl BankPerfectApp {
         if self.doc.is_none() {
             egui::CentralPanel::default_margins().show(ui, |ui| self.welcome(ui));
             self.modals(&ctx);
+            self.extension_modals(&ctx);
             self.update_title(&ctx);
             return;
         }
@@ -2479,6 +2873,7 @@ impl BankPerfectApp {
             self.execute(&ctx, command);
         }
         self.modals(&ctx);
+        self.extension_modals(&ctx);
         self.update_title(&ctx);
     }
 }

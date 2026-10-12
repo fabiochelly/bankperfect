@@ -49,6 +49,40 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Construction
         run: cargo build --release --locked -p bankperfect
+      # Signature Authenticode par SignPath Foundation (voir CODE_SIGNING.md) :
+      # un exécutable non signé est bloqué par Defender lors de la validation
+      # winget. SignPath récupère l'artefact, attend l'approbation manuelle de
+      # la release puis renvoie l'exécutable signé.
+      - name: Exécutable à signer
+        id: unsigned
+        if: startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_ORGANIZATION_ID != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unsigned
+          path: target/release/bankperfect.exe
+      - name: Signature (SignPath)
+        if: steps.unsigned.outcome == 'success'
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: bankperfect
+          signing-policy-slug: release-signing
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          wait-for-completion-timeout-in-seconds: 3600
+          output-artifact-directory: target/signed
+      - name: Vérification de la signature
+        if: steps.unsigned.outcome == 'success'
+        shell: pwsh
+        run: |
+          $sig = Get-AuthenticodeSignature target/signed/bankperfect.exe
+          if ($sig.Status -ne "Valid") { throw "signature invalide : $($sig.Status) $($sig.StatusMessage)" }
+          Write-Host "Signé par $($sig.SignerCertificate.Subject)"
+          Copy-Item target/signed/bankperfect.exe target/release/bankperfect.exe -Force
+      - name: Avertissement (exécutable non signé)
+        if: startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_ORGANIZATION_ID == ''
+        run: echo "::warning::SIGNPATH_ORGANIZATION_ID non défini, bankperfect.exe n'est pas signé et sera bloqué par la validation winget"
       - name: Archive
         shell: pwsh
         run: |
@@ -112,6 +146,8 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: BankPerfect ${{ github.ref_name }}
+          body: |
+            [Politique de signature du code](https://github.com/fabiochelly/bankperfect/blob/main/CODE_SIGNING.md) : Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
           generate_release_notes: true
           files: |
             bankperfect-*

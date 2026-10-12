@@ -32,8 +32,10 @@ pub enum Command {
     GoToSister,
     Budget(BudgetTab),
     ExportQif,
+    ExportJson,
     Print,
     Import,
+    ImportJson,
     Protection,
     Backups,
     Quit,
@@ -84,6 +86,11 @@ pub enum Command {
     Options,
     About,
     Help,
+    /// Commande d'extension (rang dans `extensions::entries`).
+    Extension(usize),
+    ManageExtensions,
+    ExtensionsFolder,
+    ExtensionsDocs,
 }
 
 pub struct Info {
@@ -102,6 +109,7 @@ impl Command {
         use Command::*;
         let mut list = vec![NewFile, Open];
         list.extend((0..recent_count()).map(OpenRecent));
+        list.push(ImportJson);
         if let Some(doc) = doc {
             list.extend([
                 Save,
@@ -111,6 +119,7 @@ impl Command {
                 Import,
                 ExportCsv,
                 ExportQif,
+                ExportJson,
                 Print,
                 Protection,
                 Backups,
@@ -187,6 +196,14 @@ impl Command {
             Theme(ThemePreference::System),
         ]);
         list.extend(crate::theme::THEMES.iter().map(|t| UseTheme(t.id)));
+        list.extend(
+            crate::extensions::entries()
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| doc.is_some() || e.needs == bp_ext::Needs::Nothing)
+                .map(|(i, _)| Extension(i)),
+        );
+        list.extend([ManageExtensions, ExtensionsFolder, ExtensionsDocs]);
         list.extend([ToggleTranslucent, Options, Help, About, Quit]);
         list
     }
@@ -276,6 +293,20 @@ impl Command {
                 icon::PRINTER,
                 Some("Ctrl+P"),
                 "pdf aperçu relevé impression",
+            ),
+            ImportJson => info(
+                "Fichier",
+                "Importer un export JSON…",
+                icon::FILE_ARROW_UP,
+                None,
+                "json restaurer fichier complet format ouvert",
+            ),
+            ExportJson => info(
+                "Fichier",
+                "Exporter le fichier complet en JSON…",
+                icon::BRACKETS_CURLY,
+                None,
+                "json format ouvert sauvegarde complète développeur",
             ),
             ExportCsv => info(
                 "Fichier",
@@ -923,12 +954,56 @@ impl Command {
                 Some("Ctrl+K"),
                 "rechercher",
             ),
+            Extension(index) => match crate::extensions::entry(index) {
+                Some(entry) => Info {
+                    group: entry.group,
+                    label: entry.label.clone(),
+                    icon: entry.icon,
+                    shortcut: entry.shortcut,
+                    keywords: entry.keywords,
+                    enabled: match entry.needs {
+                        bp_ext::Needs::Nothing => true,
+                        bp_ext::Needs::File => has_doc,
+                        bp_ext::Needs::Selection => selection > 0,
+                    },
+                },
+                None => Info {
+                    group: "Extensions",
+                    label: String::new(),
+                    icon: icon::PUZZLE_PIECE,
+                    shortcut: None,
+                    keywords: "",
+                    enabled: false,
+                },
+            },
+            ManageExtensions => info(
+                "Extensions",
+                "Gérer les extensions…",
+                icon::PUZZLE_PIECE,
+                None,
+                "plugins scripts luau modules",
+            ),
+            ExtensionsFolder => info(
+                "Extensions",
+                "Ouvrir le dossier des extensions",
+                icon::FOLDER_OPEN,
+                None,
+                "plugins scripts luau",
+            ),
+            ExtensionsDocs => info(
+                "Extensions",
+                "Documentation des extensions",
+                icon::BOOK_OPEN,
+                None,
+                "api luau développer créer plugin",
+            ),
         };
         if !has_doc
             && !matches!(
                 self,
                 Open | OpenRecent(_)
                     | NewFile
+                    | ImportJson
                     | DeleteFile
                     | Quit
                     | Notes
@@ -940,6 +1015,10 @@ impl Command {
                     | Options
                     | About
                     | Help
+                    | Extension(_)
+                    | ManageExtensions
+                    | ExtensionsFolder
+                    | ExtensionsDocs
             )
         {
             result.enabled = false;

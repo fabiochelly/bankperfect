@@ -1,0 +1,21 @@
+[package]
+name = "bp-ext"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+description = "Extensions Luau de BankPerfect : moteur, API et fenêtres déclaratives"
+
+[dependencies]
+bp-core = { version = "9.1.0", path = "../bp-core" }
+mlua = { version = "0.12.2", features = ["luau", "serde"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.152"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+encoding_rs = "0.8.42"
+ureq = "3.4.2"
+
+[dev-dependencies]
+tempfile = "3.27.0"

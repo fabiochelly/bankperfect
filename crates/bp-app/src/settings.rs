@@ -57,6 +57,8 @@ pub struct Settings {
     pub date_format: DateFormat,
     /// Taille du texte (zoom de l'interface).
     pub text_scale: f32,
+    /// Extensions désactivées (identifiants).
+    pub disabled_extensions: Vec<String>,
     /// Réglages lus sur disque : seuls ceux-là sont réenregistrés (les tests
     /// partent de réglages par défaut et n'écrivent rien).
     #[serde(skip)]
@@ -90,6 +92,7 @@ impl Default for Settings {
             export_dir: None,
             date_format: DateFormat::default(),
             text_scale: 1.0,
+            disabled_extensions: Vec::new(),
             persist: false,
         }
     }

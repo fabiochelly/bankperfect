@@ -704,6 +704,61 @@ fn importers_read_files() {
 }
 
 #[test]
+fn schedules_budget_and_rules() {
+    let mut f = Fixture::new(
+        r#"
+        bp.command{ title = "ok", run = function()
+            bp.add_category("Logement")
+            local sc = bp.add_schedule{
+                payee = "Loyer", amount = -800, mode = "Prélèvement", category = "Logement",
+                next_date = "05/01/2026", every = 1, unit = "months", auto = false,
+            }
+            assert(sc.index == 1 and sc.interval == "Tous les mois" and sc.account.name == "Courant")
+            bp.update_schedule(1, { amount = -850, end_date = "05/12/2026" })
+            local list = bp.schedules()
+            assert(#list == 1 and list[1].amount == -850 and tostring(list[1].end_date) == "05/12/2026")
+            local f = bp.forecast(bp.current_account(), "31/03/2026")
+            local due = 0
+            for _, line in f do
+                if line.kind == "schedule" then due += 1 end
+            end
+            assert(due == 3, "3 loyers prévus, pas " .. due)
+
+            bp.budget.set("Logement", -900)
+            assert(bp.budget.get("Logement") == -900)
+            assert(#bp.budget.entries() == 1)
+            local report = bp.budget.report({ all = true })
+            assert(report.expenses.budget == -900)
+
+            local n = bp.rules.add{ contains = "boulang", category = "Logement" }
+            assert(n == 1 and bp.rules.list()[1].active)
+            local op = bp.current_account():add{ payee = "Boulangerie", amount = -3 }
+            assert(bp.rules.apply({ op }) == 1)
+            assert(op.category == "Logement")
+        end }
+        bp.command{ title = "échec", run = function()
+            bp.delete_schedule(1)
+            bp.budget.set("Logement", nil)
+            bp.rules.remove(1)
+            error("raté")
+        end }
+        "#,
+    );
+    let fx = f.run(0);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    assert!(fx.feature_changed);
+    let fx = f.run(1);
+    assert_eq!(fx.errors.len(), 1);
+    // L'échec a tout défait.
+    assert_eq!(
+        bp_core::scheduler::load(&f.document).unwrap().schedules.len(),
+        1
+    );
+    let rules = bp_core::autofields::AutoFieldRules::load(&f.document, &bp_core::legacy_pickle::parse_py).unwrap();
+    assert_eq!(rules.rules.len(), 1);
+}
+
+#[test]
 fn store_is_restored_on_error() {
     let mut f = Fixture::new(
         r#"

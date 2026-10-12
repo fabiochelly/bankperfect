@@ -14,6 +14,7 @@
 
 mod api;
 mod date;
+mod features;
 mod import;
 mod objects;
 mod session;

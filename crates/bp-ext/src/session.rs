@@ -24,6 +24,8 @@ pub struct DocContext<'a> {
     /// Étape d'annulation à compléter (crochets lancés après une action de
     /// l'utilisateur) : les modifications s'y ajoutent au lieu d'en créer une.
     pub merge_tag: Option<u64>,
+    /// Filtres de la grille (`bp.filter`).
+    pub filters: bp_core::filter::Filters,
 }
 
 /// Modifications d'un appel, à inscrire dans l'historique d'annulation.
@@ -66,6 +68,9 @@ pub(crate) struct Session {
     store_backup: Vec<(String, Option<Vec<u8>>)>,
     /// Compte à afficher et lignes à sélectionner (identifiants).
     pub select: Option<(usize, Vec<u64>)>,
+    /// Filtres de la grille ; `filters_changed` : à appliquer.
+    pub filters: bp_core::filter::Filters,
+    pub filters_changed: bool,
 }
 
 impl Session {
@@ -87,6 +92,8 @@ impl Session {
             feature_changed: false,
             store_backup: Vec::new(),
             select: None,
+            filters: ctx.filters.clone(),
+            filters_changed: false,
         }
     }
 

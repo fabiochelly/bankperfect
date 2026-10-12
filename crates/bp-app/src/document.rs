@@ -74,7 +74,7 @@ pub struct OpenDoc {
 
 /// Évènement pour les extensions : évènement, lignes (compte, identifiant),
 /// ajout à la dernière étape d'annulation.
-pub type ExtEvent = (bp_ext::Event, Vec<(usize, u64)>, bool);
+pub type ExtEvent = (bp_ext::Event, Vec<bp_ext::EventItem>, bool);
 
 static FILE_IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
@@ -115,6 +115,9 @@ struct UndoEntry {
     /// Étiquette de l'étape : les crochets d'extension et les suites d'un
     /// même lancement s'ajoutent à l'étape qui porte la leur.
     tag: u64,
+    /// Action de l'utilisateur pas encore signalée aux extensions
+    /// ([`OpenDoc::take_operation_events`]).
+    observe: bool,
 }
 
 /// Destination d'un déplacement clavier dans la grille.
@@ -640,14 +643,6 @@ impl OpenDoc {
             }
         };
         self.apply_auto_rules(&[(self.account, index)]);
-        let event = if target.is_some() {
-            bp_ext::Event::OperationChanged
-        } else {
-            bp_ext::Event::OperationAdded
-        };
-        let uid = self.document.accounts[self.account].operations[index].uid;
-        self.ext_events
-            .push((event, vec![(self.account, uid)], true));
         let account = &self.document.accounts[self.account];
         self.view.index.update(&self.document, account, index);
         self.touch();
@@ -887,13 +882,6 @@ impl OpenDoc {
         let n = added.len();
         let changes: Vec<(usize, usize)> = added.iter().map(|&l| (account, l)).collect();
         self.apply_auto_rules(&changes);
-        let ops = &self.document.accounts[account].operations;
-        let lines = added
-            .iter()
-            .filter_map(|&l| ops.get(l).map(|o| (account, o.uid)))
-            .collect();
-        self.ext_events
-            .push((bp_ext::Event::OperationAdded, lines, true));
         self.view.indexed_account = None;
         self.view.series_key = None;
         self.touch();
@@ -1034,6 +1022,7 @@ impl OpenDoc {
             accounts: saved,
             referentials: None,
             tag: self.undo_tag,
+            observe: true,
         });
         while self.undo.len() > self.max_undo.max(1) {
             self.undo.remove(0);
@@ -1044,6 +1033,67 @@ impl OpenDoc {
     /// Étiquette de la dernière étape d'annulation.
     pub fn last_undo_tag(&self) -> Option<u64> {
         self.undo.last().map(|e| e.tag)
+    }
+
+    /// Évènements d'extension des actions de l'utilisateur faites depuis le
+    /// dernier appel : opérations supprimées, ajoutées et modifiées, trouvées
+    /// en comparant l'état mémorisé pour l'annulation à l'état actuel. Les
+    /// annulations, les rétablissements et les modifications des extensions
+    /// ne sont pas signalés.
+    /// `wanted` : faux si aucune extension n'écoute (rien n'est comparé).
+    pub fn take_operation_events(&mut self, wanted: bool) -> Vec<ExtEvent> {
+        use std::collections::HashMap;
+        // État le plus ancien de chaque compte touché.
+        let mut before: Vec<(usize, Vec<Operation>)> = Vec::new();
+        for entry in self.undo.iter_mut().filter(|e| e.observe) {
+            entry.observe = false;
+            if !wanted {
+                continue;
+            }
+            for (a, ops) in &entry.accounts {
+                if !before.iter().any(|(k, _)| k == a) {
+                    before.push((*a, ops.clone()));
+                }
+            }
+        }
+        let (mut deleted, mut added, mut changed) = (Vec::new(), Vec::new(), Vec::new());
+        for (a, old) in before {
+            let Some(account) = self.document.accounts.get(a) else {
+                continue;
+            };
+            let old_by_uid: HashMap<u64, &Operation> = old.iter().map(|o| (o.uid, o)).collect();
+            let now_uids: std::collections::HashSet<u64> =
+                account.operations.iter().map(|o| o.uid).collect();
+            for o in &old {
+                if !now_uids.contains(&o.uid) {
+                    deleted.push(bp_ext::EventItem {
+                        account: a,
+                        uid: o.uid,
+                        before: Some(o.clone()),
+                    });
+                }
+            }
+            for o in &account.operations {
+                match old_by_uid.get(&o.uid) {
+                    None => added.push(bp_ext::EventItem::line(a, o.uid)),
+                    Some(previous) if *previous != o => changed.push(bp_ext::EventItem {
+                        account: a,
+                        uid: o.uid,
+                        before: Some((*previous).clone()),
+                    }),
+                    Some(_) => {}
+                }
+            }
+        }
+        [
+            (bp_ext::Event::OperationDeleted, deleted),
+            (bp_ext::Event::OperationAdded, added),
+            (bp_ext::Event::OperationChanged, changed),
+        ]
+        .into_iter()
+        .filter(|(_, items)| !items.is_empty())
+        .map(|(event, items)| (event, items, true))
+        .collect()
     }
 
     /// Document prêté à une extension, avec le compte affiché, la sélection
@@ -1087,6 +1137,7 @@ impl OpenDoc {
                         accounts: changes.accounts.clone(),
                         referentials: changes.referentials.clone(),
                         tag: changes.tag,
+                        observe: false,
                     });
                     while self.undo.len() > self.max_undo.max(1) {
                         self.undo.remove(0);
@@ -1179,6 +1230,7 @@ impl OpenDoc {
             accounts: current,
             referentials,
             tag: entry.tag,
+            observe: false,
         }
     }
 
@@ -1548,6 +1600,37 @@ mod tests {
     }
 
     #[test]
+    fn user_actions_become_operation_events() {
+        let mut doc = doc();
+        doc.selection.insert(1);
+        assert!(doc.cycle_tack());
+        let events = doc.take_operation_events(true);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, bp_ext::Event::OperationChanged);
+        let item = &events[0].1[0];
+        assert_eq!(item.uid, doc.current_account().operations[1].uid);
+        assert_eq!(item.before.as_ref().map(|o| o.tack), Some(Tack::None));
+        assert!(doc.take_operation_events(true).is_empty(), "signalé une fois");
+
+        doc.selection.clear();
+        doc.selection.insert(0);
+        doc.delete_selection();
+        let events = doc.take_operation_events(true);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].0, bp_ext::Event::OperationDeleted);
+        assert_eq!(events[0].1[0].before.as_ref().map(|o| o.payee.as_str()), Some("Carrefour"));
+
+        assert!(doc.undo());
+        assert!(doc.redo());
+        assert!(doc.take_operation_events(true).is_empty(), "ni annulation ni rétablissement");
+
+        doc.selection.insert(0);
+        doc.delete_selection();
+        assert!(doc.take_operation_events(false).is_empty());
+        assert!(doc.take_operation_events(true).is_empty(), "rien ne reste en attente");
+    }
+
+    #[test]
     fn hooks_join_the_entry_step() {
         let mut doc = doc();
         let mut engine = engine(
@@ -1560,7 +1643,7 @@ mod tests {
         let mut new = op(0, 9, "Boulangerie", -450, Tack::None);
         new.uid = 0;
         doc.upsert_operation(None, new);
-        let events = std::mem::take(&mut doc.ext_events);
+        let events = doc.take_operation_events(true);
         assert_eq!(events.len(), 1);
         let (event, lines, merge) = &events[0];
         assert!(*merge);

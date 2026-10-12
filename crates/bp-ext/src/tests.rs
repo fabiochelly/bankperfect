@@ -550,7 +550,7 @@ fn hooks_merge_into_the_triggering_step() {
     );
     let mut ctx = f.ctx();
     ctx.merge_tag = Some(5);
-    let fx = engine.fire(Event::OperationAdded, &[(0, 99)], ctx);
+    let fx = engine.fire(Event::OperationAdded, &[EventItem::line(0, 99)], ctx);
     assert!(fx.errors.is_empty(), "{:?}", fx.errors);
     assert_eq!(fx.changes.len(), 1);
     assert_eq!(fx.changes[0].tag, 5);
@@ -558,6 +558,51 @@ fn hooks_merge_into_the_triggering_step() {
         .document
         .category_label(f.document.accounts[0].operations[1].category.unwrap());
     assert_eq!(label.as_deref(), Some("Alimentation > Epicerie"));
+}
+
+#[test]
+fn event_arguments() {
+    let mut f = Fixture::new(
+        r#"
+        bp.on("operation_changed", function(op, before)
+            bp.ui.toast(`changé {before.amount} -> {op.amount} {before.date}`)
+        end)
+        bp.on("operation_deleted", function(old)
+            bp.ui.toast(`supprimé {old.payee} {old.account.name} {old.tack}`)
+        end)
+        bp.on("account_selected", function(account)
+            bp.ui.toast(`compte {account.name}`)
+        end)
+        bp.on("selection_changed", function()
+            bp.ui.toast(`sélection {#bp.selection()}`)
+        end)
+        "#,
+    );
+    let mut engine = std::mem::replace(
+        &mut f.engine,
+        Engine::new(PathBuf::new(), PathBuf::new(), Rc::new(NoServices)),
+    );
+    let op = f.document.accounts[0].operations[0].clone();
+    let mut before = op.clone();
+    before.amount = Amount::from_cents(-500);
+    let item = EventItem {
+        account: 0,
+        uid: op.uid,
+        before: Some(before.clone()),
+    };
+    let fx = engine.fire(Event::OperationChanged, std::slice::from_ref(&item), f.ctx());
+    assert_eq!(fx.errors, Vec::<String>::new());
+    assert_eq!(
+        fx.toasts,
+        vec![format!("changé -5 -> 1000 {}", before.date)]
+    );
+    let fx = engine.fire(Event::OperationDeleted, &[item], f.ctx());
+    assert_eq!(fx.errors, Vec::<String>::new());
+    assert_eq!(fx.toasts, vec![format!("supprimé {} Courant reconciled", op.payee)]);
+    let fx = engine.fire(Event::AccountSelected, &[EventItem::line(1, 0)], f.ctx());
+    assert_eq!(fx.toasts, vec!["compte Livret".to_string()]);
+    let fx = engine.fire(Event::SelectionChanged, &[], f.ctx());
+    assert_eq!(fx.toasts, vec!["sélection 0".to_string()]);
 }
 
 #[test]
@@ -778,7 +823,7 @@ fn bundled_examples_load_and_open() {
         locked: false,
         merge_tag: Some(3),
     };
-    let fx = engine.fire(Event::OperationAdded, &[(0, 500)], ctx);
+    let fx = engine.fire(Event::OperationAdded, &[EventItem::line(0, 500)], ctx);
     assert!(fx.errors.is_empty(), "{:?}", fx.errors);
     let livret = &document.accounts[1].operations;
     assert_eq!(

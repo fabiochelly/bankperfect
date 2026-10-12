@@ -239,13 +239,17 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         bp.set(
             "on",
             lua.create_function(move |_, (event, f): (String, Function)| {
-                let event = match event.as_str() {
-                    "file_opened" => Event::FileOpened,
-                    "operation_added" => Event::OperationAdded,
-                    "operation_changed" => Event::OperationChanged,
-                    "before_save" => Event::BeforeSave,
-                    other => return Err(runtime(format!("évènement inconnu : « {other} »"))),
-                };
+                let event = Event::NAMES
+                    .iter()
+                    .find(|(name, _)| *name == event)
+                    .map(|(_, e)| *e)
+                    .ok_or_else(|| {
+                        let known: Vec<&str> = Event::NAMES.iter().map(|(n, _)| *n).collect();
+                        runtime(format!(
+                            "évènement inconnu : « {event} » ({})",
+                            known.join(", ")
+                        ))
+                    })?;
                 registry.borrow_mut().hooks.push((event, f));
                 Ok(())
             })?,

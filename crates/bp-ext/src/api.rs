@@ -988,6 +988,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         )?;
     }
 
+    crate::features::install(lua, &bp)?;
     lua.globals().set("bp", bp)?;
     Ok(())
 }

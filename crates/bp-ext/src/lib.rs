@@ -509,7 +509,7 @@ impl Engine {
         }
         if let Some(session) = lua.remove_app_data::<Session>() {
             let mut session = session;
-            fx.feature_changed |= session.feature_changed;
+            fx.feature_changed |= session.feature_changed();
             fx.select = session.select.take().or(fx.select.take());
             if let Some(ctx) = ctx {
                 session.finish(ctx);

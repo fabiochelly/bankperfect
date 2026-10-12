@@ -451,6 +451,8 @@ Les modifications faites par une réaction à `operation_added` ou `operation_ch
 
 Les valeurs sont du texte, des nombres, des booléens, des tables (listes ou dictionnaires) et des dates (rangées sous forme de texte). `set(clé, nil)` efface. Les comptes et opérations ne se rangent pas : gardez leur nom ou leur `uid`.
 
+Chaque extension a sa propre zone dans le fichier, inaccessible aux autres ; elle est liée au nom du fichier ou du dossier de l'extension (le renommer fait repartir de zéro). Une écriture dans `bp.store` marque le fichier comme modifié ; elle est enregistrée avec lui (Ctrl+S) et ne s'annule pas avec Ctrl+Z. Si la commande échoue, les écritures faites depuis la dernière boîte de dialogue sont défaites, comme les opérations. `bp.prefs` est écrit tout de suite sur le disque et n'est jamais défait.
+
 ## Fichiers, Internet, JSON
 
 ```lua
@@ -483,7 +485,7 @@ Sans `permissions = { "network" }`, `bp.http` refuse. `bp.open_url(url)` ouvre u
 ## Annulation, erreurs et limites
 
 - **Une commande = une étape d'annulation.** Tout ce qu'une commande modifie (opérations, catégories, modes, informations des comptes) s'annule d'un Ctrl+Z, nommé d'après la commande ; seule la création d'un compte (`bp.add_account`) n'est pas défaite (le compte reste, avec son solde initial). Dans une fenêtre, chaque clic sur un bouton qui modifie le fichier est une étape.
-- **Une erreur annule les modifications** faites depuis la dernière boîte de dialogue ; le message, avec le fichier et la ligne, s'affiche. Utilisez `error("message")` pour arrêter une commande proprement, et `pcall` pour rattraper une erreur.
+- **Une erreur annule les modifications** (opérations, référentiels et `bp.store`) faites depuis la dernière boîte de dialogue ; le message, avec le fichier et la ligne, s'affiche. Utilisez `error("message")` pour arrêter une commande proprement, et `pcall` pour rattraper une erreur.
 - **Lignes rapprochées verrouillées** : si l'option est active (menu Opérations), les extensions ne peuvent ni modifier ni supprimer ces lignes.
 - **Temps** : un appel qui dure plus de 20 secondes sans rendre la main est arrêté (boucle infinie…).
 - **Mémoire** : 512 Mo par extension.

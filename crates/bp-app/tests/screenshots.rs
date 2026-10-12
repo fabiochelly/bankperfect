@@ -670,11 +670,25 @@ fn extension_screenshots() {
         h.run_steps(3);
         h.get_by_label("Exporter").hover();
         h.run_steps(3);
-        h.get_by_label_contains("Exporter des opérations en JSON").click();
+        h.get_by_label_contains("Exporter des opérations en JSON")
+            .click();
         h.run_steps(3);
     });
     render_extension("85-ext-gestion", egui::Theme::Dark, |h| {
         open_menu(h, "Gérer les extensions");
+        // Dernière de la liste : « Synthèse du mois » (placée dans des menus).
+        let pos = egui::pos2(346.0, 659.0);
+        h.event(egui::Event::PointerMoved(pos));
+        h.step();
+        for pressed in [true, false] {
+            h.event(egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            });
+            h.step();
+        }
     });
     render_extension("86-ext-menu-operations", egui::Theme::Dark, |h| {
         h.get_by_label("Opérations").click();

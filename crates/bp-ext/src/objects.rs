@@ -582,10 +582,13 @@ pub(crate) fn operation_copy(
 ) -> mlua::Result<Table> {
     let t = lua.create_table()?;
     t.set("uid", op.uid)?;
-    t.set("account", AccountRef {
-        file,
-        index: account,
-    })?;
+    t.set(
+        "account",
+        AccountRef {
+            file,
+            index: account,
+        },
+    )?;
     t.set("date", date_value(lua, op.date)?)?;
     t.set("mark_date", date_value(lua, op.mark_date)?)?;
     t.set("payee", op.payee.clone())?;
@@ -653,11 +656,15 @@ fn split_parts(
     let mut out = Vec::new();
     let mut rest_at = None;
     for (i, part) in parts.sequence_values::<Table>().enumerate() {
-        let part = part.map_err(|_| runtime("op:split : chaque part est une table { amount, category, details }"))?;
+        let part = part.map_err(|_| {
+            runtime("op:split : chaque part est une table { amount, category, details }")
+        })?;
         let amount = match part.get::<Value>("amount")? {
             Value::Nil => {
                 if rest_at.replace(i).is_some() {
-                    return Err(runtime("op:split : une seule part peut omettre son montant"));
+                    return Err(runtime(
+                        "op:split : une seule part peut omettre son montant",
+                    ));
                 }
                 Amount::ZERO
             }

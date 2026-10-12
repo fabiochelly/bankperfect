@@ -346,12 +346,9 @@ fn run_importer(
 /// Arguments d'une réaction à un évènement.
 fn event_args(lua: &Lua, event: Event, file: u64, item: &EventItem) -> mlua::Result<MultiValue> {
     let op = || -> mlua::Result<Value> {
-        Ok(Value::UserData(lua.create_userdata(objects::OpRef::new(
-            file,
-            item.account,
-            item.uid,
-            0,
-        ))?))
+        Ok(Value::UserData(lua.create_userdata(
+            objects::OpRef::new(file, item.account, item.uid, 0),
+        )?))
     };
     let before = || -> mlua::Result<Value> {
         let before = item
@@ -364,12 +361,12 @@ fn event_args(lua: &Lua, event: Event, file: u64, item: &EventItem) -> mlua::Res
         Event::OperationAdded => MultiValue::from_iter([op()?]),
         Event::OperationChanged => MultiValue::from_iter([op()?, before()?]),
         Event::OperationDeleted => MultiValue::from_iter([before()?]),
-        Event::AccountSelected => {
-            MultiValue::from_iter([Value::UserData(lua.create_userdata(objects::AccountRef {
+        Event::AccountSelected => MultiValue::from_iter([Value::UserData(lua.create_userdata(
+            objects::AccountRef {
                 file,
                 index: item.account,
-            })?)])
-        }
+            },
+        )?)]),
         _ => MultiValue::new(),
     })
 }
@@ -909,12 +906,7 @@ impl Engine {
     /// Prévient les extensions d'un évènement. `items` : opérations
     /// concernées pour les évènements d'opération (une réaction par
     /// opération), compte pour `AccountSelected`.
-    pub fn fire(
-        &mut self,
-        event: Event,
-        items: &[EventItem],
-        mut ctx: DocContext<'_>,
-    ) -> Effects {
+    pub fn fire(&mut self, event: Event, items: &[EventItem], mut ctx: DocContext<'_>) -> Effects {
         let mut all = Effects::default();
         let tag = ctx.merge_tag.unwrap_or_else(|| self.new_tag());
         for ext in 0..self.extensions.len() {

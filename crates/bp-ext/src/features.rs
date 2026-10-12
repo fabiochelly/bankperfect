@@ -290,40 +290,48 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
     )?;
     bp.set(
         "forecast",
-        lua.create_function(|lua, (account, until, opts): (Value, Value, Option<Table>)| {
-            let until = to_date(lua, &until)?;
-            let monthly = opts
-                .map(|o| o.get::<Option<bool>>("monthly"))
-                .transpose()?
-                .flatten()
-                .unwrap_or(false);
-            with_session(lua, |s| {
-                let a = account_index(s, &account)?;
-                let schedules = load_schedules(&s.document)?;
-                let lines =
-                    scheduler::forecast(&s.document, &schedules, a, until, Date::today(), monthly);
-                let list = lua.create_table()?;
-                for line in lines {
-                    let t = lua.create_table()?;
-                    t.set("date", date_value(lua, line.date)?)?;
-                    t.set("payee", line.payee)?;
-                    t.set("amount", amount_to_f64(line.amount))?;
-                    t.set("balance", amount_to_f64(line.balance))?;
-                    t.set(
-                        "kind",
-                        match line.kind {
-                            scheduler::ForecastKind::CurrentBalance => "balance",
-                            scheduler::ForecastKind::Schedule => "schedule",
-                            scheduler::ForecastKind::Pending => "pending",
-                            scheduler::ForecastKind::Month => "month",
-                        },
-                    )?;
-                    t.set("count", line.count)?;
-                    list.raw_push(t)?;
-                }
-                Ok(list)
-            })
-        })?,
+        lua.create_function(
+            |lua, (account, until, opts): (Value, Value, Option<Table>)| {
+                let until = to_date(lua, &until)?;
+                let monthly = opts
+                    .map(|o| o.get::<Option<bool>>("monthly"))
+                    .transpose()?
+                    .flatten()
+                    .unwrap_or(false);
+                with_session(lua, |s| {
+                    let a = account_index(s, &account)?;
+                    let schedules = load_schedules(&s.document)?;
+                    let lines = scheduler::forecast(
+                        &s.document,
+                        &schedules,
+                        a,
+                        until,
+                        Date::today(),
+                        monthly,
+                    );
+                    let list = lua.create_table()?;
+                    for line in lines {
+                        let t = lua.create_table()?;
+                        t.set("date", date_value(lua, line.date)?)?;
+                        t.set("payee", line.payee)?;
+                        t.set("amount", amount_to_f64(line.amount))?;
+                        t.set("balance", amount_to_f64(line.balance))?;
+                        t.set(
+                            "kind",
+                            match line.kind {
+                                scheduler::ForecastKind::CurrentBalance => "balance",
+                                scheduler::ForecastKind::Schedule => "schedule",
+                                scheduler::ForecastKind::Pending => "pending",
+                                scheduler::ForecastKind::Month => "month",
+                            },
+                        )?;
+                        t.set("count", line.count)?;
+                        list.raw_push(t)?;
+                    }
+                    Ok(list)
+                })
+            },
+        )?,
     )?;
 
     // Budget mensuel.
@@ -361,7 +369,10 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                 let list = lua.create_table()?;
                 for e in load_budget(&s.document)?.entries {
                     let t = lua.create_table()?;
-                    t.set("category", e.category.and_then(|id| s.document.category_label(id)))?;
+                    t.set(
+                        "category",
+                        e.category.and_then(|id| s.document.category_label(id)),
+                    )?;
                     t.set("amount", amount_to_f64(e.amount))?;
                     list.raw_push(t)?;
                 }
@@ -414,7 +425,10 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                 let rows = lua.create_table()?;
                 for r in &report.rows {
                     let t = lua.create_table()?;
-                    t.set("category", r.category.and_then(|id| s.document.category_label(id)))?;
+                    t.set(
+                        "category",
+                        r.category.and_then(|id| s.document.category_label(id)),
+                    )?;
                     t.set("label", r.label.clone())?;
                     t.set("is_child", r.is_child)?;
                     t.set("budget", r.budget.map(amount_to_f64))?;
@@ -486,9 +500,7 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                     Some(label) => Some(match resolve_mode(&s.document, &label)? {
                         Mode::Standard(m) => m,
                         Mode::Custom(_) => {
-                            return Err(runtime(
-                                "une règle n'applique que les modes standard",
-                            ));
+                            return Err(runtime("une règle n'applique que les modes standard"));
                         }
                     }),
                 };
@@ -497,8 +509,9 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                     Value::Boolean(false) => Some(CategoryChange::Clear),
                     v => resolve_category(&s.document, &v)?.map(CategoryChange::Set),
                 };
-                rule.only_uncategorized =
-                    spec.get::<Option<bool>>("only_uncategorized")?.unwrap_or(false);
+                rule.only_uncategorized = spec
+                    .get::<Option<bool>>("only_uncategorized")?
+                    .unwrap_or(false);
                 rule.active = spec.get::<Option<bool>>("active")?.unwrap_or(true);
                 rule.auto_apply = spec.get::<Option<bool>>("auto")?.unwrap_or(false);
                 rule.validate(&s.document.categories)

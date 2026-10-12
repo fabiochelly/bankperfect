@@ -305,7 +305,8 @@ impl BankPerfectApp {
                 .import_file(&path, &data, &mut doc.extension_context(None));
             match read {
                 Some((name, Ok(parsed))) => {
-                    let form = crate::import_ui::ImportForm::from_extension(path, name, parsed, doc);
+                    let form =
+                        crate::import_ui::ImportForm::from_extension(path, name, parsed, doc);
                     self.tool = Some(crate::tools::Tool::Import(Box::new(form)));
                     return;
                 }

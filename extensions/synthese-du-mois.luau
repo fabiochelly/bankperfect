@@ -3,7 +3,7 @@
 
 bp.extension({
 	name = "Synthèse du mois",
-	description = "Tableau de bord mensuel du compte affiché : dépenses, recettes, plus grosses dépenses et répartition par catégorie.",
+	description = "Tableau de bord mensuel du compte affiché : dépenses, recettes, plus grosses dépenses, répartition par catégorie et six derniers mois.",
 	version = "1.0",
 	author = "BankPerfect",
 })

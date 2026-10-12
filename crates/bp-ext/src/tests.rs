@@ -542,6 +542,51 @@ fn hooks_merge_into_the_triggering_step() {
 }
 
 #[test]
+fn store_is_restored_on_error() {
+    let mut f = Fixture::new(
+        r#"
+        bp.command{ title = "ok", run = function()
+            bp.store.set("n", 1)
+        end }
+        bp.command{ title = "échec", run = function()
+            bp.store.set("n", 2)
+            bp.store.set("autre", "x")
+            error("raté")
+        end }
+        bp.command{ title = "question", run = function()
+            bp.store.set("n", 3)
+            bp.ui.confirm("Continuer ?")
+            bp.store.set("n", 4)
+            error("raté après la question")
+        end }
+        bp.command{ title = "lire", run = function()
+            bp.ui.toast(tostring(bp.store.get("n")) .. " " .. tostring(bp.store.get("autre")))
+        end }
+        "#,
+    );
+    let fx = f.run(0);
+    assert!(fx.feature_changed);
+    let saved = f.document.feature_data.clone();
+    let fx = f.run(1);
+    assert_eq!(fx.errors.len(), 1);
+    assert!(!fx.feature_changed, "rien de gardé");
+    assert_eq!(f.document.feature_data, saved, "valeur d'avant remise");
+    assert_eq!(f.run(3).toasts, vec!["1 nil".to_string()]);
+
+    // Une première clé absente disparaît aussi.
+    f.document.feature_data.clear();
+    f.run(1);
+    assert!(f.document.feature_data.is_empty());
+
+    // Ce qui précède une boîte de dialogue est gardé, la suite est défaite.
+    f.run(0);
+    f.run(2);
+    let fx = f.answer(Answer::Ok);
+    assert_eq!(fx.errors.len(), 1);
+    assert_eq!(f.run(3).toasts, vec!["3 nil".to_string()]);
+}
+
+#[test]
 fn store_and_json() {
     let mut f = Fixture::new(
         r#"

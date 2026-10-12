@@ -692,9 +692,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                         map.insert(key, json);
                     }
                     let value = serde_json::Value::Object(map);
-                    bp_core::feature_store::set(&mut s.document, &store_key(&id), &value)
+                    let key = store_key(&id);
+                    bp_core::feature_store::set(s.store_mut(&key), &key, &value)
                         .map_err(|e| runtime(e.to_string()))?;
-                    s.feature_changed = true;
                     Ok(())
                 })
             })?,

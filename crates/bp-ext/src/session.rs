@@ -58,8 +58,12 @@ pub(crate) struct Session {
     originals: Vec<(usize, Vec<Operation>)>,
     referentials: Option<Referentials>,
     accounts_before: usize,
-    /// Données propres aux extensions rangées dans le fichier modifiées.
-    pub feature_changed: bool,
+    /// Données propres aux extensions rangées dans le fichier modifiées
+    /// (segments terminés).
+    feature_changed: bool,
+    /// Valeurs d'origine des clés de `bp.store` écrites pendant le segment
+    /// (`None` : la clé n'existait pas).
+    store_backup: Vec<(String, Option<Vec<u8>>)>,
     /// Compte à afficher et lignes à sélectionner (identifiants).
     pub select: Option<(usize, Vec<u64>)>,
 }
@@ -81,6 +85,7 @@ impl Session {
             referentials: None,
             accounts_before,
             feature_changed: false,
+            store_backup: Vec::new(),
             select: None,
         }
     }
@@ -127,8 +132,27 @@ impl Session {
         uid
     }
 
+    /// Document dont la donnée `key` (`bp.store`) va changer : sa valeur
+    /// d'origine est gardée pour défaire le segment en cas d'erreur.
+    pub fn store_mut(&mut self, key: &str) -> &mut Document {
+        if !self.store_backup.iter().any(|(k, _)| k == key) {
+            let saved = bp_core::feature_store::raw(&self.document, key).map(<[u8]>::to_vec);
+            self.store_backup.push((key.to_string(), saved));
+        }
+        &mut self.document
+    }
+
+    /// Les données de `bp.store` ont changé (segments terminés ou en cours).
+    pub fn feature_changed(&self) -> bool {
+        self.feature_changed || !self.store_backup.is_empty()
+    }
+
     /// Clôt un segment : renvoie ses modifications (ou rien).
     pub fn take_changes(&mut self, label: &str, tag: u64) -> Option<Changes> {
+        if !self.store_backup.is_empty() {
+            self.store_backup.clear();
+            self.feature_changed = true;
+        }
         let accounts_added = self.document.accounts.len() > self.accounts_before;
         self.accounts_before = self.document.accounts.len();
         if self.originals.is_empty() && self.referentials.is_none() && !accounts_added {
@@ -152,6 +176,20 @@ impl Session {
         }
         if let Some(saved) = self.referentials.take() {
             self.document.swap_referentials(saved);
+        }
+        for (key, saved) in std::mem::take(&mut self.store_backup) {
+            match saved {
+                Some(bytes) => match self.document.feature_data.iter_mut().find(|f| f.key == key) {
+                    Some(entry) => entry.value = bytes,
+                    None => self
+                        .document
+                        .feature_data
+                        .push(bp_core::model::FeatureData { key, value: bytes }),
+                },
+                None => {
+                    bp_core::feature_store::remove(&mut self.document, &key);
+                }
+            }
         }
         self.document.accounts.truncate(before_accounts);
         self.document.account_order.retain(|&i| i < before_accounts);

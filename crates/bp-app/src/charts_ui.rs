@@ -605,7 +605,7 @@ fn series_color(k: usize, count: usize, pal: &Palette) -> Color32 {
 }
 
 /// Colonnes groupées (une couleur par série), axe des valeurs à gauche.
-fn columns(
+pub(crate) fn columns(
     ui: &mut egui::Ui,
     rect: Rect,
     data: &ChartData,
@@ -781,7 +781,7 @@ fn columns(
 }
 
 /// Barres horizontales de part et d'autre de zéro (libellés longs).
-fn horizontal_bars(
+pub(crate) fn horizontal_bars(
     ui: &mut egui::Ui,
     rect: Rect,
     data: &ChartData,
@@ -887,7 +887,7 @@ fn horizontal_bars(
 }
 
 /// Anneau de répartition et légende (part, montant, pourcentage).
-fn donut(
+pub(crate) fn donut(
     ui: &mut egui::Ui,
     rect: Rect,
     points: &[(String, f64)],
@@ -1130,7 +1130,7 @@ fn ring_segment(
 }
 
 /// Courbe du solde avec aire en dégradé et curseur au survol.
-fn curve(
+pub(crate) fn curve(
     ui: &mut egui::Ui,
     rect: Rect,
     data: &ChartData,

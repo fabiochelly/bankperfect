@@ -160,6 +160,19 @@ pub struct Bar {
     pub color: Option<Color>,
 }
 
+/// Forme d'un graphique (`ui.chart`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChartStyle {
+    /// Courbe de la première série (évolution).
+    Line,
+    /// Colonnes groupées, une couleur par série.
+    Columns,
+    /// Barres horizontales groupées.
+    Bars,
+    /// Anneau des valeurs (absolues) de la première série.
+    Donut,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Widget {
     Text {
@@ -210,6 +223,12 @@ pub enum Widget {
         color: Option<Color>,
     },
     Bars(Vec<Bar>),
+    Chart {
+        style: ChartStyle,
+        data: bp_core::reports::ChartData,
+        currency: String,
+        height: f32,
+    },
     Notice {
         text: String,
         color: Color,
@@ -667,6 +686,79 @@ impl Window {
                     });
                 }
                 Widget::Bars(bars)
+            }
+            "chart" => {
+                use bp_core::reports::{ChartData, ChartPoint, ChartSeries, ChartUnit};
+                let style = match t.get::<Option<String>>("style")?.as_deref() {
+                    None | Some("columns") => ChartStyle::Columns,
+                    Some("line") => ChartStyle::Line,
+                    Some("bars") => ChartStyle::Bars,
+                    Some("donut") => ChartStyle::Donut,
+                    Some(other) => {
+                        return Err(runtime(format!(
+                            "ui.chart : style « {other} » inconnu (\"line\", \"columns\", \"bars\" ou \"donut\")"
+                        )));
+                    }
+                };
+                let mut series = Vec::new();
+                if let Some(list) = t.get::<Option<Table>>("series")? {
+                    // { labels = { … }, series = { { name, values = { … } }, … } }
+                    let labels: Vec<String> = children(&t.get::<Value>("labels")?)?
+                        .iter()
+                        .map(display)
+                        .collect::<mlua::Result<_>>()?;
+                    for item in children(&Value::Table(list))? {
+                        let Value::Table(serie) = item else { continue };
+                        let values = children(&serie.get::<Value>("values")?)?;
+                        series.push(ChartSeries {
+                            name: serie.get::<Option<String>>("name")?.unwrap_or_default(),
+                            points: values
+                                .iter()
+                                .enumerate()
+                                .map(|(i, v)| ChartPoint {
+                                    label: labels.get(i).cloned().unwrap_or_default(),
+                                    value: crate::objects::number(v).unwrap_or(0.0),
+                                })
+                                .collect(),
+                        });
+                    }
+                } else {
+                    // { data = { { label, value }, … } } : une seule série.
+                    let mut points = Vec::new();
+                    for item in children(&t.get::<Value>("data")?)? {
+                        let Value::Table(p) = item else { continue };
+                        let label = match p.get::<Value>("label")? {
+                            Value::Nil => p.get::<Value>(1)?,
+                            v => v,
+                        };
+                        let value = match p.get::<Value>("value")? {
+                            Value::Nil => p.get::<Value>(2)?,
+                            v => v,
+                        };
+                        points.push(ChartPoint {
+                            label: display(&label)?,
+                            value: crate::objects::number(&value).unwrap_or(0.0),
+                        });
+                    }
+                    series.push(ChartSeries {
+                        name: t.get::<Option<String>>("name")?.unwrap_or_default(),
+                        points,
+                    });
+                }
+                Widget::Chart {
+                    style,
+                    data: ChartData {
+                        unit: match t.get::<Option<String>>("unit")?.as_deref() {
+                            Some("count") => ChartUnit::Count,
+                            _ => ChartUnit::Amount,
+                        },
+                        series,
+                    },
+                    currency: t
+                        .get::<Option<String>>("currency")?
+                        .unwrap_or_else(|| "€".into()),
+                    height: t.get::<Option<f32>>("height")?.unwrap_or(260.0).clamp(120.0, 900.0),
+                }
             }
             "separator" => Widget::Separator,
             "space" => Widget::Space(t.get::<Option<f32>>("size")?.unwrap_or(12.0)),

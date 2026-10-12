@@ -506,6 +506,53 @@ impl Painter<'_> {
                 }
                 ui.add(bar);
             }
+            Widget::Chart {
+                style,
+                data,
+                currency,
+                height,
+            } => {
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(width, *height), egui::Sense::hover());
+                let format = |v: f64| match data.unit {
+                    bp_core::reports::ChartUnit::Amount => crate::format::money(
+                        bp_core::model::Amount::from_cents((v * 100.0).round() as i64),
+                        currency,
+                    ),
+                    bp_core::reports::ChartUnit::Count => format!("{}", v.round() as i64),
+                };
+                let empty = data.series.iter().all(|s| s.points.is_empty());
+                if empty {
+                    ui.painter().text(
+                        rect.center(),
+                        egui::Align2::CENTER_CENTER,
+                        "Aucune donnée",
+                        egui::FontId::proportional(14.0),
+                        pal.muted,
+                    );
+                } else {
+                    match style {
+                        bp_ext::ui::ChartStyle::Line => {
+                            crate::charts_ui::curve(ui, rect, data, &format, &pal, 1.0)
+                        }
+                        bp_ext::ui::ChartStyle::Columns => {
+                            crate::charts_ui::columns(ui, rect, data, &format, &pal, 1.0)
+                        }
+                        bp_ext::ui::ChartStyle::Bars => {
+                            crate::charts_ui::horizontal_bars(ui, rect, data, &format, &pal, 1.0)
+                        }
+                        bp_ext::ui::ChartStyle::Donut => {
+                            let points: Vec<(String, f64)> = data.series[0]
+                                .points
+                                .iter()
+                                .filter(|p| p.value != 0.0)
+                                .map(|p| (p.label.clone(), p.value.abs()))
+                                .collect();
+                            crate::charts_ui::donut(ui, rect, &points, &format, &pal, 1.0)
+                        }
+                    }
+                }
+            }
             Widget::Bars(bars) => {
                 let max = bars
                     .iter()

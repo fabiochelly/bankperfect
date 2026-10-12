@@ -72,7 +72,26 @@ pub struct CommandInfo {
     pub shortcut: Option<String>,
     pub description: Option<String>,
     pub needs: Needs,
+    /// Menus où la commande apparaît ([`MENUS`]) ; jamais vide
+    /// (`"extensions"` par défaut).
+    pub menus: Vec<String>,
 }
+
+/// Emplacements possibles d'une commande (`menu = …` dans `bp.command`) :
+/// identifiant et libellé.
+pub const MENUS: &[(&str, &str)] = &[
+    ("file", "Fichier"),
+    ("export", "Fichier › Exporter"),
+    ("edit", "Édition"),
+    ("view", "Affichage"),
+    ("accounts", "Comptes"),
+    ("operations", "Opérations"),
+    ("reports", "Rapports"),
+    ("tools", "Outils"),
+    ("extensions", "Extensions"),
+    ("grid", "clic droit sur les opérations"),
+    ("account", "clic droit sur un compte"),
+];
 
 /// Évènements auxquels une extension peut réagir (`bp.on`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

@@ -35,6 +35,10 @@ pub const EXAMPLES: &[(&str, &str)] = &[
         "export-json.luau",
         include_str!("../../../extensions/export-json.luau"),
     ),
+    (
+        "selection.luau",
+        include_str!("../../../extensions/selection.luau"),
+    ),
 ];
 
 struct AppServices;
@@ -102,6 +106,8 @@ pub struct Entry {
     pub keys: Option<KeyboardShortcut>,
     pub needs: Needs,
     pub keywords: &'static str,
+    /// Menus où la commande apparaît (`bp_ext::MENUS`).
+    pub menus: Vec<&'static str>,
 }
 
 /// Commandes d'extension (copie tenue à jour par l'application).
@@ -156,6 +162,7 @@ pub fn refresh(engine: &Engine) {
                 shortcut: keys.map(|_| intern(info.shortcut.as_deref().unwrap_or_default())),
                 keys,
                 needs: info.needs,
+                menus: info.menus.iter().map(|m| intern(m)).collect(),
                 keywords: intern(&format!(
                     "extension {} {}",
                     name,
@@ -171,6 +178,23 @@ pub fn refresh(engine: &Engine) {
 
 pub fn entries() -> Vec<Entry> {
     ENTRIES.lock().map(|e| e.clone()).unwrap_or_default()
+}
+
+/// Commandes placées dans un menu (rangs dans [`entries`]), dans l'ordre.
+pub fn placed(menu: &str) -> Vec<(usize, Entry)> {
+    entries()
+        .into_iter()
+        .enumerate()
+        .filter(|(_, e)| e.menus.contains(&menu))
+        .collect()
+}
+
+/// Libellé d'un emplacement (`"grid"` → « clic droit sur les opérations »).
+pub fn menu_label(menu: &str) -> &'static str {
+    bp_ext::MENUS
+        .iter()
+        .find(|(id, _)| *id == menu)
+        .map_or("Extensions", |(_, label)| label)
 }
 
 pub fn entry(index: usize) -> Option<Entry> {
@@ -474,6 +498,15 @@ impl Manager {
                             );
                         }
                     });
+                    if c.menus != ["extensions"] {
+                        let places: Vec<&str> =
+                            c.menus.iter().map(|m| menu_label(m)).collect();
+                        ui.label(
+                            RichText::new(format!("{}  {}", icon::LIST, places.join(", ")))
+                                .size(12.5)
+                                .color(pal.muted),
+                        );
+                    }
                     if let Some(d) = &c.description {
                         ui.label(RichText::new(d).size(12.5).color(pal.fg_dark));
                     }

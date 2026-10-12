@@ -43,6 +43,7 @@ bp.command({
 	id = "synthese",
 	title = "Synthèse du mois…",
 	icon = "chart-pie-slice",
+	menu = { "reports", "account" }, -- menu Rapports et clic droit sur un compte
 	shortcut = "Ctrl+Alt+M",
 	run = function()
 		local account = bp.current_account()

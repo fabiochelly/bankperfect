@@ -117,6 +117,25 @@ fn loads_declarations() {
 }
 
 #[test]
+fn command_menus() {
+    let f = Fixture::new(
+        r#"
+        bp.command{ title = "Par défaut", run = function() end }
+        bp.command{ title = "Opérations", menu = "operations", run = function() end }
+        bp.command{ title = "Deux", menu = { "grid", "account" }, run = function() end }
+        "#,
+    );
+    let commands = f.engine.extensions[0].commands();
+    assert_eq!(commands[0].menus, vec!["extensions"]);
+    assert_eq!(commands[1].menus, vec!["operations"]);
+    assert_eq!(commands[2].menus, vec!["grid", "account"]);
+
+    let f = Fixture::new(r#"bp.command{ title = "X", menu = "nulle-part", run = function() end }"#);
+    let error = f.engine.extensions[0].error.clone().unwrap_or_default();
+    assert!(error.contains("nulle-part"), "{error}");
+}
+
+#[test]
 fn reports_load_errors() {
     let f = Fixture::new("bp.command{ title = 'x' }");
     let error = f.engine.extensions[0].error.clone().unwrap();
@@ -667,7 +686,7 @@ fn bundled_examples_load_and_open() {
     let data = tempfile::tempdir().unwrap();
     let mut engine = Engine::new(dir, data.path().to_path_buf(), Rc::new(NoServices));
     engine.load_all(&[]);
-    assert_eq!(engine.extensions.len(), 4);
+    assert_eq!(engine.extensions.len(), 5);
     let mut document = bp_core::manage::new_document("Test", Amount::from_cents(100_000));
     bp_core::manage::add_account(&mut document, "Livret", Amount::ZERO);
     for ext in 0..engine.extensions.len() {
@@ -680,7 +699,7 @@ fn bundled_examples_load_and_open() {
                 file_id: 1,
                 path: PathBuf::from("t.bp"),
                 account: 0,
-                selection: vec![],
+                selection: vec![0],
                 visible: (0..n).collect(),
                 locked: false,
                 merge_tag: None,

@@ -33,6 +33,7 @@ bp.command({
 	id = "rechercher",
 	title = "Rechercher les doublons…",
 	icon = "copy",
+	menu = "operations", -- dans le menu Opérations plutôt que dans Extensions
 	shortcut = "Ctrl+Alt+D",
 	description = "Sur le compte affiché.",
 	run = function()

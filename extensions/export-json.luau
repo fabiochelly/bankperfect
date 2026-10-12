@@ -12,8 +12,9 @@ local ui = bp.ui
 
 bp.command({
 	id = "exporter",
-	title = "Exporter en JSON…",
+	title = "Exporter des opérations en JSON…",
 	icon = "brackets-curly",
+	menu = "export", -- sous-menu Fichier › Exporter
 	run = function()
 		local today = bp.today()
 		local v = ui.form({

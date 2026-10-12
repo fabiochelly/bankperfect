@@ -50,7 +50,30 @@ declare class BPOperation
 	function move_to(self, account: BPAccount | string): ()
 	function copy_to(self, account: BPAccount | string): BPOperation
 	function sister(self): BPOperation?
+	split_info: SplitInfo?
+	function split(self, parts: { SplitPart }): { BPOperation }
 end
+
+type SplitInfo = { index: number, count: number, total: number?, payee: string }
+type SplitPart = { amount: (number | string)?, category: (string | number | boolean)?, details: string? }
+
+-- Copie d'une opération (état d'avant une modification, opération supprimée).
+type OperationCopy = {
+	uid: number,
+	account: BPAccount,
+	date: BPDate,
+	mark_date: BPDate,
+	payee: string,
+	details: string,
+	amount: number,
+	mode: string,
+	category: string?,
+	category_id: number?,
+	tack: Tack,
+	cheque: string?,
+	is_transfer: boolean,
+	fields: { [string]: string },
+}
 
 type OperationFilter = {
 	from: DateLike?,
@@ -114,9 +137,97 @@ type CommandSpec = {
 	icon: string?,
 	shortcut: string?,
 	needs: ("file" | "selection" | "nothing")?,
+	menu: (MenuPlace | { MenuPlace })?,
 	description: string?,
 	id: string?,
 }
+
+type MenuPlace = "file" | "export" | "edit" | "view" | "accounts" | "operations" | "reports" | "tools" | "extensions" | "grid" | "account"
+
+type ImportedOperation = {
+	date: DateLike,
+	amount: number | string,
+	payee: string?,
+	details: string?,
+	mode: string?,
+	category: string?,
+	tack: Tack?,
+	cheque: string?,
+	value_date: DateLike?,
+	id: (string | number)?,
+}
+type ImportedAccount = { name: string?, number: string?, bank: string?, branch: string?, currency: string?, operations: { ImportedOperation } }
+type ImportFile = { name: string, path: string, text: string, data: string }
+type ImporterSpec = {
+	name: string,
+	extensions: string | { string },
+	detect: ((file: ImportFile) -> boolean)?,
+	parse: (file: ImportFile) -> { ImportedOperation } | ImportedAccount | { accounts: { ImportedAccount } },
+}
+
+type PeriodUnit = "days" | "weeks" | "months" | "years"
+type Schedule = {
+	index: number,
+	account: BPAccount?,
+	transfer: BPAccount?,
+	payee: string,
+	details: string,
+	mode: string,
+	category: string?,
+	amount: number,
+	next_date: BPDate,
+	end_date: BPDate?,
+	every: number,
+	unit: PeriodUnit,
+	day: number?,
+	auto: boolean,
+	postpone: { saturday: boolean, sunday: boolean, holiday: boolean },
+	interval: string,
+	finished: boolean,
+}
+type ScheduleSpec = {
+	account: (BPAccount | string)?,
+	transfer: (BPAccount | string | boolean)?,
+	payee: string?,
+	details: string?,
+	mode: string?,
+	category: (string | number | boolean)?,
+	amount: (number | string)?,
+	next_date: DateLike?,
+	end_date: (DateLike | boolean)?,
+	every: number?,
+	unit: PeriodUnit?,
+	day: (number | boolean)?,
+	auto: boolean?,
+	postpone: { saturday: boolean?, sunday: boolean?, holiday: boolean? }?,
+}
+type ForecastLine = { date: BPDate, payee: string, amount: number, balance: number, kind: "balance" | "schedule" | "pending" | "month", count: number }
+type BudgetTotal = { budget: number, real: number, difference: number, percent: number? }
+type BudgetRow = { category: string?, label: string, is_child: boolean, budget: number?, real: number, difference: number?, percent: number? }
+type RuleInfo = { index: number, contains: string, field: "payee" | "details" | "both", active: boolean, auto: boolean, condition: string, actions: string }
+type RuleSpec = {
+	contains: string,
+	field: ("payee" | "details" | "both")?,
+	any: boolean?,
+	payee: string?,
+	details: string?,
+	date: DateLike?,
+	mode: string?,
+	category: (string | number | boolean)?,
+	only_uncategorized: boolean?,
+	active: boolean?,
+	auto: boolean?,
+}
+type GridFilter = {
+	payee: string?,
+	mode: string?,
+	category: string?,
+	amount: string?,
+	tack: ("none" | "pointed" | "reconciled" | "marked" | "all")?,
+	from: DateLike?,
+	to: DateLike?,
+}
+type EventName = "file_opened" | "operation_added" | "operation_changed" | "operation_deleted" | "before_save" | "after_save" | "account_selected" | "selection_changed"
 
 type WindowSpec = {
 	title: string?,
@@ -136,9 +247,14 @@ declare bp: {
 	version: string,
 	id: string,
 
-	extension: (spec: { name: string?, description: string?, version: string?, author: string?, permissions: { string }? }) -> (),
+	extension: (spec: { name: string?, description: string?, version: string?, author: string?, permissions: { string }?, requires: string? }) -> (),
 	command: (spec: CommandSpec) -> (),
-	on: (event: "operation_added" | "operation_changed" | "file_opened" | "before_save", handler: (op: BPOperation?) -> ()) -> (),
+	importer: (spec: ImporterSpec) -> (),
+	on: ((event: "operation_added", handler: (op: BPOperation) -> ()) -> ())
+		& ((event: "operation_changed", handler: (op: BPOperation, before: OperationCopy) -> ()) -> ())
+		& ((event: "operation_deleted", handler: (old: OperationCopy) -> ()) -> ())
+		& ((event: "account_selected", handler: (account: BPAccount) -> ()) -> ())
+		& ((event: EventName, handler: () -> ()) -> ()),
 	log: (...any) -> (),
 
 	accounts: (options: { all: boolean? }?) -> { BPAccount },
@@ -151,6 +267,31 @@ declare bp: {
 	select: (operations: BPOperation | { BPOperation }) -> (),
 	transfer: (spec: { from: BPAccount | string, to: BPAccount | string, amount: number, date: DateLike?, details: string?, category: any? }) -> (BPOperation, BPOperation),
 	file: () -> { name: string, path: string, user: string }?,
+	filter: ((spec: GridFilter) -> ()) & ((clear: false) -> ()) & (() -> GridFilter & { active: boolean }),
+
+	schedules: () -> { Schedule },
+	add_schedule: (spec: ScheduleSpec) -> Schedule,
+	update_schedule: (index: number, spec: ScheduleSpec) -> Schedule,
+	delete_schedule: (index: number) -> (),
+	forecast: (account: BPAccount | string, limit: DateLike, options: { monthly: boolean? }?) -> { ForecastLine },
+	budget: {
+		get: (category: (string | number | boolean)?) -> number?,
+		set: (category: (string | number | boolean)?, amount: (number | string)?) -> (),
+		entries: () -> { { category: string?, amount: number } },
+		report: (options: { month: DateLike?, year: number?, all: boolean?, accounts: { BPAccount | string }?, unbudgeted: boolean?, subcategories: boolean? }?) -> {
+			rows: { BudgetRow },
+			expenses: BudgetTotal,
+			income: BudgetTotal,
+			total: BudgetTotal,
+			description: string,
+		},
+	},
+	rules: {
+		list: () -> { RuleInfo },
+		add: (spec: RuleSpec) -> number,
+		remove: (index: number) -> (),
+		apply: (operations: (BPOperation | { BPOperation })?) -> number,
+	},
 
 	categories: () -> { Category },
 	category: (category: string | number) -> Category?,
@@ -202,6 +343,16 @@ declare bp: {
 		table: (spec: Widget) -> Widget,
 		stat: (spec: Widget) -> Widget,
 		bars: (spec: Widget) -> Widget,
+		chart: (spec: {
+			style: ("line" | "columns" | "bars" | "donut")?,
+			data: { { any } | { label: any, value: number } }?,
+			labels: { any }?,
+			series: { { name: string?, values: { number } } }?,
+			name: string?,
+			unit: ("amount" | "count")?,
+			currency: string?,
+			height: number?,
+		}) -> Widget,
 		pill: (text: any, color: string?) -> Widget,
 		notice: (text: any, options: (string | { color: string?, icon: string? })?) -> Widget,
 		progress: (value: number, options: { text: string?, color: string? }?) -> Widget,

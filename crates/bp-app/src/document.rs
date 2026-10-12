@@ -1616,7 +1616,10 @@ mod tests {
         let item = &events[0].1[0];
         assert_eq!(item.uid, doc.current_account().operations[1].uid);
         assert_eq!(item.before.as_ref().map(|o| o.tack), Some(Tack::None));
-        assert!(doc.take_operation_events(true).is_empty(), "signalé une fois");
+        assert!(
+            doc.take_operation_events(true).is_empty(),
+            "signalé une fois"
+        );
 
         doc.selection.clear();
         doc.selection.insert(0);
@@ -1624,16 +1627,25 @@ mod tests {
         let events = doc.take_operation_events(true);
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].0, bp_ext::Event::OperationDeleted);
-        assert_eq!(events[0].1[0].before.as_ref().map(|o| o.payee.as_str()), Some("Carrefour"));
+        assert_eq!(
+            events[0].1[0].before.as_ref().map(|o| o.payee.as_str()),
+            Some("Carrefour")
+        );
 
         assert!(doc.undo());
         assert!(doc.redo());
-        assert!(doc.take_operation_events(true).is_empty(), "ni annulation ni rétablissement");
+        assert!(
+            doc.take_operation_events(true).is_empty(),
+            "ni annulation ni rétablissement"
+        );
 
         doc.selection.insert(0);
         doc.delete_selection();
         assert!(doc.take_operation_events(false).is_empty());
-        assert!(doc.take_operation_events(true).is_empty(), "rien ne reste en attente");
+        assert!(
+            doc.take_operation_events(true).is_empty(),
+            "rien ne reste en attente"
+        );
     }
 
     #[test]

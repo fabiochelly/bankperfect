@@ -107,8 +107,14 @@ fn account_menu(ui: &mut egui::Ui, doc: &OpenDoc) -> Option<Command> {
     let mut chosen = None;
     let mut entry = |ui: &mut egui::Ui, command: Command| {
         let info = command.info(Some(doc));
-        if crate::menu::item_enabled(ui, info.enabled, Some(info.icon), &info.label, info.shortcut)
-            .clicked()
+        if crate::menu::item_enabled(
+            ui,
+            info.enabled,
+            Some(info.icon),
+            &info.label,
+            info.shortcut,
+        )
+        .clicked()
         {
             chosen = Some(command);
         }

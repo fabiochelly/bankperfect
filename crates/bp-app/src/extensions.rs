@@ -312,7 +312,11 @@ impl Manager {
                                         (icon::WARNING_CIRCLE, pal.negative)
                                     } else if ext.enabled {
                                         let first = ext.commands().into_iter().next();
-                                        (glyph(first.and_then(|c| c.icon).as_deref()), pal.accent)
+                                        let glyph = match first {
+                                            None if !ext.importers().is_empty() => icon::DOWNLOAD_SIMPLE,
+                                            first => glyph(first.and_then(|c| c.icon).as_deref()),
+                                        };
+                                        (glyph, pal.accent)
                                     } else {
                                         (icon::PROHIBIT, pal.muted)
                                     };
@@ -342,6 +346,9 @@ impl Manager {
                                             let n = ext.commands().len();
                                             let version = ext.version();
                                             let commands = match n {
+                                                0 if !ext.importers().is_empty() => {
+                                                    "format d'import".to_string()
+                                                }
                                                 0 => "automatismes".to_string(),
                                                 1 => "1 commande".to_string(),
                                                 n => format!("{n} commandes"),
@@ -507,8 +514,7 @@ impl Manager {
                         }
                     });
                     if c.menus != ["extensions"] {
-                        let places: Vec<&str> =
-                            c.menus.iter().map(|m| menu_label(m)).collect();
+                        let places: Vec<&str> = c.menus.iter().map(|m| menu_label(m)).collect();
                         ui.label(
                             RichText::new(format!("{}  {}", icon::LIST, places.join(", ")))
                                 .size(12.5)

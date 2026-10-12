@@ -2,7 +2,9 @@
 //! est lu par l'extension, l'aperçu, les doublons et le choix du compte sont
 //! ceux de l'import de BankPerfect.
 
-use bp_core::import::{ImportedAccount, ImportedOperation, ParsedImport, RejectReason, RejectedLine};
+use bp_core::import::{
+    ImportedAccount, ImportedOperation, ParsedImport, RejectReason, RejectedLine,
+};
 use bp_core::model::{Document, Mode};
 use mlua::{Function, Lua, Table, Value};
 
@@ -80,7 +82,11 @@ fn optional(t: &Table, key: &str) -> mlua::Result<Option<String>> {
 /// Ce que renvoie `parse` : une liste d'opérations (un seul compte),
 /// `{ name, number, currency, operations = { … } }` ou
 /// `{ accounts = { { name, number, currency, operations }, … } }`.
-pub(crate) fn parsed_import(lua: &Lua, document: &Document, value: Value) -> mlua::Result<ParsedImport> {
+pub(crate) fn parsed_import(
+    lua: &Lua,
+    document: &Document,
+    value: Value,
+) -> mlua::Result<ParsedImport> {
     let Value::Table(t) = value else {
         return Err(runtime(
             "parse doit renvoyer une liste d'opérations ou { accounts = … }",
@@ -89,7 +95,8 @@ pub(crate) fn parsed_import(lua: &Lua, document: &Document, value: Value) -> mlu
     let mut parsed = ParsedImport::default();
     let mut line = 0;
     let accounts: Vec<Table> = if let Some(list) = t.get::<Option<Table>>("accounts")? {
-        list.sequence_values::<Table>().collect::<mlua::Result<_>>()?
+        list.sequence_values::<Table>()
+            .collect::<mlua::Result<_>>()?
     } else if t.contains_key("operations")? {
         vec![t]
     } else {
@@ -166,7 +173,8 @@ fn imported_operation(
     let mode = match resolve_mode(document, &mode_text) {
         Ok(mode) if !mode_text.is_empty() => mode,
         _ => {
-            let (mode, number) = bp_core::import::guess_mode(&mode_text, &payee, &details, amount.is_negative());
+            let (mode, number) =
+                bp_core::import::guess_mode(&mode_text, &payee, &details, amount.is_negative());
             cheque_number = cheque_number.or(number);
             Mode::Standard(mode)
         }

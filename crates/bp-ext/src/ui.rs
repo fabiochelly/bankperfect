@@ -757,7 +757,10 @@ impl Window {
                     currency: t
                         .get::<Option<String>>("currency")?
                         .unwrap_or_else(|| "€".into()),
-                    height: t.get::<Option<f32>>("height")?.unwrap_or(260.0).clamp(120.0, 900.0),
+                    height: t
+                        .get::<Option<f32>>("height")?
+                        .unwrap_or(260.0)
+                        .clamp(120.0, 900.0),
                 }
             }
             "separator" => Widget::Separator,

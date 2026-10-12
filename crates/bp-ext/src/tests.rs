@@ -137,6 +137,15 @@ fn command_menus() {
 }
 
 #[test]
+fn required_version() {
+    let f = Fixture::new(r#"bp.extension{ name = "x", requires = "9.0" }"#);
+    assert_eq!(f.engine.extensions[0].error, None);
+    let f = Fixture::new(r#"bp.extension{ name = "x", requires = "99.1" }"#);
+    let error = f.engine.extensions[0].error.clone().unwrap_or_default();
+    assert!(error.contains("nécessite BankPerfect 99.1"), "{error}");
+}
+
+#[test]
 fn reports_load_errors() {
     let f = Fixture::new("bp.command{ title = 'x' }");
     let error = f.engine.extensions[0].error.clone().unwrap();
@@ -591,7 +600,11 @@ fn event_arguments() {
         uid: op.uid,
         before: Some(before.clone()),
     };
-    let fx = engine.fire(Event::OperationChanged, std::slice::from_ref(&item), f.ctx());
+    let fx = engine.fire(
+        Event::OperationChanged,
+        std::slice::from_ref(&item),
+        f.ctx(),
+    );
     assert_eq!(fx.errors, Vec::<String>::new());
     assert_eq!(
         fx.toasts,
@@ -599,7 +612,10 @@ fn event_arguments() {
     );
     let fx = engine.fire(Event::OperationDeleted, &[item], f.ctx());
     assert_eq!(fx.errors, Vec::<String>::new());
-    assert_eq!(fx.toasts, vec![format!("supprimé {} Courant reconciled", op.payee)]);
+    assert_eq!(
+        fx.toasts,
+        vec![format!("supprimé {} Courant reconciled", op.payee)]
+    );
     let fx = engine.fire(Event::AccountSelected, &[EventItem::line(1, 0)], f.ctx());
     assert_eq!(fx.toasts, vec!["compte Livret".to_string()]);
     let fx = engine.fire(Event::SelectionChanged, &[], f.ctx());
@@ -688,12 +704,16 @@ fn importers_read_files() {
     assert_eq!(parsed.rejected.len(), 1);
 
     // Pas reconnu : l'import de BankPerfect prend le relais.
-    assert!(engine
-        .import_file(std::path::Path::new("a.csv"), b"autre", &mut f.ctx())
-        .is_none());
-    assert!(engine
-        .import_file(std::path::Path::new("a.qif"), data, &mut f.ctx())
-        .is_none());
+    assert!(
+        engine
+            .import_file(std::path::Path::new("a.csv"), b"autre", &mut f.ctx())
+            .is_none()
+    );
+    assert!(
+        engine
+            .import_file(std::path::Path::new("a.qif"), data, &mut f.ctx())
+            .is_none()
+    );
 
     // Un format qui modifie les comptes est refusé et défait.
     let n = f.document.accounts[0].operations.len();
@@ -752,10 +772,15 @@ fn schedules_budget_and_rules() {
     assert_eq!(fx.errors.len(), 1);
     // L'échec a tout défait.
     assert_eq!(
-        bp_core::scheduler::load(&f.document).unwrap().schedules.len(),
+        bp_core::scheduler::load(&f.document)
+            .unwrap()
+            .schedules
+            .len(),
         1
     );
-    let rules = bp_core::autofields::AutoFieldRules::load(&f.document, &bp_core::legacy_pickle::parse_py).unwrap();
+    let rules =
+        bp_core::autofields::AutoFieldRules::load(&f.document, &bp_core::legacy_pickle::parse_py)
+            .unwrap();
     assert_eq!(rules.rules.len(), 1);
 }
 
@@ -925,7 +950,7 @@ fn bundled_examples_load_and_open() {
                 visible: (0..n).collect(),
                 locked: false,
                 merge_tag: None,
-            filters: Default::default(),
+                filters: Default::default(),
             };
             let fx = engine.run_command(ext, command, Some(&mut ctx));
             assert!(
@@ -959,7 +984,7 @@ fn bundled_examples_load_and_open() {
         visible: vec![],
         locked: false,
         merge_tag: None,
-            filters: Default::default(),
+        filters: Default::default(),
     };
     engine.run_command(arrondis, 0, Some(&mut ctx));
     engine.window_event(
@@ -1011,4 +1036,84 @@ fn bundled_examples_load_and_open() {
         Amount(6_600),
         "12,34 € arrondis à 13 €"
     );
+}
+
+/// Le fichier de définitions de la documentation (luau-lsp) reste
+/// syntaxiquement juste : ses `type` et la déclaration de `bp` sont compilés
+/// par Luau (les blocs `declare class`, propres aux fichiers de définitions,
+/// sont retirés).
+#[test]
+fn definitions_file_parses() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/bankperfect.d.luau");
+    let text = std::fs::read_to_string(path).unwrap();
+    let mut kept = String::new();
+    let mut in_class = false;
+    for line in text.lines() {
+        if line.starts_with("declare class") {
+            in_class = true;
+            continue;
+        }
+        if in_class {
+            in_class = line != "end";
+            continue;
+        }
+        kept.push_str(&line.replace("declare bp:", "type BP ="));
+        kept.push('\n');
+    }
+    let lua = mlua::Lua::new();
+    lua.load(kept)
+        .set_name("=bankperfect.d.luau")
+        .into_function()
+        .expect("définitions valides");
+}
+
+/// Les recettes de la documentation se chargent et marchent.
+#[test]
+fn documentation_recipes() {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/extensions.md");
+    let text = std::fs::read_to_string(path).unwrap();
+    let start = text.find("## Recettes").expect("section Recettes");
+    let end = start
+        + text[start..]
+            .find("\n## Sécurité")
+            .expect("section suivante");
+    let mut source = String::new();
+    let mut in_code = false;
+    for line in text[start..end].lines() {
+        if line.starts_with("```") {
+            in_code = line == "```lua";
+            continue;
+        }
+        if in_code {
+            source.push_str(line);
+            source.push('\n');
+        }
+    }
+    let mut f = Fixture::new(&source);
+    assert_eq!(f.engine.extensions[0].error, None);
+    let titles: Vec<String> = f.engine.extensions[0]
+        .commands()
+        .into_iter()
+        .map(|c| c.title)
+        .collect();
+    let index = |t: &str| titles.iter().position(|x| x.starts_with(t)).unwrap();
+    let fx = f.run(index("Opérations sans catégorie"));
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    assert_eq!(fx.filters.map(|f| f.category), Some("//".to_string()));
+    let fx = f.run(index("Créer le virement mensuel"));
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    let fx = f.answer(Answer::Ok);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    let schedules = bp_core::scheduler::load(&f.document).unwrap().schedules;
+    assert_eq!(schedules.len(), 1);
+    assert_eq!(schedules[0].amount, Amount::from_cents(-10_000));
+    assert!(schedules[0].transfer.is_some());
+    let mut engine = std::mem::replace(
+        &mut f.engine,
+        Engine::new(PathBuf::new(), PathBuf::new(), Rc::new(NoServices)),
+    );
+    let mut ctx = f.ctx();
+    ctx.selection = vec![0];
+    let fx = engine.run_command(0, index("Rechercher le tiers"), Some(&mut ctx));
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
 }

@@ -62,6 +62,20 @@ pub(crate) struct Outbox {
 
 const LOG_LINES: usize = 200;
 
+/// `"9.1.2"` → `[9, 1, 2]` (parties manquantes ou illisibles : 0).
+fn version_parts(text: &str) -> [u32; 3] {
+    let mut out = [0; 3];
+    for (slot, part) in out.iter_mut().zip(text.trim().split('.')) {
+        *slot = part
+            .chars()
+            .take_while(char::is_ascii_digit)
+            .collect::<String>()
+            .parse()
+            .unwrap_or(0);
+    }
+    out
+}
+
 pub(crate) struct ApiContext {
     pub id: String,
     pub dir: Option<PathBuf>,
@@ -173,6 +187,14 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 if let Some(p) = spec.get::<Option<Table>>("permissions")? {
                     r.permissions = p.sequence_values::<String>().collect::<mlua::Result<_>>()?;
                 }
+                if let Some(required) = spec.get::<Option<String>>("requires")?
+                    && version_parts(env!("CARGO_PKG_VERSION")) < version_parts(&required)
+                {
+                    return Err(runtime(format!(
+                        "cette extension nécessite BankPerfect {required} ou plus récent (version actuelle : {})",
+                        env!("CARGO_PKG_VERSION")
+                    )));
+                }
                 Ok(())
             })?,
         )?;
@@ -242,9 +264,12 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
             lua.create_function(move |_, spec: Table| {
                 let mut r = registry.borrow_mut();
                 if !r.loading {
-                    return Err(runtime("bp.importer se déclare au chargement de l'extension"));
+                    return Err(runtime(
+                        "bp.importer se déclare au chargement de l'extension",
+                    ));
                 }
-                r.importers.push(crate::import::ImporterSpec::parse_spec(&spec)?);
+                r.importers
+                    .push(crate::import::ImporterSpec::parse_spec(&spec)?);
                 Ok(())
             })?,
         )?;

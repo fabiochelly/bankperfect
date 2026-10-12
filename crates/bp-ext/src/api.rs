@@ -48,6 +48,7 @@ pub(crate) struct Registry {
     pub permissions: Vec<String>,
     pub commands: Vec<(CommandInfo, Function)>,
     pub hooks: Vec<(Event, Function)>,
+    pub importers: Vec<crate::import::ImporterSpec>,
     pub log: Vec<String>,
 }
 
@@ -112,7 +113,7 @@ fn from_json(lua: &Lua, value: &serde_json::Value) -> mlua::Result<Value> {
     )
 }
 
-fn decode_text(bytes: &[u8]) -> String {
+pub(crate) fn decode_text(bytes: &[u8]) -> String {
     match std::str::from_utf8(bytes) {
         Ok(text) => text.trim_start_matches('\u{feff}').to_string(),
         Err(_) => encoding_rs::WINDOWS_1252.decode(bytes).0.into_owned(),
@@ -230,6 +231,20 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     menus,
                 };
                 r.commands.push((info, run));
+                Ok(())
+            })?,
+        )?;
+    }
+    {
+        let registry = registry.clone();
+        bp.set(
+            "importer",
+            lua.create_function(move |_, spec: Table| {
+                let mut r = registry.borrow_mut();
+                if !r.loading {
+                    return Err(runtime("bp.importer se déclare au chargement de l'extension"));
+                }
+                r.importers.push(crate::import::ImporterSpec::parse_spec(&spec)?);
                 Ok(())
             })?,
         )?;

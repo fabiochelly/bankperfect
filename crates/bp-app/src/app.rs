@@ -288,6 +288,40 @@ impl BankPerfectApp {
         self.apply_effects(fx, now);
     }
 
+    /// Ouvre l'aperçu d'import d'un fichier : lu par le format d'une
+    /// extension qui le reconnaît, sinon par l'import de BankPerfect.
+    fn open_import(&mut self, path: PathBuf) {
+        let Some(doc) = &mut self.doc else { return };
+        if !self.extensions.importers().is_empty() {
+            let data = match std::fs::read(&path) {
+                Ok(data) => data,
+                Err(e) => {
+                    self.error = Some(format!("Lecture impossible : {e}"));
+                    return;
+                }
+            };
+            let read = self
+                .extensions
+                .import_file(&path, &data, &mut doc.extension_context(None));
+            match read {
+                Some((name, Ok(parsed))) => {
+                    let form = crate::import_ui::ImportForm::from_extension(path, name, parsed, doc);
+                    self.tool = Some(crate::tools::Tool::Import(Box::new(form)));
+                    return;
+                }
+                Some((_, Err(e))) => {
+                    self.ext_errors.push(e);
+                    return;
+                }
+                None => {}
+            }
+        }
+        match crate::import_ui::ImportForm::new(path) {
+            Ok(form) => self.tool = Some(crate::tools::Tool::Import(Box::new(form))),
+            Err(e) => self.error = Some(e),
+        }
+    }
+
     /// Évènements des extensions en attente : ceux mis de côté par le
     /// document, opérations touchées par les actions de l'utilisateur,
     /// changement de compte et de sélection.
@@ -948,12 +982,19 @@ impl BankPerfectApp {
             }
             Command::Print => self.tool = Some(Tool::Print(Default::default())),
             Command::Import => {
+                let mut statements: Vec<String> = ["ofx", "qfx", "qif", "csv", "tsv", "txt"]
+                    .map(String::from)
+                    .to_vec();
+                for importer in self.extensions.importers() {
+                    for e in importer.extensions {
+                        if !statements.contains(&e) {
+                            statements.push(e);
+                        }
+                    }
+                }
                 let mut dialog = rfd::FileDialog::new()
                     .set_title("Fichier d'opérations à importer")
-                    .add_filter(
-                        "Relevés bancaires",
-                        &["ofx", "qfx", "qif", "csv", "tsv", "txt"],
-                    );
+                    .add_filter("Relevés bancaires", &statements);
                 if let Some(dir) = &self.settings.export_dir {
                     dialog = dialog.set_directory(dir);
                 }
@@ -962,10 +1003,7 @@ impl BankPerfectApp {
                     .map(PathBuf::from)
                     .or_else(|| dialog.pick_file());
                 if let Some(path) = path {
-                    match crate::import_ui::ImportForm::new(path) {
-                        Ok(form) => self.tool = Some(Tool::Import(Box::new(form))),
-                        Err(e) => self.error = Some(e),
-                    }
+                    self.open_import(path);
                 }
             }
             Command::ExportQif => {
@@ -2768,17 +2806,20 @@ impl BankPerfectApp {
                 .map(|f| f.path().to_path_buf())
                 .filter(|p| !p.as_os_str().is_empty())
         }) {
-            let statement = path
+            let suffix = path
                 .extension()
                 .and_then(|e| e.to_str())
                 .map(str::to_lowercase)
-                .is_some_and(|e| matches!(e.as_str(), "ofx" | "qfx" | "qif" | "csv" | "tsv"));
+                .unwrap_or_default();
+            let statement = matches!(suffix.as_str(), "ofx" | "qfx" | "qif" | "csv" | "tsv")
+                || self
+                    .extensions
+                    .importers()
+                    .iter()
+                    .any(|i| i.extensions.contains(&suffix));
             if statement && self.doc.is_some() {
                 // Relevé bancaire déposé : import dans le fichier ouvert.
-                match crate::import_ui::ImportForm::new(path) {
-                    Ok(form) => self.tool = Some(crate::tools::Tool::Import(Box::new(form))),
-                    Err(e) => self.error = Some(e),
-                }
+                self.open_import(path);
             } else {
                 self.request(Pending::Open(Some(path)));
             }

@@ -1,6 +1,7 @@
-//! Mise en page en îles : la fenêtre a un fond plus sombre (le canevas) et
-//! chaque zone (comptes, soldes, tableau) est une île arrondie posée dessus,
-//! un peu plus claire, avec une ombre douce.
+//! Mise en page en îles : chaque zone de la fenêtre (comptes, soldes,
+//! tableau) est une île arrondie posée sur le fond de la fenêtre (le
+//! canevas). En sombre, une vitre fumée : un voile et une bordure fine, sans
+//! ombre ni relief ; en clair, un fond plus clair avec une ombre douce.
 //!
 //! egui ne sait pas découper un dessin selon un rectangle arrondi : les
 //! dégradés en maillage d'une île sont donc construits directement à
@@ -20,17 +21,17 @@ pub const GAP: f32 = 10.0;
 /// Fond de la fenêtre, sous les îles.
 pub fn canvas(p: &Palette, dark: bool) -> Color32 {
     if dark {
-        backdrop(p.bg_dark.lerp_to_gamma(Color32::BLACK, 0.45), 0.84)
+        backdrop(p.bg, 0.84)
     } else {
         backdrop(p.bg.lerp_to_gamma(Color32::BLACK, 0.07), 0.76)
     }
 }
 
-/// Fond d'une île : le fond sombre du thème en sombre, plus clair que la
-/// fenêtre en clair.
+/// Fond d'une île : en sombre, un voile de vitre fumée posé sur le canevas ;
+/// en clair, un fond plus clair que la fenêtre, avec une ombre douce.
 pub fn fill(p: &Palette, dark: bool) -> Color32 {
     if dark {
-        backdrop(p.bg_dark, 0.94)
+        Color32::from_black_alpha(70)
     } else {
         backdrop(p.bg.lerp_to_gamma(Color32::WHITE, 0.55), 0.92)
     }
@@ -38,20 +39,16 @@ pub fn fill(p: &Palette, dark: bool) -> Color32 {
 
 fn stroke(p: &Palette, dark: bool) -> Stroke {
     if dark {
-        Stroke::new(1.0, Color32::from_white_alpha(12))
+        Stroke::new(1.0, Color32::from_white_alpha(20))
     } else {
         Stroke::new(1.0, p.border.gamma_multiply(0.6))
     }
 }
 
+/// Ombre portée : en clair seulement (la vitre fumée n'a pas de relief).
 fn shadow(dark: bool) -> Shadow {
     if dark {
-        Shadow {
-            offset: [0, 8],
-            blur: 24,
-            spread: 0,
-            color: Color32::from_black_alpha(80),
-        }
+        Shadow::NONE
     } else {
         Shadow {
             offset: [0, 4],

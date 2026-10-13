@@ -1,7 +1,9 @@
-//! Barre latérale : comptes avec leur solde, total, état de protection.
+//! Barre latérale : le compte affiché en carte bancaire, les autres comptes
+//! avec leur solde, le total, l'état de protection.
 
 use bp_core::model::Amount;
-use egui::{Align, Layout, RichText, Sense};
+use egui::text::{LayoutJob, TextWrapping};
+use egui::{Align, Align2, Color32, FontId, Layout, Pos2, Rect, RichText, Sense, pos2, vec2};
 use egui_phosphor::regular as icon;
 
 use crate::commands::Command;
@@ -12,32 +14,45 @@ use crate::theme::palette;
 /// Renvoie la commande choisie dans le menu contextuel d'un compte.
 pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
     let pal = palette(ui);
-    ui.add_space(10.0);
+    ui.add_space(2.0);
     ui.label(RichText::new(&doc.document.group_name).heading());
     ui.label(RichText::new(doc.file_name()).small().color(pal.muted));
-    ui.add_space(12.0);
-    ui.label(
-        RichText::new("COMPTES")
-            .small()
-            .family(crate::theme::medium())
-            .color(pal.muted),
-    );
-    ui.add_space(2.0);
+    ui.add_space(14.0);
+
+    let mut command = None;
+    let card = bank_card(ui, doc);
+    card.context_menu(|ui| command = account_menu(ui, doc));
+    ui.add_space(18.0);
 
     let order = doc.document.account_order.clone();
-    let mut clicked = None;
-    let mut command = None;
-    let mut total = Amount::ZERO;
-    for &i in order
+    let enabled: Vec<usize> = order
         .iter()
-        .filter(|&&i| !doc.document.accounts[i].disabled)
-    {
+        .copied()
+        .filter(|&i| !doc.document.accounts[i].disabled)
+        .collect();
+    let total = enabled
+        .iter()
+        .filter(|&&i| !doc.document.accounts[i].counts_as_virtual())
+        .fold(Amount::ZERO, |sum, &i| sum + doc.account_balance(i));
+    let others: Vec<usize> = enabled
+        .iter()
+        .copied()
+        .filter(|&i| i != doc.account)
+        .collect();
+    if !others.is_empty() {
+        ui.label(
+            RichText::new("AUTRES COMPTES")
+                .small()
+                .family(crate::theme::medium())
+                .color(pal.muted),
+        );
+        ui.add_space(2.0);
+    }
+    let mut clicked = None;
+    for i in others {
         let account = &doc.document.accounts[i];
         let balance = doc.account_balance(i);
-        if !account.counts_as_virtual() {
-            total = total + balance;
-        }
-        let (pressed, response) = account_row(ui, account, balance, i == doc.account, &pal);
+        let (pressed, response) = account_row(ui, account, balance, false, &pal);
         if pressed || response.secondary_clicked() {
             clicked = Some(i);
         }
@@ -97,6 +112,155 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
         protection_badge(ui, doc);
     });
     command
+}
+
+/// Le compte affiché, en carte bancaire : dégradé aux couleurs du logo,
+/// banque et puce, nom, solde, fin de l'IBAN et dernier rapprochement.
+fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
+    let pal = palette(ui);
+    let dark = ui.visuals().dark_mode;
+    let account = doc.current_account();
+    let balance = doc.account_balance(doc.account);
+    let (rect, response) =
+        ui.allocate_exact_size(vec2(ui.available_width() - 6.0, 118.0), Sense::click());
+    let painter = ui.painter();
+    let radius = 14.0;
+
+    // Une seconde carte dépasse derrière, comme dans un portefeuille.
+    let behind = Rect::from_min_max(rect.min + vec2(8.0, 8.0), rect.max + vec2(6.0, 6.0));
+    let behind_fill = if dark {
+        pal.surface.gamma_multiply(0.8)
+    } else {
+        pal.border.gamma_multiply(0.45)
+    };
+    painter.rect_filled(behind, radius, behind_fill);
+    let shadow = egui::Shadow {
+        offset: [0, 10],
+        blur: 24,
+        spread: 0,
+        color: Color32::from_rgba_unmultiplied(61, 89, 161, if dark { 90 } else { 70 }),
+    };
+    painter.add(shadow.as_shape(rect, radius as u8));
+
+    // Bleu du « b » vers violet du « p », avec un reflet vert en haut à droite.
+    let stops = [
+        (0.0, Color32::from_rgb(0x3d, 0x59, 0xa1)),
+        (0.52, Color32::from_rgb(0x5b, 0x4f, 0xb8)),
+        (1.0, Color32::from_rgb(0x8b, 0x6f, 0xd6)),
+    ];
+    let shine_at = pos2(
+        rect.right() + rect.width() * 0.05,
+        rect.top() - rect.height() * 0.1,
+    );
+    let shine_reach = rect.width().max(rect.height()) * 0.6;
+    let shine = Color32::from_rgb(0xb9, 0xf2, 0x8a);
+    crate::islands::rounded_gradient(painter, rect, radius, |p: Pos2| {
+        let t = (p.x - rect.left()) / rect.width() * 0.6 + (p.y - rect.top()) / rect.height() * 0.4;
+        let base = crate::islands::gradient(&stops, t);
+        let glow = (1.0 - p.distance(shine_at) / shine_reach)
+            .max(0.0)
+            .powf(1.5)
+            * 0.55;
+        crate::islands::lerp(base, shine, glow)
+    });
+
+    let white = |alpha: u8| Color32::from_white_alpha(alpha);
+    let inner = rect.shrink2(vec2(14.0, 12.0));
+    // Puce.
+    let chip = Rect::from_min_size(pos2(inner.right() - 24.0, inner.top()), vec2(24.0, 18.0));
+    painter.rect_filled(chip, 4.0, Color32::from_rgb(0xd6, 0xc4, 0x8a));
+    painter.rect_stroke(
+        chip.shrink(4.0),
+        2.0,
+        egui::Stroke::new(1.0, Color32::from_rgb(0xb8, 0xa4, 0x6a)),
+        egui::StrokeKind::Inside,
+    );
+    let text = |text: &str,
+                pos: Pos2,
+                size: f32,
+                family: egui::FontFamily,
+                color: Color32,
+                width: f32,
+                align: Align2| {
+        let mut job =
+            LayoutJob::simple_singleline(text.to_string(), FontId::new(size, family), color);
+        job.wrap = TextWrapping {
+            max_width: width.max(10.0),
+            max_rows: 1,
+            break_anywhere: true,
+            overflow_character: Some('…'),
+        };
+        let galley = painter.layout_job(job);
+        let rect = align.anchor_size(pos, galley.size());
+        painter.galley(rect.min, galley, color);
+    };
+    let bank = if account.bank_name.trim().is_empty() {
+        "Compte"
+    } else {
+        account.bank_name.trim()
+    };
+    text(
+        bank,
+        inner.left_top(),
+        11.0,
+        crate::theme::medium(),
+        white(220),
+        inner.width() - 34.0,
+        Align2::LEFT_TOP,
+    );
+    let name = if account.name.is_empty() {
+        "(sans nom)"
+    } else {
+        &account.name
+    };
+    text(
+        name,
+        pos2(inner.left(), inner.bottom() - 44.0),
+        11.0,
+        crate::theme::medium(),
+        white(210),
+        inner.width(),
+        Align2::LEFT_BOTTOM,
+    );
+    text(
+        &money(balance, &account.currency).replacen('-', "\u{2212}", 1),
+        pos2(inner.left(), inner.bottom() - 17.0),
+        21.0,
+        crate::theme::semibold(),
+        Color32::WHITE,
+        inner.width(),
+        Align2::LEFT_BOTTOM,
+    );
+    let digits: String = account
+        .iban
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect();
+    if digits.len() >= 4 {
+        let tail = &digits[digits.len() - 4..];
+        text(
+            &format!("•••• {tail}"),
+            inner.left_bottom(),
+            10.5,
+            crate::theme::medium(),
+            white(200),
+            inner.width() * 0.5,
+            Align2::LEFT_BOTTOM,
+        );
+    }
+    if let Some(date) = doc.totals().last_reconciled {
+        let d = date.to_string();
+        text(
+            &format!("rapproché {}", &d[..5.min(d.len())]),
+            inner.right_bottom(),
+            10.5,
+            crate::theme::medium(),
+            white(200),
+            inner.width() * 0.5,
+            Align2::RIGHT_BOTTOM,
+        );
+    }
+    response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban))
 }
 
 /// Menu contextuel d'un compte (le compte est affiché dès le clic droit).

@@ -505,6 +505,15 @@ fn dashboard_widths() {
             },
         );
     }
+    // Ligne des filtres de colonnes ouverte par la loupe.
+    for (name, theme) in [
+        ("63-filtres-colonnes", egui::Theme::Dark),
+        ("63-filtres-colonnes-clair", egui::Theme::Light),
+    ] {
+        render_sized(name, theme, egui::vec2(1280.0, 700.0), |h| {
+            h.get_by_label("Filtres de colonnes").click();
+        });
+    }
     render_sized(
         "60-largeur-1280-clair",
         egui::Theme::Light,

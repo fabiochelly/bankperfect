@@ -43,6 +43,8 @@ pub struct OpenDoc {
     pub show_forecast: bool,
     /// Soldes en trois cartes plutôt qu'en équation (réglages).
     pub balance_cards: bool,
+    /// Ligne des filtres de colonnes ouverte (réglages).
+    pub show_column_filters: bool,
     /// Niveaux d'annulation gardés.
     pub max_undo: usize,
     /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
@@ -236,6 +238,7 @@ impl OpenDoc {
             show_balance_panel: true,
             show_forecast: true,
             balance_cards: false,
+            show_column_filters: false,
             max_undo: 30,
             disable_reconcile: false,
             ignore_filter_totals: false,

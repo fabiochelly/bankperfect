@@ -39,6 +39,12 @@ const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE,
 /// Symbole du logiciel en haut à droite : côté et marge au bord de la fenêtre.
 const LOGO_SIZE: f32 = 40.0;
 const LOGO_MARGIN: f32 = 8.0;
+
+/// Haut des îles (comptes, soldes) : sous le symbole, qui déborde de la
+/// barre de menus, avec une marge.
+fn islands_top(ctx: &egui::Context) -> f32 {
+    ctx.content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 14.0
+}
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
 const SHORTCUT_RULES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
@@ -1147,6 +1153,10 @@ impl BankPerfectApp {
                 self.settings.balance_cards = !self.settings.balance_cards;
                 self.settings.save();
             }
+            Command::ToggleColumnFilters => {
+                self.settings.show_column_filters = !self.settings.show_column_filters;
+                self.settings.save();
+            }
             Command::ReverseCurrencies => self.confirm_reverse = true,
             Command::Rules => {
                 self.tool = Some(Tool::Rules(Box::new(crate::rules_ui::RulesForm::new(doc))))
@@ -1775,6 +1785,11 @@ impl BankPerfectApp {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleBalanceCards);
                 }
+                let mut column_filters = self.settings.show_column_filters;
+                if menu::toggle(ui, &mut column_filters, "Filtres de colonnes", None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleColumnFilters);
+                }
                 menu::separator(ui);
                 menu::heading(ui, "Thème");
                 let current = ui.ctx().options(|o| o.theme_preference);
@@ -1945,10 +1960,9 @@ impl BankPerfectApp {
         if compact {
             ui.add_space(8.0);
         } else {
-            // Le symbole déborde sous la barre de menus : la carte commence
-            // sous lui, avec une marge.
-            let below_logo = ui.ctx().content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 14.0;
-            ui.add_space((below_logo - ui.cursor().top()).max(8.0));
+            // Le symbole déborde sous la barre de menus : les tuiles
+            // commencent sous lui, à la même hauteur que l'île des comptes.
+            ui.add_space((islands_top(ui.ctx()) - ui.cursor().top()).max(8.0));
         }
         if doc.show_balance_panel
             && let Some(toggle) = crate::dashboard::cards(ui, doc)
@@ -2926,12 +2940,21 @@ impl BankPerfectApp {
             self.toast = None;
         }
 
+        // Mise en page en îles : les panneaux sont posés sur le canevas, plus
+        // sombre ; les comptes, les soldes et le tableau y forment des îles.
+        let pal = palette(ui);
+        let dark = ui.visuals().dark_mode;
+        let canvas = crate::islands::canvas(&pal, dark);
+        let gap = crate::islands::GAP as i8;
         egui::Panel::top("menu")
             .show_separator_line(false)
+            .frame(egui::Frame::side_top_panel(ui.style()).fill(canvas))
             .show(ui, |ui| self.menu_bar(ui));
 
         if self.doc.is_none() {
-            egui::CentralPanel::default_margins().show(ui, |ui| self.welcome(ui));
+            egui::CentralPanel::default_margins()
+                .frame(egui::Frame::central_panel(ui.style()).fill(canvas))
+                .show(ui, |ui| self.welcome(ui));
             self.modals(&ctx);
             self.extension_modals(&ctx);
             self.update_title(&ctx);
@@ -2940,12 +2963,11 @@ impl BankPerfectApp {
 
         let toast = self.toast.as_ref().map(|(t, _)| t.clone());
         let doc = self.doc.as_mut().expect("document ouvert");
-        egui::Panel::bottom("status").show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
+        egui::Panel::bottom("status")
+            .show_separator_line(false)
+            .frame(egui::Frame::side_top_panel(ui.style()).fill(canvas))
+            .show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
 
-        let sidebar_fill = crate::theme::backdrop(
-            palette(ui).bg_dark,
-            crate::theme::sidebar_alpha(ui.visuals().dark_mode),
-        );
         // Fenêtre étroite (tuile) : pas de panneau des comptes, le nom du
         // compte devient un sélecteur.
         let compact = ui.available_width() < 860.0;
@@ -2955,14 +2977,25 @@ impl BankPerfectApp {
         if !compact {
             sidebar_command = egui::Panel::left("accounts")
                 .resizable(true)
+                .show_separator_line(false)
                 .default_size(sidebar_width)
                 .min_size(170.0)
-                .frame(
-                    egui::Frame::side_top_panel(ui.style())
-                        .fill(sidebar_fill)
-                        .inner_margin(12),
-                )
-                .show(ui, |ui| sidebar::show(ui, doc))
+                .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
+                    left: gap,
+                    right: 0,
+                    top: 0,
+                    bottom: gap,
+                }))
+                .show(ui, |ui| {
+                    ui.add_space((islands_top(ui.ctx()) - ui.cursor().top()).max(8.0));
+                    crate::islands::frame(&pal, dark)
+                        .inner_margin(12)
+                        .show(ui, |ui| {
+                            ui.set_min_size(ui.available_size());
+                            sidebar::show(ui, doc)
+                        })
+                        .inner
+                })
                 .inner;
         }
 
@@ -2974,6 +3007,7 @@ impl BankPerfectApp {
         doc.show_balance_panel = self.settings.show_balance_panel;
         doc.show_forecast = self.settings.show_forecast;
         doc.balance_cards = self.settings.balance_cards;
+        doc.show_column_filters = self.settings.show_column_filters;
         if let Some(notice) = doc.notice.take() {
             self.toast = Some((notice, now + 4.0));
         }
@@ -2990,9 +3024,13 @@ impl BankPerfectApp {
         let mut grid_action = GridAction::None;
         let mut deferred = sidebar_command;
         let header_command = egui::Panel::top("balances")
-            .frame(
-                egui::Frame::central_panel(ui.style()).inner_margin(egui::Margin::symmetric(18, 0)),
-            )
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
+                left: gap,
+                right: gap,
+                top: 0,
+                bottom: 0,
+            }))
             .show(ui, |ui| Self::balance_strip(ui, doc, compact))
             .inner;
         if let Some(command) = header_command {
@@ -3006,22 +3044,46 @@ impl BankPerfectApp {
                 .editor
                 .get_or_insert_with(|| Editor::new_operation(&doc.document, doc.account).quiet());
             bar_action = egui::Panel::bottom("entry_bar")
-                .frame(
-                    egui::Frame::side_top_panel(ui.style())
-                        .fill(palette(ui).surface)
-                        .inner_margin(egui::Margin::symmetric(18, 4)),
-                )
-                .show(ui, |ui| editor.show_bar(ui, doc))
+                .show_separator_line(false)
+                .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
+                    left: gap,
+                    right: gap,
+                    top: gap,
+                    bottom: 0,
+                }))
+                .show(ui, |ui| {
+                    crate::islands::frame(&pal, dark)
+                        .inner_margin(egui::Margin::symmetric(18, 6))
+                        .show(ui, |ui| editor.show_bar(ui, doc))
+                        .inner
+                })
                 .inner
                 .into();
         }
 
-        egui::CentralPanel::default_margins().show(ui, |ui| {
-            let action = grid::show(ui, doc);
-            if !matches!(action, GridAction::None) {
-                grid_action = action;
-            }
-        });
+        egui::CentralPanel::default_margins()
+            .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
+                left: gap,
+                right: gap,
+                top: 0,
+                bottom: gap,
+            }))
+            .show(ui, |ui| {
+                crate::islands::frame(&pal, dark)
+                    .inner_margin(egui::Margin {
+                        left: 6,
+                        right: 2,
+                        top: 6,
+                        bottom: 4,
+                    })
+                    .show(ui, |ui| {
+                        ui.set_min_size(ui.available_size());
+                        let action = grid::show(ui, doc);
+                        if !matches!(action, GridAction::None) {
+                            grid_action = action;
+                        }
+                    });
+            });
         if self.editor.is_none()
             && !self.settings.entry_at_bottom
             && floating_add_button(&ctx, content_rect)

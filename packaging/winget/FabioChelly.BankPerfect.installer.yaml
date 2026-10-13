@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://aka.ms/winget-manifest.installer.1.6.0.schema.json
 PackageIdentifier: FabioChelly.BankPerfect
-PackageVersion: 9.3.0
+PackageVersion: 9.4.0
 InstallerType: zip
 NestedInstallerType: portable
 NestedInstallerFiles:
@@ -8,7 +8,7 @@ NestedInstallerFiles:
     PortableCommandAlias: bankperfect
 Installers:
   - Architecture: x64
-    InstallerUrl: https://github.com/fabiochelly/bankperfect/releases/download/v9.3.0/bankperfect-9.3.0-windows-x86_64.zip
-    InstallerSha256: 'f683296c48a695317144a13464876b48d5be58e00f6369e3ab126246f0d94f3a'
+    InstallerUrl: https://github.com/fabiochelly/bankperfect/releases/download/v9.4.0/bankperfect-9.4.0-windows-x86_64.zip
+    InstallerSha256: '3049a7d108a1264ad7e1f75ee9157ecfc139c00314020d135cf2e2ad6b1e15f3'
 ManifestType: installer
 ManifestVersion: 1.6.0

@@ -87,6 +87,7 @@ pub enum Command {
     Palette,
     Options,
     About,
+    License,
     Help,
     /// Commande d'extension (rang dans `extensions::entries`).
     Extension(usize),
@@ -208,7 +209,7 @@ impl Command {
                 .map(|(i, _)| Extension(i)),
         );
         list.extend([ManageExtensions, ExtensionsFolder, ExtensionsDocs]);
-        list.extend([ToggleTranslucent, Options, Help, About, Quit]);
+        list.extend([ToggleTranslucent, Options, Help, License, About, Quit]);
         list
     }
 
@@ -965,6 +966,13 @@ impl Command {
                 Some("Ctrl+,"),
                 "préférences réglages paramètres",
             ),
+            License => info(
+                "Aide",
+                "Licence…",
+                icon::KEY,
+                None,
+                "licence clé enregistrer activer achat",
+            ),
             About => info(
                 "Aide",
                 "À propos de BankPerfect",
@@ -1045,6 +1053,7 @@ impl Command {
                     | ToggleTranslucent
                     | Palette
                     | Options
+                    | License
                     | About
                     | Help
                     | Extension(_)

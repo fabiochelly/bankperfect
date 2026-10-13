@@ -153,6 +153,9 @@ pub struct BankPerfectApp {
     scheduler_notice: Option<String>,
     options: Option<crate::options_ui::OptionsForm>,
     about: bool,
+    /// Licence active (certificat des réglages, vérifié au démarrage).
+    license: Option<crate::license::License>,
+    license_form: Option<crate::license_ui::LicenseForm>,
     tool: Option<crate::tools::Tool>,
     command_palette: Option<crate::command_palette::CommandPalette>,
     /// Commandes lancées récemment, la plus récente en premier.
@@ -220,6 +223,8 @@ impl BankPerfectApp {
             scheduler_notice: None,
             options: None,
             about: false,
+            license: settings.license.as_deref().and_then(crate::license::verify),
+            license_form: None,
             tool: None,
             command_palette: None,
             recent_commands: Vec::new(),
@@ -865,6 +870,10 @@ impl BankPerfectApp {
                 return;
             }
             Command::About => return self.about = true,
+            Command::License => {
+                self.license_form = Some(crate::license_ui::LicenseForm::new());
+                return;
+            }
             Command::Extension(index) => return self.run_extension(ctx, index),
             Command::ManageExtensions => {
                 self.ext_manager = Some(Default::default());
@@ -1261,6 +1270,7 @@ impl BankPerfectApp {
             | Command::ToggleTranslucent
             | Command::OpenRecent(_)
             | Command::Options
+            | Command::License
             | Command::About
             | Command::Help
             | Command::Extension(_)
@@ -1630,6 +1640,7 @@ impl BankPerfectApp {
             self.menu_command(ui, Palette);
             self.menu_command(ui, Help);
             menu::separator(ui);
+            self.menu_command(ui, License);
             self.menu_command(ui, About);
             return;
         }
@@ -2068,7 +2079,12 @@ impl BankPerfectApp {
         command
     }
 
-    fn status_bar(ui: &mut egui::Ui, doc: &mut OpenDoc, toast: Option<&str>) {
+    fn status_bar(
+        ui: &mut egui::Ui,
+        doc: &mut OpenDoc,
+        toast: Option<&str>,
+        license: Option<&str>,
+    ) {
         let pal = palette(ui);
         ui.horizontal(|ui| {
             let shown = doc.visible_len();
@@ -2099,6 +2115,15 @@ impl BankPerfectApp {
                 } else {
                     ui.label(
                         RichText::new(format!("{}  Enregistré", icon::CHECK))
+                            .small()
+                            .color(pal.muted),
+                    );
+                }
+                // Licence : à gauche de l'état d'enregistrement.
+                if let Some(license) = license {
+                    ui.separator();
+                    ui.label(
+                        RichText::new(format!("{}  {license}", icon::SEAL_CHECK))
                             .small()
                             .color(pal.muted),
                     );
@@ -2384,6 +2409,12 @@ impl BankPerfectApp {
                         ))
                         .color(pal.positive),
                     );
+                    if let Some(license) = &self.license {
+                        ui.label(
+                            RichText::new(format!("{}  {}", icon::KEY, license.label()))
+                                .color(pal.fg_dark),
+                        );
+                    }
                     ui.hyperlink_to(
                         format!("{}  github.com/fabiochelly/bankperfect", icon::GITHUB_LOGO),
                         "https://github.com/fabiochelly/bankperfect",
@@ -2407,6 +2438,25 @@ impl BankPerfectApp {
                     }
                 });
             });
+        }
+        if let Some(form) = &mut self.license_form {
+            use crate::license_ui::LicenseAction;
+            match form.show(ctx, self.license.as_ref()) {
+                LicenseAction::Keep => {}
+                LicenseAction::Close => self.license_form = None,
+                // La fenêtre reste ouverte et montre la licence activée.
+                LicenseAction::Activated(certificate, license) => {
+                    self.settings.license = Some(certificate);
+                    self.settings.save();
+                    self.license = Some(license);
+                }
+                LicenseAction::Remove => {
+                    self.settings.license = None;
+                    self.settings.save();
+                    self.license = None;
+                    self.license_form = None;
+                }
+            }
         }
         if let Some(palette) = &mut self.command_palette {
             use crate::command_palette::PaletteResult;
@@ -2962,11 +3012,14 @@ impl BankPerfectApp {
         }
 
         let toast = self.toast.as_ref().map(|(t, _)| t.clone());
+        let license = self.license.as_ref().map(|l| l.label());
         let doc = self.doc.as_mut().expect("document ouvert");
         egui::Panel::bottom("status")
             .show_separator_line(false)
             .frame(egui::Frame::side_top_panel(ui.style()).fill(canvas))
-            .show(ui, |ui| Self::status_bar(ui, doc, toast.as_deref()));
+            .show(ui, |ui| {
+                Self::status_bar(ui, doc, toast.as_deref(), license.as_deref())
+            });
 
         // Fenêtre étroite (tuile) : pas de panneau des comptes, le nom du
         // compte devient un sélecteur.

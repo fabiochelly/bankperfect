@@ -11,12 +11,14 @@ description.workspace = true
 [dependencies]
 bp-core = { version = "9.4.0", path = "../bp-core" }
 bp-ext = { version = "9.4.0", path = "../bp-ext" }
+base64 = "0.22.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 directories = "6.0.0"
 eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts"] }
 egui = "0.36"
 egui-phosphor = "0.14.0"
 egui_extras = "0.36.2"
+ed25519-dalek = "2.2.0"
 encoding_rs = "0.8.42"
 jsonwebtoken = { version = "11.1.0", features = ["rust_crypto"] }
 nucleo-matcher = "0.3"

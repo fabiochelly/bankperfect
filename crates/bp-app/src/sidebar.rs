@@ -117,30 +117,12 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
 /// Le compte affiché, en carte bancaire : dégradé aux couleurs du logo,
 /// banque et puce, nom, solde, fin de l'IBAN et dernier rapprochement.
 fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
-    let pal = palette(ui);
-    let dark = ui.visuals().dark_mode;
     let account = doc.current_account();
     let balance = doc.account_balance(doc.account);
     let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width() - 6.0, 118.0), Sense::click());
+        ui.allocate_exact_size(vec2(ui.available_width(), 118.0), Sense::click());
     let painter = ui.painter();
     let radius = 14.0;
-
-    // Une seconde carte dépasse derrière, comme dans un portefeuille.
-    let behind = Rect::from_min_max(rect.min + vec2(8.0, 8.0), rect.max + vec2(6.0, 6.0));
-    let behind_fill = if dark {
-        pal.surface.gamma_multiply(0.8)
-    } else {
-        pal.border.gamma_multiply(0.45)
-    };
-    painter.rect_filled(behind, radius, behind_fill);
-    let shadow = egui::Shadow {
-        offset: [0, 10],
-        blur: 24,
-        spread: 0,
-        color: Color32::from_rgba_unmultiplied(61, 89, 161, if dark { 90 } else { 70 }),
-    };
-    painter.add(shadow.as_shape(rect, radius as u8));
 
     // Bleu du « b » vers violet du « p », avec un reflet vert en haut à droite.
     let stops = [
@@ -163,6 +145,8 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
             * 0.55;
         crate::islands::lerp(base, shine, glow)
     });
+    // Liseré fin, plus clair en haut : un léger relief, sans ombre.
+    crate::islands::lit_edge(painter, rect, radius, 1.0, 64, 10);
 
     let white = |alpha: u8| Color32::from_white_alpha(alpha);
     let inner = rect.shrink2(vec2(14.0, 12.0));

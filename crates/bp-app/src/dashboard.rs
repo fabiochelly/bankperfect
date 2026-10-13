@@ -464,7 +464,7 @@ fn lush_chart(
     pal: &Palette,
     dark: bool,
 ) {
-    use crate::islands::{RADIUS, gradient, rounded_span};
+    use crate::islands::{RADIUS, gradient, rounded_normal, rounded_span};
     const FADE: f32 = 90.0;
     let zone = Rect::from_min_max(pos2(left, tile.top()), tile.max);
     let plot = Rect::from_min_max(
@@ -507,7 +507,9 @@ fn lush_chart(
     let painter = ui.painter().clone();
 
     // Une aire = une bande verticale par échantillon, du trait jusqu'au bas
-    // arrondi de la tuile.
+    // arrondi de la tuile, adouci sur un pixel physique (sinon le coin
+    // crénelle).
+    let feather = 1.0 / ui.ctx().pixels_per_point();
     let area = |ys: &[f32], color_at: &dyn Fn(usize, f32) -> Color32| {
         let mut mesh = egui::Mesh::default();
         for (i, &y) in ys.iter().enumerate() {
@@ -515,13 +517,18 @@ fn lush_chart(
             let (top, bottom) = rounded_span(tile, RADIUS, x);
             let t = (x - zone.left()) / zone.width();
             let color = color_at(i, t).gamma_multiply(fade(x));
+            let edge = pos2(x, bottom);
+            let normal = rounded_normal(tile, RADIUS, edge) * feather / 2.0;
             mesh.colored_vertex(pos2(x, y.max(top)), color);
-            mesh.colored_vertex(pos2(x, bottom), color.gamma_multiply(0.75));
+            mesh.colored_vertex(edge - normal, color.gamma_multiply(0.75));
+            mesh.colored_vertex(edge + normal, Color32::TRANSPARENT);
         }
         for i in 0..ys.len().saturating_sub(1) as u32 {
-            let k = i * 2;
-            mesh.add_triangle(k, k + 1, k + 2);
-            mesh.add_triangle(k + 1, k + 3, k + 2);
+            let k = i * 3;
+            for (a, b) in [(k, k + 1), (k + 1, k + 2)] {
+                mesh.add_triangle(a, b, a + 3);
+                mesh.add_triangle(b, b + 3, a + 3);
+            }
         }
         painter.add(mesh);
     };

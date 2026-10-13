@@ -93,49 +93,105 @@ pub fn rounded_span(rect: Rect, r: f32, x: f32) -> (f32, f32) {
     (rect.top() + inset, rect.bottom() - inset)
 }
 
-/// Rectangle arrondi rempli d'un dégradé libre : `color_at` donne la couleur
-/// en chaque point. Le maillage suit le contour puis des anneaux concentriques
-/// vers le centre, assez serrés pour un dégradé doux.
-pub fn rounded_gradient(painter: &Painter, rect: Rect, r: f32, color_at: impl Fn(Pos2) -> Color32) {
-    const ARC: usize = 10;
-    const RINGS: usize = 10;
-    let r = r.min(rect.width() / 2.0).min(rect.height() / 2.0);
+/// Normale sortante du rectangle arrondi `rect` (rayon `r`) au point `p` de
+/// son contour.
+pub fn rounded_normal(rect: Rect, r: f32, p: Pos2) -> egui::Vec2 {
+    let inner = rect.shrink(r);
+    let nearest = pos2(
+        p.x.clamp(inner.left(), inner.right()),
+        p.y.clamp(inner.top(), inner.bottom()),
+    );
+    let n = p - nearest;
+    if n.length_sq() > 1e-6 {
+        return n.normalized();
+    }
+    // Sur un côté droit : le bord le plus proche.
+    let d = [
+        (p.x - rect.left(), vec2(-1.0, 0.0)),
+        (rect.right() - p.x, vec2(1.0, 0.0)),
+        (p.y - rect.top(), vec2(0.0, -1.0)),
+        (rect.bottom() - p.y, vec2(0.0, 1.0)),
+    ];
+    d.iter()
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .map(|d| d.1)
+        .unwrap_or(vec2(0.0, 1.0))
+}
+
+/// Contour du rectangle arrondi (sens horaire depuis le haut à droite), avec
+/// la normale sortante de chaque point.
+fn rounded_outline(rect: Rect, r: f32, arc: usize) -> Vec<(Pos2, egui::Vec2)> {
     let corners = [
         (pos2(rect.right() - r, rect.top() + r), -90.0f32),
         (pos2(rect.right() - r, rect.bottom() - r), 0.0),
         (pos2(rect.left() + r, rect.bottom() - r), 90.0),
         (pos2(rect.left() + r, rect.top() + r), 180.0),
     ];
-    let mut outline = Vec::with_capacity(4 * (ARC + 1));
+    let mut outline = Vec::with_capacity(4 * (arc + 1));
     for (center, start) in corners {
-        for i in 0..=ARC {
-            let a = (start + 90.0 * i as f32 / ARC as f32).to_radians();
-            outline.push(center + vec2(a.cos(), a.sin()) * r);
+        for i in 0..=arc {
+            let a = (start + 90.0 * i as f32 / arc as f32).to_radians();
+            let n = vec2(a.cos(), a.sin());
+            outline.push((center + n * r, n));
         }
     }
+    outline
+}
+
+/// Rectangle arrondi rempli d'un dégradé libre : `color_at` donne la couleur
+/// en chaque point. Le maillage suit le contour puis des anneaux concentriques
+/// vers le centre, assez serrés pour un dégradé doux. Le bord est adouci sur
+/// un pixel physique, comme les formes d'egui (sinon les coins crénellent).
+pub fn rounded_gradient(painter: &Painter, rect: Rect, r: f32, color_at: impl Fn(Pos2) -> Color32) {
+    const ARC: usize = 16;
+    const RINGS: usize = 10;
+    let r = r.min(rect.width() / 2.0).min(rect.height() / 2.0);
+    let feather = 1.0 / painter.ctx().pixels_per_point();
+    let outline = rounded_outline(rect, r, ARC);
     let center = rect.center();
     let n = outline.len() as u32;
     let mut mesh = egui::Mesh::default();
     mesh.colored_vertex(center, color_at(center));
-    // Anneau k (1 = le plus proche du centre, RINGS = le contour).
+    // Anneau k (1 = le plus proche du centre, RINGS = le contour, rentré d'un
+    // demi-pixel), puis l'anneau transparent, sorti d'un demi-pixel.
     for k in 1..=RINGS {
         let s = k as f32 / RINGS as f32;
-        for p in &outline {
-            let q = center + (*p - center) * s;
+        for (p, normal) in &outline {
+            let q = center + (*p - *normal * feather / 2.0 - center) * s;
             mesh.colored_vertex(q, color_at(q));
         }
+    }
+    for (p, normal) in &outline {
+        mesh.colored_vertex(*p + *normal * feather / 2.0, Color32::TRANSPARENT);
     }
     let ring = |k: u32, i: u32| 1 + (k - 1) * n + (i % n);
     for i in 0..n {
         mesh.add_triangle(0, ring(1, i), ring(1, i + 1));
     }
-    for k in 1..RINGS as u32 {
+    for k in 1..=RINGS as u32 {
         for i in 0..n {
             mesh.add_triangle(ring(k, i), ring(k + 1, i), ring(k, i + 1));
             mesh.add_triangle(ring(k, i + 1), ring(k + 1, i), ring(k + 1, i + 1));
         }
     }
     painter.add(mesh);
+}
+
+/// Liseré fin à l'intérieur du rectangle arrondi, blanc plus opaque en haut
+/// (`top_alpha`) qu'en bas (`bottom_alpha`) : un léger relief, sans ombre.
+pub fn lit_edge(painter: &Painter, rect: Rect, r: f32, width: f32, top_alpha: u8, bottom_alpha: u8) {
+    let edge = rect.shrink(width / 2.0);
+    let points: Vec<Pos2> = rounded_outline(edge, (r - width / 2.0).max(0.0), 16)
+        .into_iter()
+        .map(|(p, _)| p)
+        .collect();
+    let (top, height) = (edge.top(), edge.height().max(1.0));
+    let stroke = egui::epaint::PathStroke::new_uv(width, move |_, p: Pos2| {
+        let t = ((p.y - top) / height).clamp(0.0, 1.0);
+        let a = top_alpha as f32 + (bottom_alpha as f32 - top_alpha as f32) * t;
+        Color32::from_white_alpha(a.round() as u8)
+    });
+    painter.add(egui::epaint::PathShape::closed_line(points, stroke));
 }
 
 /// Mélange linéaire de couleurs (alpha compris) le long de `stops`

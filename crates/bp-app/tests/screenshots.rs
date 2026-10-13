@@ -478,6 +478,33 @@ fn dashboard_widths() {
             h.key_press(egui::Key::Enter);
         });
     }
+    // Filtre actif (période choisie sur la courbe) : mention dans la barre de
+    // menus, en toutes lettres ou en icône selon la place.
+    for width in [1280.0, 900.0] {
+        render_sized(
+            &format!("62-filtre-{width}"),
+            egui::Theme::Dark,
+            egui::vec2(width, 700.0),
+            |h| {
+                let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                };
+                let (from, to) = (width - 110.0, width - 40.0);
+                h.event(egui::Event::PointerMoved(egui::pos2(from, 130.0)));
+                h.event(press(egui::pos2(from, 130.0), true));
+                h.run_steps(2);
+                for x in (from as i32..=to as i32).step_by(10) {
+                    h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 130.0)));
+                    h.run_steps(1);
+                }
+                h.event(press(egui::pos2(to, 130.0), false));
+                h.run_steps(3);
+            },
+        );
+    }
     render_sized(
         "60-largeur-1280-clair",
         egui::Theme::Light,

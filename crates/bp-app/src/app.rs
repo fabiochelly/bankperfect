@@ -35,6 +35,10 @@ const SHORTCUT_GROUP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAN
 const SHORTCUT_EXTRA: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F3);
 const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::G);
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
+
+/// Symbole du logiciel en haut à droite : côté et marge au bord de la fenêtre.
+const LOGO_SIZE: f32 = 40.0;
+const LOGO_MARGIN: f32 = 8.0;
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
 const SHORTCUT_RULES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
@@ -1506,15 +1510,15 @@ impl BankPerfectApp {
         } else {
             &["Fichier", "Outils", "Extensions", "Aide"]
         };
-        let opened = ui
+        let (opened, command) = ui
             .horizontal(|ui| {
                 let opened = self.menus.titles(ui, titles);
                 // Symbole du logiciel en haut à droite, dessiné par-dessus la
                 // barre (il déborde un peu sous elle sans la grandir).
                 let pal = palette(ui);
-                let size = 40.0;
+                let size = LOGO_SIZE;
                 // Même marge en haut et à droite de la fenêtre.
-                let margin = 8.0;
+                let margin = LOGO_MARGIN;
                 let window = ui.ctx().content_rect();
                 let rect = egui::Rect::from_min_size(
                     egui::pos2(window.right() - margin - size, window.top() + margin),
@@ -1530,15 +1534,16 @@ impl BankPerfectApp {
                     crate::theme::logo_b(&pal),
                     crate::theme::logo_p(&pal),
                 );
-                // Mention discrète du nom, à gauche du symbole.
-                painter.text(
-                    egui::pos2(rect.left() - 4.0, rect.center().y),
-                    egui::Align2::RIGHT_CENTER,
-                    "BankPerfect",
-                    egui::FontId::new(12.5, crate::theme::medium()),
-                    pal.muted,
-                );
-                opened
+                // Filtres prédéfinis à gauche du symbole : la place gagnée
+                // évite une ligne d'en-tête au-dessus des soldes.
+                let mut command = None;
+                if let Some(doc) = self.doc.as_mut() {
+                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                        ui.add_space((ui.max_rect().right() - rect.left() + 16.0).max(0.0));
+                        command = Self::filters_menu(ui, doc);
+                    });
+                }
+                (opened, command)
             })
             .inner;
         if let Some((index, anchor)) = opened {
@@ -1546,6 +1551,10 @@ impl BankPerfectApp {
             let mut menus = std::mem::take(&mut self.menus);
             menus.popup(&ctx, index, anchor, |ui| self.menu_content(ui, index));
             self.menus = menus;
+        }
+        if let Some(command) = command {
+            let ctx = ui.ctx().clone();
+            self.execute(&ctx, command);
         }
     }
 
@@ -1887,16 +1896,15 @@ impl BankPerfectApp {
 
     fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc, compact: bool) -> Option<Command> {
         let mut command = None;
-        let pal = palette(ui);
-        let filtered = doc.filters.is_active() && !doc.ignore_filter_totals();
-        // En-tête compact sur une ligne : nom du compte, banque et IBAN.
-        ui.add_space(8.0);
-        ui.horizontal(|ui| {
-            let title = RichText::new(&doc.current_account().name)
-                .size(18.0)
-                .family(crate::theme::semibold());
-            if compact {
-                // Sans panneau des comptes : le nom sert de sélecteur.
+        if compact {
+            // Sans panneau des comptes : le nom du compte sert de sélecteur,
+            // avec la banque et l'IBAN à côté.
+            let pal = palette(ui);
+            ui.add_space(8.0);
+            ui.horizontal(|ui| {
+                let title = RichText::new(&doc.current_account().name)
+                    .size(18.0)
+                    .family(crate::theme::semibold());
                 let mut selected = None;
                 egui::ComboBox::from_id_salt("account_switcher")
                     .selected_text(title)
@@ -1920,93 +1928,130 @@ impl BankPerfectApp {
                 if let Some(i) = selected {
                     doc.select_account(i);
                 }
-            } else {
-                ui.label(title);
-            }
-            let account = doc.current_account();
-            let mut sub = account.bank_name.clone();
-            if !account.iban.trim().is_empty() {
-                sub = if sub.is_empty() {
-                    account.iban.trim().to_string()
-                } else {
-                    format!("{sub}  ·  {}", account.iban.trim())
-                };
-            }
-            ui.label(RichText::new(sub).small().color(pal.muted));
-            ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.add_space(4.0);
-                // Filtres prédéfinis : appliquer, enregistrer, gérer.
-                let response = ui.add(
-                    egui::Button::new(
-                        RichText::new(format!("{}  Filtres  {}", icon::FUNNEL, icon::CARET_DOWN))
-                            .small(),
-                    )
-                    .frame(false),
-                );
-                egui::Popup::menu(&response).show(|ui| {
-                    crate::menu::popup_style(ui.style_mut());
-                    crate::menu::begin(ui);
-                    let filters = crate::filters_ui::load(doc);
-                    let names: Vec<String> =
-                        filters.names().iter().map(|s| s.to_string()).collect();
-                    for name in &names {
-                        if crate::menu::item(ui, Some(icon::FUNNEL_SIMPLE), name, None).clicked()
-                            && let Some(f) = filters.get(name)
-                        {
-                            crate::filters_ui::apply(doc, f);
-                        }
-                    }
-                    if !names.is_empty() {
-                        crate::menu::separator(ui);
-                    }
-                    if crate::menu::item_enabled(
-                        ui,
-                        doc.filters.is_active(),
-                        Some(icon::FUNNEL_X),
-                        "Retirer les filtres",
-                        None,
-                    )
-                    .clicked()
-                    {
-                        command = Some(Command::ClearFilters);
-                    }
-                    if crate::menu::item(
-                        ui,
-                        Some(icon::FLOPPY_DISK),
-                        "Enregistrer le filtre actuel…",
-                        None,
-                    )
-                    .clicked()
-                    {
-                        command = Some(Command::SaveFilter);
-                    }
-                    if crate::menu::item(ui, Some(icon::GEAR_SIX), "Gérer les filtres…", Some("F7"))
-                        .clicked()
-                    {
-                        command = Some(Command::AutoFilters);
-                    }
-                });
-                // Dans l'en-tête plutôt qu'en dessous : la grille ne bouge pas
-                // quand un filtre s'active.
-                if filtered {
-                    ui.label(
-                        RichText::new(format!(
-                            "{}  soldes calculés sur les lignes filtrées",
-                            icon::FUNNEL
-                        ))
-                        .small()
-                        .color(pal.pointed),
-                    );
+                let account = doc.current_account();
+                let mut sub = account.bank_name.clone();
+                if !account.iban.trim().is_empty() {
+                    sub = if sub.is_empty() {
+                        account.iban.trim().to_string()
+                    } else {
+                        format!("{sub}  ·  {}", account.iban.trim())
+                    };
                 }
+                ui.add(egui::Label::new(RichText::new(sub).small().color(pal.muted)).truncate());
             });
-        });
-        ui.add_space(8.0);
+        }
+        // Le nom du compte est déjà dans le panneau latéral (la banque et
+        // l'IBAN en infobulle) : les soldes remontent juste sous les menus.
+        if compact {
+            ui.add_space(8.0);
+        } else {
+            // Le symbole déborde sous la barre de menus : la carte commence
+            // sous lui, avec une marge.
+            let below_logo = ui.ctx().content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 14.0;
+            ui.add_space((below_logo - ui.cursor().top()).max(8.0));
+        }
         if doc.show_balance_panel
             && let Some(toggle) = crate::dashboard::cards(ui, doc)
         {
             command = Some(toggle);
         }
         ui.add_space(-4.0);
+        command
+    }
+
+    /// Menu des filtres prédéfinis (appliquer, enregistrer, gérer), dans la
+    /// barre de menus, en disposition de droite à gauche. Le bouton prend la
+    /// couleur des lignes pointées quand un filtre est actif ; si les soldes
+    /// portent sur les lignes filtrées, une mention le dit à sa gauche quand
+    /// il y a la place, sinon l'infobulle du bouton.
+    fn filters_menu(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
+        const NOTICE: &str = "soldes calculés sur les lignes filtrées";
+        let mut command = None;
+        let pal = palette(ui);
+        let active = doc.filters.is_active();
+        let filtered = active && !doc.ignore_filter_totals();
+        let color = if active { pal.pointed } else { pal.fg_dark };
+        let measure = |ui: &egui::Ui, text: &str, style: egui::TextStyle| {
+            let font = style.resolve(ui.style());
+            ui.painter()
+                .layout_no_wrap(text.into(), font, color)
+                .size()
+                .x
+        };
+        let full = format!("{}  Filtres  {}", icon::FUNNEL, icon::CARET_DOWN);
+        let button = measure(ui, &full, egui::TextStyle::Body) + 24.0;
+        let notice = measure(
+            ui,
+            &format!("{}  {NOTICE}", icon::FUNNEL),
+            egui::TextStyle::Small,
+        ) + 16.0;
+        let room = ui.available_width();
+        // Icône seule quand les menus laissent trop peu de place.
+        let label = if room > button {
+            full
+        } else {
+            format!("{} {}", icon::FUNNEL, icon::CARET_DOWN)
+        };
+        let show_notice = filtered && room > button + notice;
+        let hover = if filtered && !show_notice {
+            format!("Filtres prédéfinis\n{}  {NOTICE}", icon::FUNNEL)
+        } else {
+            "Filtres prédéfinis".to_string()
+        };
+        let response = ui
+            .add(egui::Button::new(RichText::new(label).color(color)).frame(false))
+            .on_hover_text(hover);
+        egui::Popup::menu(&response).show(|ui| {
+            crate::menu::popup_style(ui.style_mut());
+            crate::menu::begin(ui);
+            let filters = crate::filters_ui::load(doc);
+            let names: Vec<String> = filters.names().iter().map(|s| s.to_string()).collect();
+            for name in &names {
+                if crate::menu::item(ui, Some(icon::FUNNEL_SIMPLE), name, None).clicked()
+                    && let Some(f) = filters.get(name)
+                {
+                    crate::filters_ui::apply(doc, f);
+                }
+            }
+            if !names.is_empty() {
+                crate::menu::separator(ui);
+            }
+            if crate::menu::item_enabled(
+                ui,
+                active,
+                Some(icon::FUNNEL_X),
+                "Retirer les filtres",
+                None,
+            )
+            .clicked()
+            {
+                command = Some(Command::ClearFilters);
+            }
+            if crate::menu::item(
+                ui,
+                Some(icon::FLOPPY_DISK),
+                "Enregistrer le filtre actuel…",
+                None,
+            )
+            .clicked()
+            {
+                command = Some(Command::SaveFilter);
+            }
+            if crate::menu::item(ui, Some(icon::GEAR_SIX), "Gérer les filtres…", Some("F7"))
+                .clicked()
+            {
+                command = Some(Command::AutoFilters);
+            }
+        });
+        // Dans la barre plutôt qu'au-dessus de la grille : rien ne bouge quand
+        // un filtre s'active.
+        if show_notice {
+            ui.label(
+                RichText::new(format!("{}  {NOTICE}", icon::FUNNEL))
+                    .small()
+                    .color(pal.pointed),
+            );
+        }
         command
     }
 

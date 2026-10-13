@@ -45,6 +45,12 @@ fn render_full(
         .wgpu()
         .build_eframe(|cc| {
             bankperfect::theme::install(&cc.egui_ctx);
+            // Fond translucide (BP_TRANSLUCENT) : l'image garde la
+            // transparence, à poser sur un fond d'écran pour la juger.
+            if std::env::var_os("BP_TRANSLUCENT").is_some() {
+                bankperfect::theme::set_surface_transparent(true);
+                bankperfect::theme::set_translucent(&cc.egui_ctx, true);
+            }
             let mut app = bankperfect::BankPerfectApp::with_settings(None, Default::default());
             if let Some(dir) = extensions {
                 app.load_extensions(dir);

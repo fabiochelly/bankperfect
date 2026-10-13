@@ -40,10 +40,10 @@ const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE,
 const LOGO_SIZE: f32 = 34.0;
 const LOGO_MARGIN: f32 = 6.0;
 
-/// Haut des îles (comptes, soldes) : sous le symbole, qui déborde de la
-/// barre de menus, avec une marge.
+/// Haut des îles (comptes, soldes) : juste sous le symbole, qui déborde de
+/// la barre de menus.
 fn islands_top(ctx: &egui::Context) -> f32 {
-    ctx.content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 10.0
+    ctx.content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 4.0
 }
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
@@ -1969,7 +1969,6 @@ impl BankPerfectApp {
         {
             command = Some(toggle);
         }
-        ui.add_space(-4.0);
         command
     }
 

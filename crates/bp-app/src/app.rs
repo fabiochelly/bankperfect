@@ -2957,6 +2957,7 @@ impl BankPerfectApp {
             self.modals(&ctx);
             self.extension_modals(&ctx);
             self.update_title(&ctx);
+            open_requested_urls(&ctx);
             return;
         }
 
@@ -3110,6 +3111,27 @@ impl BankPerfectApp {
         self.modals(&ctx);
         self.extension_modals(&ctx);
         self.update_title(&ctx);
+        open_requested_urls(&ctx);
+    }
+}
+
+/// Liens demandés pendant l'image (`hyperlink`, `open_url`) : eframe est
+/// compilé sans sa fonction « links », on les ouvre donc nous-mêmes dans le
+/// navigateur.
+fn open_requested_urls(ctx: &egui::Context) {
+    let urls: Vec<String> = ctx.output_mut(|o| {
+        let mut urls = Vec::new();
+        o.commands.retain(|command| match command {
+            egui::OutputCommand::OpenUrl(open) => {
+                urls.push(open.url.clone());
+                false
+            }
+            _ => true,
+        });
+        urls
+    });
+    for url in urls {
+        let _ = open::that_detached(&url);
     }
 }
 

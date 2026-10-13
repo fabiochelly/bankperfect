@@ -26,7 +26,7 @@ const PUBLIC_KEY: [u8; 32] = [
 ];
 
 /// Page d'activation (`BP_LICENSE_URL` la remplace, pour les essais).
-const ACTIVATION_URL: &str = "https://chelly.net/check-bp-license.php";
+const ACTIVATION_URL: &str = "https://chelly.net/bankperfect/licences/check-bp-license.php";
 
 /// Licence vérifiée.
 #[derive(Debug, Clone, PartialEq, Deserialize)]

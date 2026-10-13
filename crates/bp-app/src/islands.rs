@@ -179,7 +179,14 @@ pub fn rounded_gradient(painter: &Painter, rect: Rect, r: f32, color_at: impl Fn
 
 /// Liseré fin à l'intérieur du rectangle arrondi, blanc plus opaque en haut
 /// (`top_alpha`) qu'en bas (`bottom_alpha`) : un léger relief, sans ombre.
-pub fn lit_edge(painter: &Painter, rect: Rect, r: f32, width: f32, top_alpha: u8, bottom_alpha: u8) {
+pub fn lit_edge(
+    painter: &Painter,
+    rect: Rect,
+    r: f32,
+    width: f32,
+    top_alpha: u8,
+    bottom_alpha: u8,
+) {
     let edge = rect.shrink(width / 2.0);
     let points: Vec<Pos2> = rounded_outline(edge, (r - width / 2.0).max(0.0), 16)
         .into_iter()

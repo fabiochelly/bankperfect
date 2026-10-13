@@ -821,18 +821,28 @@ fn license_screens() {
         h.key_press(egui::Key::Enter);
         h.run_steps(3);
     };
-    render_sized("65-licence", egui::Theme::Dark, egui::vec2(1280.0, 700.0), |h| {
-        open_dialog(h);
-        h.event(egui::Event::Text(key.clone()));
-    });
-    render_sized("66-licence-activee", egui::Theme::Dark, egui::vec2(1280.0, 700.0), |h| {
-        open_dialog(h);
-        h.event(egui::Event::Text(key.clone()));
-        h.run_steps(2);
-        h.get_by_label("Activer").click();
-        for _ in 0..60 {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            h.run_steps(1);
-        }
-    });
+    render_sized(
+        "65-licence",
+        egui::Theme::Dark,
+        egui::vec2(1280.0, 700.0),
+        |h| {
+            open_dialog(h);
+            h.event(egui::Event::Text(key.clone()));
+        },
+    );
+    render_sized(
+        "66-licence-activee",
+        egui::Theme::Dark,
+        egui::vec2(1280.0, 700.0),
+        |h| {
+            open_dialog(h);
+            h.event(egui::Event::Text(key.clone()));
+            h.run_steps(2);
+            h.get_by_label("Activer").click();
+            for _ in 0..60 {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                h.run_steps(1);
+            }
+        },
+    );
 }

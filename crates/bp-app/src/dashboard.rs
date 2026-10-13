@@ -102,7 +102,9 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
             }
         })
         .inner;
-    ui.add_space(crate::islands::GAP);
+    // Même écart sous les tuiles qu'entre elles : l'espacement entre
+    // éléments, déjà ajouté après les tuiles, compte dans cet écart.
+    ui.add_space(crate::islands::GAP - ui.spacing().item_spacing.y);
     toggle.then_some(Command::ToggleBalanceCards)
 }
 

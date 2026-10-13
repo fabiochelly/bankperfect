@@ -57,6 +57,7 @@ pub enum Command {
     ToggleBalancePanel,
     ToggleForecast,
     ToggleBalanceCards,
+    ToggleColumnFilters,
     ReverseCurrencies,
     Scheduler,
     Forecast,
@@ -147,6 +148,7 @@ impl Command {
                 ToggleBalancePanel,
                 ToggleForecast,
                 ToggleBalanceCards,
+                ToggleColumnFilters,
                 ReverseCurrencies,
                 Scheduler,
                 Forecast,
@@ -599,6 +601,20 @@ impl Command {
                     icon::COLUMNS,
                     None,
                     "soldes cartes équation panneau bascule",
+                )
+            }
+            ToggleColumnFilters => {
+                let label = if doc.is_some_and(|d| d.show_column_filters) {
+                    "Masquer les filtres de colonnes"
+                } else {
+                    "Afficher les filtres de colonnes"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::MAGNIFYING_GLASS,
+                    None,
+                    "filtres colonnes recherche loupe tiers montant",
                 )
             }
             ToggleForecast => {

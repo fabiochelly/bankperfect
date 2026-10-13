@@ -1,5 +1,6 @@
-//! Grille des opérations : en-têtes triables avec champs de filtre intégrés,
-//! lignes virtualisées (seules les lignes visibles sont dessinées).
+//! Grille des opérations : en-têtes triables, ligne de filtres de colonnes
+//! repliable (la loupe à gauche de « Date »), lignes virtualisées (seules les
+//! lignes visibles sont dessinées).
 
 use bp_core::filter::TackFilter;
 use bp_core::model::{Date, Tack};
@@ -68,7 +69,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 .resizable(false),
         )
         .column(Column::initial(amount_w).at_least(86.0))
-        .column(Column::initial(balance_w).at_least(96.0))
+        .column(Column::initial(balance_w).at_least(96.0).resizable(false))
         .min_scrolled_height(0.0);
     if let Some(op) = scroll_to
         && let Some(row) = visible.iter().position(|&i| i == op)
@@ -78,14 +79,22 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
 
     let mut first_drawn = usize::MAX;
     let mut last_drawn = 0;
+    // Filtres de colonnes : une ligne de champs sous les titres, ouverte
+    // par la loupe.
+    let open = doc.show_column_filters;
     table
-        .header(66.0, |mut header| {
-            header.col(|ui| tack_filter_header(ui, doc));
-            header.col(|ui| date_header(ui, doc));
+        .header(if open { 66.0 } else { 30.0 }, |mut header| {
+            header.col(|ui| {
+                if loupe_header(ui, doc) {
+                    action = GridAction::Command(crate::commands::Command::ToggleColumnFilters);
+                }
+            });
+            header.col(|ui| date_header(ui, doc, open));
             header.col(|ui| {
                 filter_header(
                     ui,
                     doc,
+                    open,
                     "Mode",
                     SortColumn::Mode,
                     |f| &mut f.mode,
@@ -96,6 +105,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 filter_header(
                     ui,
                     doc,
+                    open,
                     "Tiers",
                     SortColumn::Payee,
                     |f| &mut f.payee,
@@ -106,6 +116,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 filter_header(
                     ui,
                     doc,
+                    open,
                     "Catégorie",
                     SortColumn::Category,
                     |f| &mut f.category,
@@ -116,6 +127,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 filter_header(
                     ui,
                     doc,
+                    open,
                     "Montant",
                     SortColumn::Amount,
                     |f| &mut f.amount,
@@ -474,6 +486,7 @@ fn category_badge(
 fn filter_header(
     ui: &mut egui::Ui,
     doc: &mut OpenDoc,
+    open: bool,
     title: &str,
     column: SortColumn,
     field: impl Fn(&mut bp_core::filter::Filters) -> &mut String,
@@ -482,6 +495,9 @@ fn filter_header(
     ui.vertical(|ui| {
         ui.add_space(2.0);
         sort_title(ui, doc, title, column);
+        if !open {
+            return;
+        }
         let value = field(&mut doc.filters);
         let active = !value.is_empty();
         let edit = crate::theme::field(value)
@@ -520,10 +536,13 @@ fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortCol
     }
 }
 
-fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc, open: bool) {
     ui.vertical(|ui| {
         ui.add_space(2.0);
         sort_title(ui, doc, "Date", SortColumn::Date);
+        if !open {
+            return;
+        }
         let active = doc.filters.date_from.is_some() || doc.filters.date_to.is_some();
         let label = if active {
             format!("{} Période", icon::FUNNEL)
@@ -594,23 +613,79 @@ fn date_bound(ui: &mut egui::Ui, label: &str, bound: &mut Option<Date>) {
     ui.add_space(4.0);
 }
 
-fn tack_filter_header(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+/// Première colonne de l'en-tête : la loupe qui ouvre ou ferme la ligne des
+/// filtres de colonnes (bleue quand elle est ouverte ; couleur des filtres
+/// quand elle est fermée sur des filtres actifs), puis, ligne ouverte, le
+/// filtre par pointage. Renvoie vrai si la loupe a été cliquée.
+fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
+    let pal = palette(ui);
+    let open = doc.show_column_filters;
+    let f = &doc.filters;
+    let hidden_filters = !open
+        && (!f.mode.is_empty()
+            || !f.payee.is_empty()
+            || !f.category.is_empty()
+            || !f.amount.is_empty()
+            || f.date_from.is_some()
+            || f.date_to.is_some()
+            || f.tack != TackFilter::All);
+    let mut clicked = false;
     ui.vertical_centered(|ui| {
-        ui.add_space(26.0);
-        let active = doc.filters.tack != TackFilter::All;
-        let glyph = if active { icon::FUNNEL } else { icon::CHECKS };
-        let response = ui
-            .add(egui::Button::new(glyph).selected(active).frame(active))
-            .on_hover_text("Filtrer par pointage");
-        egui::Popup::menu(&response).show(|ui| {
-            crate::menu::popup_style(ui.style_mut());
-            crate::menu::begin(ui);
-            crate::menu::heading(ui, "Afficher les lignes");
-            for filter in TackFilter::ALL {
-                if crate::menu::choice(ui, doc.filters.tack == filter, filter.label()).clicked() {
-                    doc.filters.tack = filter;
-                }
-            }
+        ui.add_space(2.0);
+        let galley = ui.painter().layout_no_wrap(
+            icon::MAGNIFYING_GLASS.to_string(),
+            egui::FontId::proportional(16.0),
+            Color32::PLACEHOLDER,
+        );
+        let (rect, response) =
+            ui.allocate_exact_size(galley.size() + egui::vec2(6.0, 4.0), Sense::click());
+        response.widget_info(|| {
+            egui::WidgetInfo::selected(egui::WidgetType::Button, true, open, "Filtres de colonnes")
         });
+        let color = if open {
+            pal.accent
+        } else if hidden_filters {
+            pal.pointed
+        } else if response.hovered() {
+            pal.fg
+        } else {
+            pal.muted
+        };
+        ui.painter()
+            .galley(rect.center() - galley.size() / 2.0, galley, color);
+        let tip = if open {
+            "Masquer les filtres de colonnes"
+        } else if hidden_filters {
+            "Afficher les filtres de colonnes (des filtres sont actifs)"
+        } else {
+            "Afficher les filtres de colonnes"
+        };
+        clicked = response
+            .on_hover_cursor(egui::CursorIcon::PointingHand)
+            .on_hover_text(tip)
+            .clicked();
+        if open {
+            ui.add_space(4.0);
+            tack_filter_button(ui, doc);
+        }
+    });
+    clicked
+}
+
+fn tack_filter_button(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+    let active = doc.filters.tack != TackFilter::All;
+    let glyph = if active { icon::FUNNEL } else { icon::CHECKS };
+    let response = ui
+        .add(egui::Button::new(glyph).selected(active).frame(active))
+        .on_hover_text("Filtrer par pointage");
+    egui::Popup::menu(&response).show(|ui| {
+        crate::menu::popup_style(ui.style_mut());
+        crate::menu::begin(ui);
+        crate::menu::heading(ui, "Afficher les lignes");
+        for filter in TackFilter::ALL {
+            if crate::menu::choice(ui, doc.filters.tack == filter, filter.label()).clicked() {
+                doc.filters.tack = filter;
+            }
+        }
     });
 }

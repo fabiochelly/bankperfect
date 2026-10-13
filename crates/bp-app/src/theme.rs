@@ -876,9 +876,13 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     };
     v.menu_corner_radius = CornerRadius::same(8);
     v.extreme_bg_color = p.bg_dark;
-    // Bandes de la grille : peintes par-dessus le fond déjà translucide, elles
-    // restent très légères pour ne pas créer de rayures marquées.
-    v.faint_bg_color = backdrop(p.stripe, 0.35);
+    // Bandes de la grille : un voile clair (sombre en thème clair) plutôt
+    // qu'une couleur, pour rester visibles sur les îles, même translucides.
+    v.faint_bg_color = if dark {
+        Color32::from_white_alpha(9)
+    } else {
+        Color32::from_black_alpha(10)
+    };
     v.code_bg_color = p.bg_dark;
     v.hyperlink_color = p.accent;
     v.warn_fg_color = p.warning;

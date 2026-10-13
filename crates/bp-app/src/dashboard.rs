@@ -27,7 +27,7 @@ use crate::document::{ChartWindow, OpenDoc, Totals};
 use crate::format::{money, money_compact};
 use crate::theme::{Palette, medium, palette, semibold};
 
-const EQUATION_HEIGHT: f32 = 136.0;
+const TILES_HEIGHT: f32 = 148.0;
 const CARDS_HEIGHT: f32 = 112.0;
 /// Côté du bouton qui bascule entre l'équation et les cartes.
 const TOGGLE_SIZE: f32 = 22.0;
@@ -102,143 +102,56 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
             }
         })
         .inner;
-    ui.add_space(12.0);
+    ui.add_space(crate::islands::GAP);
     toggle.then_some(Command::ToggleBalanceCards)
 }
 
+/// Soldes en tuiles (îles) : « En banque », « À venir » et, en grand,
+/// « Solde final » avec sa courbe ; les signes de l'équation sont posés à
+/// cheval entre les tuiles.
 fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     let pal = palette(ui);
     let dark = ui.visuals().dark_mode;
-    let (rect, _) =
-        ui.allocate_exact_size(vec2(ui.available_width(), EQUATION_HEIGHT), Sense::hover());
+    let (area, _) =
+        ui.allocate_exact_size(vec2(ui.available_width(), TILES_HEIGHT), Sense::hover());
     let f = figures(doc);
-    card(ui, rect, 0.0);
+    let gap = crate::islands::GAP;
+    let unit = (area.width() - 2.0 * gap) / 4.1;
+    let bank = Rect::from_min_size(area.min, vec2(unit, area.height()));
+    let pending = bank.translate(vec2(unit + gap, 0.0));
+    let hero = Rect::from_min_max(pos2(pending.right() + gap, area.top()), area.max);
+    for tile in [bank, pending, hero] {
+        crate::islands::paint(ui.painter(), tile, &pal, dark);
+    }
 
-    let inner = Rect::from_min_max(rect.min + vec2(24.0, 16.0), rect.max - vec2(18.0, 14.0));
-    let op_width = (inner.width() * 0.045).clamp(26.0, 44.0);
-    let hero_width = inner.width() * 0.46;
-    let term_width = ((inner.width() - hero_width - 2.0 * op_width) / 2.0).max(40.0);
-    let pointed = Rect::from_min_size(inner.min, vec2(term_width, inner.height()));
-    let pending = pointed.translate(vec2(term_width + op_width, 0.0));
-    let hero = Rect::from_min_max(pos2(pending.right() + op_width, inner.top()), inner.max);
-    let hero_color = if f.totals.balance.is_negative() {
-        pal.negative
-    } else {
-        pal.positive
-    };
-
-    // Halo derrière le solde final.
-    glow(
-        &ui.painter_at(rect.shrink(1.0)),
-        pos2(hero.left() + hero.width() * 0.2, hero.top() + 42.0),
-        vec2(hero.width() * 0.6, 78.0),
-        hero_color.gamma_multiply(if dark { 0.14 } else { 0.12 }),
-    );
-
-    // Libellés.
-    let label = caption(
+    // En banque : montant, tendance, rapprochement, et l'anneau de pointage.
+    let inner = bank.shrink2(vec2(16.0, 14.0));
+    let head = tile_head(
         ui,
-        pointed.min,
+        inner.min,
         icon::CHECKS,
         "En banque",
         pal.accent,
-        pointed.width(),
+        inner.width(),
     );
-    bank_tooltip(ui, label);
-    caption(
-        ui,
-        pending.min,
-        icon::CLOCK,
-        "À venir",
-        pal.future,
-        pending.width(),
+    bank_tooltip(ui, head);
+    let ring_size = 48.0;
+    let ring = Rect::from_min_size(
+        pos2(inner.right() - ring_size, inner.top()),
+        Vec2::splat(ring_size),
     );
-    let toggle = layout_toggle(ui, toggle_rect(hero), false, &pal);
-    let chips_right = hero.right() - TOGGLE_SIZE - 4.0;
-    let chips_left = if hero.width() >= CHIPS_MIN_BLOCK {
-        let area = Rect::from_min_max(
-            pos2(hero.center().x, hero.top() - 3.0),
-            pos2(chips_right, hero.top() + 15.0),
-        );
-        window_chips(ui, area, doc, &pal, hero_color)
-    } else {
-        chips_right
-    };
-    caption(
-        ui,
-        hero.min,
-        icon::WALLET,
-        "Solde final",
-        hero_color,
-        chips_left - hero.left() - 8.0,
-    );
-
-    // Montants, posés sur une même ligne de base.
-    let with_chart = f.window.is_some() && hero.width() >= CHART_MIN_BLOCK + 60.0;
-    let hero_text = if with_chart {
-        hero.width() * 0.55
-    } else {
-        hero.width()
-    };
-    let balance = animated(ui, ui.id().with("balance_value"), f.totals.balance);
-    let balance_galley = amount_galley(
-        ui,
-        balance,
-        &f.currency,
-        36.0,
-        if balance.is_negative() {
-            pal.negative
-        } else {
-            pal.fg
-        },
-        hero_text,
-    );
-    let baseline = hero.top() + 21.0 + baseline_of(&balance_galley);
-    let mut hero_used = balance_galley.size().x;
-    paint_on_baseline(ui, hero.left(), baseline, balance_galley);
-
-    let pointed_value = animated(ui, ui.id().with("pointed_value"), f.totals.pointed);
+    pointed_ring(ui, ring, doc, &pal);
+    let value = animated(ui, ui.id().with("pointed_value"), f.totals.pointed);
     let galley = amount_galley(
         ui,
-        pointed_value,
+        value,
         &f.currency,
-        24.0,
+        23.0,
         pal.fg,
-        pointed.width(),
+        ring.left() - inner.left() - 8.0,
     );
-    paint_on_baseline(ui, pointed.left(), baseline, galley);
-
-    // L'à venir s'affiche sans signe : c'est l'opérateur qui le porte.
-    let pending_value = animated(ui, ui.id().with("pending_value"), f.totals.pending);
-    let galley = amount_galley(
-        ui,
-        Amount(pending_value.0.abs()),
-        &f.currency,
-        24.0,
-        pal.future,
-        pending.width(),
-    );
-    paint_on_baseline(ui, pending.left(), baseline, galley);
-
-    let operator = |x: f32, glyph: &str| {
-        let galley = ui.painter().layout_no_wrap(
-            glyph.into(),
-            FontId::proportional(28.0),
-            pal.muted.gamma_multiply(0.8),
-        );
-        let x = x - galley.size().x / 2.0;
-        paint_on_baseline(ui, x, baseline, galley);
-    };
-    let sign = if f.totals.pending.is_negative() {
-        "\u{2212}"
-    } else {
-        "+"
-    };
-    operator(pointed.right() + op_width / 2.0, sign);
-    operator(pending.right() + op_width / 2.0, "=");
-
-    // Lignes secondaires.
-    let lines_top = baseline + 9.0;
+    let baseline = inner.top() + 62.0;
+    paint_on_baseline(ui, inner.left(), baseline, galley);
     let mut lines = Vec::new();
     lines.extend(
         f.window
@@ -247,50 +160,56 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     lines.push(reconciled_line(&f, &pal));
     paint_lines(
         ui,
-        pos2(pointed.left(), lines_top),
+        pos2(inner.left(), baseline + 10.0),
         &lines,
-        pointed.width(),
-        inner.bottom() - 6.0,
+        inner.width(),
+        inner.bottom() + 2.0,
     );
 
-    let mut pending_line = match f.totals.pending_count {
-        0 => "rien à pointer".to_string(),
-        1 => "1 non pointée".to_string(),
-        n => format!("{} non pointées", crate::format::count(n)),
-    };
-    let (future_sum, future_count) = f.future_pending;
-    if future_count > 0 {
-        pending_line.push_str(&format!(
-            " · {} à venir",
-            money_compact(future_sum, &f.currency)
-        ));
-    }
-    paint_lines(
+    // À venir : montant sans signe (l'opérateur le porte), nombre de non
+    // pointées, frise des semaines autour d'aujourd'hui.
+    let inner = pending.shrink2(vec2(16.0, 14.0));
+    tile_head(
         ui,
-        pos2(pending.left(), lines_top),
-        &[(pending_line, pal.fg_dark)],
-        pending.width(),
-        inner.bottom(),
+        inner.min,
+        icon::CLOCK,
+        "À venir",
+        pal.future,
+        inner.width(),
     );
-    let frise = Rect::from_min_max(
-        pos2(pending.left(), lines_top + 17.0),
-        pos2(pending.right(), inner.bottom() - 9.0),
+    let value = animated(ui, ui.id().with("pending_value"), f.totals.pending);
+    let galley = amount_galley(
+        ui,
+        Amount(value.0.abs()),
+        &f.currency,
+        23.0,
+        pal.future,
+        inner.width(),
     );
+    paint_on_baseline(ui, inner.left(), baseline, galley);
+    let count_galley = pending_count(ui, &f, &pal, inner.width());
+    paint_on_baseline(ui, inner.left(), baseline + 26.0, count_galley);
+    let frise = Rect::from_min_max(pos2(inner.left(), baseline + 38.0), inner.max);
     if frise.height() >= 8.0 {
         pending_timeline(ui, frise, doc, &f.currency, &pal);
     }
 
-    // Barre de composition sous les deux premiers termes.
-    composition_bar(
-        ui,
-        Rect::from_min_max(
-            pos2(pointed.left(), inner.bottom() - 4.0),
-            pos2(pending.right(), inner.bottom()),
-        ),
-        &f,
-        &pal,
-    );
-
+    // Solde final : le texte à gauche, la courbe remplit le reste de la
+    // tuile jusqu'aux bords et apparaît en fondu juste après le texte.
+    let hero_color = if f.totals.balance.is_negative() {
+        pal.negative
+    } else {
+        pal.positive
+    };
+    let inner = hero.shrink2(vec2(18.0, 14.0));
+    let balance = animated(ui, ui.id().with("balance_value"), f.totals.balance);
+    let color = if balance.is_negative() {
+        pal.negative
+    } else {
+        pal.fg
+    };
+    let text_max = inner.width() * 0.6;
+    let galley = amount_galley(ui, balance, &f.currency, 34.0, color, text_max);
     let mut lines = Vec::new();
     if let Some((start, end)) = f.window {
         lines.push(balance_trend(&f, start, end, doc.chart_window, &pal));
@@ -298,96 +217,499 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
             lines.push(forecast_line(&f, end, &pal));
         }
     }
-    let width = paint_lines(
+    let text_width = lines
+        .iter()
+        .map(|(text, color)| {
+            truncated(ui, text, FontId::proportional(11.5), *color, text_max)
+                .size()
+                .x
+        })
+        .fold(galley.size().x, f32::max);
+    if let Some((start, end)) = f.window {
+        let fade_from = inner.left() + text_width - 10.0;
+        if hero.right() - fade_from >= 120.0 {
+            lush_chart(ui, hero, fade_from, doc, &f, start, end, &pal, dark);
+        }
+    }
+    let toggle = layout_toggle(ui, toggle_rect(inner), false, &pal);
+    let chips_left = if inner.width() >= CHIPS_MIN_BLOCK {
+        let chips = Rect::from_min_max(
+            pos2(inner.center().x, inner.top() - 3.0),
+            pos2(inner.right() - TOGGLE_SIZE - 4.0, inner.top() + 15.0),
+        );
+        window_chips(ui, chips, doc, &pal, hero_color)
+    } else {
+        inner.right() - TOGGLE_SIZE - 4.0
+    };
+    tile_head(
         ui,
-        pos2(hero.left(), lines_top),
-        &lines,
-        hero_text,
-        rect.bottom(),
+        inner.min,
+        icon::WALLET,
+        "Solde final",
+        hero_color,
+        chips_left - inner.left() - 8.0,
     );
-    hero_used = hero_used.max(width);
+    let hero_baseline = inner.top() + 70.0;
+    paint_on_baseline(ui, inner.left(), hero_baseline, galley);
+    paint_lines(
+        ui,
+        pos2(inner.left(), hero_baseline + 9.0),
+        &lines,
+        text_max,
+        hero.bottom() - 4.0,
+    );
 
-    // Courbe du solde, jusqu'aux bords droit et bas de la carte.
-    if with_chart && let Some((start, end)) = f.window {
-        let chart = Rect::from_min_max(
-            pos2(hero.left() + hero_used + 28.0, hero.top() + 30.0),
-            pos2(rect.right() - 1.0, rect.bottom() - 1.0),
-        );
-        if chart.width() > 60.0 {
-            balance_chart(
-                ui,
-                chart,
-                rect.shrink(1.0),
-                doc,
-                &f.series,
-                start,
-                end,
-                &f.currency,
-                &pal,
-                hero_color,
-                "balance_chart",
-            );
-        }
+    for tile in [bank, pending, hero] {
+        crate::islands::outline(ui.painter(), tile, &pal, dark);
     }
-    toggle
-}
-
-/// Barre de composition : la part du solde final et celle de l'à venir, à
-/// l'échelle du pointé. Hachurée quand l'à venir retire de l'argent.
-fn composition_bar(ui: &Ui, rect: Rect, f: &Figures, pal: &Palette) {
-    let (p, b) = (f.totals.pointed.as_f64(), f.totals.balance.as_f64());
-    let lo = 0f64.min(p).min(b);
-    let hi = 0f64.max(p).max(b);
-    if hi - lo < 0.01 {
-        return;
-    }
-    let x = |v: f64| rect.left() + ((v - lo) / (hi - lo)) as f32 * rect.width();
-    let painter = ui.painter();
-    let radius = rect.height() / 2.0;
-    painter.rect_filled(rect, radius, pal.border.gamma_multiply(0.5));
-    let span = |a: f64, b: f64| Rect::from_x_y_ranges(x(a.min(b))..=x(a.max(b)), rect.y_range());
-    let final_color = if b < 0.0 { pal.negative } else { pal.positive };
-    painter.rect_filled(span(0.0, b), radius, final_color.gamma_multiply(0.85));
-    let part = span(p, b);
-    if part.width() >= 1.0 {
-        if b < p {
-            let clip = ui.painter_at(part);
-            clip.rect_filled(part, radius, pal.future.gamma_multiply(0.22));
-            let mut x = part.left() - part.height();
-            while x < part.right() {
-                clip.line_segment(
-                    [pos2(x, part.bottom()), pos2(x + part.height(), part.top())],
-                    Stroke::new(1.4, pal.future),
-                );
-                x += 4.0;
-            }
-        } else {
-            painter.rect_filled(part, radius, pal.future);
-        }
-    }
-    if lo < 0.0 {
-        painter.vline(
-            x(0.0),
-            (rect.top() - 3.0)..=(rect.bottom() + 3.0),
-            Stroke::new(1.0, pal.fg.gamma_multiply(0.5)),
-        );
-    }
+    // Signes de l'équation, à cheval entre les tuiles.
     let sign = if f.totals.pending.is_negative() {
         "\u{2212}"
     } else {
         "+"
     };
-    ui.interact(
-        rect.expand(5.0),
-        ui.id().with("composition"),
-        Sense::hover(),
-    )
-    .on_hover_text(format!(
-        "En banque {}  {sign}  à venir {}  =  solde final {}",
-        money(f.totals.pointed, &f.currency),
-        money(Amount(f.totals.pending.0.abs()), &f.currency),
-        money(f.totals.balance, &f.currency),
-    ));
+    badge(
+        ui,
+        pos2(bank.right() + gap / 2.0, area.center().y),
+        sign,
+        &pal,
+        dark,
+    );
+    badge(
+        ui,
+        pos2(pending.right() + gap / 2.0, area.center().y),
+        "=",
+        &pal,
+        dark,
+    );
+    toggle
+}
+
+/// En-tête d'une tuile : icône dans une pastille ronde, puis le libellé.
+fn tile_head(ui: &Ui, pos: Pos2, glyph: &str, text: &str, color: Color32, max_width: f32) -> Rect {
+    let pal = palette(ui);
+    let dark = ui.visuals().dark_mode;
+    let disc = Rect::from_min_size(pos, Vec2::splat(26.0));
+    ui.painter().circle_filled(
+        disc.center(),
+        13.0,
+        if dark {
+            Color32::from_white_alpha(14)
+        } else {
+            Color32::from_black_alpha(10)
+        },
+    );
+    ui.painter().text(
+        disc.center(),
+        Align2::CENTER_CENTER,
+        glyph,
+        FontId::proportional(13.0),
+        color,
+    );
+    let galley = truncated(
+        ui,
+        text,
+        FontId::new(12.5, medium()),
+        pal.fg_dark,
+        max_width - 34.0,
+    );
+    let label = Rect::from_min_size(
+        pos2(disc.right() + 8.0, disc.center().y - galley.size().y / 2.0),
+        galley.size(),
+    );
+    ui.painter().galley(label.min, galley, pal.fg_dark);
+    disc.union(label)
+}
+
+/// Pastille d'un signe de l'équation.
+fn badge(ui: &Ui, center: Pos2, glyph: &str, pal: &Palette, dark: bool) {
+    let rect = Rect::from_center_size(center, Vec2::splat(26.0));
+    let shadow = egui::Shadow {
+        offset: [0, 3],
+        blur: 10,
+        spread: 0,
+        color: Color32::from_black_alpha(if dark { 90 } else { 30 }),
+    };
+    ui.painter().add(shadow.as_shape(rect, 13));
+    let (fill, stroke) = if dark {
+        (pal.surface, Color32::from_white_alpha(20))
+    } else {
+        (crate::islands::fill(pal, dark), pal.border)
+    };
+    ui.painter()
+        .circle(center, 13.0, fill, Stroke::new(1.0, stroke));
+    ui.painter().text(
+        center,
+        Align2::CENTER_CENTER,
+        glyph,
+        FontId::proportional(15.0),
+        pal.fg,
+    );
+}
+
+/// Anneau de pointage : part des opérations du compte pointées ou
+/// rapprochées.
+fn pointed_ring(ui: &Ui, rect: Rect, doc: &OpenDoc, pal: &Palette) {
+    let counts = doc.insights().tack_counts;
+    let total: usize = counts.iter().sum();
+    if total == 0 {
+        return;
+    }
+    let done = counts[1] + counts[2];
+    let ratio = done as f32 / total as f32;
+    let dark = ui.visuals().dark_mode;
+    let center = rect.center();
+    let radius = rect.width() / 2.0 - 3.0;
+    let track = if dark {
+        Color32::from_white_alpha(18)
+    } else {
+        Color32::from_black_alpha(16)
+    };
+    ui.painter()
+        .circle_stroke(center, radius, Stroke::new(4.5, track));
+    if ratio > 0.0 {
+        let n = (64.0 * ratio).ceil().max(2.0) as usize;
+        let points: Vec<Pos2> = (0..=n)
+            .map(|i| {
+                let a = -std::f32::consts::FRAC_PI_2
+                    + std::f32::consts::TAU * ratio * i as f32 / n as f32;
+                center + vec2(a.cos(), a.sin()) * radius
+            })
+            .collect();
+        ui.painter()
+            .add(egui::Shape::line(points, Stroke::new(4.5, pal.positive)));
+    }
+    let percent = (ratio * 100.0).floor() as u32;
+    ui.painter().text(
+        center - vec2(0.0, 3.0),
+        Align2::CENTER_CENTER,
+        format!("{percent} %"),
+        FontId::new(11.0, semibold()),
+        pal.fg,
+    );
+    ui.painter().text(
+        center + vec2(0.0, 8.0),
+        Align2::CENTER_CENTER,
+        "pointé",
+        FontId::proportional(8.0),
+        pal.muted,
+    );
+    ui.interact(rect, ui.id().with("pointed_ring"), Sense::hover())
+        .on_hover_text(format!(
+            "{} opérations pointées sur {} (dont {} rapprochées)",
+            crate::format::count(done),
+            crate::format::count(total),
+            crate::format::count(counts[2]),
+        ));
+}
+
+/// « 33 non pointées · 1,3 k€ à venir » : le nombre en grand.
+fn pending_count(ui: &Ui, f: &Figures, pal: &Palette, max_width: f32) -> Arc<Galley> {
+    let mut job = LayoutJob::default();
+    let small = TextFormat {
+        font_id: FontId::new(12.5, medium()),
+        color: pal.fg_dark,
+        ..Default::default()
+    };
+    match f.totals.pending_count {
+        0 => job.append("rien à pointer", 0.0, small.clone()),
+        n => {
+            job.append(
+                &crate::format::count(n),
+                0.0,
+                TextFormat {
+                    font_id: FontId::new(18.0, semibold()),
+                    color: pal.fg,
+                    ..Default::default()
+                },
+            );
+            let label = if n == 1 {
+                " non pointée"
+            } else {
+                " non pointées"
+            };
+            job.append(label, 0.0, small.clone());
+        }
+    }
+    let (future_sum, future_count) = f.future_pending;
+    if future_count > 0 {
+        job.append(
+            &format!(" · {} à venir", money_compact(future_sum, &f.currency)),
+            0.0,
+            TextFormat {
+                color: pal.muted,
+                ..small
+            },
+        );
+    }
+    job.wrap = single_line(max_width);
+    ui.painter().layout_job(job)
+}
+
+/// Courbe du solde final en aire dégradée (violet vers vert, ou rouge sous
+/// zéro) qui remplit la tuile à partir de `left` (avec un fondu d'entrée),
+/// avec le solde pointé en transparence derrière et les mois (ou années) en
+/// bas.
+#[allow(clippy::too_many_arguments)]
+fn lush_chart(
+    ui: &mut Ui,
+    tile: Rect,
+    left: f32,
+    doc: &mut OpenDoc,
+    f: &Figures,
+    start: Date,
+    end: Date,
+    pal: &Palette,
+    dark: bool,
+) {
+    use crate::islands::{RADIUS, gradient, rounded_span};
+    const FADE: f32 = 90.0;
+    let zone = Rect::from_min_max(pos2(left, tile.top()), tile.max);
+    let plot = Rect::from_min_max(
+        pos2(zone.left(), tile.top() + 42.0),
+        pos2(zone.right(), tile.bottom() - 24.0),
+    );
+    let span = (end.0 - start.0).max(1) as f32;
+    let samples = (zone.width() / 2.0).max(2.0) as usize;
+    let x_of = |i: usize| zone.left() + zone.width() * i as f32 / (samples - 1) as f32;
+    let date_of =
+        |i: usize| Date(start.0 + (span * i as f32 / (samples - 1) as f32).round() as i32);
+    let x_of_date =
+        |d: Date| zone.left() + ((d.0 - start.0) as f32 / span).clamp(0.0, 1.0) * zone.width();
+    // Fondu d'entrée, après le texte.
+    let fade = |x: f32| {
+        let t = ((x - zone.left()) / FADE).clamp(0.0, 1.0);
+        t * t * (3.0 - 2.0 * t)
+    };
+    let values: Vec<f64> = (0..samples)
+        .map(|i| balance_at(&f.series, date_of(i)).as_f64())
+        .collect();
+    let pointed: Vec<f64> = (0..samples)
+        .map(|i| balance_at(&f.pointed_series, date_of(i)).as_f64())
+        .collect();
+    let today = Date::today();
+    let split = (0..samples)
+        .position(|i| date_of(i) > today)
+        .unwrap_or(samples);
+    let (mut lo, mut hi) = values
+        .iter()
+        .chain(&pointed[..split])
+        .fold((f64::MAX, f64::MIN), |(lo, hi), &v| (lo.min(v), hi.max(v)));
+    if (hi - lo).abs() < 1.0 {
+        lo -= 1.0;
+        hi += 1.0;
+    }
+    let pad = (hi - lo) * 0.1;
+    let (lo, hi) = (lo - pad, hi + pad);
+    let y_of = move |v: f64| plot.bottom() - ((v - lo) / (hi - lo)) as f32 * plot.height();
+    let painter = ui.painter().clone();
+
+    // Une aire = une bande verticale par échantillon, du trait jusqu'au bas
+    // arrondi de la tuile.
+    let area = |ys: &[f32], color_at: &dyn Fn(usize, f32) -> Color32| {
+        let mut mesh = egui::Mesh::default();
+        for (i, &y) in ys.iter().enumerate() {
+            let x = x_of(i);
+            let (top, bottom) = rounded_span(tile, RADIUS, x);
+            let t = (x - zone.left()) / zone.width();
+            let color = color_at(i, t).gamma_multiply(fade(x));
+            mesh.colored_vertex(pos2(x, y.max(top)), color);
+            mesh.colored_vertex(pos2(x, bottom), color.gamma_multiply(0.75));
+        }
+        for i in 0..ys.len().saturating_sub(1) as u32 {
+            let k = i * 2;
+            mesh.add_triangle(k, k + 1, k + 2);
+            mesh.add_triangle(k + 1, k + 3, k + 2);
+        }
+        painter.add(mesh);
+    };
+    let future_fade = |i: usize| if i < split { 1.0 } else { 0.55 };
+
+    // Solde pointé (jusqu'à aujourd'hui), en transparence derrière.
+    let (b, p) = (crate::theme::logo_b(pal).0, crate::theme::logo_p(pal).1);
+    let back: Vec<f32> = pointed[..split].iter().map(|&v| y_of(v)).collect();
+    area(&back, &|_, t| {
+        gradient(
+            &[(0.0, p.gamma_multiply(0.2)), (1.0, b.gamma_multiply(0.26))],
+            t,
+        )
+    });
+
+    // Solde : violet vers vert (ou rouge s'il finit sous zéro).
+    let end_color = if f.totals.balance.is_negative() {
+        pal.negative
+    } else if dark {
+        pal.positive.lerp_to_gamma(Color32::WHITE, 0.2)
+    } else {
+        pal.positive.lerp_to_gamma(Color32::WHITE, 0.3)
+    };
+    let alpha = if dark { 0.92 } else { 0.85 };
+    let stops = [
+        (
+            0.0,
+            Color32::from_rgb(0x6b, 0x4f, 0xd0).gamma_multiply(alpha),
+        ),
+        (
+            0.55,
+            Color32::from_rgb(0x9a, 0x7f, 0xe6).gamma_multiply(alpha),
+        ),
+        (1.0, end_color.gamma_multiply(alpha)),
+    ];
+    let front: Vec<f32> = values.iter().map(|&v| y_of(v)).collect();
+    area(&front, &|i, t| {
+        gradient(&stops, t).gamma_multiply(future_fade(i))
+    });
+
+    // Période filtrée.
+    let (from, to) = (doc.filters.date_from, doc.filters.date_to);
+    if from.is_some() || to.is_some() {
+        painter.rect_filled(
+            Rect::from_x_y_ranges(
+                x_of_date(from.unwrap_or(start))..=x_of_date(to.unwrap_or(end)),
+                plot.top() - 6.0..=plot.bottom() + 6.0,
+            ),
+            4.0,
+            Color32::from_white_alpha(if dark { 28 } else { 70 }),
+        );
+    }
+
+    // Trait du solde : plein jusqu'à aujourd'hui, pointillé ensuite ; en
+    // fondu au début, comme l'aire.
+    let line = Color32::from_white_alpha(if dark { 150 } else { 210 });
+    let points: Vec<Pos2> = front
+        .iter()
+        .enumerate()
+        .map(|(i, &y)| pos2(x_of(i), y))
+        .collect();
+    let past = &points[..split.min(points.len())];
+    let faded = past
+        .iter()
+        .position(|p| p.x >= zone.left() + FADE)
+        .unwrap_or(past.len());
+    for w in past[..(faded + 1).min(past.len())].windows(2) {
+        let color = line.gamma_multiply(fade((w[0].x + w[1].x) / 2.0));
+        painter.line_segment([w[0], w[1]], Stroke::new(1.5, color));
+    }
+    if past.len() > faded + 1 {
+        painter.add(egui::Shape::line(
+            past[faded..].to_vec(),
+            Stroke::new(1.5, line),
+        ));
+    }
+    if split < points.len() {
+        painter.add(egui::Shape::dashed_line(
+            &points[split.saturating_sub(1)..],
+            Stroke::new(1.5, line.gamma_multiply(0.8)),
+            4.0,
+            4.0,
+        ));
+        if let Some(last) = past.last() {
+            painter.circle(
+                *last,
+                3.5,
+                crate::islands::fill(pal, dark).to_opaque(),
+                Stroke::new(2.0, line),
+            );
+        }
+    }
+
+    // Mois (ou semaines, ou années) en bas, une fois la courbe apparue.
+    let label_color = if dark {
+        Color32::from_white_alpha(150)
+    } else {
+        pal.fg.gamma_multiply(0.75)
+    };
+    let mut last_right = zone.left() + FADE * 0.5;
+    for (date, text, current) in axis_labels(start, end) {
+        let x = x_of_date(date);
+        let font = if current {
+            FontId::new(10.5, semibold())
+        } else {
+            FontId::proportional(10.5)
+        };
+        let color = if current { pal.fg } else { label_color };
+        let galley = ui.painter().layout_no_wrap(text, font, color);
+        let label_left = x - galley.size().x / 2.0;
+        if label_left < last_right + 6.0 || label_left + galley.size().x > zone.right() - 12.0 {
+            continue;
+        }
+        last_right = label_left + galley.size().x;
+        painter.galley(
+            pos2(label_left, tile.bottom() - 8.0 - galley.size().y),
+            galley,
+            color,
+        );
+    }
+
+    // Survol, glisser pour filtrer une période, clic pour l'effacer.
+    let hit = Rect::from_min_max(pos2(zone.left(), plot.top() - 14.0), zone.max);
+    chart_interaction(
+        ui,
+        &painter,
+        Rect::from_x_y_ranges(zone.x_range(), plot.y_range()),
+        hit,
+        doc,
+        &f.series,
+        start,
+        end,
+        &f.currency,
+        pal,
+        Color32::WHITE,
+        "balance_chart",
+        &y_of,
+    );
+}
+
+/// Repères de l'axe du temps : semaines pour un mois, mois jusqu'à trois
+/// ans, années au-delà. Le repère qui contient aujourd'hui est marqué.
+fn axis_labels(start: Date, end: Date) -> Vec<(Date, String, bool)> {
+    use chrono::Datelike;
+    const MONTHS: [&str; 12] = [
+        "Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc",
+    ];
+    let today = Date::today();
+    let span = end.0 - start.0;
+    let mut out = Vec::new();
+    if span <= 62 {
+        // Lundis.
+        let mut d = start.0 + (7 - start.to_naive().weekday().num_days_from_monday() as i32) % 7;
+        while d <= end.0 {
+            let date = Date(d);
+            let n = date.to_naive();
+            let current = today.0 >= d && today.0 < d + 7;
+            out.push((
+                Date(d + 3),
+                format!("{:02}/{:02}", n.day(), n.month()),
+                current,
+            ));
+            d += 7;
+        }
+    } else if span <= 3 * 366 {
+        let s = start.to_naive();
+        let (mut y, mut m) = (s.year(), s.month());
+        while let Some(first) = Date::from_ymd(y, m, 1)
+            && first.0 <= end.0
+        {
+            let (ny, nm) = if m == 12 { (y + 1, 1) } else { (y, m + 1) };
+            let next = Date::from_ymd(ny, nm, 1)
+                .map(|d| d.0)
+                .unwrap_or(first.0 + 30);
+            let mid = Date((first.0.max(start.0) + next.min(end.0 + 1)) / 2);
+            let current = today.0 >= first.0 && today.0 < next;
+            out.push((mid, MONTHS[(m - 1) as usize].to_string(), current));
+            (y, m) = (ny, nm);
+        }
+    } else {
+        let (first_year, last_year) = (start.to_naive().year(), end.to_naive().year());
+        for y in first_year..=last_year {
+            let (Some(a), Some(b)) = (Date::from_ymd(y, 1, 1), Date::from_ymd(y + 1, 1, 1)) else {
+                continue;
+            };
+            let mid = Date((a.0.max(start.0) + b.0.min(end.0 + 1)) / 2);
+            out.push((mid, y.to_string(), today.0 >= a.0 && today.0 < b.0));
+        }
+    }
+    out
 }
 
 // ─────────────────────────────── Les cartes ───────────────────────────────
@@ -611,15 +933,9 @@ fn card_text(
 
 // ─────────────────────────────── Éléments communs ───────────────────────────────
 
-/// Fond de la carte : plus foncé que la fenêtre en thème sombre, la surface
-/// habituelle en thème clair.
+/// Fond d'une carte : celui des îles.
 fn card_fill(ui: &Ui) -> Color32 {
-    let pal = palette(ui);
-    if ui.visuals().dark_mode {
-        pal.bg_dark.lerp_to_gamma(Color32::BLACK, 0.3)
-    } else {
-        pal.surface
-    }
+    crate::islands::fill(&palette(ui), ui.visuals().dark_mode)
 }
 
 /// Fond d'une carte, liseré discret et reflet clair sur le bord haut.
@@ -1010,9 +1326,11 @@ fn ease(t: f64) -> f64 {
 fn window_chips(ui: &mut Ui, area: Rect, doc: &mut OpenDoc, pal: &Palette, color: Color32) -> f32 {
     let mut x = area.right();
     for window in ChartWindow::ALL.iter().rev() {
-        let galley =
-            ui.painter()
-                .layout_no_wrap(window.label().into(), FontId::new(11.0, medium()), pal.fg);
+        let galley = ui.painter().layout_no_wrap(
+            window.label().into(),
+            FontId::new(11.0, medium()),
+            Color32::PLACEHOLDER,
+        );
         let chip = Rect::from_min_size(
             pos2(x - galley.size().x - 12.0, area.center().y - 10.0),
             vec2(galley.size().x + 12.0, 20.0),
@@ -1186,9 +1504,6 @@ fn balance_chart(
     let y_of = |v: f64| rect.bottom() - ((v - lo) / (hi - lo)) as f32 * rect.height();
     let x_of_date =
         |d: Date| rect.left() + ((d.0 - start.0) as f32 / span).clamp(0.0, 1.0) * rect.width();
-    let date_of_x = |x: f32| {
-        Date(start.0 + (((x - rect.left()) / rect.width()).clamp(0.0, 1.0) * span).round() as i32)
-    };
     let painter = ui.painter_at(rect.expand2(vec2(4.0, 6.0)).intersect(clip));
     let today = Date::today();
     let split = dates.iter().position(|d| *d > today).unwrap_or(samples);
@@ -1276,8 +1591,39 @@ fn balance_chart(
         }
     }
 
-    // Interaction : survol (valeur), glisser (période), clic (effacer).
-    let response = ui.interact(rect, ui.id().with(id), Sense::click_and_drag());
+    chart_interaction(
+        ui, &painter, rect, rect, doc, series, start, end, currency, pal, color, id, &y_of,
+    );
+}
+
+/// Interaction avec une courbe de solde : survol (date et valeur), glisser
+/// (sélectionne une période, qui filtre la grille), clic (efface la période).
+/// `rect` porte l'échelle du temps et la hauteur de la sélection ; `hit` est
+/// la zone sensible.
+#[allow(clippy::too_many_arguments)]
+fn chart_interaction(
+    ui: &mut Ui,
+    painter: &Painter,
+    rect: Rect,
+    hit: Rect,
+    doc: &mut OpenDoc,
+    series: &[(Date, Amount)],
+    start: Date,
+    end: Date,
+    currency: &str,
+    pal: &Palette,
+    color: Color32,
+    id: &str,
+    y_of: &dyn Fn(f64) -> f32,
+) {
+    let span = (end.0 - start.0).max(1) as f32;
+    let x_of_date =
+        |d: Date| rect.left() + ((d.0 - start.0) as f32 / span).clamp(0.0, 1.0) * rect.width();
+    let date_of_x = |x: f32| {
+        Date(start.0 + (((x - rect.left()) / rect.width()).clamp(0.0, 1.0) * span).round() as i32)
+    };
+    let today = Date::today();
+    let response = ui.interact(hit, ui.id().with(id), Sense::click_and_drag());
     let drag_id = ui.id().with((id, "drag"));
     if response.drag_started()
         && let Some(p) = response.interact_pointer_pos()
@@ -1329,10 +1675,9 @@ fn balance_chart(
         let galley =
             ui.painter()
                 .layout_no_wrap(text, egui::TextStyle::Small.resolve(ui.style()), pal.fg);
-        let mut tip = Rect::from_min_size(
-            pos2(x + 10.0, rect.top() - 4.0),
-            galley.size() + vec2(14.0, 8.0),
-        );
+        let size = galley.size() + vec2(14.0, 8.0);
+        let top = (y - size.y - 12.0).max(hit.top() + 2.0);
+        let mut tip = Rect::from_min_size(pos2(x + 10.0, top), size);
         if tip.right() > rect.right() {
             tip = tip.translate(vec2(-(tip.width() + 20.0), 0.0));
         }

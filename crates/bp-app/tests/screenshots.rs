@@ -465,6 +465,25 @@ fn dashboard_widths() {
             |_| {},
         );
     }
+    // Soldes séparés en trois cartes (palette de commandes).
+    for (name, theme) in [
+        ("61-cartes", egui::Theme::Dark),
+        ("61-cartes-clair", egui::Theme::Light),
+    ] {
+        render_sized(name, theme, egui::vec2(1280.0, 700.0), |h| {
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+            h.run_steps(2);
+            h.event(egui::Event::Text("trois cartes".into()));
+            h.run_steps(2);
+            h.key_press(egui::Key::Enter);
+        });
+    }
+    render_sized(
+        "60-largeur-1280-clair",
+        egui::Theme::Light,
+        egui::vec2(1280.0, 700.0),
+        |_| {},
+    );
 }
 
 /// Rapports, graphiques et budgets (lancés seuls pendant la mise au point).

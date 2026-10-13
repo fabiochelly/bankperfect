@@ -41,6 +41,8 @@ pub struct OpenDoc {
     /// Panneau des soldes et solde prévisionnel affichés (réglages).
     pub show_balance_panel: bool,
     pub show_forecast: bool,
+    /// Soldes en trois cartes plutôt qu'en équation (réglages).
+    pub balance_cards: bool,
     /// Niveaux d'annulation gardés.
     pub max_undo: usize,
     /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
@@ -191,6 +193,8 @@ pub struct Insights {
     pub pointed_series: Arc<[(Date, Amount)]>,
     /// Non pointées par semaine (lundi), de 8 semaines avant à 4 après aujourd'hui.
     pub pending_weeks: Vec<(Date, Amount, usize)>,
+    /// Non pointées par jour sur la même plage, par date croissante.
+    pub pending_days: Vec<(Date, Amount, usize)>,
     /// Non pointées datées après aujourd'hui : somme et nombre.
     pub future_pending: (Amount, usize),
 }
@@ -231,6 +235,7 @@ impl OpenDoc {
             show_mark_dates: false,
             show_balance_panel: true,
             show_forecast: true,
+            balance_cards: false,
             max_undo: 30,
             disable_reconcile: false,
             ignore_filter_totals: false,
@@ -329,6 +334,7 @@ impl OpenDoc {
         let mut counts = [0usize; 3];
         let mut sums = [Amount::ZERO; 3];
         let mut future = (Amount::ZERO, 0usize);
+        let mut days: Vec<(Date, Amount)> = Vec::new();
         let mut pointed: Vec<(Date, Amount)> = Vec::new();
         for op in ops {
             let k = match op.tack {
@@ -344,6 +350,7 @@ impl OpenDoc {
                     let slot = &mut weeks[w as usize];
                     slot.1 = slot.1 + op.amount;
                     slot.2 += 1;
+                    days.push((op.date, op.amount));
                 }
                 if op.date > today {
                     future = (future.0 + op.amount, future.1 + 1);
@@ -353,6 +360,17 @@ impl OpenDoc {
             }
         }
         pointed.sort_unstable_by_key(|(d, _)| *d);
+        days.sort_unstable_by_key(|(d, _)| *d);
+        let mut pending_days: Vec<(Date, Amount, usize)> = Vec::new();
+        for (date, amount) in days {
+            match pending_days.last_mut() {
+                Some(last) if last.0 == date => {
+                    last.1 = last.1 + amount;
+                    last.2 += 1;
+                }
+                _ => pending_days.push((date, amount, 1)),
+            }
+        }
         let mut series: Vec<(Date, Amount)> = Vec::new();
         let mut balance = Amount::ZERO;
         for (date, amount) in pointed {
@@ -367,6 +385,7 @@ impl OpenDoc {
         insights.tack_sums = sums;
         insights.pointed_series = series.into();
         insights.pending_weeks = weeks;
+        insights.pending_days = pending_days;
         insights.future_pending = future;
     }
 

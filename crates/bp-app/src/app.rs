@@ -1139,6 +1139,10 @@ impl BankPerfectApp {
                 self.settings.show_forecast = !self.settings.show_forecast;
                 self.settings.save();
             }
+            Command::ToggleBalanceCards => {
+                self.settings.balance_cards = !self.settings.balance_cards;
+                self.settings.save();
+            }
             Command::ReverseCurrencies => self.confirm_reverse = true,
             Command::Rules => {
                 self.tool = Some(Tool::Rules(Box::new(crate::rules_ui::RulesForm::new(doc))))
@@ -1757,6 +1761,11 @@ impl BankPerfectApp {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleForecast);
                 }
+                let mut split = self.settings.balance_cards;
+                if menu::toggle(ui, &mut split, "Soldes en trois cartes", None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleBalanceCards);
+                }
                 menu::separator(ui);
                 menu::heading(ui, "Thème");
                 let current = ui.ctx().options(|o| o.theme_preference);
@@ -1992,8 +2001,10 @@ impl BankPerfectApp {
             });
         });
         ui.add_space(8.0);
-        if doc.show_balance_panel {
-            crate::dashboard::cards(ui, doc);
+        if doc.show_balance_panel
+            && let Some(toggle) = crate::dashboard::cards(ui, doc)
+        {
+            command = Some(toggle);
         }
         ui.add_space(-4.0);
         command
@@ -2917,6 +2928,7 @@ impl BankPerfectApp {
         doc.locked = self.settings.lock_reconciled;
         doc.show_balance_panel = self.settings.show_balance_panel;
         doc.show_forecast = self.settings.show_forecast;
+        doc.balance_cards = self.settings.balance_cards;
         if let Some(notice) = doc.notice.take() {
             self.toast = Some((notice, now + 4.0));
         }

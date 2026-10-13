@@ -56,6 +56,7 @@ pub enum Command {
     ToggleMarkDates,
     ToggleBalancePanel,
     ToggleForecast,
+    ToggleBalanceCards,
     ReverseCurrencies,
     Scheduler,
     Forecast,
@@ -145,6 +146,7 @@ impl Command {
                 ToggleMarkDates,
                 ToggleBalancePanel,
                 ToggleForecast,
+                ToggleBalanceCards,
                 ReverseCurrencies,
                 Scheduler,
                 Forecast,
@@ -583,6 +585,20 @@ impl Command {
                     icon::SQUARES_FOUR,
                     None,
                     "soldes blocs pointé à venir",
+                )
+            }
+            ToggleBalanceCards => {
+                let label = if doc.is_some_and(|d| d.balance_cards) {
+                    "Soldes en équation"
+                } else {
+                    "Soldes en trois cartes"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::COLUMNS,
+                    None,
+                    "soldes cartes équation panneau bascule",
                 )
             }
             ToggleForecast => {

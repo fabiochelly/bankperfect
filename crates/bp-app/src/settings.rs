@@ -29,6 +29,8 @@ pub struct Settings {
     pub lock_reconciled: bool,
     pub show_balance_panel: bool,
     pub show_forecast: bool,
+    /// Soldes en trois cartes plutôt qu'en équation.
+    pub balance_cards: bool,
     /// Niveaux d'annulation.
     pub max_undo: usize,
     /// Pointage sans rapprochement : une ligne est pointée ou non.
@@ -78,6 +80,7 @@ impl Default for Settings {
             lock_reconciled: false,
             show_balance_panel: true,
             show_forecast: true,
+            balance_cards: false,
             max_undo: 30,
             disable_reconcile: false,
             ignore_filter_totals: false,

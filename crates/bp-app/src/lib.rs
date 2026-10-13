@@ -22,6 +22,8 @@ mod format;
 mod grid;
 mod import_ui;
 mod islands;
+mod license;
+mod license_ui;
 mod loan_ui;
 pub mod logo;
 mod manage_ui;

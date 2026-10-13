@@ -689,12 +689,7 @@ Panneau gauche 160 px, couleur `clr_total_panel` — `unitMain.dfm:134-427`, `un
 
 ## 18. Licence, identité, à propos
 
-- [ ] **LIC-01 — Décodage de la clé** (`TLicence.DecodeKey`) — `ObjectLicence.pas:29-117` :
-  - clé = hexadécimal de `XOR` octet par octet avec `pwd[(i mod 5)+1]` où `pwd` commence par `ChAnT` (seuls ces 5 caractères servent) ;
-  - texte clair `<n>...<nom>...<n>` ; valide si les deux `<n>` sont identiques et numériques ;
-  - résultat `"<n> - <nom>"` ; liste noire de clés (`DisabledNames1`) et de numéros (`DisabledLicenses`) → refus ;
-  - **Licence Gold** si `n ≤ 200` ou `n` dans les listes `GoldLicenses1..3` — `ObjectLicence.pas:76-80`, `111` ;
-  - `EncodeKey(nom, n)` existe (génération).
+- [x] **LIC-01 — Vérification de la clé** : remplacée. L'ancienne vérification locale de la clé n'est plus dans l'application ; la clé reçue à l'achat est vérifiée une seule fois par le serveur de licences de l'auteur, qui renvoie un certificat signé (Ed25519) vérifié hors ligne par l'application (`crates/bp-app/src/license.rs`). Le format de l'ancienne clé n'est volontairement pas documenté ici.
 - [ ] **LIC-02 — Entrer son n° de licence** : boucle « Entrez ici votre code de licence » (saisie libre) ; invalide → « Le code de licence saisi est incorrect. N'essayez pas de le saisir manuellement… » ; valide → `[APPLICATION] Licence`, titre mis à jour, INI persisté immédiatement — `unitMain.pas:5396-5412`.
 - [ ] **LIC-03 — Effets de l'enregistrement** : titre « Licence n° … » / « Licence Gold n° … », bandeau et menu « S'enregistrer » masqués, fonction d'envoi d'e-mail (API) autorisée (§30).
 - [ ] **LIC-04 — À propos** : `BPDefaultCaption` (non enregistré) ou « BankPerfect », puis « <Description> / Version <FileVersion> du <date du fichier> / Emplacement: <PathExe> / Copyright: <BPCopyright> / Organisation: <BPCompany> », puis « Programme non enregistré » ou « Licence n° … » ; si non enregistré : « Souhaitez-vous acquérir une licence ? » [Oui | Non] → page d'enregistrement — `unitMain.pas:3040-3078`, `UnitRStrings.pas:74`.
@@ -899,7 +894,7 @@ Utilisé par l'API (scripts « Graphiques », simulateur de crédit, budget…) 
 - [ ] **UTIL-03 — `Split` / `Merge`** sur `;` (pas d'échappement) — `UnitStrings.pas:374-401`.
 - [ ] **UTIL-04 — Normalisations** : `SimpleString` (garde `,`), `SimpleString2` (`,` → espace), `KeepOnlyDigits`, `KeepOnlyAlphaNum`, `KeepOnlyAlphaNumSpace` (tables de 256 entrées CP1252) — `UnitStrings.pas:545-690`.
 - [ ] **UTIL-05 — Codec v5** (`EncryptCodec5`/`DecryptCodec5`, `LoadFileV5`/`SaveFileV5`) : utilisé pour les `.bp` et `identity.dat` — `UnitStrings.pas:135-227` (détail : doc 02).
-- [ ] **UTIL-06 — Chiffrement du mot de passe FTP** : `EncryptStr` = `'28O673'` (lettre O) + hex(XOR avec `pwd[(i mod 5)+1]`, `pwd` commençant par `ChAnT`) ; `DecryptStr` ; ancien format sans préfixe = inversion + XOR 20 — `UnitStrings.pas:309-359`.
+- [ ] **UTIL-06 — Chiffrement du mot de passe FTP** : sans objet (sauvegarde FTP abandonnée) ; le procédé n'est pas documenté ici.
 - [ ] **UTIL-07 — Divers** : `Color2HTML` (BGR → `#RRGGBB`), `Slice`, `FPos` (position de la n-ième ou dernière occurrence), `Str2Date`, `IsInteger`, `bp_guid` (identifiant aléatoire a-z0-9), `OpenTextFile`/`SaveTextFile` (octets bruts), `AppendToFile`, `Log` (`bp.log`), `GetCRLF`, `checkUTF8` (non utilisé) — `UnitStrings.pas`.
 - [ ] **UTIL-08 — Dates** : `TDateTime` (jours depuis le 30/12/1899) ; affichage `FormatDateTime(DateFormat)` ; `DateToStr` → `dd/mm/yy`.
 - [ ] **UTIL-09 — Code mort** à ne pas reproduire mais à connaître : `op_auto_suivante` (intervalles d'échéances 1-14 j, 30/60/90/180/360 → mois), `correctDate`, `Webdate`, `ValidateOperation`, `AEvalExpression`, `ReadFirstLine`, `GetWinVersion`, `code.pas` (liste d'affectations de traduction d'une ancienne version, mentionnant des fonctions passées en scripts) — `unitMain.pas:1905-1912`, `5329-5341`, `4673-4677`, `4988-4994`, `4547-4554`, `5516-5534`, `7283-7314`, `code.pas`.

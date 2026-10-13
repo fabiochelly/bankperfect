@@ -806,3 +806,33 @@ fn right_click(h: &mut Harness<'_, bankperfect::BankPerfectApp>, pos: egui::Pos2
         h.step();
     }
 }
+
+/// Licence : activation de bout en bout contre un serveur de test
+/// (BP_LICENSE_URL et BP_LICENSE_KEY), puis licence affichée.
+#[test]
+#[ignore]
+fn license_screens() {
+    let key = std::env::var("BP_LICENSE_KEY").expect("BP_LICENSE_KEY");
+    let open_dialog = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("Licence".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+    };
+    render_sized("65-licence", egui::Theme::Dark, egui::vec2(1280.0, 700.0), |h| {
+        open_dialog(h);
+        h.event(egui::Event::Text(key.clone()));
+    });
+    render_sized("66-licence-activee", egui::Theme::Dark, egui::vec2(1280.0, 700.0), |h| {
+        open_dialog(h);
+        h.event(egui::Event::Text(key.clone()));
+        h.run_steps(2);
+        h.get_by_label("Activer").click();
+        for _ in 0..60 {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            h.run_steps(1);
+        }
+    });
+}

@@ -9,10 +9,10 @@ use egui::{Color32, Pos2, Rect, Shape};
 /// dans le repère du dessin d'origine (centré, 512 unités).
 const A: f32 = 150.0;
 const Y_SCALE: f32 = 1.4;
-const STEM: f32 = 190.0;
+const STEM: f32 = 160.0;
 const WIDTH: f32 = 40.0;
 /// Encombrement du symbole (trait compris) dans ce repère.
-const EXTENT: f32 = 440.0;
+const EXTENT: f32 = 368.0;
 
 /// Point du dessin d'origine après l'inclinaison de 12°, ramené dans `rect`.
 fn map(rect: Rect, x: f32, y: f32) -> Pos2 {

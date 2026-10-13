@@ -21,6 +21,15 @@ pub fn dialog_height(ctx: &egui::Context, fraction: f32) -> f32 {
     ctx.content_rect().height() * fraction
 }
 
+/// Infobulle, seulement si son texte n'est pas vide (pas de bulle vide).
+pub fn hover(response: egui::Response, text: &str) -> egui::Response {
+    if text.trim().is_empty() {
+        response
+    } else {
+        response.on_hover_text(text.trim().to_string())
+    }
+}
+
 /// Description sous l'en-tête d'une fenêtre.
 pub fn subtitle(ui: &mut egui::Ui, text: impl Into<String>) {
     let pal = palette(ui);

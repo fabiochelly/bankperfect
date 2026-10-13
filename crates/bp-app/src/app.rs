@@ -2164,7 +2164,7 @@ impl BankPerfectApp {
                     let button =
                         egui::Button::new(RichText::new(format!("{}  {name}", icon::FILE)))
                             .frame(false);
-                    if ui.add(button).on_hover_text(&folder).clicked() {
+                    if crate::ui_kit::hover(ui.add(button), &folder).clicked() {
                         self.request(Pending::Open(Some(path)));
                     }
                 }

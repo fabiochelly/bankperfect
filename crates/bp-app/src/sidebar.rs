@@ -260,7 +260,17 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
             Align2::RIGHT_BOTTOM,
         );
     }
-    response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban))
+    crate::ui_kit::hover(response, &bank_details(account))
+}
+
+/// Banque et IBAN d'un compte, sur deux lignes (vide s'il n'y a ni l'un ni
+/// l'autre).
+fn bank_details(account: &bp_core::model::Account) -> String {
+    [account.bank_name.trim(), account.iban.trim()]
+        .into_iter()
+        .filter(|s| !s.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Menu contextuel d'un compte (le compte est affiché dès le clic droit).
@@ -348,7 +358,7 @@ fn account_row(
     });
     // Sélection dès l'appui, comme une liste native.
     let pressed = response.hovered() && ui.input(|i| i.pointer.primary_pressed());
-    let response = response.on_hover_text(format!("{}\n{}", account.bank_name, account.iban));
+    let response = crate::ui_kit::hover(response, &bank_details(account));
     (pressed, response)
 }
 

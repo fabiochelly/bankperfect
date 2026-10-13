@@ -37,13 +37,13 @@ const SHORTCUT_ACCOUNTS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COM
 const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F5);
 
 /// Symbole du logiciel en haut à droite : côté et marge au bord de la fenêtre.
-const LOGO_SIZE: f32 = 40.0;
-const LOGO_MARGIN: f32 = 8.0;
+const LOGO_SIZE: f32 = 34.0;
+const LOGO_MARGIN: f32 = 6.0;
 
 /// Haut des îles (comptes, soldes) : sous le symbole, qui déborde de la
 /// barre de menus, avec une marge.
 fn islands_top(ctx: &egui::Context) -> f32 {
-    ctx.content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 14.0
+    ctx.content_rect().top() + LOGO_MARGIN + LOGO_SIZE + 10.0
 }
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);

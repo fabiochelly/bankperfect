@@ -1,6 +1,6 @@
 # Maintainer: Fabio Chelly <fabio@chelly.net>
 pkgname=bankperfect-bin
-pkgver=9.4.0
+pkgver=9.4.1
 pkgrel=1
 pkgdesc="Gestion de comptes bancaires personnels, rapide et moderne"
 arch=('x86_64')
@@ -10,7 +10,7 @@ depends=('glibc' 'gcc-libs' 'libxkbcommon' 'wayland' 'libx11' 'vulkan-icd-loader
 provides=('bankperfect')
 conflicts=('bankperfect')
 source=("$url/releases/download/v$pkgver/bankperfect-$pkgver-linux-x86_64.tar.gz")
-sha256sums=('9e8a0e481f21f7ed1f45283356d9287e412cc5da8e3a0b3d80383c775275ed58')
+sha256sums=('ce9e7a6d6f19bd2d2e272ec58d3b9c6ef8822bfdf44d5d17368305d864a78755')
 
 package() {
   cd "bankperfect-$pkgver-linux-x86_64"

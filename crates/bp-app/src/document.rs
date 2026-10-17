@@ -45,6 +45,8 @@ pub struct OpenDoc {
     pub balance_cards: bool,
     /// Ligne des filtres de colonnes ouverte (réglages).
     pub show_column_filters: bool,
+    /// Courbe du solde derrière la colonne Solde (réglages).
+    pub show_balance_river: bool,
     /// Niveaux d'annulation gardés.
     pub max_undo: usize,
     /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
@@ -239,6 +241,7 @@ impl OpenDoc {
             show_forecast: true,
             balance_cards: false,
             show_column_filters: false,
+            show_balance_river: true,
             max_undo: 30,
             disable_reconcile: false,
             ignore_filter_totals: false,

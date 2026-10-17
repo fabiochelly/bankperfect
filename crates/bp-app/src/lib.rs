@@ -35,6 +35,7 @@ mod profiler;
 mod protection_ui;
 mod quotes_ui;
 mod reports_ui;
+mod river;
 mod rules_ui;
 mod scheduler_ui;
 mod settings;

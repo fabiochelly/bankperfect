@@ -1176,6 +1176,10 @@ impl BankPerfectApp {
                 self.settings.show_column_filters = !self.settings.show_column_filters;
                 self.settings.save();
             }
+            Command::ToggleBalanceRiver => {
+                self.settings.balance_river = !self.settings.balance_river;
+                self.settings.save();
+            }
             Command::ReverseCurrencies => self.confirm_reverse = true,
             Command::Rules => {
                 self.tool = Some(Tool::Rules(Box::new(crate::rules_ui::RulesForm::new(doc))))
@@ -1823,6 +1827,11 @@ impl BankPerfectApp {
                 if menu::toggle(ui, &mut column_filters, "Filtres de colonnes", None).clicked() {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleColumnFilters);
+                }
+                let mut river = self.settings.balance_river;
+                if menu::toggle(ui, &mut river, "Courbe du solde", None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleBalanceRiver);
                 }
                 menu::separator(ui);
                 menu::heading(ui, "Thème");
@@ -3139,6 +3148,7 @@ impl BankPerfectApp {
         doc.show_forecast = self.settings.show_forecast;
         doc.balance_cards = self.settings.balance_cards;
         doc.show_column_filters = self.settings.show_column_filters;
+        doc.show_balance_river = self.settings.balance_river;
         if let Some(notice) = doc.notice.take() {
             self.toast = Some((notice, now + 4.0));
         }
@@ -3174,13 +3184,15 @@ impl BankPerfectApp {
             let editor = self
                 .editor
                 .get_or_insert_with(|| Editor::new_operation(&doc.document, doc.account).quiet());
+            // Même espace que sous la barre des comptes : le bas de l'île
+            // s'aligne sur elle, et la grille garde son espace au-dessus.
             bar_action = egui::Panel::bottom("entry_bar")
                 .show_separator_line(false)
                 .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
                     left: gap,
                     right: gap,
-                    top: gap,
-                    bottom: 0,
+                    top: 0,
+                    bottom: gap,
                 }))
                 .show(ui, |ui| {
                     crate::islands::frame(&pal, dark)

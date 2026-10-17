@@ -33,6 +33,8 @@ pub struct Settings {
     pub balance_cards: bool,
     /// Ligne des filtres de colonnes ouverte sous les en-têtes de la grille.
     pub show_column_filters: bool,
+    /// Courbe du solde derrière la colonne Solde de la grille.
+    pub balance_river: bool,
     /// Certificat de licence signé par le serveur (voir `license`).
     pub license: Option<String>,
     /// Niveaux d'annulation.
@@ -86,6 +88,7 @@ impl Default for Settings {
             show_forecast: true,
             balance_cards: false,
             show_column_filters: false,
+            balance_river: true,
             license: None,
             max_undo: 30,
             disable_reconcile: false,

@@ -3,9 +3,10 @@
 //! lignes visibles sont dessinées).
 
 use bp_core::filter::TackFilter;
-use bp_core::model::{Date, Tack};
+use bp_core::model::{Amount, Date, Tack};
 use bp_core::view::SortColumn;
 use chrono::Datelike;
+use egui::emath::GuiRounding as _;
 use egui::{Align, Color32, Layout, RichText, Sense, Stroke};
 use egui_extras::{Column, TableBuilder};
 use egui_phosphor::regular as icon;
@@ -272,9 +273,25 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let visible = doc.visible();
     let sort_by_date = matches!(doc.sort, SortColumn::Date | SortColumn::MarkDate);
     let show_mark = doc.show_mark_dates;
+    // Courbe du solde : le solde progressif n'a de sens que trié par date.
+    let river = if sort_by_date && doc.show_balance_river {
+        // Échelle des lignes à l'écran (à l'image précédente), avec de la marge.
+        let (first, last) = doc.on_screen.unwrap_or((0, 30));
+        let rows = visible.get(first.saturating_sub(10)..(last + 11).min(visible.len()));
+        let range = rows.unwrap_or(&visible).iter().fold(None, |range, &i| {
+            let b = doc.balance_of(i);
+            Some(range.map_or((b, b), |(lo, hi): (Amount, Amount)| (lo.min(b), hi.max(b))))
+        });
+        crate::river::River::new(ui.ctx(), (doc.file_id, doc.account), range)
+    } else {
+        crate::river::reset(ui.ctx());
+        None
+    };
     // Contenu de l'île du tableau : les séparateurs de mois n'en sortent pas.
     let grid_rect = ui.max_rect();
     let spacing_y = ui.spacing().item_spacing.y;
+    // Ligne des titres de colonnes (hauteur d'un `ui.horizontal`).
+    let title_row = ui.spacing().interact_size.y;
 
     // Fenêtre étroite : colonnes plus compactes (disposition mémorisée à part).
     let narrow = ui.available_width() < 760.0;
@@ -312,7 +329,12 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     // Filtres de colonnes : une ligne de champs sous les titres, ouverte
     // par la loupe.
     let open = doc.show_column_filters;
-    let header_height = if open { 66.0 } else { 30.0 };
+    // Ouverte : marge, ligne des titres, champ de 34 points et marge du bas.
+    let header_height = if open {
+        2.0 + title_row + spacing_y + 34.0 + 6.0
+    } else {
+        30.0
+    };
     table
         .header(header_height, |mut header| {
             header.col(|ui| {
@@ -507,7 +529,41 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         ui.label(RichText::new(money(op.amount, &currency)).color(color));
                     });
                 });
-                row.col(|ui| {
+                let (_, balance_cell) = row.col(|ui| {
+                    if let Some(river) = &river {
+                        let cell = ui.max_rect();
+                        // Bande de la ligne sans trou avec ses voisines, comme
+                        // les fonds alternés.
+                        let band = cell.expand2(0.5 * ui.spacing().item_spacing).round_ui();
+                        let painter = egui::Painter::new(
+                            ui.ctx().clone(),
+                            ui.layer_id(),
+                            band.intersect(rows_clip),
+                        );
+                        let whole_row =
+                            egui::Rect::from_x_y_ranges(grid_rect.x_range(), band.y_range())
+                                .intersect(rows_clip);
+                        let hovered = ui.ctx().rect_contains_pointer(ui.layer_id(), whole_row);
+                        let neighbour = |p: Option<usize>| {
+                            p.and_then(|p| visible.get(p))
+                                .map_or(balance, |&i| doc.balance_of(i))
+                                .as_f64()
+                        };
+                        river.paint(
+                            &painter,
+                            egui::Rangef::new(cell.left() + 4.0, cell.right() - SCROLLBAR_GUTTER),
+                            band.y_range(),
+                            cell.center().y,
+                            [
+                                neighbour(pos.checked_sub(1)),
+                                balance.as_f64(),
+                                neighbour(Some(pos + 1)),
+                            ],
+                            hovered,
+                            &pal,
+                            ui.visuals().dark_mode,
+                        );
+                    }
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         // Place pour la barre de défilement flottante.
                         ui.add_space(SCROLLBAR_GUTTER);
@@ -519,6 +575,30 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         ui.label(text);
                     });
                 });
+                if river.is_some() && crate::river::wants_tooltip(&balance_cell, rows_clip) {
+                    let anchor = &balance_cell;
+                    let id = balance_cell.id.with("balance_tooltip");
+                    egui::Tooltip::always_open(
+                        balance_cell.ctx.clone(),
+                        balance_cell.layer_id,
+                        id,
+                        anchor,
+                    )
+                    .show(|ui| {
+                        let mark_date = doc.sort == SortColumn::MarkDate;
+                        let (points, marked) = crate::river::window(
+                            &visible,
+                            pos,
+                            |i| {
+                                let op = doc.operation(i);
+                                if mark_date { op.mark_date } else { op.date }
+                            },
+                            |i| doc.balance_of(i),
+                            doc.ascending,
+                        );
+                        crate::river::tooltip(ui, &points, marked, &currency, &pal);
+                    });
+                }
 
                 let response = row.response();
                 if new_month {
@@ -1135,6 +1215,9 @@ fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
             || f.date_to.is_some()
             || f.tack != TackFilter::All);
     let mut clicked = false;
+    // Haut de la ligne des champs de filtre (voir `filter_header`).
+    let fields_top =
+        ui.max_rect().top() + 2.0 + ui.spacing().interact_size.y + ui.spacing().item_spacing.y;
     ui.vertical_centered(|ui| {
         ui.add_space(2.0);
         let galley = ui.painter().layout_no_wrap(
@@ -1170,8 +1253,11 @@ fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
             .on_hover_text(tip)
             .clicked();
         if open {
-            ui.add_space(4.0);
-            tack_filter_button(ui, doc);
+            // Centré sur les champs de filtre des autres colonnes.
+            ui.add_space((fields_top - ui.cursor().top()).max(0.0));
+            let row = egui::vec2(ui.available_width(), 34.0);
+            let layout = Layout::left_to_right(Align::Center).with_main_align(Align::Center);
+            ui.allocate_ui_with_layout(row, layout, |ui| tack_filter_button(ui, doc));
         }
     });
     clicked

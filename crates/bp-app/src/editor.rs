@@ -447,12 +447,6 @@ impl Editor {
         let wide = width >= 1250.0;
         let (date_w, mode_w, cat_w, sign_w, amount_w, tack_w) =
             (150.0, 175.0, 210.0, 34.0, 130.0, 112.0);
-        let fixed_row1 = if wide {
-            date_w + mode_w + cat_w + sign_w + amount_w + tack_w + 7.0 * GAP
-        } else {
-            date_w + mode_w + 3.0 * GAP
-        };
-        let text_w = ((width - fixed_row1 - 4.0) / 2.0).max(120.0);
         let mut payee_rect = None;
         let mut payee_focus = false;
         let color = if self.credit {
@@ -477,11 +471,19 @@ impl Editor {
                 this.date_keys(ui);
             }
             this.mode_combo(ui, doc, mode_w);
-            // Les champs ont 10 points de marge de chaque côté.
+            // Tiers et détail se partagent la place restante, jusqu'au bord
+            // droit (en large, après eux : catégorie, signe, montant, pointage).
+            let after = if wide {
+                cat_w + sign_w + amount_w + tack_w + 4.0 * GAP
+            } else {
+                0.0
+            };
+            // Largeur totale du champ, marges comprises.
+            let text_w = ((ui.available_width() - after - GAP) / 2.0).max(120.0);
             let payee = ui.add(
                 crate::theme::field(&mut this.payee)
                     .hint_text("Tiers")
-                    .desired_width(text_w - 20.0),
+                    .desired_width(text_w),
             );
             *focused |= payee.has_focus();
             payee_focus = payee.has_focus();
@@ -489,7 +491,7 @@ impl Editor {
             let details = ui.add(
                 crate::theme::field(&mut this.details)
                     .hint_text("Détail")
-                    .desired_width(text_w - 20.0),
+                    .desired_width(text_w),
             );
             *focused |= details.has_focus();
         };
@@ -518,7 +520,7 @@ impl Editor {
                     .text_color(color)
                     .horizontal_align(egui::Align::Max)
                     .hint_text("0,00")
-                    .desired_width(amount_w - 20.0),
+                    .desired_width(amount_w),
             );
             if amount.changed() {
                 if let Some(rest) = this.amount.strip_prefix('-') {
@@ -561,7 +563,6 @@ impl Editor {
                 fields_b(ui, self, &mut focused);
             });
         }
-        ui.add_space(8.0);
         if payee_focus && !self.payee.is_empty() && crate::settings::shared::autocomplete() {
             self.payee_suggestions(ui, document, payee_rect);
         }

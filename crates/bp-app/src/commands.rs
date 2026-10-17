@@ -58,6 +58,7 @@ pub enum Command {
     ToggleForecast,
     ToggleBalanceCards,
     ToggleColumnFilters,
+    ToggleBalanceRiver,
     ReverseCurrencies,
     Scheduler,
     Forecast,
@@ -150,6 +151,7 @@ impl Command {
                 ToggleForecast,
                 ToggleBalanceCards,
                 ToggleColumnFilters,
+                ToggleBalanceRiver,
                 ReverseCurrencies,
                 Scheduler,
                 Forecast,
@@ -616,6 +618,20 @@ impl Command {
                     icon::MAGNIFYING_GLASS,
                     None,
                     "filtres colonnes recherche loupe tiers montant",
+                )
+            }
+            ToggleBalanceRiver => {
+                let label = if doc.is_none_or(|d| d.show_balance_river) {
+                    "Masquer la courbe du solde"
+                } else {
+                    "Afficher la courbe du solde"
+                };
+                info(
+                    "Affichage",
+                    label,
+                    icon::CHART_LINE,
+                    None,
+                    "courbe solde graphique colonne évolution",
                 )
             }
             ToggleForecast => {

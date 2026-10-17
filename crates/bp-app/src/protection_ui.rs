@@ -34,7 +34,9 @@ impl ProtectionForm {
         let protected = is_protected(doc);
         crate::dialogs::modal(ctx, "tool_protection").show(ctx, |ui| {
             let pal = palette(ui);
-            ui.set_width(500.0);
+            // Assez large pour les quatre boutons du pied quand le fichier est
+            // protégé (sinon le groupe de gauche recouvre « Fermer »).
+            ui.set_width(if protected { 660.0 } else { 500.0 });
             crate::dialogs::header(ui, icon::SHIELD_CHECK, pal.accent, "Protection du fichier");
             let (glyph, status, color) = if protected {
                 (

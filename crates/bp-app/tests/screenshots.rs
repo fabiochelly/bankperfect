@@ -318,6 +318,36 @@ fn screenshots() {
 /// Outils autonomes : simulateur de crédit, convertisseur de devises.
 #[test]
 #[ignore]
+fn protection_screenshots() {
+    render("17b-protection-protegee", egui::Theme::Dark, |h| {
+        let open = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+            h.get_by_label("Fichier").click();
+            h.run_steps(3);
+            h.get_by_label("Protection du fichier…").click();
+            h.run_steps(2);
+        };
+        open(h);
+        for i in 0..2 {
+            h.query_all_by_role(egui::accesskit::Role::PasswordInput)
+                .chain(h.query_all_by_role(egui::accesskit::Role::TextInput))
+                .nth(i)
+                .unwrap()
+                .click();
+            h.run_steps(2);
+            h.event(egui::Event::Text("motdepasse".into()));
+            h.run_steps(2);
+        }
+        h.run_steps(2);
+        h.get_by_label("Protéger").click();
+        h.run_steps(2);
+        h.get_by_label("J'ai noté ma clé").click();
+        h.run_steps(2);
+        open(h);
+    });
+}
+
+#[test]
+#[ignore]
 fn theme_screenshots() {
     for theme in bankperfect::theme::THEMES {
         let mode = if theme.dark {

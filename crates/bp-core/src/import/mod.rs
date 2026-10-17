@@ -140,7 +140,20 @@ pub struct ImportedAccount {
     pub currency: Option<String>,
     /// Relevé de carte de crédit (OFX `CCSTMTRS`).
     pub credit_card: bool,
+    /// Solde annoncé par la banque (OFX `LEDGERBAL`, synchronisation).
+    pub balance: Option<StatementBalance>,
     pub operations: Vec<ImportedOperation>,
+}
+
+/// Solde d'un compte selon la banque.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StatementBalance {
+    pub amount: Amount,
+    /// Le solde tient compte des opérations jusqu'à cette date incluse.
+    pub date: Option<Date>,
+    /// Solde comptable (opérations comptabilisées seulement) ; sinon solde
+    /// disponible, qui compte aussi les opérations en attente.
+    pub booked: bool,
 }
 
 impl ImportedAccount {
@@ -857,6 +870,41 @@ pub fn detect_duplicates(
         }
     }
     statuses
+}
+
+/// Solde pointé du compte une fois les lignes cochées importées, à comparer
+/// au solde de la banque : opérations pointées ou rapprochées, lignes cochées
+/// (elles viennent du relevé, qu'on les pointe ou non à l'import) et
+/// opérations existantes reconnues dans une ligne décochée (elles figurent au
+/// relevé). Avec `until`, seules les opérations jusqu'à cette date comptent.
+pub fn pointed_after_import(
+    account: &Account,
+    imported: &[ImportedOperation],
+    statuses: &[ImportStatus],
+    include: &[bool],
+    until: Option<Date>,
+) -> Amount {
+    let counts = |d: Date| until.is_none_or(|u| d <= u);
+    let ops = &account.operations;
+    let mut total: Amount = ops
+        .iter()
+        .filter(|op| op.tack != Tack::None && counts(op.date))
+        .map(|op| op.amount)
+        .sum();
+    for (k, imp) in imported.iter().enumerate() {
+        if !counts(imp.date) {
+            continue;
+        }
+        if include.get(k).copied().unwrap_or(false) {
+            total = total + imp.amount;
+        } else if let Some(ImportStatus::ProbableDuplicate { existing, .. }) = statuses.get(k)
+            && let Some(op) = ops.get(*existing)
+            && op.tack == Tack::None
+        {
+            total = total + op.amount;
+        }
+    }
+    total
 }
 
 // ---------------------------------------------------------------------------
@@ -1577,6 +1625,46 @@ pub(crate) mod tests {
         assert_eq!(
             detect_duplicates(&account, &other_mode, &ignore_mode),
             vec![dup(0)]
+        );
+    }
+
+    #[test]
+    fn pointed_balance_after_import() {
+        let d = ymd(2026, 10, 1);
+        let mut account = empty_account();
+        let mut pointed = existing(d, -10_000, StandardMode::Carte, "Pointée");
+        pointed.tack = Tack::Pointed;
+        let pending = existing(d, -2_500, StandardMode::Carte, "Saisie");
+        let cheque = existing(d, -7_000, StandardMode::ChequeEmis, "Chèque non encaissé");
+        account.operations = vec![pointed, pending, cheque];
+        let lines = [
+            imported(d, -2_500, StandardMode::Carte, "Saisie"),
+            imported(d, 50_000, StandardMode::VirementRecu, "Salaire"),
+            imported(
+                ymd(2026, 10, 9),
+                -1_000,
+                StandardMode::Carte,
+                "Après le solde",
+            ),
+        ];
+        let statuses = detect_duplicates(&account, &lines, &DuplicateOptions::default());
+        let include: Vec<bool> = statuses.iter().map(|s| s.is_new()).collect();
+        assert_eq!(include, [false, true, true]);
+        // Pointée, doublon non pointé reconnu, salaire ; ni le chèque ni la
+        // ligne postérieure au solde.
+        assert_eq!(
+            pointed_after_import(
+                &account,
+                &lines,
+                &statuses,
+                &include,
+                Some(ymd(2026, 10, 8))
+            ),
+            Amount::from_cents(-10_000 - 2_500 + 50_000)
+        );
+        assert_eq!(
+            pointed_after_import(&account, &lines, &statuses, &include, None),
+            Amount::from_cents(-10_000 - 2_500 + 50_000 - 1_000)
         );
     }
 

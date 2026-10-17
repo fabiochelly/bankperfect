@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use bp_core::import::{
     self, ConvertOptions, DateOrder, DuplicateOptions, ImportFormat, ImportStatus, ParsedImport,
+    StatementBalance,
     csv::{CsvColumns, CsvConfig, CsvRecord},
     qif::{QifField, QifOptions},
 };
@@ -17,6 +18,11 @@ use crate::format::money;
 use crate::theme::palette;
 use crate::tools::Outcome;
 use crate::ui_kit;
+
+/// Colonne d'état de l'aperçu (pastille et infobulle du doublon).
+const STATUS_WIDTH: f32 = 160.0;
+/// Place laissée à droite des lignes pour la barre de défilement.
+const SCROLLBAR_GUTTER: f32 = crate::theme::SCROLLBAR_WIDTH + 4.0;
 
 /// Champ affecté à une colonne CSV.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -739,7 +745,11 @@ impl ImportForm {
             .map_or("€".to_string(), |t| {
                 doc.document.accounts[t].currency.clone()
             });
-        let list_height = height - 110.0 - if self.show_rejected { 140.0 } else { 0.0 };
+        let mut list_height = height - 110.0 - if self.show_rejected { 140.0 } else { 0.0 };
+        if let Some(balance) = account.balance {
+            self.bank_balance(ui, doc, account, balance, &currency, width);
+            list_height -= 52.0;
+        }
         egui::ScrollArea::vertical()
             .id_salt(("import_rows", shown))
             .max_height(list_height.max(120.0))
@@ -766,7 +776,11 @@ impl ImportForm {
                             egui::Align::Min,
                             RichText::new(crate::settings::shared::date(op.date)),
                         );
-                        let w = (width - 540.0).max(160.0);
+                        // Libellé : la place laissée par les colonnes fixes et
+                        // la barre de défilement, pour ne pas élargir la fenêtre.
+                        let fixed = 130.0 + 110.0 + 12.0 + STATUS_WIDTH + SCROLLBAR_GUTTER;
+                        let w = (ui.available_width() - fixed - 4.0 * ui.spacing().item_spacing.x)
+                            .max(160.0);
                         let text = if op.details.is_empty() || op.details == op.payee {
                             op.payee.clone()
                         } else {
@@ -792,7 +806,9 @@ impl ImportForm {
                             RichText::new(money(op.amount, &currency)).color(amount_color),
                         );
                         ui.add_space(12.0);
-                        match status {
+                        let status_cell = egui::vec2(STATUS_WIDTH, 30.0);
+                        let layout = egui::Layout::left_to_right(egui::Align::Center);
+                        ui.allocate_ui_with_layout(status_cell, layout, |ui| match status {
                             ImportStatus::New => ui_kit::pill(ui, "Nouvelle", pal.positive),
                             ImportStatus::ProbableDuplicate {
                                 existing,
@@ -815,11 +831,92 @@ impl ImportForm {
                                         ));
                                 }
                             }
-                        }
+                        });
                     });
                 }
             });
         self.rejected(ui, &parsed, width);
+    }
+
+    /// Solde annoncé par la banque et solde pointé du compte une fois l'import
+    /// fait : l'écart révèle une opération manquante ou en double.
+    fn bank_balance(
+        &self,
+        ui: &mut egui::Ui,
+        doc: &OpenDoc,
+        account: &import::ImportedAccount,
+        balance: StatementBalance,
+        currency: &str,
+        width: f32,
+    ) {
+        let pal = palette(ui);
+        let shown = self.shown;
+        let target = self.targets.get(shown).copied().flatten();
+        let mine = target.map(|t| {
+            import::pointed_after_import(
+                &doc.document.accounts[t],
+                &account.operations,
+                self.statuses.get(shown).map_or(&[][..], Vec::as_slice),
+                self.include.get(shown).map_or(&[][..], Vec::as_slice),
+                balance.date,
+            )
+        });
+        let kind = if balance.booked {
+            "Solde en banque"
+        } else {
+            "Solde disponible"
+        };
+        let title = match balance.date {
+            Some(d) => format!("{kind} au {}", crate::settings::shared::date(d)),
+            None => kind.to_string(),
+        };
+        egui::Frame::new()
+            .fill(pal.bg)
+            .stroke(egui::Stroke::new(1.0, pal.border.gamma_multiply(0.6)))
+            .corner_radius(10)
+            .inner_margin(egui::Margin::symmetric(14, 8))
+            .show(ui, |ui| {
+                ui.set_width(width - 30.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(icon::BANK).size(18.0).color(pal.accent));
+                    let response = ui.label(RichText::new(title).color(pal.fg_dark));
+                    if !balance.booked {
+                        response.on_hover_text(
+                            "La banque ne donne que le solde disponible : il compte aussi \
+                             les opérations en attente, qui ne sont pas importées.",
+                        );
+                    }
+                    ui.label(RichText::new(money(balance.amount, currency)).strong());
+                    let Some(mine) = mine else {
+                        return;
+                    };
+                    ui.add_space(24.0);
+                    ui.label(RichText::new("En banque après import").color(pal.fg_dark))
+                        .on_hover_text(
+                            "Opérations pointées ou rapprochées du compte, plus les lignes \
+                             cochées ici et les opérations déjà saisies qu'elles recouvrent.",
+                        );
+                    ui.label(RichText::new(money(mine, currency)).strong());
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        let gap = mine + -balance.amount;
+                        if gap == bp_core::model::Amount::ZERO {
+                            ui_kit::pill(ui, &format!("{}  Concorde", icon::CHECK), pal.positive);
+                        } else {
+                            let sign = if gap.is_negative() { "" } else { "+" };
+                            ui_kit::pill(
+                                ui,
+                                &format!("Écart {sign}{}", money(gap, currency)),
+                                if balance.booked {
+                                    pal.warning
+                                } else {
+                                    pal.muted
+                                },
+                            );
+                        }
+                    });
+                });
+            });
+        ui.add_space(8.0);
     }
 
     fn rejected(&mut self, ui: &mut egui::Ui, parsed: &ParsedImport, width: f32) {

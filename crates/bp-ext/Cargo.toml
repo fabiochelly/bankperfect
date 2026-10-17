@@ -9,7 +9,7 @@ homepage.workspace = true
 description = "Extensions Luau de BankPerfect : moteur, API et fenêtres déclaratives"
 
 [dependencies]
-bp-core = { version = "9.5.0", path = "../bp-core" }
+bp-core = { version = "9.6.0", path = "../bp-core" }
 mlua = { version = "0.12.2", features = ["luau", "serde"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.152"

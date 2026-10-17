@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/bp-app","crates/bp-core","crates/bp-ext"]
 
 [workspace.package]
-version = "9.5.0"
+version = "9.6.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/fabiochelly/bankperfect"

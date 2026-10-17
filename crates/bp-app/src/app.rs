@@ -2079,6 +2079,23 @@ impl BankPerfectApp {
         command
     }
 
+    /// Nombre d'opérations du compte (affichées / total si un filtre est
+    /// actif).
+    fn operation_count(ui: &mut egui::Ui, doc: &OpenDoc) {
+        let total = crate::format::count(doc.total_count());
+        if doc.filters.is_active() || doc.filters.hide_old_lines {
+            let shown = crate::format::count(doc.visible_len());
+            ui.label(
+                RichText::new(format!("{}  {shown} / {total} opérations", icon::FUNNEL))
+                    .color(palette(ui).pointed),
+            );
+        } else {
+            ui.label(format!("{total} opérations"));
+        }
+    }
+
+    /// Barre d'état, dans son île. Une seule taille de texte partout, entre
+    /// le texte courant et le petit texte.
     fn status_bar(
         ui: &mut egui::Ui,
         doc: &mut OpenDoc,
@@ -2086,24 +2103,18 @@ impl BankPerfectApp {
         license: Option<&str>,
     ) {
         let pal = palette(ui);
-        ui.horizontal(|ui| {
-            let shown = doc.visible_len();
-            let total = doc.total_count();
+        let font = egui::FontId::proportional(STATUS_FONT_SIZE);
+        for style in [egui::TextStyle::Body, egui::TextStyle::Small] {
+            ui.style_mut().text_styles.insert(style, font.clone());
+        }
+        ui.horizontal_centered(|ui| {
+            Self::operation_count(ui, doc);
             if doc.filters.is_active() || doc.filters.hide_old_lines {
-                ui.label(
-                    RichText::new(format!(
-                        "{}  {} / {} opérations",
-                        icon::FUNNEL,
-                        crate::format::count(shown),
-                        crate::format::count(total)
-                    ))
-                    .color(pal.pointed),
-                );
                 filter_chips(ui, doc);
-            } else {
-                ui.label(format!("{} opérations", crate::format::count(total)));
             }
-            ui.separator();
+            if !doc.selection.is_empty() {
+                ui.separator();
+            }
             selection_summary(ui, doc);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if doc.dirty {
@@ -3014,16 +3025,24 @@ impl BankPerfectApp {
         let toast = self.toast.as_ref().map(|(t, _)| t.clone());
         let license = self.license.as_ref().map(|l| l.label());
         let doc = self.doc.as_mut().expect("document ouvert");
-        egui::Panel::bottom("status")
-            .show_separator_line(false)
-            .frame(egui::Frame::side_top_panel(ui.style()).fill(canvas))
-            .show(ui, |ui| {
-                Self::status_bar(ui, doc, toast.as_deref(), license.as_deref())
-            });
-
         // Fenêtre étroite (tuile) : pas de panneau des comptes, le nom du
         // compte devient un sélecteur.
         let compact = ui.available_width() < 860.0;
+        // Barre d'état : une île sur toute la largeur, sous les comptes et le
+        // tableau.
+        egui::Panel::bottom("status")
+            .show_separator_line(false)
+            .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
+                left: gap,
+                right: gap,
+                top: 0,
+                bottom: gap,
+            }))
+            .show(ui, |ui| {
+                status_island(ui, &pal, dark, |ui| {
+                    Self::status_bar(ui, doc, toast.as_deref(), license.as_deref())
+                });
+            });
         // Panneau des comptes plus étroit sur les petits écrans.
         let sidebar_width = (ui.available_width() * 0.2).clamp(190.0, 260.0);
         let mut sidebar_command = None;
@@ -3051,7 +3070,6 @@ impl BankPerfectApp {
                 })
                 .inner;
         }
-
         // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
         let content_rect = ui.available_rect_before_wrap();
 
@@ -3192,6 +3210,27 @@ fn open_requested_urls(ctx: &egui::Context) {
 type ClearFilter = fn(&mut bp_core::filter::Filters);
 
 /// Un badge par filtre actif ; un clic le retire.
+/// Hauteur intérieure de l'île de la barre d'état.
+const STATUS_HEIGHT: f32 = 22.0;
+/// Taille du texte de la barre d'état.
+const STATUS_FONT_SIZE: f32 = 12.5;
+
+/// Île de la barre d'état, de hauteur fixe.
+fn status_island(
+    ui: &mut egui::Ui,
+    pal: &crate::theme::Palette,
+    dark: bool,
+    content: impl FnOnce(&mut egui::Ui),
+) {
+    crate::islands::frame(pal, dark)
+        .inner_margin(egui::Margin::symmetric(12, 5))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.set_height(STATUS_HEIGHT);
+            content(ui);
+        });
+}
+
 fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let f = &doc.filters;
     let mut chips: Vec<(String, ClearFilter)> = Vec::new();

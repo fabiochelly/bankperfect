@@ -19,6 +19,68 @@ const TRANSFER_FROM: &str = "Transfert depuis le compte ";
 const AUTO_PREFIX: &str = "[auto] ";
 const SCROLLBAR_GUTTER: f32 = crate::theme::SCROLLBAR_WIDTH + 10.0;
 
+/// Hauteur de la pastille du mois, à cheval sur deux lignes.
+const MONTH_CHIP_HEIGHT: f32 = 18.0;
+
+/// Séparateur de changement de mois en haut de la ligne `row` : pastille du
+/// mois qui commence (à partir de `x`), prolongée par un filet qui s'estompe.
+/// Le filet couvre le haut de la ligne, à partir de sa limite avec la ligne
+/// précédente (`top`), sur un pixel physique.
+fn month_separator(
+    painter: &egui::Painter,
+    row: egui::Rect,
+    top: f32,
+    x: f32,
+    date: Date,
+    pal: &crate::theme::Palette,
+) {
+    let d = date.to_naive();
+    let label = format!(
+        "{} {}",
+        crate::datepicker::MONTHS[d.month0() as usize].to_uppercase(),
+        d.year()
+    );
+    let mut job = egui::text::LayoutJob::default();
+    job.append(
+        &label,
+        0.0,
+        egui::TextFormat {
+            font_id: egui::FontId::new(10.0, crate::theme::semibold()),
+            color: pal.month_rule,
+            extra_letter_spacing: 0.6,
+            ..Default::default()
+        },
+    );
+    let galley = painter.layout_job(job);
+    let pixel = 1.0 / painter.pixels_per_point();
+    let y = top + pixel / 2.0;
+    let chip = egui::Rect::from_min_size(
+        egui::pos2(x, y - MONTH_CHIP_HEIGHT / 2.0),
+        egui::vec2(galley.size().x + 14.0, MONTH_CHIP_HEIGHT),
+    );
+    // Filet : plein contre la pastille, transparent au bout de la ligne.
+    let line = egui::Rect::from_x_y_ranges(chip.right()..=row.right(), top..=(top + pixel));
+    let strong = pal.month_rule.gamma_multiply(0.55);
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(line.left_top(), strong);
+    mesh.colored_vertex(line.right_top(), Color32::TRANSPARENT);
+    mesh.colored_vertex(line.right_bottom(), Color32::TRANSPARENT);
+    mesh.colored_vertex(line.left_bottom(), strong);
+    mesh.add_triangle(0, 1, 2);
+    mesh.add_triangle(0, 2, 3);
+    painter.add(mesh);
+    // Fond opaque : la pastille cache la limite entre les deux lignes.
+    painter.rect(
+        chip,
+        MONTH_CHIP_HEIGHT / 2.0,
+        pal.bg.lerp_to_gamma(pal.month_rule, 0.14),
+        Stroke::new(1.0, pal.month_rule.gamma_multiply(0.35)),
+        egui::StrokeKind::Inside,
+    );
+    let pos = chip.center() - galley.size() / 2.0;
+    painter.galley(pos, galley, pal.month_rule);
+}
+
 /// Ce que l'utilisateur a demandé depuis la grille.
 pub enum GridAction {
     None,
@@ -39,6 +101,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let visible = doc.visible();
     let sort_by_date = matches!(doc.sort, SortColumn::Date | SortColumn::MarkDate);
     let show_mark = doc.show_mark_dates;
+    // Contenu de l'île du tableau : les séparateurs de mois n'en sortent pas.
+    let grid_rect = ui.max_rect();
+    let spacing_y = ui.spacing().item_spacing.y;
 
     // Fenêtre étroite : colonnes plus compactes (disposition mémorisée à part).
     let narrow = ui.available_width() < 760.0;
@@ -141,7 +206,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 });
             });
         })
-        .body(|body| {
+        .body(|mut body| {
+            // Zone visible des lignes : les séparateurs de mois n'en sortent pas.
+            let rows_clip = body.ui_mut().clip_rect();
             body.rows(row_height, visible.len(), |mut row| {
                 let pos = row.index();
                 first_drawn = first_drawn.min(pos);
@@ -167,7 +234,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         ui.label(RichText::new(glyph).color(color).size(15.0))
                     });
                 });
-                row.col(|ui| {
+                let (date_cell, _) = row.col(|ui| {
                     if op.date > today {
                         let r = ui.max_rect();
                         ui.painter().vline(
@@ -279,10 +346,19 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
 
                 let response = row.response();
                 if new_month {
-                    // Séparateur de changement de mois, sur toute la largeur de la ligne.
+                    // Séparateur de changement de mois, sans déborder de l'île ni
+                    // passer sur les en-têtes.
                     let rect = response.interact_rect;
-                    egui::Painter::new(response.ctx.clone(), response.layer_id, rect.expand(1.0))
-                        .hline(rect.x_range(), rect.top(), Stroke::new(1.0, pal.month_rule));
+                    let clip = rect
+                        .expand2(egui::vec2(1.0, MONTH_CHIP_HEIGHT))
+                        .intersect(grid_rect)
+                        .intersect(rows_clip);
+                    let painter = egui::Painter::new(response.ctx.clone(), response.layer_id, clip);
+                    // Limite avec la ligne précédente : celle des fonds alternés,
+                    // au milieu de l'espacement, calée sur les pixels.
+                    let pixels = response.ctx.pixels_per_point();
+                    let top = ((rect.top() - spacing_y / 2.0) * pixels).round() / pixels;
+                    month_separator(&painter, rect, top, date_cell.left() + 4.0, op.date, &pal);
                 }
                 // Sélection dès l'appui, comme les listes natives (egui attend
                 // le relâchement pour `clicked`).

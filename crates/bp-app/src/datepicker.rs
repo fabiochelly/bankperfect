@@ -7,7 +7,7 @@ use egui_phosphor::regular as icon;
 
 use crate::theme::palette;
 
-const MONTHS: [&str; 12] = [
+pub(crate) const MONTHS: [&str; 12] = [
     "Janvier",
     "Février",
     "Mars",

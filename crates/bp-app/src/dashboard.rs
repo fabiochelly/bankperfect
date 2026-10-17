@@ -33,7 +33,8 @@ const CARDS_HEIGHT: f32 = 112.0;
 const TOGGLE_SIZE: f32 = 22.0;
 /// Durée du fondu quand on bascule de présentation.
 const SWITCH_SECONDS: f64 = 0.25;
-const RADIUS: u8 = 12;
+/// Rayon des cartes : celui des îles.
+const RADIUS: u8 = crate::islands::RADIUS as u8;
 /// Durée de l'animation des montants quand les données changent.
 const COUNT_UP_SECONDS: f64 = 0.28;
 /// Largeur en dessous de laquelle un mini-graphique est masqué (petites
@@ -966,7 +967,7 @@ fn card(ui: &Ui, rect: Rect, lift: f32) {
         rect,
         RADIUS,
         card_fill(ui),
-        Stroke::new(1.0, pal.border.gamma_multiply(if dark { 0.8 } else { 1.0 })),
+        crate::islands::stroke(&pal, dark),
         StrokeKind::Inside,
     );
     let sheen = if dark {

@@ -91,7 +91,8 @@ static FILE_IDS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::ne
 struct View {
     key: Option<(usize, SortColumn, bool, u64)>,
     filters: Option<(Filters, Date)>,
-    /// Compte pour lequel l'index de recherche est à jour.
+    /// Compte pour lequel l'index de recherche est à jour (construit au
+    /// premier filtre de texte).
     indexed_account: Option<usize>,
     index: SearchIndex,
     order: Vec<usize>,
@@ -107,6 +108,8 @@ struct View {
     /// Compte et révision pour lesquels la courbe du solde est à jour.
     /// Compte, version, empreinte de l'échéancier et date du jour.
     series_key: Option<(usize, u64, u64, Date)>,
+    /// Compte, version et date du jour de la répartition du pointage.
+    tack_key: Option<(usize, u64, Date)>,
 }
 
 /// État d'un compte avant une action, pour Annuler/Refaire.
@@ -281,10 +284,6 @@ impl OpenDoc {
         let key = (self.account, self.sort, self.ascending, self.revision);
         if self.view.key != Some(key) {
             let account = &self.document.accounts[self.account];
-            if self.view.indexed_account != Some(self.account) {
-                self.view.index = SearchIndex::build(&self.document, account);
-                self.view.indexed_account = Some(self.account);
-            }
             self.view.order = sorted_order(&self.document, account, self.sort, self.ascending);
             let balances = running_balances(account, &self.view.order, self.ascending);
             self.view.balance_of = vec![Amount::ZERO; account.operations.len()];
@@ -308,16 +307,26 @@ impl OpenDoc {
             self.view.insights.series = balance_series(&self.document, self.account, today);
             self.view.series_key = Some(series_key);
         }
+        // Répartition du pointage : tout le compte, filtres ignorés.
+        let tack_key = (self.account, self.revision, today);
+        if self.view.tack_key != Some(tack_key) {
+            self.compute_tack_insights();
+            self.view.tack_key = Some(tack_key);
+        }
         if self.view.filters.as_ref() != Some(&(self.filters.clone(), today)) {
             let account = &self.document.accounts[self.account];
-            self.view.visible = self
-                .filters
-                .compile(today)
+            let compiled = self.filters.compile(today);
+            // Index de recherche construit au premier filtre de texte : sans
+            // lui, l'ouverture d'un gros fichier est plus rapide.
+            if compiled.needs_index() && self.view.indexed_account != Some(self.account) {
+                self.view.index = SearchIndex::build(&self.document, account);
+                self.view.indexed_account = Some(self.account);
+            }
+            self.view.visible = compiled
                 .apply(account, &self.view.index, &self.view.order)
                 .into();
             self.view.filters = Some((self.filters.clone(), today));
             self.view.totals = self.compute_totals();
-            self.compute_tack_insights();
         }
     }
 
@@ -668,8 +677,12 @@ impl OpenDoc {
             }
         };
         self.apply_auto_rules(&[(self.account, index)]);
-        let account = &self.document.accounts[self.account];
-        self.view.index.update(&self.document, account, index);
+        // Index à jour si déjà construit pour ce compte (sinon il le sera au
+        // premier filtre de texte).
+        if self.view.indexed_account == Some(self.account) {
+            let account = &self.document.accounts[self.account];
+            self.view.index.update(&self.document, account, index);
+        }
         self.touch();
         self.refresh();
         self.selection.clear();
@@ -1509,6 +1522,36 @@ mod tests {
         assert_eq!(totals.balance, Amount::from_cents(-3_000));
         assert_eq!(totals.pending, Amount::from_cents(-2_000));
         assert_eq!(totals.reconciled, Amount::from_cents(-1_000));
+    }
+
+    #[test]
+    fn search_index_built_on_first_text_filter_and_per_account() {
+        let mut d = doc_with_transfer();
+        assert_eq!(d.view.indexed_account, None, "pas d'index à l'ouverture");
+        d.filters.amount = "<0".into();
+        d.refresh();
+        assert_eq!(
+            d.view.indexed_account, None,
+            "filtre de montant : pas d'index"
+        );
+        d.filters.payee = "carrefour".into();
+        d.refresh();
+        assert_eq!(d.view.indexed_account, Some(0));
+        assert_eq!(d.visible_len(), 2);
+        // Ajout sur un autre compte : l'index du premier reste juste.
+        d.filters = Default::default();
+        d.select_account(1);
+        d.refresh();
+        d.upsert_operation(None, op(0, 5, "Fnac", -3_000, Tack::None));
+        d.select_account(0);
+        d.filters.payee = "carrefour".into();
+        d.refresh();
+        assert_eq!(d.visible_len(), 2);
+        d.select_account(1);
+        d.filters.payee = "fnac".into();
+        d.refresh();
+        assert_eq!(d.view.indexed_account, Some(1));
+        assert_eq!(d.visible_len(), 1);
     }
 
     #[test]

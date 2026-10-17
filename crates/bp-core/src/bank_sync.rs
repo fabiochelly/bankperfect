@@ -8,7 +8,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::import::{ImportedAccount, ImportedOperation, guess_mode_from_field};
+use crate::import::{ImportedAccount, ImportedOperation, StatementBalance, guess_mode_from_field};
 use crate::model::{Amount, Date, Document, Mode, StandardMode};
 
 /// Adresse de l'API.
@@ -365,10 +365,51 @@ fn transaction(t: &Value) -> Option<ImportedOperation> {
     })
 }
 
+/// Solde le plus utile de `GET /accounts/{uid}/balances` : de préférence
+/// comptable (il correspond aux opérations comptabilisées, les seules
+/// importées), le plus récent ; à défaut, un solde disponible.
+pub fn parse_balances(json: &Value) -> Option<StatementBalance> {
+    // Types ISO 20022 : comptables, puis disponibles et prévisionnels.
+    const BOOKED: [&str; 4] = ["ITBD", "CLBD", "PRCD", "OPBD"];
+    const OTHERS: [&str; 5] = ["XPCD", "ITAV", "CLAV", "OPAV", "FWAV"];
+    json.get("balances")?
+        .as_array()?
+        .iter()
+        .filter_map(|b| {
+            let kind = text_at(b, &["balance_type"]).unwrap_or_default();
+            let rank = BOOKED
+                .iter()
+                .chain(&OTHERS)
+                .position(|k| *k == kind)
+                .unwrap_or(BOOKED.len() + OTHERS.len());
+            let raw = text_at(b, &["balance_amount", "amount"])?;
+            let mut amount = Amount::parse(&raw.replace('.', ","))?;
+            if text_at(b, &["credit_debit_indicator"]) == Some("DBIT") && !amount.is_negative() {
+                amount = Amount(-amount.0);
+            }
+            let mut date = text_at(b, &["reference_date"])
+                .and_then(parse_iso_date)
+                .or_else(|| text_at(b, &["last_change_date_time"]).and_then(valid_until_date));
+            // Solde d'ouverture : sans les opérations du jour.
+            if kind == "OPBD" || kind == "OPAV" {
+                date = date.map(|d| Date(d.0 - 1));
+            }
+            let balance = StatementBalance {
+                amount,
+                date,
+                booked: rank < BOOKED.len(),
+            };
+            Some((rank, balance))
+        })
+        .min_by_key(|(rank, b)| (*rank, std::cmp::Reverse(b.date)))
+        .map(|(_, b)| b)
+}
+
 /// Compte importé à présenter à l'aperçu d'import.
 pub fn imported_account(
     link: &BankAccountLink,
     mut operations: Vec<ImportedOperation>,
+    balance: Option<StatementBalance>,
 ) -> ImportedAccount {
     operations.sort_by_key(|o| o.date);
     for (k, op) in operations.iter_mut().enumerate() {
@@ -378,6 +419,7 @@ pub fn imported_account(
         name: Some(link.name.clone()),
         account_id: (!link.iban.is_empty()).then(|| link.iban.clone()),
         currency: (!link.currency.is_empty()).then(|| link.currency.clone()),
+        balance,
         operations,
         ..Default::default()
     }
@@ -438,6 +480,31 @@ mod tests {
         assert_eq!(ops[1].payee, "EMPLOYEUR SA");
         assert_eq!(ops[1].mode, Mode::Standard(StandardMode::VirementRecu));
         assert_eq!(ops[1].fitid.as_deref(), Some("T2"));
+    }
+
+    #[test]
+    fn picks_the_booked_balance() {
+        let json: Value = serde_json::from_str(
+            r#"{"balances":[
+                {"balance_amount":{"currency":"EUR","amount":"1180.40"},"balance_type":"ITAV","reference_date":"2026-10-16"},
+                {"balance_amount":{"currency":"EUR","amount":"1200.00"},"balance_type":"CLBD","reference_date":"2026-10-14"},
+                {"balance_amount":{"currency":"EUR","amount":"-35.10"},"balance_type":"CLBD","reference_date":"2026-10-15"}
+              ]}"#,
+        )
+        .unwrap();
+        let b = parse_balances(&json).unwrap();
+        assert_eq!(b.amount, Amount::from_cents(-3510), "le plus récent");
+        assert_eq!(b.date, parse_iso_date("2026-10-15"));
+        assert!(b.booked);
+
+        let json: Value = serde_json::from_str(
+            r#"{"balances":[{"balance_amount":{"currency":"EUR","amount":"10"},"balance_type":"OPAV","reference_date":"2026-10-16"}]}"#,
+        )
+        .unwrap();
+        let b = parse_balances(&json).unwrap();
+        assert!(!b.booked);
+        assert_eq!(b.date, parse_iso_date("2026-10-15"), "solde d'ouverture");
+        assert_eq!(parse_balances(&serde_json::json!({"balances": []})), None);
     }
 
     #[test]

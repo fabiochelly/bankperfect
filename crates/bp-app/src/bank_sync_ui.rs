@@ -11,7 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bp_core::bank_sync::{self, Bank, BankAccountLink, BankConnection, BankSync};
-use bp_core::import::{ImportedOperation, ParsedImport};
+use bp_core::import::{ImportedOperation, ParsedImport, StatementBalance};
 use bp_core::model::Date;
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
@@ -28,6 +28,9 @@ const KEY_FILE: &str = "banque-cle.pem";
 /// Adresse de retour proposée : n'importe quelle page HTTPS convient,
 /// l'utilisateur recopie ensuite l'adresse affichée (qui contient le code).
 const DEFAULT_REDIRECT: &str = "https://github.com/fabiochelly/bankperfect";
+/// Pages demandées à l'enregistrement de l'application.
+const PRIVACY_URL: &str = "https://github.com/fabiochelly/bankperfect/blob/main/PRIVACY.md";
+const TERMS_URL: &str = "https://github.com/fabiochelly/bankperfect/blob/main/LICENSE";
 const COUNTRIES: [(&str, &str); 16] = [
     ("FR", "France"),
     ("BE", "Belgique"),
@@ -148,7 +151,14 @@ enum JobResult {
     Banks(Vec<Bank>),
     AuthUrl(String),
     Session(Value),
-    Transactions(Vec<(BankAccountLink, usize, Vec<ImportedOperation>)>),
+    Transactions(
+        Vec<(
+            BankAccountLink,
+            usize,
+            Vec<ImportedOperation>,
+            Option<StatementBalance>,
+        )>,
+    ),
 }
 
 type Job = Arc<Mutex<Option<Result<JobResult, String>>>>;
@@ -459,15 +469,15 @@ impl BankSyncForm {
                 ));
             }
             Ok(JobResult::Transactions(results)) => {
-                let total: usize = results.iter().map(|(_, _, ops)| ops.len()).sum();
+                let total: usize = results.iter().map(|(_, _, ops, _)| ops.len()).sum();
                 if total == 0 {
                     self.message = Some("Aucune nouvelle opération.".into());
                     return Outcome::Keep;
                 }
-                let targets = results.iter().map(|(_, t, _)| Some(*t)).collect();
+                let targets = results.iter().map(|(_, t, _, _)| Some(*t)).collect();
                 let accounts = results
                     .into_iter()
-                    .map(|(link, _, ops)| bank_sync::imported_account(&link, ops))
+                    .map(|(link, _, ops, balance)| bank_sync::imported_account(&link, ops, balance))
                     .collect();
                 let parsed = ParsedImport {
                     accounts,
@@ -488,53 +498,92 @@ impl BankSyncForm {
 
     fn setup(&mut self, ui: &mut egui::Ui, ctx: &egui::Context, width: f32, pal: &Palette) {
         let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
+        let redirect = self.redirect.trim().to_string();
         ui_kit::section(
             ui,
             width,
             icon::LIST_NUMBERS,
             "Une seule fois : votre application Enable Banking",
             |ui| {
+                let number = |ui: &mut egui::Ui, n: &str| {
+                    ui.label(
+                        RichText::new(n)
+                            .family(crate::theme::semibold())
+                            .color(pal.accent),
+                    );
+                };
                 let step = |ui: &mut egui::Ui, n: &str, text: &str| {
                     ui.horizontal_wrapped(|ui| {
-                        ui.label(
-                            RichText::new(n)
-                                .family(crate::theme::semibold())
-                                .color(pal.accent),
-                        );
+                        number(ui, n);
                         ui.label(text);
                     });
                     ui.add_space(4.0);
                 };
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(
-                        RichText::new("1.")
-                            .family(crate::theme::semibold())
-                            .color(pal.accent),
-                    );
-                    ui.label("Créez un compte gratuit sur");
+                    number(ui, "1.");
+                    ui.label("Créez un compte sur");
                     ui.hyperlink_to("enablebanking.com", "https://enablebanking.com/sign-in/");
-                    ui.label("(offre gratuite réservée à l'usage personnel).");
+                    ui.label(
+                        "(gratuit pour un usage personnel) : il suffit de votre adresse e-mail, un lien de connexion vous est envoyé.",
+                    );
                 });
                 ui.add_space(4.0);
                 step(
                     ui,
                     "2.",
-                    "Dans « API applications », enregistrez une application de type Production et laissez le navigateur générer la clé : un fichier .pem est téléchargé.",
+                    "Dans « API applications », remplissez le formulaire « Add a new application » ainsi, en gardant l'option proposée pour la clé privée :",
                 );
+                // Champs du formulaire : libellé, valeur, à copier.
+                let fields: [(&str, &str, bool); 7] = [
+                    ("Environment", "Production", false),
+                    ("Application name", "BankPerfect", false),
+                    ("Redirect URLs", &redirect, true),
+                    ("Description", "Usage personnel", false),
+                    ("Data protection email", "votre adresse e-mail", false),
+                    ("Privacy policy URL", PRIVACY_URL, true),
+                    ("Terms of service URL", TERMS_URL, true),
+                ];
+                ui.horizontal(|ui| {
+                    ui.add_space(18.0);
+                    egui::Grid::new("bank_sync_form")
+                        .num_columns(2)
+                        .spacing([16.0, 6.0])
+                        .show(ui, |ui| {
+                            for (label, value, copy) in fields {
+                                ui.label(RichText::new(label).color(pal.fg_dark));
+                                ui.horizontal(|ui| {
+                                    if copy {
+                                        ui.label(RichText::new(value).monospace());
+                                        if ui
+                                            .small_button(icon::COPY)
+                                            .on_hover_text("Copier")
+                                            .clicked()
+                                        {
+                                            ui.ctx().copy_text(value.to_string());
+                                        }
+                                    } else {
+                                        ui.label(value);
+                                    }
+                                });
+                                ui.end_row();
+                            }
+                        });
+                });
+                ui.add_space(8.0);
                 step(
                     ui,
                     "3.",
-                    "Comme adresse de redirection (« redirect URL »), indiquez celle ci-dessous, à l'identique.",
+                    "Cliquez sur « Register » : le navigateur génère la clé privée et la télécharge dans un fichier .pem nommé d'après l'identifiant de l'application. Gardez ce fichier, c'est la seule copie de la clé.",
                 );
                 step(
                     ui,
                     "4.",
-                    "Toujours sur Enable Banking, reliez vos comptes bancaires à l'application (« Link accounts »).",
+                    "Sur la fiche de l'application, cliquez sur « Link accounts » et autorisez, sur le site de votre banque, l'accès à vos comptes. Seuls les comptes reliés seront accessibles.",
                 );
                 step(
                     ui,
                     "5.",
-                    "Ici, collez l'identifiant de l'application et choisissez le fichier .pem.",
+                    "Ici, choisissez le fichier .pem (l'identifiant de l'application est rempli d'après son nom), puis « Enregistrer et tester ».",
                 );
             },
         );
@@ -688,7 +737,13 @@ impl BankSyncForm {
                         _ => break,
                     }
                 }
-                results.push((link, target, operations));
+                // Solde facultatif : une banque qui ne le donne pas n'empêche
+                // pas l'import.
+                let balance = client
+                    .call("GET", &format!("/accounts/{}/balances", link.uid), None)
+                    .ok()
+                    .and_then(|json| bank_sync::parse_balances(&json));
+                results.push((link, target, operations, balance));
             }
             Ok(JobResult::Transactions(results))
         });

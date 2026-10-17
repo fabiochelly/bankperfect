@@ -19,7 +19,7 @@
 
 use super::{
     ImportError, ImportedAccount, ImportedOperation, ParsedImport, RejectReason, RejectedLine,
-    clean_text, decode_text, guess_mode_from_label, parse_amount,
+    StatementBalance, clean_text, decode_text, guess_mode_from_label, parse_amount,
 };
 use crate::model::{Amount, Date, Mode, StandardMode};
 
@@ -305,6 +305,8 @@ struct Builder<'a> {
     current: Option<ImportedAccount>,
     has_statement: bool,
     transaction: Option<RawTransaction>,
+    /// Dans `LEDGERBAL` (`Some(true)`) ou `AVAILBAL` (`Some(false)`).
+    in_balance: Option<bool>,
 }
 
 impl Builder<'_> {
@@ -403,6 +405,12 @@ impl Builder<'_> {
 
     fn open(&mut self, tag: &str, line: usize) {
         match tag {
+            "LEDGERBAL" => self.in_balance = Some(true),
+            "AVAILBAL" => self.in_balance = Some(false),
+            "BALAMT" | "DTASOF" => {}
+            _ => self.in_balance = None,
+        }
+        match tag {
             "STMTTRNRS" | "CCSTMTTRNRS" => self.start_account(tag.starts_with("CC")),
             "STMTRS" | "CCSTMTRS" => {
                 if self.current.is_none() || self.has_statement {
@@ -429,6 +437,33 @@ impl Builder<'_> {
         if matches!(tag, "STMTTRN" | "BANKTRANLIST" | "STMTRS" | "CCSTMTRS") {
             self.finish_transaction();
         }
+        if matches!(tag, "LEDGERBAL" | "AVAILBAL") {
+            self.in_balance = None;
+        }
+    }
+
+    /// Solde du relevé : `LEDGERBAL` (comptable), à défaut `AVAILBAL`.
+    fn balance(&mut self, tag: &str, value: &str, booked: bool) {
+        let account = self.account();
+        match tag {
+            "BALAMT" => {
+                if let Some(amount) = parse_amount(value, None)
+                    && account.balance.is_none_or(|b| booked && !b.booked)
+                {
+                    account.balance = Some(StatementBalance {
+                        amount,
+                        date: None,
+                        booked,
+                    });
+                }
+            }
+            "DTASOF" => {
+                if let Some(b) = account.balance.as_mut().filter(|b| b.booked == booked) {
+                    b.date = parse_ofx_date(value);
+                }
+            }
+            _ => {}
+        }
     }
 
     fn value(&mut self, tag: &str, value: String) {
@@ -437,6 +472,10 @@ impl Builder<'_> {
             return;
         }
         if value.is_empty() {
+            return;
+        }
+        if let Some(booked) = self.in_balance {
+            self.balance(tag, &value, booked);
             return;
         }
         let account = match tag {
@@ -477,6 +516,7 @@ pub fn parse(data: &[u8], options: &OfxOptions) -> Result<ParsedImport, ImportEr
         current: None,
         has_statement: false,
         transaction: None,
+        in_balance: None,
     };
     let mut last_open: Option<&str> = None;
     // Numéro de ligne : calculé au fil des positions croissantes.
@@ -615,6 +655,15 @@ CHARSET:1252\r\n\
         assert!(!bank.credit_card);
         assert_eq!(bank.description(), "n° 30004-00123-00012345678");
         assert_eq!(bank.operations.len(), 4);
+        assert_eq!(
+            bank.balance,
+            Some(StatementBalance {
+                amount: Amount::from_cents(100_000),
+                date: Some(ymd(2026, 3, 11)),
+                booked: true,
+            })
+        );
+        assert_eq!(parsed.accounts[1].balance, None);
 
         let ops = &bank.operations;
         assert_eq!(ops[0].date, ymd(2026, 3, 5));

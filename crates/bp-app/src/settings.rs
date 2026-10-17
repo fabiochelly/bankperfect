@@ -155,7 +155,7 @@ impl Settings {
             let _ = std::fs::create_dir_all(dir);
         }
         if let Ok(json) = serde_json::to_vec_pretty(self) {
-            let _ = bp_core::format_v6::write_atomic(&path, &json);
+            let _ = bp_core::format_v6::write_replace(&path, &json);
         }
     }
 

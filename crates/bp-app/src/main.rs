@@ -20,11 +20,12 @@ fn main() -> eframe::Result {
                 present_mode: present_mode(),
                 ..eframe::SurfaceConfig::LOW_LATENCY
             },
+            wgpu_setup: wgpu_setup(),
             ..Default::default()
         },
         ..Default::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "BankPerfect",
         options,
         Box::new(move |cc| {
@@ -33,7 +34,47 @@ fn main() -> eframe::Result {
             bankperfect::theme::set_translucent(&cc.egui_ctx, translucent);
             Ok(Box::new(bankperfect::BankPerfectApp::new(initial_file)))
         }),
-    )
+    );
+    if matches!(result, Err(eframe::Error::Wgpu(_))) && vulkan_only() {
+        // Pas de Vulkan utilisable : on relance avec OpenGL.
+        if let Some(code) = relaunch_with_gl() {
+            std::process::exit(code);
+        }
+    }
+    result
+}
+
+/// Sous Linux, Vulkan seul par défaut : préparer aussi OpenGL (EGL) coûte
+/// une vingtaine de millisecondes au démarrage, pour rien quand Vulkan est
+/// là. Sans Vulkan, l'application se relance avec OpenGL. `WGPU_BACKEND`
+/// garde la main.
+fn vulkan_only() -> bool {
+    cfg!(target_os = "linux") && std::env::var_os("WGPU_BACKEND").is_none()
+}
+
+fn wgpu_setup() -> eframe::egui_wgpu::WgpuSetup {
+    use eframe::wgpu;
+    let mut setup = eframe::egui_wgpu::WgpuSetupCreateNew::without_display_handle();
+    if vulkan_only() {
+        setup.instance_descriptor.backends = wgpu::Backends::VULKAN;
+    }
+    // Carte intégrée plutôt que la carte dédiée des portables qui en ont
+    // deux : elle suffit largement, et réveiller l'autre retarde le
+    // démarrage et vide la batterie. `WGPU_POWER_PREF` garde la main.
+    setup.power_preference =
+        wgpu::PowerPreference::from_env().unwrap_or(wgpu::PowerPreference::LowPower);
+    eframe::egui_wgpu::WgpuSetup::CreateNew(setup)
+}
+
+/// Relance l'application avec OpenGL ; renvoie son code de sortie.
+fn relaunch_with_gl() -> Option<i32> {
+    let exe = std::env::current_exe().ok()?;
+    let status = std::process::Command::new(exe)
+        .args(std::env::args_os().skip(1))
+        .env("WGPU_BACKEND", "gl")
+        .status()
+        .ok()?;
+    Some(status.code().unwrap_or(1))
 }
 
 /// Mode de présentation, réglable par `BP_PRESENT` (fifo, mailbox,

@@ -59,13 +59,30 @@ pub struct SearchIndex {
 
 impl SearchIndex {
     pub fn build(document: &Document, account: &Account) -> Self {
-        Self {
-            rows: account
-                .operations
-                .iter()
-                .map(|op| index_operation(document, op))
-                .collect(),
+        let ops = &account.operations;
+        let index = |ops: &[Operation]| -> Vec<IndexedOperation> {
+            ops.iter().map(|op| index_operation(document, op)).collect()
+        };
+        // Gros comptes : réparti sur les cœurs (normaliser le texte de
+        // 100 000 opérations prend une trentaine de millisecondes sur un seul).
+        const CHUNK: usize = 8_192;
+        let threads = std::thread::available_parallelism().map_or(1, |n| n.get());
+        if ops.len() < 2 * CHUNK || threads < 2 {
+            return Self { rows: index(ops) };
         }
+        let chunk = ops.len().div_ceil(threads).max(CHUNK);
+        let rows = std::thread::scope(|scope| {
+            let parts: Vec<_> = ops
+                .chunks(chunk)
+                .map(|part| scope.spawn(move || index(part)))
+                .collect();
+            let mut rows = Vec::with_capacity(ops.len());
+            for part in parts {
+                rows.extend(part.join().expect("index de recherche"));
+            }
+            rows
+        });
+        Self { rows }
     }
 
     pub fn update(&mut self, document: &Document, account: &Account, index: usize) {
@@ -214,6 +231,11 @@ pub struct CompiledFilters {
 
 impl CompiledFilters {
     pub fn matches(&self, op: &Operation, indexed: &IndexedOperation) -> bool {
+        self.matches_values(op) && self.matches_text(indexed)
+    }
+
+    /// Critères sur le pointage, les dates et le montant.
+    fn matches_values(&self, op: &Operation) -> bool {
         self.tack.accepts(op.tack)
             && self.date_from.is_none_or(|d| op.date >= d)
             && self.date_to.is_none_or(|d| op.date <= d)
@@ -221,17 +243,33 @@ impl CompiledFilters {
                 .hide_before
                 .is_none_or(|d| !(op.tack == Tack::Reconciled && op.date < d))
             && self.amount.matches(op.amount)
-            && self.mode.matches(&indexed.mode)
+    }
+
+    /// Critères de texte, sur l'index.
+    fn matches_text(&self, indexed: &IndexedOperation) -> bool {
+        self.mode.matches(&indexed.mode)
             && self.category.matches(&indexed.category)
             && self.payee.matches(&indexed.payee)
     }
 
+    /// Un critère de texte (mode, tiers, catégorie) est posé : `apply` a
+    /// besoin de l'index. Sans lui, l'index peut rester vide.
+    pub fn needs_index(&self) -> bool {
+        [&self.mode, &self.payee, &self.category]
+            .iter()
+            .any(|q| **q != TextQuery::Any)
+    }
+
     /// Filtre `order` (indices d'opérations) en conservant son ordre.
     pub fn apply(&self, account: &Account, index: &SearchIndex, order: &[usize]) -> Vec<usize> {
+        let text = self.needs_index();
         order
             .iter()
             .copied()
-            .filter(|&i| self.matches(&account.operations[i], &index.rows[i]))
+            .filter(|&i| {
+                self.matches_values(&account.operations[i])
+                    && (!text || self.matches_text(&index.rows[i]))
+            })
             .collect()
     }
 }
@@ -445,6 +483,56 @@ mod tests {
 
     fn q(query: &str, value: &str) -> bool {
         TextQuery::parse(query).matches(&padded(value))
+    }
+
+    #[test]
+    fn parallel_index_matches_sequential() {
+        let op = |i: usize| Operation {
+            uid: i as u64 + 1,
+            date: Date(45_000 + i as i32 / 10),
+            mark_date: Date(45_000),
+            tack: Tack::None,
+            mode: crate::model::Mode::Custom(["Carte", "Chèque", "Espèces"][i % 3].into()),
+            payee: format!("Tiers {}", i % 977),
+            details: if i.is_multiple_of(2) {
+                "Détail".into()
+            } else {
+                String::new()
+            },
+            category: None,
+            amount: Amount::from_cents(-(i as i64)),
+            extra: Vec::new(),
+        };
+        let account = Account {
+            uid: "a".into(),
+            name: "Courant".into(),
+            bank_name: String::new(),
+            agency_name: String::new(),
+            agency_address: String::new(),
+            number: String::new(),
+            bank_code: String::new(),
+            agency_code: String::new(),
+            bic: String::new(),
+            iban: String::new(),
+            logo: String::new(),
+            currency: "€".into(),
+            currency_rate: 1.0,
+            secondary_currency: String::new(),
+            secondary_rate: 1.0,
+            is_virtual: false,
+            disabled: false,
+            operations: (0..50_000).map(op).collect(),
+        };
+        let document = Document::default();
+        let index = SearchIndex::build(&document, &account);
+        assert_eq!(index.len(), account.operations.len());
+        for (row, op) in index.rows.iter().zip(&account.operations) {
+            let expected = index_operation(&document, op);
+            assert_eq!(
+                (&row.mode, &row.payee, &row.category),
+                (&expected.mode, &expected.payee, &expected.category)
+            );
+        }
     }
 
     #[test]

@@ -175,6 +175,8 @@ pub struct BankPerfectApp {
     theme_pending: bool,
     /// Vraie application (pas un test) : notes affichées à l'ouverture.
     interactive: bool,
+    /// Première image pas encore peinte.
+    first_frame: bool,
     /// Extensions Luau chargées.
     extensions: bp_ext::Engine,
     ext_manager: Option<crate::extensions::Manager>,
@@ -249,6 +251,7 @@ impl BankPerfectApp {
             settings,
             theme_pending: false,
             interactive: false,
+            first_frame: true,
             extensions: crate::extensions::engine(None, &[]),
             ext_manager: None,
             ext_errors: Vec::new(),
@@ -516,19 +519,9 @@ impl BankPerfectApp {
                 return self.error = Some(format!("Impossible de lire {} : {e}", path.display()));
             }
         };
-        match file::requires_password(&data) {
-            Ok(true) => {
-                self.prompt = Some(PasswordPrompt {
-                    can_use_recovery_key: bp_core::format_v6::is_v6(&data),
-                    path,
-                    input: String::new(),
-                    use_recovery_key: false,
-                    error: None,
-                })
-            }
-            Ok(false) => self.finish_open(path, &data, Unlock::None),
-            Err(e) => self.unreadable = Some((path, e.to_string())),
-        }
+        // Ouverture directe : un fichier protégé répond `PasswordRequired`
+        // (et un fichier v5 n'est lu qu'une fois).
+        self.finish_open(path, &data, Unlock::None);
     }
 
     fn finish_open(&mut self, path: PathBuf, data: &[u8], unlock: Unlock<'_>) {
@@ -584,6 +577,15 @@ impl BankPerfectApp {
                 }
                 self.editor = None;
                 self.prompt = None;
+            }
+            Err(bp_core::Error::PasswordRequired) => {
+                self.prompt = Some(PasswordPrompt {
+                    can_use_recovery_key: bp_core::format_v6::is_v6(data),
+                    path,
+                    input: String::new(),
+                    use_recovery_key: false,
+                    error: None,
+                })
             }
             Err(bp_core::Error::WrongPassword) => {
                 if let Some(prompt) = &mut self.prompt {
@@ -2998,6 +3000,20 @@ impl BankPerfectApp {
             ctx.set_theme(self.settings.theme_preference());
         }
         crate::theme::adapt_to_display(&ctx);
+        // Sous Wayland, la première image part avant que le compositeur ait
+        // donné l'échelle de l'écran (1 au lieu de 2 en HiDPI) : tout y
+        // serait mis en page et rastérisé pour rien. Le fond seul suffit.
+        if std::mem::take(&mut self.first_frame)
+            && self.interactive
+            && std::env::var_os("WAYLAND_DISPLAY").is_some()
+        {
+            let canvas = crate::islands::canvas(&palette(ui), ui.visuals().dark_mode);
+            egui::CentralPanel::default_margins()
+                .frame(egui::Frame::new().fill(canvas))
+                .show(ui, |_| {});
+            ctx.request_repaint();
+            return;
+        }
 
         if let Some(path) = ctx.input(|i| {
             i.raw

@@ -253,6 +253,18 @@ pub fn is_v6(data: &[u8]) -> bool {
 /// `fsync`, puis renommage. Un plantage pendant l'écriture ne peut pas
 /// laisser un fichier à moitié écrit.
 pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
+    write_through_temp(path, bytes, true)
+}
+
+/// Comme [`write_atomic`], sans `fsync` : le fichier reste entier (ancien ou
+/// nouveau), mais une coupure de courant peut perdre la dernière écriture.
+/// Pour les réglages, enregistrés souvent pendant que l'interface attend :
+/// les `fsync` y coûtent jusqu'à une vingtaine de millisecondes.
+pub fn write_replace(path: &Path, bytes: &[u8]) -> Result<()> {
+    write_through_temp(path, bytes, false)
+}
+
+fn write_through_temp(path: &Path, bytes: &[u8], sync: bool) -> Result<()> {
     let dir = path
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
@@ -260,10 +272,14 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> Result<()> {
     let mut tmp = tempfile_in(dir, path)?;
     let result = (|| {
         tmp.1.write_all(bytes)?;
-        tmp.1.sync_all()?;
+        if sync {
+            tmp.1.sync_all()?;
+        }
         fs::rename(&tmp.0, path)?;
         #[cfg(unix)]
-        fs::File::open(dir)?.sync_all()?;
+        if sync {
+            fs::File::open(dir)?.sync_all()?;
+        }
         Ok(())
     })();
     if result.is_err() {

@@ -742,7 +742,7 @@ Sans `permissions = { "network" }`, `bp.http` refuse. `bp.open_url(url)` ouvre u
 - **Journal.** `print(…)` (ou `bp.log(…)`) écrit dans le journal de l'extension, affiché dans la fenêtre de gestion (200 dernières lignes).
 - **Erreurs.** Une erreur au chargement (syntaxe, appel refusé) est affichée dans la fenêtre de gestion avec la ligne fautive, et l'extension n'ajoute rien. Une erreur pendant une commande ou une réaction s'affiche dans une fenêtre d'erreur, avec le fichier et la ligne.
 - **Recharger.** Le bouton **Recharger** relit toutes les extensions : leurs fenêtres ouvertes se ferment et leurs variables repartent de zéro. Ce qui doit survivre va dans `bp.store` ou `bp.prefs`. Désactiver puis réactiver une extension la recharge aussi.
-- **Versions.** `bp.version` donne la version de BankPerfect (`"9.5.0"`) ; `requires` dans `bp.extension` refuse proprement une version trop ancienne. `bp.id` est l'identifiant de l'extension (nom de son fichier ou dossier).
+- **Versions.** `bp.version` donne la version de BankPerfect (`"9.6.0"`) ; `requires` dans `bp.extension` refuse proprement une version trop ancienne. `bp.id` est l'identifiant de l'extension (nom de son fichier ou dossier).
 - **Éditeur.** Le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) donne l'auto-complétion et la vérification des types (voir [Référence rapide](#référence-rapide)).
 
 ## Recettes

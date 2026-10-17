@@ -107,8 +107,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
             .color(pal.muted),
     );
 
+    // En bas de l'île, avec la même marge qu'à gauche (celle de l'île).
     ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
-        ui.add_space(8.0);
         protection_badge(ui, doc);
     });
     command

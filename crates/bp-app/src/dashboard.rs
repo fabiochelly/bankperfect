@@ -267,9 +267,9 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     }
     // Signes de l'équation, à cheval entre les tuiles.
     let sign = if f.totals.pending.is_negative() {
-        "\u{2212}"
+        Sign::Minus
     } else {
-        "+"
+        Sign::Plus
     };
     badge(
         ui,
@@ -281,7 +281,7 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     badge(
         ui,
         pos2(pending.right() + gap / 2.0, area.center().y),
-        "=",
+        Sign::Equals,
         &pal,
         dark,
     );
@@ -325,7 +325,15 @@ fn tile_head(ui: &Ui, pos: Pos2, glyph: &str, text: &str, color: Color32, max_wi
 }
 
 /// Pastille d'un signe de l'équation.
-fn badge(ui: &Ui, center: Pos2, glyph: &str, pal: &Palette, dark: bool) {
+/// Signe de l'équation entre deux tuiles.
+#[derive(Clone, Copy, PartialEq)]
+enum Sign {
+    Plus,
+    Minus,
+    Equals,
+}
+
+fn badge(ui: &Ui, center: Pos2, sign: Sign, pal: &Palette, dark: bool) {
     let rect = Rect::from_center_size(center, Vec2::splat(26.0));
     let shadow = egui::Shadow {
         offset: [0, 3],
@@ -341,13 +349,28 @@ fn badge(ui: &Ui, center: Pos2, glyph: &str, pal: &Palette, dark: bool) {
     };
     ui.painter()
         .circle(center, 13.0, fill, Stroke::new(1.0, stroke));
-    ui.painter().text(
-        center,
-        Align2::CENTER_CENTER,
-        glyph,
-        FontId::proportional(15.0),
-        pal.fg,
-    );
+    // Signe tracé (et non écrit) : centré exactement dans le cercle, quelle
+    // que soit la position du caractère dans sa police.
+    let stroke = Stroke::new(1.6, pal.fg);
+    let half = 4.5;
+    let horizontal = |dy: f32| {
+        ui.painter()
+            .line_segment([center + vec2(-half, dy), center + vec2(half, dy)], stroke);
+    };
+    match sign {
+        Sign::Plus => {
+            horizontal(0.0);
+            ui.painter().line_segment(
+                [center + vec2(0.0, -half), center + vec2(0.0, half)],
+                stroke,
+            );
+        }
+        Sign::Minus => horizontal(0.0),
+        Sign::Equals => {
+            horizontal(-2.25);
+            horizontal(2.25);
+        }
+    }
 }
 
 /// Anneau de pointage : part des opérations du compte pointées ou

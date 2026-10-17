@@ -81,6 +81,177 @@ fn month_separator(
     painter.galley(pos, galley, pal.month_rule);
 }
 
+/// Marges intérieures de l'île du tableau (voir `app.rs`).
+pub const ISLAND_MARGIN: egui::Margin = egui::Margin {
+    left: 6,
+    right: 2,
+    top: 6,
+    bottom: 4,
+};
+
+/// Largeur de la colonne de pointage.
+const TACK_WIDTH: f32 = 28.0;
+
+/// Largeurs des colonnes réglables. Tiers et Catégorie se partagent la place
+/// restante (`payee_share` : part des tiers).
+#[derive(Clone, Copy, PartialEq)]
+struct ColumnWidths {
+    date: f32,
+    mode: f32,
+    payee_share: f32,
+    amount: f32,
+    balance: f32,
+}
+
+/// Largeurs minimales, d'après le contenu de chaque colonne.
+struct ColumnMinima {
+    date: f32,
+    mode: f32,
+    payee: f32,
+    category: f32,
+    amount: f32,
+    balance: f32,
+}
+
+/// Position des colonnes à l'écran pour l'image en cours.
+struct ColumnLayout {
+    /// Place partagée entre Tiers et Catégorie.
+    flex: f32,
+    payee: f32,
+    /// Traits entre les colonnes, de gauche à droite : après le pointage, la
+    /// date, le mode, les tiers et le montant.
+    rules: [f32; 5],
+}
+
+impl ColumnWidths {
+    fn initial(narrow: bool) -> Self {
+        if narrow {
+            Self {
+                date: 112.0,
+                mode: 92.0,
+                payee_share: 0.5,
+                amount: 96.0,
+                balance: 108.0,
+            }
+        } else {
+            Self {
+                date: 134.0,
+                mode: 136.0,
+                payee_share: 0.5,
+                amount: 108.0,
+                balance: 130.0,
+            }
+        }
+    }
+
+    fn at_least(mut self, m: &ColumnMinima) -> Self {
+        self.date = self.date.max(m.date);
+        self.mode = self.mode.max(m.mode);
+        self.amount = self.amount.max(m.amount);
+        self.balance = self.balance.max(m.balance);
+        self
+    }
+
+    fn layout(&self, left: f32, total: f32, m: &ColumnMinima, ui: &egui::Ui) -> ColumnLayout {
+        let s = ui.spacing().item_spacing.x;
+        let fixed = TACK_WIDTH + self.date + self.mode + self.amount + self.balance + 6.0 * s;
+        let flex = (total - fixed).max(m.payee + m.category);
+        let payee = (flex * self.payee_share).clamp(m.payee, flex - m.category);
+        // Comme `egui_extras` : au milieu de l'espace entre deux colonnes.
+        let after = |x: f32, w: f32| x + w + s / 2.0;
+        let tack = after(left, TACK_WIDTH);
+        let date = after(tack + s / 2.0, self.date);
+        let mode = after(date + s / 2.0, self.mode);
+        let payee_rule = after(mode + s / 2.0, payee);
+        let amount = left + total - self.balance - s / 2.0;
+        ColumnLayout {
+            flex,
+            payee,
+            rules: [tack, date, mode, payee_rule, amount],
+        }
+    }
+}
+
+impl ColumnMinima {
+    fn of(ui: &egui::Ui) -> Self {
+        let body = egui::TextStyle::Body.resolve(ui.style());
+        let bold = egui::FontId::new(body.size, crate::theme::semibold());
+        let width = |text: &str, font: &egui::FontId| {
+            ui.painter()
+                .layout_no_wrap(text.to_string(), font.clone(), Color32::WHITE)
+                .size()
+                .x
+        };
+        let money = "-88\u{202f}888,88\u{a0}€";
+        Self {
+            // Marge avant le trait (14) et un peu d'air.
+            date: width("88/88/8888", &body) + 14.0 + 8.0,
+            // Badge réduit à son icône.
+            mode: 44.0,
+            payee: 90.0,
+            category: (width("Catégorie", &bold) + 16.0).max(70.0),
+            amount: (width(money, &body) + 8.0).max(width("Montant", &bold) + 24.0),
+            balance: width(money, &bold) + SCROLLBAR_GUTTER + 8.0,
+        }
+    }
+}
+
+/// Traits entre les colonnes et poignées de redimensionnement : la date et le
+/// mode prennent ou rendent leur place à Tiers et Catégorie, qui se la
+/// partagent à leur limite, comme Montant et Solde à la leur. Les poignées
+/// ne se saisissent que dans l'en-tête (`header_y`). Double-clic : largeur
+/// d'origine.
+fn column_handles(
+    ui: &egui::Ui,
+    narrow: bool,
+    rules_y: egui::Rangef,
+    header_y: egui::Rangef,
+    layout: &ColumnLayout,
+    m: &ColumnMinima,
+    w: &mut ColumnWidths,
+) {
+    let initial = ColumnWidths::initial(narrow);
+    // Place que Tiers et Catégorie peuvent encore céder.
+    let spare = (layout.flex - m.payee - m.category).max(0.0);
+    for (k, &x) in layout.rules.iter().enumerate() {
+        let mut stroke = ui.visuals().widgets.noninteractive.bg_stroke;
+        if k > 0 {
+            let rect = egui::Rect::from_x_y_ranges((x - 4.0)..=(x + 4.0), header_y);
+            let id = ui.id().with(("grid_resize", narrow, k));
+            let response = ui.interact(rect, id, Sense::click_and_drag());
+            if response.hovered() || response.dragged() {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
+                stroke = ui.visuals().widgets.hovered.bg_stroke;
+            }
+            let dx = response.drag_delta().x;
+            if response.dragged() {
+                stroke = ui.visuals().widgets.active.bg_stroke;
+            }
+            match k {
+                1 if response.double_clicked() => w.date = initial.date,
+                1 => w.date = (w.date + dx).clamp(m.date, w.date + spare),
+                2 if response.double_clicked() => w.mode = initial.mode,
+                2 => w.mode = (w.mode + dx).clamp(m.mode, w.mode + spare),
+                3 if response.double_clicked() => w.payee_share = initial.payee_share,
+                3 => {
+                    let payee = (layout.payee + dx).clamp(m.payee, layout.flex - m.category);
+                    w.payee_share = payee / layout.flex;
+                }
+                _ if response.double_clicked() => {
+                    w.amount = initial.amount;
+                    w.balance = initial.balance;
+                }
+                _ => {
+                    let both = w.amount + w.balance;
+                    w.amount = (w.amount + dx).clamp(m.amount, both - m.balance);
+                    w.balance = both - w.amount;
+                }
+            }
+        }
+        ui.painter().vline(x, rules_y, stroke);
+    }
+}
+
 /// Ce que l'utilisateur a demandé depuis la grille.
 pub enum GridAction {
     None,
@@ -107,34 +278,28 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
 
     // Fenêtre étroite : colonnes plus compactes (disposition mémorisée à part).
     let narrow = ui.available_width() < 760.0;
-    let (date_w, mode_w, amount_w, balance_w) = if narrow {
-        (112.0, 92.0, 96.0, 108.0)
-    } else {
-        (134.0, 136.0, 108.0, 130.0)
-    };
+    // Largeurs réglées à la souris (poignées dessinées après le tableau).
+    let widths_id = ui.id().with(("grid_widths", narrow));
+    let minima = ColumnMinima::of(ui);
+    let mut widths = ui
+        .data(|d| d.get_temp::<ColumnWidths>(widths_id))
+        .unwrap_or_else(|| ColumnWidths::initial(narrow))
+        .at_least(&minima);
+    let layout = widths.layout(ui.cursor().left(), ui.available_width(), &minima, ui);
+    let table_top = ui.cursor().top();
     let mut table = TableBuilder::new(ui)
         .id_salt(("grid", narrow))
         .striped(true)
-        .resizable(true)
+        .resizable(false)
         .sense(Sense::click())
         .cell_layout(Layout::left_to_right(Align::Center))
-        .column(Column::exact(28.0))
-        .column(Column::initial(date_w).at_least(108.0))
-        .column(Column::initial(mode_w).at_least(44.0).clip(true))
-        .column(
-            Column::remainder()
-                .at_least(90.0)
-                .clip(true)
-                .resizable(false),
-        )
-        .column(
-            Column::remainder()
-                .at_least(70.0)
-                .clip(true)
-                .resizable(false),
-        )
-        .column(Column::initial(amount_w).at_least(86.0))
-        .column(Column::initial(balance_w).at_least(96.0).resizable(false))
+        .column(Column::exact(TACK_WIDTH))
+        .column(Column::exact(widths.date).clip(true))
+        .column(Column::exact(widths.mode).clip(true))
+        .column(Column::exact(layout.payee).clip(true))
+        .column(Column::remainder().at_least(minima.category).clip(true))
+        .column(Column::exact(widths.amount).clip(true))
+        .column(Column::exact(widths.balance).clip(true))
         .min_scrolled_height(0.0);
     if let Some(op) = scroll_to
         && let Some(row) = visible.iter().position(|&i| i == op)
@@ -147,8 +312,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     // Filtres de colonnes : une ligne de champs sous les titres, ouverte
     // par la loupe.
     let open = doc.show_column_filters;
+    let header_height = if open { 66.0 } else { 30.0 };
     table
-        .header(if open { 66.0 } else { 30.0 }, |mut header| {
+        .header(header_height, |mut header| {
             header.col(|ui| {
                 if loupe_header(ui, doc) {
                     action = GridAction::Command(crate::commands::Command::ToggleColumnFilters);
@@ -200,9 +366,19 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 )
             });
             header.col(|ui| {
-                ui.with_layout(Layout::right_to_left(Align::Min), |ui| {
-                    ui.add_space(SCROLLBAR_GUTTER);
-                    ui.label(RichText::new("Solde").family(crate::theme::semibold()));
+                // Même bloc que les titres triables : une ligne de la hauteur de
+                // `ui.horizontal` (titre centré dedans), alignée à droite.
+                ui.vertical(|ui| {
+                    ui.add_space(2.0);
+                    let row = egui::vec2(ui.available_width(), ui.spacing().interact_size.y);
+                    let layout = Layout::right_to_left(Align::Center);
+                    ui.allocate_ui_with_layout(row, layout, |ui| {
+                        ui.add_space(SCROLLBAR_GUTTER);
+                        ui.label(RichText::new("Solde").family(crate::theme::semibold()));
+                    });
+                    if open {
+                        ui.add_space(34.0 + ui.spacing().item_spacing.y);
+                    }
                 });
             });
         })
@@ -425,6 +601,14 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 });
             });
         });
+    // Traits jusqu'aux bords de l'île (dans ses marges), sans couvrir son liseré.
+    let rules_y = egui::Rangef::new(
+        table_top - f32::from(ISLAND_MARGIN.top) + 1.0,
+        ui.min_rect().bottom() + f32::from(ISLAND_MARGIN.bottom) - 1.0,
+    );
+    let header_y = egui::Rangef::new(table_top, table_top + header_height);
+    column_handles(ui, narrow, rules_y, header_y, &layout, &minima, &mut widths);
+    ui.data_mut(|d| d.insert_temp(widths_id, widths));
     // Lignes entièrement visibles (les rangées extrêmes sont souvent coupées).
     doc.on_screen = (first_drawn <= last_drawn).then(|| {
         let first = if first_drawn > 0 { first_drawn + 1 } else { 0 };
@@ -447,7 +631,7 @@ fn mode_badge(
     pal: &crate::theme::Palette,
 ) {
     let (glyph, color) = mode_style(&doc.document, &op.mode, pal);
-    pill(ui, glyph, &op.mode_label(), color, 9.0);
+    pill(ui, glyph, &op.mode_label(), color);
 }
 
 /// Icône et couleur d'un mode de paiement.
@@ -483,11 +667,17 @@ pub fn mode_style(
 }
 
 /// Badge arrondi teinté : icône et libellé dans la couleur donnée.
-fn pill(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32, top_space: f32) {
+fn pill(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32) -> egui::Response {
     ui.vertical(|ui| {
-        if top_space > 0.0 {
-            ui.add_space(top_space);
-        }
+        ui.add_space(((ui.available_height() - PILL_HEIGHT) / 2.0).max(0.0));
+        pill_body(ui, glyph, label, color)
+    })
+    .inner
+}
+
+/// Le badge lui-même, à la position courante.
+fn pill_body(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32) -> egui::Response {
+    {
         let family = egui::TextStyle::Small.resolve(ui.style()).family;
         let font = egui::FontId::new(12.5, family);
         let available = ui.available_width();
@@ -505,7 +695,7 @@ fn pill(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32, top_s
             overflow_character: Some('…'),
         };
         let galley = ui.painter().layout_job(job);
-        let size = egui::vec2((galley.size().x + 16.0).min(available), 22.0);
+        let size = egui::vec2((galley.size().x + 16.0).min(available), PILL_HEIGHT);
         let (rect, response) = ui.allocate_exact_size(size, Sense::hover());
         ui.painter()
             .rect_filled(rect, 11.0, color.gamma_multiply(0.16));
@@ -516,13 +706,19 @@ fn pill(ui: &mut egui::Ui, glyph: &str, label: &str, color: egui::Color32, top_s
             color,
         );
         if elided || available < 64.0 {
-            response.on_hover_text(label);
+            response.on_hover_text(label)
+        } else {
+            response
         }
-    });
+    }
 }
 
-/// Catégorie dans un badge coloré avec son icône ; la famille (catégorie
-/// parente) en petit dessous.
+/// Hauteur des badges.
+const PILL_HEIGHT: f32 = 22.0;
+
+/// Catégorie dans un badge coloré avec son icône. Une sous-catégorie est
+/// précédée de sa famille, en deux segments séparés par un chevron vide comme
+/// un prompt de terminal ; faute de place, la famille passe dans l'infobulle.
 fn category_badge(
     ui: &mut egui::Ui,
     doc: &OpenDoc,
@@ -543,19 +739,166 @@ fn category_badge(
     } else {
         None
     };
-    ui.vertical(|ui| {
-        ui.spacing_mut().item_spacing.y = 1.0;
-        pill(
-            ui,
-            glyph,
-            &cat.name,
-            color,
-            if parent.is_none() { 9.0 } else { 0.0 },
-        );
-        if let Some(parent) = parent {
-            ui.add(egui::Label::new(RichText::new(parent).small().color(pal.muted)).truncate());
+    match parent {
+        Some(parent) if family_pill(ui, glyph, &parent, &cat.name, color) => {}
+        Some(parent) => {
+            pill(ui, glyph, &cat.name, color).on_hover_text(format!("{parent} › {}", cat.name));
         }
+        None => {
+            pill(ui, glyph, &cat.name, color);
+        }
+    }
+}
+
+/// Profondeur de la pointe du chevron entre les deux segments.
+const CHEVRON_DEPTH: f32 = 7.0;
+/// Vide entre les deux segments, mesuré horizontalement.
+const CHEVRON_GAP: f32 = 3.5;
+
+/// Badge en deux segments « icône Famille › Catégorie » : la famille sur un
+/// fond léger se termine en pointe, la catégorie sur le fond habituel des
+/// badges commence par une encoche de même forme, un vide les sépare. La
+/// catégorie est coupée (« … ») si la colonne est trop étroite ; rien n'est
+/// dessiné (`false`) s'il n'en reste pas au moins deux lettres.
+fn family_pill(ui: &mut egui::Ui, glyph: &str, family: &str, name: &str, color: Color32) -> bool {
+    let font = egui::FontId::new(12.5, egui::TextStyle::Small.resolve(ui.style()).family);
+    let full = format!("{family} › {name}");
+    let painter = ui.painter();
+    let icon = painter.layout_no_wrap(glyph.to_string(), font.clone(), color);
+    let family =
+        painter.layout_no_wrap(family.to_string(), font.clone(), color.gamma_multiply(0.8));
+    // Pointe du chevron, mesurée depuis le bord gauche.
+    let tip = 8.0 + icon.size().x + 6.0 + family.size().x + 6.0 + CHEVRON_DEPTH;
+    let name_x = tip + CHEVRON_GAP + 6.0;
+    let room = ui.available_width() - name_x - 10.0;
+    if room < 24.0 {
+        return false;
+    }
+    let mut job = egui::text::LayoutJob::simple_singleline(name.to_string(), font, color);
+    job.wrap = egui::text::TextWrapping {
+        max_width: room,
+        max_rows: 1,
+        break_anywhere: true,
+        overflow_character: Some('…'),
+    };
+    let name = painter.layout_job(job);
+    let elided = name.elided;
+    let width = name_x + name.size().x + 10.0;
+    ui.vertical(|ui| {
+        ui.add_space(((ui.available_height() - PILL_HEIGHT) / 2.0).max(0.0));
+        let (rect, response) =
+            ui.allocate_exact_size(egui::vec2(width, PILL_HEIGHT), Sense::hover());
+        if elided {
+            response.on_hover_text(&full);
+        }
+        let painter = ui.painter();
+        let (top, mid, bottom) = (rect.top(), rect.center().y, rect.bottom());
+        let r = PILL_HEIGHT / 2.0;
+        let tip_x = rect.left() + tip;
+        // Demi-cercle d'un bout arrondi, de haut en bas.
+        let arc = |center_x: f32, from: f32, to: f32| -> Vec<egui::Pos2> {
+            (0..=12)
+                .map(|i| {
+                    let a = from + (to - from) * i as f32 / 12.0;
+                    egui::pos2(center_x + r * a.cos(), mid + r * a.sin())
+                })
+                .collect()
+        };
+        use std::f32::consts::FRAC_PI_2;
+        // Famille : bout gauche arrondi, pointe à droite (sens horaire).
+        let mut left = arc(rect.left() + r, 3.0 * FRAC_PI_2, FRAC_PI_2);
+        left.extend([
+            egui::pos2(tip_x - CHEVRON_DEPTH, bottom),
+            egui::pos2(tip_x, mid),
+            egui::pos2(tip_x - CHEVRON_DEPTH, top),
+        ]);
+        // Catégorie : encoche à gauche, bout droit arrondi.
+        let notch = tip_x + CHEVRON_GAP;
+        let mut right = vec![egui::pos2(notch - CHEVRON_DEPTH, top)];
+        right.extend(arc(rect.right() - r, -FRAC_PI_2, FRAC_PI_2));
+        right.extend([
+            egui::pos2(notch - CHEVRON_DEPTH, bottom),
+            egui::pos2(notch, mid),
+        ]);
+        let feather = 1.0 / ui.ctx().pixels_per_point();
+        let left_center = egui::pos2((rect.left() + tip_x) / 2.0, mid);
+        let right_center = egui::pos2((notch + rect.right()) / 2.0, mid);
+        fill_star_polygon(
+            painter,
+            &left,
+            left_center,
+            color.gamma_multiply(0.08),
+            feather,
+        );
+        fill_star_polygon(
+            painter,
+            &right,
+            right_center,
+            color.gamma_multiply(0.2),
+            feather,
+        );
+        let mut x = rect.left() + 8.0;
+        for galley in [icon, family] {
+            let w = galley.size().x;
+            painter.galley(egui::pos2(x, mid - galley.size().y / 2.0), galley, color);
+            x += w + 6.0;
+        }
+        let pos = egui::pos2(rect.left() + name_x, mid - name.size().y / 2.0);
+        painter.galley(pos, name, color);
     });
+    true
+}
+
+/// Remplit un polygone (même concave) dont tous les sommets sont visibles
+/// depuis `center`, avec un bord adouci de `feather` (epaint ne remplit que
+/// les polygones convexes).
+fn fill_star_polygon(
+    painter: &egui::Painter,
+    points: &[egui::Pos2],
+    center: egui::Pos2,
+    color: Color32,
+    feather: f32,
+) {
+    let n = points.len();
+    if n < 3 {
+        return;
+    }
+    // Sens de parcours : les normales des côtés pointent vers l'extérieur.
+    let area: f32 = (0..n)
+        .map(|i| {
+            let (a, b) = (points[i], points[(i + 1) % n]);
+            a.x * b.y - b.x * a.y
+        })
+        .sum();
+    let outward = |a: egui::Pos2, b: egui::Pos2| {
+        let d = (b - a).normalized();
+        if area > 0.0 {
+            egui::vec2(d.y, -d.x)
+        } else {
+            egui::vec2(-d.y, d.x)
+        }
+    };
+    let mut mesh = egui::Mesh::default();
+    mesh.colored_vertex(center, color);
+    for i in 0..n {
+        let prev = points[(i + n - 1) % n];
+        let (p, next) = (points[i], points[(i + 1) % n]);
+        let normal = (outward(prev, p) + outward(p, next)).normalized();
+        // Onglet borné pour les angles aigus (pointe du chevron).
+        let cos = normal.dot(outward(p, next)).max(0.3);
+        let offset = normal * (feather / 2.0 / cos);
+        mesh.colored_vertex(p - offset, color);
+        mesh.colored_vertex(p + offset, Color32::TRANSPARENT);
+    }
+    for i in 0..n as u32 {
+        let j = (i + 1) % n as u32;
+        let (inner, outer) = (1 + 2 * i, 2 + 2 * i);
+        let (inner2, outer2) = (1 + 2 * j, 2 + 2 * j);
+        mesh.add_triangle(0, inner, inner2);
+        mesh.add_triangle(inner, outer, outer2);
+        mesh.add_triangle(inner, outer2, inner2);
+    }
+    painter.add(mesh);
 }
 
 /// En-tête de colonne : titre cliquable (tri) + champ de filtre.
@@ -586,29 +929,115 @@ fn filter_header(
     });
 }
 
+/// Police de la flèche de tri, celle des titres.
+fn sort_arrow_font(ui: &egui::Ui) -> egui::FontId {
+    egui::FontId::new(
+        egui::TextStyle::Body.resolve(ui.style()).size,
+        crate::theme::semibold(),
+    )
+}
+
+/// Place réservée à la flèche de tri ; sa hauteur fixe celle de la ligne
+/// des titres.
+fn sort_arrow_size(ui: &egui::Ui) -> egui::Vec2 {
+    ui.painter()
+        .layout_no_wrap(
+            icon::CARET_DOWN.to_string(),
+            sort_arrow_font(ui),
+            Color32::WHITE,
+        )
+        .size()
+}
+
+/// Titre de colonne cliquable : trie sur la colonne, ou inverse le tri si
+/// elle l'est déjà. La flèche du tri actuel est affichée ; au survol, une
+/// flèche dans la couleur d'accent annonce le tri que donnera le clic.
 fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortColumn) {
-    let mut text = RichText::new(title).family(crate::theme::semibold());
-    if doc.sort == column {
-        text = RichText::new(format!(
-            "{title} {}",
-            if doc.ascending {
-                icon::CARET_UP
-            } else {
-                icon::CARET_DOWN
-            }
-        ))
-        .family(crate::theme::semibold());
-    }
-    if ui
-        .add(egui::Label::new(text).sense(Sense::click()))
-        .on_hover_text("Trier")
-        .clicked()
-    {
-        if doc.sort == column {
-            doc.ascending = !doc.ascending;
+    let sorted = doc.sort == column;
+    // Sens après un clic : inversé sur la colonne triée, inchangé sinon.
+    let next_ascending = if sorted {
+        !doc.ascending
+    } else {
+        doc.ascending
+    };
+    let caret = |ascending: bool| {
+        if ascending {
+            icon::CARET_UP
         } else {
-            doc.sort = column;
+            icon::CARET_DOWN
         }
+    };
+    let clicked = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let text = RichText::new(title).family(crate::theme::semibold());
+            let title = ui.add(egui::Label::new(text).sense(Sense::click()));
+            let font = sort_arrow_font(ui);
+            let (rect, arrow) = ui.allocate_exact_size(sort_arrow_size(ui), Sense::click());
+            // Flèche affichée :
+            // - au clic (bouton relâché), le tri qu'il applique, en plein ;
+            // - au survol, en couleur, le tri que donnera le clic. Elle ne change
+            //   pas quand on appuie sur le titre (seulement au relâchement), ni
+            //   juste après un clic : le tri appliqué reste affiché jusqu'à ce
+            //   que le pointeur quitte le titre ;
+            // - sinon, le tri actuel de la colonne.
+            let clicked = title.clicked() || arrow.clicked();
+            // `hovered` passe à faux pendant l'appui : on suit le pointeur.
+            let hovered = title.contains_pointer() || arrow.contains_pointer();
+            // Bouton enfoncé ailleurs (glisser une poignée par-dessus) : pas
+            // de flèche de survol. Un appui commencé sur le titre est retenu
+            // jusqu'au relâchement (egui l'oublie s'il se prolonge).
+            let any_down = ui.input(|i| i.pointer.any_down());
+            let press_id = ui.id().with(("sort_press", format!("{column:?}")));
+            if title.is_pointer_button_down_on() || arrow.is_pointer_button_down_on() {
+                ui.data_mut(|d| d.insert_temp(press_id, true));
+            } else if !any_down {
+                ui.data_mut(|d| d.remove::<bool>(press_id));
+            }
+            let pressed_here = ui.data(|d| d.get_temp::<bool>(press_id)).unwrap_or(false);
+            let pressed_elsewhere = any_down && !pressed_here;
+            let clicked_id = ui.id().with(("sort_clicked", format!("{column:?}")));
+            if clicked {
+                ui.data_mut(|d| d.insert_temp(clicked_id, true));
+            } else if !hovered {
+                ui.data_mut(|d| d.remove::<bool>(clicked_id));
+            }
+            let just_clicked = ui.data(|d| d.get_temp::<bool>(clicked_id)).unwrap_or(false);
+            let strong = ui.visuals().strong_text_color();
+            let (glyph, color) = if clicked {
+                (caret(next_ascending), strong)
+            } else if hovered && !just_clicked && !pressed_elsewhere {
+                // « Allumée » dans la couleur d'accent du thème.
+                (caret(next_ascending), palette(ui).accent)
+            } else if sorted {
+                (caret(doc.ascending), strong)
+            } else {
+                ("", Color32::TRANSPARENT)
+            };
+            ui.painter().text(
+                rect.center(),
+                egui::Align2::CENTER_CENTER,
+                glyph,
+                font,
+                color,
+            );
+            let order = if next_ascending {
+                "croissant"
+            } else {
+                "décroissant"
+            };
+            let hint = format!("Trier par ordre {order}");
+            let title = title.on_hover_text(&hint);
+            let arrow = arrow.on_hover_text(hint);
+            if hovered {
+                ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+            }
+            title.clicked() || arrow.clicked()
+        })
+        .inner;
+    if clicked {
+        doc.sort = column;
+        doc.ascending = next_ascending;
     }
 }
 

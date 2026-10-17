@@ -187,9 +187,12 @@ impl RulesForm {
                         clicked = Some(self.rules.rules.len() - 1);
                         changed = true;
                     }
-                    if ui.add(egui::Button::new(icon::DOWNLOAD_SIMPLE).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Importer des règles…").clicked()
-                        && let Some(path) = rfd::FileDialog::new().add_filter("Règles", &["bprules", "txt", "dat"]).pick_file()
-                    {
+                    let (import, export) = (egui::Id::new("rules_import"), egui::Id::new("rules_export"));
+                    if ui.add(egui::Button::new(icon::DOWNLOAD_SIMPLE).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Importer des règles…").clicked() {
+                        let dialog = rfd::FileDialog::new().add_filter("Règles", &["bprules", "txt", "dat"]);
+                        crate::file_picker::open(ui.ctx(), import, crate::file_picker::Kind::File, dialog);
+                    }
+                    if let Some(path) = crate::file_picker::chosen(ui.ctx(), import) {
                         match std::fs::read(&path).map_err(|e| e.to_string()).and_then(|b| AutoFieldRules::import_bytes(&b).map_err(|e| e.to_string())) {
                             Ok(rules) => {
                                 let n = rules.len();
@@ -200,9 +203,11 @@ impl RulesForm {
                             Err(e) => self.errors = vec![e],
                         }
                     }
-                    if ui.add(egui::Button::new(icon::EXPORT).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Exporter les règles…").clicked()
-                        && let Some(path) = rfd::FileDialog::new().set_file_name("regles.bprules").add_filter("Règles", &["bprules"]).save_file()
-                    {
+                    if ui.add(egui::Button::new(icon::EXPORT).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Exporter les règles…").clicked() {
+                        let dialog = rfd::FileDialog::new().set_file_name("regles.bprules").add_filter("Règles", &["bprules"]);
+                        crate::file_picker::open(ui.ctx(), export, crate::file_picker::Kind::Save, dialog);
+                    }
+                    if let Some(path) = crate::file_picker::chosen(ui.ctx(), export) {
                         self.message = Some(match std::fs::write(&path, self.rules.export_text()) {
                             Ok(()) => format!("Règles exportées dans {}", path.display()),
                             Err(e) => format!("Export impossible : {e}"),

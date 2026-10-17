@@ -74,7 +74,7 @@ impl bp_ext::Services for AppServices {
     }
 
     fn open_url(&self, url: &str) {
-        let _ = open::that(url);
+        let _ = open::that_detached(url);
     }
 }
 

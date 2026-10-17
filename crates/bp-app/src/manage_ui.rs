@@ -970,23 +970,28 @@ impl ManageForm {
                 doc.edit_document(manage::sort_categories);
                 self.category = None;
             }
-            if tool_button(ui, icon::EXPORT, "Exporter…").clicked()
-                && let Some(path) = rfd::FileDialog::new()
+            let (export, import) = (
+                egui::Id::new("categories_export"),
+                egui::Id::new("categories_import"),
+            );
+            if tool_button(ui, icon::EXPORT, "Exporter…").clicked() {
+                let dialog = rfd::FileDialog::new()
                     .set_file_name("categories.txt")
-                    .add_filter("Texte", &["txt"])
-                    .save_file()
-            {
+                    .add_filter("Texte", &["txt"]);
+                crate::file_picker::open(ui.ctx(), export, crate::file_picker::Kind::Save, dialog);
+            }
+            if let Some(path) = crate::file_picker::chosen(ui.ctx(), export) {
                 let text = manage::export_categories(&doc.document);
                 self.message = Some(match std::fs::write(&path, text) {
                     Ok(()) => format!("Catégories exportées dans {}", path.display()),
                     Err(e) => format!("Export impossible : {e}"),
                 });
             }
-            if tool_button(ui, icon::DOWNLOAD_SIMPLE, "Importer…").clicked()
-                && let Some(path) = rfd::FileDialog::new()
-                    .add_filter("Texte", &["txt"])
-                    .pick_file()
-            {
+            if tool_button(ui, icon::DOWNLOAD_SIMPLE, "Importer…").clicked() {
+                let dialog = rfd::FileDialog::new().add_filter("Texte", &["txt"]);
+                crate::file_picker::open(ui.ctx(), import, crate::file_picker::Kind::File, dialog);
+            }
+            if let Some(path) = crate::file_picker::chosen(ui.ctx(), import) {
                 let text = std::fs::read(&path)
                     .map(|b| encoding_rs::UTF_8.decode(&b).0.into_owned())
                     .unwrap_or_default();

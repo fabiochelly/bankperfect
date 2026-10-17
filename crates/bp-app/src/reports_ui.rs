@@ -202,11 +202,7 @@ impl ReportsForm {
                     let dir = crate::settings::shared::export_dir(
                         doc.path.parent().unwrap_or(std::path::Path::new(".")),
                     );
-                    if let Some(message) =
-                        crate::spreadsheet::save_dialog(&dir, &name, &name, &rows)
-                    {
-                        self.message = Some(message);
-                    }
+                    crate::spreadsheet::export(ui.ctx(), &dir, &name, &name, rows);
                 }
             });
         });

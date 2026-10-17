@@ -14,7 +14,7 @@ use egui::{
 use crate::theme::{Palette, backdrop};
 
 /// Rayon des coins d'une île.
-pub const RADIUS: f32 = 16.0;
+pub const RADIUS: f32 = 10.0;
 /// Espace entre deux îles, et entre une île et le bord de la fenêtre.
 pub const GAP: f32 = 10.0;
 
@@ -37,7 +37,8 @@ pub fn fill(p: &Palette, dark: bool) -> Color32 {
     }
 }
 
-fn stroke(p: &Palette, dark: bool) -> Stroke {
+/// Liseré d'une île.
+pub fn stroke(p: &Palette, dark: bool) -> Stroke {
     if dark {
         Stroke::new(1.0, Color32::from_white_alpha(20))
     } else {

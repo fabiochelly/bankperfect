@@ -171,10 +171,13 @@ impl PrintForm {
                         Err(e) => self.error = Some(e),
                     }
                 }
+                let pick = egui::Id::new("statement_pdf");
                 if crate::dialogs::button(ui, format!("{}  Enregistrer en PDF…", icon::FILE_PDF)).clicked() {
-                    match save_statement(doc, options) {
-                        Ok(Some(message)) => outcome = Outcome::Done(message),
-                        Ok(None) => {}
+                    crate::file_picker::open(ui.ctx(), pick, crate::file_picker::Kind::Save, statement_dialog(doc));
+                }
+                if let Some(path) = crate::file_picker::chosen(ui.ctx(), pick) {
+                    match save_statement(doc, options, &path) {
+                        Ok(message) => outcome = Outcome::Done(message),
                         Err(e) => self.error = Some(e),
                     }
                 }
@@ -209,25 +212,26 @@ fn open_statement(
     Ok("Relevé ouvert dans la visionneuse PDF".into())
 }
 
-/// Enregistre le relevé à l'emplacement choisi ; `None` si annulé.
-fn save_statement(
-    doc: &OpenDoc,
-    options: crate::statement_pdf::StatementOptions,
-) -> Result<Option<String>, String> {
+/// Choix de l'emplacement du relevé.
+fn statement_dialog(doc: &OpenDoc) -> rfd::FileDialog {
     let dir =
         crate::settings::shared::export_dir(doc.path.parent().unwrap_or(std::path::Path::new(".")));
-    let Some(path) = rfd::FileDialog::new()
+    rfd::FileDialog::new()
         .set_title("Enregistrer le relevé en PDF")
         .set_directory(dir)
         .set_file_name(statement_name(doc))
         .add_filter("PDF", &["pdf"])
-        .save_file()
-    else {
-        return Ok(None);
-    };
+}
+
+/// Enregistre le relevé à l'emplacement choisi.
+fn save_statement(
+    doc: &OpenDoc,
+    options: crate::statement_pdf::StatementOptions,
+    path: &std::path::Path,
+) -> Result<String, String> {
     let bytes = crate::statement_pdf::build(doc, options)?;
-    std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    Ok(Some(format!("Relevé enregistré : {}", path.display())))
+    std::fs::write(path, bytes).map_err(|e| e.to_string())?;
+    Ok(format!("Relevé enregistré : {}", path.display()))
 }
 
 // ─────────────────────────────── Date de pointage ───────────────────────────────
@@ -832,95 +836,115 @@ impl CsvForm {
             });
             let any = self.fields.iter().any(|(_, on)| *on);
             match buttons(ui, &format!("{}  Exporter…", icon::EXPORT), any) {
-                Some(true) => {
-                    if let Some(message) = self.export(doc) {
-                        outcome = Outcome::Done(message);
-                    }
-                }
+                Some(true) => self.choose_destination(ui.ctx(), doc),
                 Some(false) => outcome = Outcome::Close,
                 None => {}
+            }
+            if let Some(folder) = crate::file_picker::chosen(ui.ctx(), egui::Id::new("csv_folder")) {
+                outcome = Outcome::Done(self.export_all(doc, &folder));
+            }
+            if let Some(path) = crate::file_picker::chosen(ui.ctx(), egui::Id::new("csv_file")) {
+                outcome = Outcome::Done(self.export_current(doc, &path));
             }
         });
         outcome
     }
 
-    /// Écrit le ou les fichiers ; `None` si l'utilisateur a annulé le choix.
-    fn export(&self, doc: &OpenDoc) -> Option<String> {
-        let options = self.options();
-        let stem = doc
-            .path
+    fn stem(doc: &OpenDoc) -> String {
+        doc.path
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
-            .unwrap_or_default();
+            .unwrap_or_default()
+    }
+
+    /// Demande le dossier (tous les comptes) ou le fichier (compte affiché).
+    fn choose_destination(&self, ctx: &egui::Context, doc: &OpenDoc) {
         let start_dir = crate::settings::shared::export_dir(
             doc.path.parent().unwrap_or(std::path::Path::new(".")),
         );
-        let write = |path: &std::path::Path, text: String| {
-            // UTF-8 avec BOM : reconnu par Excel et LibreOffice.
-            std::fs::write(path, [b"\xEF\xBB\xBF".as_slice(), text.as_bytes()].concat())
-        };
+        let dialog = rfd::FileDialog::new().set_directory(&start_dir);
         if self.all_accounts {
-            let folder = rfd::FileDialog::new()
-                .set_title("Dossier des fichiers CSV")
-                .set_directory(&start_dir)
-                .pick_folder()?;
-            let mut written = 0;
-            for account in &doc.document.accounts {
-                let lines: Vec<usize> = (0..account.operations.len()).collect();
-                let path = folder.join(bp_core::export::suggested_file_name(&stem, account, "csv"));
-                if write(
-                    &path,
-                    bp_core::export::csv(&doc.document, account, &lines, &options),
-                )
-                .is_ok()
-                {
-                    written += 1;
-                }
-            }
-            Some(format!(
-                "{written} fichier(s) CSV créé(s) dans {}",
-                folder.display()
-            ))
+            let dialog = dialog.set_title("Dossier des fichiers CSV");
+            let id = egui::Id::new("csv_folder");
+            crate::file_picker::open(ctx, id, crate::file_picker::Kind::Folder, dialog);
         } else {
-            let account = doc.current_account();
-            let path = rfd::FileDialog::new()
+            let name = bp_core::export::suggested_file_name(
+                &Self::stem(doc),
+                doc.current_account(),
+                "csv",
+            );
+            let dialog = dialog
                 .set_title("Exporter vers un fichier CSV")
-                .set_directory(&start_dir)
-                .set_file_name(bp_core::export::suggested_file_name(&stem, account, "csv"))
-                .add_filter("CSV", &["csv"])
-                .save_file()?;
-            let text = bp_core::export::csv(&doc.document, account, &doc.visible(), &options);
-            Some(match write(&path, text) {
-                Ok(()) => format!("Fichier {} créé", path.display()),
-                Err(e) => format!("Impossible de créer {} : {e}", path.display()),
-            })
+                .set_file_name(name)
+                .add_filter("CSV", &["csv"]);
+            let id = egui::Id::new("csv_file");
+            crate::file_picker::open(ctx, id, crate::file_picker::Kind::Save, dialog);
+        }
+    }
+
+    /// UTF-8 avec BOM : reconnu par Excel et LibreOffice.
+    fn write(path: &std::path::Path, text: String) -> std::io::Result<()> {
+        std::fs::write(path, [b"\xEF\xBB\xBF".as_slice(), text.as_bytes()].concat())
+    }
+
+    /// Un fichier par compte dans `folder`.
+    fn export_all(&self, doc: &OpenDoc, folder: &std::path::Path) -> String {
+        let options = self.options();
+        let stem = Self::stem(doc);
+        let mut written = 0;
+        for account in &doc.document.accounts {
+            let lines: Vec<usize> = (0..account.operations.len()).collect();
+            let path = folder.join(bp_core::export::suggested_file_name(&stem, account, "csv"));
+            let text = bp_core::export::csv(&doc.document, account, &lines, &options);
+            if Self::write(&path, text).is_ok() {
+                written += 1;
+            }
+        }
+        format!("{written} fichier(s) CSV créé(s) dans {}", folder.display())
+    }
+
+    /// Lignes affichées du compte courant dans `path`.
+    fn export_current(&self, doc: &OpenDoc, path: &std::path::Path) -> String {
+        let options = self.options();
+        let account = doc.current_account();
+        let text = bp_core::export::csv(&doc.document, account, &doc.visible(), &options);
+        match Self::write(path, text) {
+            Ok(()) => format!("Fichier {} créé", path.display()),
+            Err(e) => format!("Impossible de créer {} : {e}", path.display()),
         }
     }
 }
 
-/// Export QIF des lignes affichées du compte courant (pas d'options).
-pub fn export_qif(doc: &OpenDoc) -> Option<String> {
+/// Choix du fichier de l'export QIF.
+pub fn qif_dialog(doc: &OpenDoc) -> rfd::FileDialog {
     let stem = doc
         .path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let account = doc.current_account();
-    let path = rfd::FileDialog::new()
+    rfd::FileDialog::new()
         .set_title("Exporter vers un fichier QIF")
         .set_directory(crate::settings::shared::export_dir(
             doc.path.parent().unwrap_or(std::path::Path::new(".")),
         ))
-        .set_file_name(bp_core::export::suggested_file_name(&stem, account, "qif"))
+        .set_file_name(bp_core::export::suggested_file_name(
+            &stem,
+            doc.current_account(),
+            "qif",
+        ))
         .add_filter("QIF", &["qif"])
-        .save_file()?;
+}
+
+/// Export QIF des lignes affichées du compte courant (pas d'options).
+pub fn export_qif(doc: &OpenDoc, path: &std::path::Path) -> String {
+    let account = doc.current_account();
     let text = bp_core::export::qif(&doc.document, account, &doc.visible());
     // Les logiciels qui lisent le QIF attendent de l'ANSI (Windows-1252).
     let (bytes, _, _) = encoding_rs::WINDOWS_1252.encode(&text);
-    Some(match std::fs::write(&path, bytes) {
+    match std::fs::write(path, bytes) {
         Ok(()) => format!("Fichier {} créé", path.display()),
         Err(e) => format!("Impossible de créer {} : {e}", path.display()),
-    })
+    }
 }
 
 // ─────────────────────────────── Sauvegardes ───────────────────────────────

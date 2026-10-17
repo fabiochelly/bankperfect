@@ -70,10 +70,16 @@ impl NewFileForm {
                     outcome = Outcome::Close;
                 }
             });
+            let pick = egui::Id::new("new_file");
             if submit && valid {
-                match self.create(start_dir) {
-                    Ok(Some(path)) => outcome = Outcome::Reopen(path, "Nouveau fichier de comptes créé".into()),
-                    Ok(None) => {}
+                match self.balance() {
+                    Ok(_) => crate::file_picker::open(ctx, pick, crate::file_picker::Kind::Save, self.dialog(start_dir)),
+                    Err(e) => self.error = Some(e),
+                }
+            }
+            if let Some(path) = crate::file_picker::chosen(ctx, pick) {
+                match self.create(path) {
+                    Ok(path) => outcome = Outcome::Reopen(path, "Nouveau fichier de comptes créé".into()),
                     Err(e) => self.error = Some(e),
                 }
             }
@@ -81,16 +87,16 @@ impl NewFileForm {
         outcome
     }
 
-    /// Demande l'emplacement puis écrit le fichier ; `None` si annulé.
-    fn create(
-        &self,
-        start_dir: Option<std::path::PathBuf>,
-    ) -> Result<Option<std::path::PathBuf>, String> {
-        let balance = if self.balance.trim().is_empty() {
-            Amount::ZERO
+    fn balance(&self) -> Result<Amount, String> {
+        if self.balance.trim().is_empty() {
+            Ok(Amount::ZERO)
         } else {
-            Amount::parse(&self.balance).ok_or("Solde invalide")?
-        };
+            Amount::parse(&self.balance).ok_or_else(|| "Solde invalide".into())
+        }
+    }
+
+    /// Choix de l'emplacement du nouveau fichier.
+    fn dialog(&self, start_dir: Option<std::path::PathBuf>) -> rfd::FileDialog {
         let name = bp_core::manage::clean(self.name.trim());
         let mut dialog = rfd::FileDialog::new()
             .set_title("Enregistrer le nouveau fichier de comptes")
@@ -99,9 +105,13 @@ impl NewFileForm {
         if let Some(dir) = start_dir {
             dialog = dialog.set_directory(dir);
         }
-        let Some(mut path) = dialog.save_file() else {
-            return Ok(None);
-        };
+        dialog
+    }
+
+    /// Écrit le nouveau fichier à l'emplacement choisi.
+    fn create(&self, mut path: std::path::PathBuf) -> Result<std::path::PathBuf, String> {
+        let balance = self.balance()?;
+        let name = bp_core::manage::clean(self.name.trim());
         if path.extension().is_none() {
             path.set_extension("bp");
         }
@@ -111,6 +121,6 @@ impl NewFileForm {
         let document = bp_core::manage::new_document(&name, balance);
         let protection = bp_core::format_v6::Protection::none().map_err(|e| e.to_string())?;
         bp_core::file::save(&path, &document, &protection).map_err(|e| e.to_string())?;
-        Ok(Some(path))
+        Ok(path)
     }
 }

@@ -262,9 +262,7 @@ impl LoanForm {
                 {
                     let rows = export_rows(&loan, self.start_year, self.start_month);
                     let dir = crate::settings::shared::export_dir(&dirs_home());
-                    if let Some(message) = crate::spreadsheet::save_dialog(&dir, "Simulation de crédit", "Amortissement", &rows) {
-                        self.message = Some(message);
-                    }
+                    crate::spreadsheet::export(ui.ctx(), &dir, "Simulation de crédit", "Amortissement", rows);
                 }
             });
         });

@@ -183,7 +183,14 @@ pub struct BankPerfectApp {
     /// Fichier, compte affiché et sélection vus par les extensions
     /// (évènements `account_selected` et `selection_changed`).
     ext_watch: Option<(u64, usize, std::collections::BTreeSet<usize>)>,
+    /// Contexte egui, pour ouvrir un sélecteur de fichiers hors d'une image.
+    egui_ctx: egui::Context,
+    /// Suite d'une commande qui attend le choix d'un fichier (voir `ask`).
+    pick_then: Option<PickThen>,
 }
+
+/// Suite d'une commande, appelée avec le fichier choisi.
+type PickThen = Box<dyn FnOnce(&mut BankPerfectApp, PathBuf)>;
 
 const DRAWER_WIDTH: f32 = 460.0;
 const DRAWER_SLIDE_SECONDS: f64 = 0.15;
@@ -232,6 +239,8 @@ impl BankPerfectApp {
             unreadable: None,
             toast: None,
             allow_close: false,
+            egui_ctx: egui::Context::default(),
+            pick_then: None,
             title: String::new(),
             drawer_open: false,
             drawer_opened_at: 0.0,
@@ -434,7 +443,8 @@ impl BankPerfectApp {
                     self.toast = Some(("Extensions rechargées".into(), now + 3.0));
                 }
                 ManagerAction::OpenFolder => {
-                    let _ = open::that(self.extensions.dir());
+                    let _ = std::fs::create_dir_all(self.extensions.dir());
+                    let _ = open::that_detached(self.extensions.dir());
                 }
                 ManagerAction::InstallExamples => {
                     let n = crate::extensions::install_examples(self.extensions.dir());
@@ -483,9 +493,7 @@ impl BankPerfectApp {
                 if let Some(dir) = &self.settings.files_dir {
                     dialog = dialog.set_directory(dir);
                 }
-                if let Some(path) = dialog.pick_file() {
-                    self.open_path(path);
-                }
+                self.ask(crate::file_picker::Kind::File, dialog, Self::open_path);
             }
             Pending::NewFile => {
                 self.tool = Some(crate::tools::Tool::NewFile(Default::default()));
@@ -860,7 +868,7 @@ impl BankPerfectApp {
                 {
                     self.confirm_json_export = true;
                 } else {
-                    self.export_json(now);
+                    self.export_json();
                 }
                 return;
             }
@@ -880,7 +888,8 @@ impl BankPerfectApp {
                 return;
             }
             Command::ExtensionsFolder => {
-                let _ = open::that(self.extensions.dir());
+                let _ = std::fs::create_dir_all(self.extensions.dir());
+                let _ = open::that_detached(self.extensions.dir());
                 return;
             }
             Command::ExtensionsDocs => {
@@ -959,8 +968,8 @@ impl BankPerfectApp {
                 return;
             }
             Command::Save => return self.save(now),
-            Command::SaveAs => return self.save_as(now),
-            Command::SaveCopy => return self.save_copy(now),
+            Command::SaveAs => return self.save_as(),
+            Command::SaveCopy => return self.save_copy(),
             Command::CloseFile => return self.request(Pending::Close),
             _ => {}
         }
@@ -973,9 +982,7 @@ impl BankPerfectApp {
                     doc.path.parent().unwrap_or(std::path::Path::new(".")),
                 );
                 let name = doc.current_account().name.clone();
-                if let Some(message) = crate::spreadsheet::save_dialog(&dir, &name, &name, &rows) {
-                    doc.notice = Some(message);
-                }
+                crate::spreadsheet::export(&self.egui_ctx, &dir, &name, &name, rows);
             }
             Command::Budget(tab) => {
                 self.tool = Some(Tool::Budget(Box::new(crate::budget_ui::BudgetForm::new(
@@ -1019,17 +1026,20 @@ impl BankPerfectApp {
                     dialog = dialog.set_directory(dir);
                 }
                 // BP_IMPORT_FILE : fichier imposé (captures d'écran automatiques).
-                let path = std::env::var_os("BP_IMPORT_FILE")
-                    .map(PathBuf::from)
-                    .or_else(|| dialog.pick_file());
-                if let Some(path) = path {
-                    self.open_import(path);
+                match std::env::var_os("BP_IMPORT_FILE") {
+                    Some(path) => self.open_import(PathBuf::from(path)),
+                    None => self.ask(crate::file_picker::Kind::File, dialog, |app, path| {
+                        app.open_import(path)
+                    }),
                 }
             }
             Command::ExportQif => {
-                if let Some(message) = crate::tools::export_qif(doc) {
-                    self.toast = Some((message, now + 4.0));
-                }
+                let dialog = crate::tools::qif_dialog(doc);
+                self.ask(crate::file_picker::Kind::Save, dialog, |app, path| {
+                    let Some(doc) = &app.doc else { return };
+                    let message = crate::tools::export_qif(doc, &path);
+                    app.toast = Some((message, app.egui_ctx.input(|i| i.time) + 4.0));
+                });
             }
             Command::Protection => self.tool = Some(Tool::Protection(Default::default())),
             Command::Backups => {
@@ -1324,17 +1334,19 @@ impl BankPerfectApp {
     }
 
     /// Enregistrer sous (F12) : le fichier enregistré devient le fichier courant.
-    fn save_as(&mut self, now: f64) {
-        let Some(doc) = &mut self.doc else { return };
-        let Some(mut path) = rfd::FileDialog::new()
+    fn save_as(&mut self) {
+        let Some(doc) = &self.doc else { return };
+        let dialog = rfd::FileDialog::new()
             .set_title("Enregistrer le fichier de comptes sous…")
             .set_directory(doc.path.parent().unwrap_or(Path::new(".")))
             .set_file_name(doc.file_name())
-            .add_filter("Comptes BankPerfect", &["bp"])
-            .save_file()
-        else {
-            return;
-        };
+            .add_filter("Comptes BankPerfect", &["bp"]);
+        self.ask(crate::file_picker::Kind::Save, dialog, Self::save_as_to);
+    }
+
+    fn save_as_to(&mut self, mut path: PathBuf) {
+        let now = self.egui_ctx.input(|i| i.time);
+        let Some(doc) = &mut self.doc else { return };
         if path.extension().is_none() {
             path.set_extension("bp");
         }
@@ -1353,14 +1365,14 @@ impl BankPerfectApp {
 
     /// Enregistre une copie (clé USB, disque externe…) sans changer de
     /// fichier courant : `<nom>_AAAAMMJJ.bp` dans le dossier choisi.
-    fn save_copy(&mut self, now: f64) {
+    fn save_copy(&mut self) {
+        let dialog = rfd::FileDialog::new().set_title("Dossier où enregistrer une copie");
+        self.ask(crate::file_picker::Kind::Folder, dialog, Self::save_copy_to);
+    }
+
+    fn save_copy_to(&mut self, folder: PathBuf) {
+        let now = self.egui_ctx.input(|i| i.time);
         let Some(doc) = &mut self.doc else { return };
-        let Some(folder) = rfd::FileDialog::new()
-            .set_title("Dossier où enregistrer une copie")
-            .pick_folder()
-        else {
-            return;
-        };
         let stem = doc
             .path
             .file_stem()
@@ -1392,24 +1404,26 @@ impl BankPerfectApp {
 
     /// Exporte le fichier complet (comptes, référentiels, données des
     /// fonctionnalités) en JSON lisible, réimportable sans perte.
-    fn export_json(&mut self, now: f64) {
+    fn export_json(&mut self) {
         let Some(doc) = &self.doc else { return };
         let stem = doc
             .path
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
-        let Some(mut path) = rfd::FileDialog::new()
+        let dialog = rfd::FileDialog::new()
             .set_title("Exporter le fichier complet en JSON")
             .set_directory(crate::settings::shared::export_dir(
                 doc.path.parent().unwrap_or(Path::new(".")),
             ))
             .set_file_name(format!("{stem}.json"))
-            .add_filter("JSON", &["json"])
-            .save_file()
-        else {
-            return;
-        };
+            .add_filter("JSON", &["json"]);
+        self.ask(crate::file_picker::Kind::Save, dialog, Self::export_json_to);
+    }
+
+    fn export_json_to(&mut self, mut path: PathBuf) {
+        let now = self.egui_ctx.input(|i| i.time);
+        let Some(doc) = &self.doc else { return };
         if path.extension().is_none() {
             path.set_extension("json");
         }
@@ -1432,9 +1446,14 @@ impl BankPerfectApp {
         if let Some(dir) = &self.settings.export_dir {
             dialog = dialog.set_directory(dir);
         }
-        let Some(source) = dialog.pick_file() else {
-            return;
-        };
+        self.ask(
+            crate::file_picker::Kind::File,
+            dialog,
+            Self::import_json_from,
+        );
+    }
+
+    fn import_json_from(&mut self, source: PathBuf) {
         let document = match std::fs::read(&source)
             .map_err(bp_core::Error::from)
             .and_then(|data| bp_core::json::from_json(&data))
@@ -1453,9 +1472,12 @@ impl BankPerfectApp {
         if let Some(dir) = &self.settings.files_dir {
             dialog = dialog.set_directory(dir);
         }
-        let Some(mut path) = dialog.save_file() else {
-            return;
-        };
+        self.ask(crate::file_picker::Kind::Save, dialog, move |app, path| {
+            app.import_json_to(path, document)
+        });
+    }
+
+    fn import_json_to(&mut self, mut path: PathBuf, document: bp_core::model::Document) {
         if path.extension().is_none() {
             path.set_extension("bp");
         }
@@ -1488,9 +1510,10 @@ impl BankPerfectApp {
         }) {
             dialog = dialog.set_directory(dir);
         }
-        let Some(path) = dialog.pick_file() else {
-            return;
-        };
+        self.ask(crate::file_picker::Kind::File, dialog, Self::trash_file);
+    }
+
+    fn trash_file(&mut self, path: PathBuf) {
         let same = |a: &Path, b: &Path| a.canonicalize().ok() == b.canonicalize().ok();
         if self.doc.as_ref().is_some_and(|d| same(&d.path, &path)) {
             self.error = Some("Ce fichier est actuellement ouvert : fermez-le d'abord.".into());
@@ -2743,7 +2766,7 @@ impl BankPerfectApp {
                 Choice::Pending => {}
                 Choice::Yes => {
                     self.confirm_json_export = false;
-                    self.export_json(now);
+                    self.export_json();
                 }
                 Choice::No | Choice::Cancel => self.confirm_json_export = false,
             }
@@ -2922,7 +2945,44 @@ impl eframe::App for BankPerfectApp {
 }
 
 impl BankPerfectApp {
+    /// Ouvre un sélecteur de fichiers sans bloquer l'interface ; `then` est
+    /// appelée avec le fichier choisi (rien si l'utilisateur annule).
+    fn ask(
+        &mut self,
+        kind: crate::file_picker::Kind,
+        dialog: rfd::FileDialog,
+        then: impl FnOnce(&mut Self, PathBuf) + 'static,
+    ) {
+        if crate::file_picker::is_open(&self.egui_ctx) {
+            return;
+        }
+        crate::file_picker::open(&self.egui_ctx, egui::Id::new("app_pick"), kind, dialog);
+        self.pick_then = Some(Box::new(then));
+    }
+
+    /// Suite de la commande en attente, une fois le fichier choisi.
+    fn poll_pick(&mut self) {
+        if self.pick_then.is_none() {
+            return;
+        }
+        match crate::file_picker::finished(&self.egui_ctx, egui::Id::new("app_pick")) {
+            Some(Some(path)) => {
+                if let Some(then) = self.pick_then.take() {
+                    then(self, path);
+                }
+            }
+            Some(None) => self.pick_then = None,
+            None => {}
+        }
+    }
+
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
+        self.egui_ctx = ui.ctx().clone();
+        self.poll_pick();
+        // Exports vers un tableur, d'où qu'ils viennent.
+        if let Some(message) = crate::spreadsheet::finished(ui.ctx()) {
+            self.toast = Some((message, ui.ctx().input(|i| i.time) + 5.0));
+        }
         let ctx = ui.ctx().clone();
         if std::mem::take(&mut self.theme_pending) {
             crate::theme::select(&ctx, &self.settings.dark_theme, &self.settings.light_theme);
@@ -3141,12 +3201,7 @@ impl BankPerfectApp {
             }))
             .show(ui, |ui| {
                 crate::islands::frame(&pal, dark)
-                    .inner_margin(egui::Margin {
-                        left: 6,
-                        right: 2,
-                        top: 6,
-                        bottom: 4,
-                    })
+                    .inner_margin(grid::ISLAND_MARGIN)
                     .show(ui, |ui| {
                         ui.set_min_size(ui.available_size());
                         let action = grid::show(ui, doc);

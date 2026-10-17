@@ -192,11 +192,15 @@ impl OptionsForm {
                     [w, 34.0],
                     egui::Label::new(RichText::new(text).color(color)).truncate(),
                 );
+                let pick = egui::Id::new(("options_folder", label));
                 if ui
                     .button(format!("{}  Choisir…", icon::FOLDER_OPEN))
                     .clicked()
-                    && let Some(dir) = rfd::FileDialog::new().pick_folder()
                 {
+                    let kind = crate::file_picker::Kind::Folder;
+                    crate::file_picker::open(ui.ctx(), pick, kind, rfd::FileDialog::new());
+                }
+                if let Some(dir) = crate::file_picker::chosen(ui.ctx(), pick) {
                     *value = Some(dir);
                 }
                 if value.is_some()

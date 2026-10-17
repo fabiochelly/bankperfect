@@ -254,11 +254,7 @@ impl ChartsForm {
                         doc.path.parent().unwrap_or(std::path::Path::new(".")),
                     );
                     let name = format!("Graphique - {}", self.kind.label());
-                    if let Some(message) =
-                        crate::spreadsheet::save_dialog(&dir, &name, self.kind.label(), &rows)
-                    {
-                        self.message = Some(message);
-                    }
+                    crate::spreadsheet::export(ui.ctx(), &dir, &name, self.kind.label(), rows);
                 }
             });
         });

@@ -411,7 +411,7 @@ impl BankSyncForm {
                 if let Some(pending) = &mut self.pending {
                     pending.url = url.clone();
                 }
-                if open::that(&url).is_err() {
+                if open::that_detached(&url).is_err() {
                     self.message =
                         Some("Ouvrez l'adresse ci-dessous dans votre navigateur.".into());
                 }
@@ -606,13 +606,20 @@ impl BankSyncForm {
             });
             ui.add_space(8.0);
             ui.horizontal(|ui| {
+                let pick = egui::Id::new("bank_sync_key");
                 if ui
                     .button(format!("{}  Choisir le fichier de clé (.pem)", icon::FILE))
                     .clicked()
-                    && let Some(path) = rfd::FileDialog::new()
-                        .add_filter("Clé privée", &["pem", "key"])
-                        .pick_file()
                 {
+                    let dialog = rfd::FileDialog::new().add_filter("Clé privée", &["pem", "key"]);
+                    crate::file_picker::open(
+                        ui.ctx(),
+                        pick,
+                        crate::file_picker::Kind::File,
+                        dialog,
+                    );
+                }
+                if let Some(path) = crate::file_picker::chosen(ui.ctx(), pick) {
                     match std::fs::read(&path) {
                         Ok(bytes) if String::from_utf8_lossy(&bytes).contains("PRIVATE KEY") => {
                             self.key_name = path
@@ -1004,7 +1011,7 @@ impl BankSyncForm {
                                 ))
                                 .clicked()
                             {
-                                let _ = open::that(&url);
+                                let _ = open::that_detached(&url);
                             }
                             if ui
                                 .small_button(format!("{}  Copier l'adresse", icon::COPY))

@@ -91,24 +91,56 @@ pub fn write(path: &std::path::Path, sheet: &str, rows: &[Vec<Cell>]) -> Result<
     workbook.save(path).map_err(|e| e.to_string())
 }
 
-/// Demande l'emplacement puis écrit le tableau ; message de résultat, ou
-/// `None` si l'utilisateur a annulé.
-pub fn save_dialog(
+/// Tableau en attente d'écriture : l'emplacement est demandé sans bloquer
+/// l'interface, puis [`finished`] écrit le fichier.
+#[derive(Clone)]
+struct PendingExport {
+    sheet: String,
+    rows: std::sync::Arc<Vec<Vec<Cell>>>,
+}
+
+fn export_id() -> egui::Id {
+    egui::Id::new("spreadsheet_export")
+}
+
+/// Demande l'emplacement du classeur ; le tableau sera écrit par [`finished`].
+pub fn export(
+    ctx: &egui::Context,
     default_dir: &std::path::Path,
     file_name: &str,
     sheet: &str,
-    rows: &[Vec<Cell>],
-) -> Option<String> {
-    let mut path = rfd::FileDialog::new()
+    rows: Vec<Vec<Cell>>,
+) {
+    if crate::file_picker::is_open(ctx) {
+        return;
+    }
+    let dialog = rfd::FileDialog::new()
         .set_title("Exporter vers un tableur")
         .set_directory(default_dir)
         .set_file_name(format!("{file_name}.xlsx"))
-        .add_filter("Classeur Excel", &["xlsx"])
-        .save_file()?;
+        .add_filter("Classeur Excel", &["xlsx"]);
+    let pending = PendingExport {
+        sheet: sheet.to_string(),
+        rows: std::sync::Arc::new(rows),
+    };
+    ctx.data_mut(|d| d.insert_temp(export_id(), pending));
+    crate::file_picker::open(ctx, export_id(), crate::file_picker::Kind::Save, dialog);
+}
+
+/// Une fois l'emplacement choisi, écrit le tableau et rend le message de
+/// résultat (rien si l'utilisateur a annulé ou n'a pas encore choisi).
+pub fn finished(ctx: &egui::Context) -> Option<String> {
+    let choice = crate::file_picker::finished(ctx, export_id())?;
+    let pending = ctx.data_mut(|d| {
+        let pending = d.get_temp::<PendingExport>(export_id());
+        d.remove::<PendingExport>(export_id());
+        pending
+    })?;
+    let mut path = choice?;
     if path.extension().is_none() {
         path.set_extension("xlsx");
     }
-    Some(match write(&path, sheet, rows) {
+    Some(match write(&path, &pending.sheet, &pending.rows) {
         Ok(()) => format!("Tableau exporté : {}", path.display()),
         Err(e) => format!("Export impossible : {e}"),
     })

@@ -321,6 +321,23 @@ impl OptionsForm {
         let pal = palette(ui);
         let d = &mut self.draft;
         let theme = &mut self.theme;
+        ui_kit::section(ui, width, icon::TRANSLATE, "Langue", |ui| {
+            ui_kit::row(ui, "Langue de l'interface", LABEL_WIDTH, |ui| {
+                let current = d.language();
+                let mut chosen = current;
+                egui::ComboBox::from_id_salt("language")
+                    .selected_text(current.native_name())
+                    .width(240.0)
+                    .show_ui(ui, |ui| {
+                        for lang in bp_core::i18n::Lang::ALL {
+                            ui.selectable_value(&mut chosen, lang, lang.native_name());
+                        }
+                    });
+                if chosen != current {
+                    d.language = Some(chosen.code().into());
+                }
+            });
+        });
         ui_kit::section(ui, width, icon::PALETTE, "Apparence", |ui| {
             ui_kit::row(ui, "Mode", LABEL_WIDTH, |ui| {
                 let w = ui.available_width().min(460.0);

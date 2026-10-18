@@ -217,6 +217,7 @@ impl BankPerfectApp {
         initial_file: Option<PathBuf>,
         settings: crate::settings::Settings,
     ) -> Self {
+        crate::settings::shared::set(&settings);
         let mut app = Self {
             doc: None,
             editor: None,
@@ -961,6 +962,11 @@ impl BankPerfectApp {
                 }
                 return self.settings.set_theme(ctx.options(|o| o.theme_preference));
             }
+            Command::Language(lang) => {
+                self.settings.language = Some(lang.code().into());
+                self.settings.save();
+                return crate::settings::shared::set(&self.settings);
+            }
             Command::ToggleTranslucent => {
                 let on = !self.settings.translucent();
                 self.settings.translucent = Some(on);
@@ -1303,6 +1309,7 @@ impl BankPerfectApp {
             | Command::Palette
             | Command::Theme(_)
             | Command::UseTheme(_)
+            | Command::Language(_)
             | Command::ToggleTranslucent
             | Command::OpenRecent(_)
             | Command::Options
@@ -1906,6 +1913,19 @@ impl BankPerfectApp {
                 {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleTranslucent);
+                }
+                let current = self.settings.language();
+                let mut chosen = None;
+                menu::submenu(ui, Some(icon::TRANSLATE), "Langue", |ui| {
+                    for lang in bp_core::i18n::Lang::ALL {
+                        if menu::choice(ui, current == lang, lang.native_name()).clicked() {
+                            chosen = Some(lang);
+                        }
+                    }
+                });
+                if let Some(lang) = chosen {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, Command::Language(lang));
                 }
                 self.extension_items(ui, "view");
             }

@@ -4,6 +4,7 @@
 use std::path::PathBuf;
 use std::rc::Rc;
 
+use bp_core::{tr, trn};
 use bp_ext::{Engine, Needs};
 use egui::{Key, KeyboardShortcut, Modifiers, RichText};
 use egui_phosphor::regular as icon;
@@ -193,12 +194,13 @@ pub fn placed(menu: &str) -> Vec<(usize, Entry)> {
         .collect()
 }
 
-/// Libellé d'un emplacement (`"grid"` → « clic droit sur les opérations »).
+/// Libellé d'un emplacement (`"grid"` → « clic droit sur les opérations »),
+/// dans la langue en cours.
 pub fn menu_label(menu: &str) -> &'static str {
     bp_ext::MENUS
         .iter()
         .find(|(id, _)| *id == menu)
-        .map_or("Extensions", |(_, label)| label)
+        .map_or(tr!("Extensions"), |(_, label)| bp_core::i18n::tr(label))
 }
 
 pub fn entry(index: usize) -> Option<Entry> {
@@ -224,21 +226,22 @@ pub enum ManagerAction {
 
 fn permission_label(permission: &str) -> (&'static str, String) {
     match permission {
-        "network" => (icon::GLOBE, "Accès à Internet".into()),
+        "network" => (icon::GLOBE, tr!("Accès à Internet").into()),
         other => (icon::KEY, other.to_string()),
     }
 }
 
+/// Phrase décrivant la réaction à un évènement.
 fn event_label(event: bp_ext::Event) -> &'static str {
     match event {
-        bp_ext::Event::FileOpened => "à l'ouverture du fichier",
-        bp_ext::Event::OperationAdded => "à chaque opération ajoutée",
-        bp_ext::Event::OperationChanged => "à chaque opération modifiée",
-        bp_ext::Event::OperationDeleted => "à chaque opération supprimée",
-        bp_ext::Event::BeforeSave => "avant chaque enregistrement",
-        bp_ext::Event::AfterSave => "après chaque enregistrement",
-        bp_ext::Event::AccountSelected => "au changement de compte",
-        bp_ext::Event::SelectionChanged => "au changement de sélection",
+        bp_ext::Event::FileOpened => tr!("Réagit à l'ouverture du fichier"),
+        bp_ext::Event::OperationAdded => tr!("Réagit à chaque opération ajoutée"),
+        bp_ext::Event::OperationChanged => tr!("Réagit à chaque opération modifiée"),
+        bp_ext::Event::OperationDeleted => tr!("Réagit à chaque opération supprimée"),
+        bp_ext::Event::BeforeSave => tr!("Réagit avant chaque enregistrement"),
+        bp_ext::Event::AfterSave => tr!("Réagit après chaque enregistrement"),
+        bp_ext::Event::AccountSelected => tr!("Réagit au changement de compte"),
+        bp_ext::Event::SelectionChanged => tr!("Réagit au changement de sélection"),
     }
 }
 
@@ -249,10 +252,10 @@ impl Manager {
         crate::dialogs::modal(ctx, "extensions_manager").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::PUZZLE_PIECE, pal.accent, "Extensions");
+            crate::dialogs::header(ui, icon::PUZZLE_PIECE, pal.accent, tr!("Extensions"));
             ui_kit::subtitle(
                 ui,
-                "Des scripts Luau ajoutent des commandes, des fenêtres et des automatismes. Ils tournent en bac à sable : ils n'accèdent qu'à vos comptes et, s'ils le déclarent, à Internet.",
+                tr!("Des scripts Luau ajoutent des commandes, des fenêtres et des automatismes. Ils tournent en bac à sable : ils n'accèdent qu'à vos comptes et, s'ils le déclarent, à Internet."),
             );
             let height = ui_kit::dialog_height(ctx, 0.56);
             let list_width = (width * 0.36).min(340.0);
@@ -267,18 +270,18 @@ impl Manager {
                     egui::Layout::top_down(egui::Align::Min),
                     |ui| {
                         ui.set_width(list_width);
-                        ui_kit::caption(ui, icon::LIST, "Installées");
+                        ui_kit::caption(ui, icon::LIST, tr!("Installées"));
                         if engine.extensions.is_empty() {
                             ui_kit::card(ui, list_width, |ui| {
-                                ui.label(RichText::new("Aucune extension pour l'instant.").color(pal.fg_dark));
+                                ui.label(RichText::new(tr!("Aucune extension pour l'instant.")).color(pal.fg_dark));
                                 ui.add_space(8.0);
                                 ui.label(
-                                    RichText::new("Installez les exemples pour découvrir ce qu'elles permettent, ou déposez vos fichiers .luau dans le dossier des extensions.")
+                                    RichText::new(tr!("Installez les exemples pour découvrir ce qu'elles permettent, ou déposez vos fichiers .luau dans le dossier des extensions."))
                                         .size(12.5)
                                         .color(pal.muted),
                                 );
                                 ui.add_space(12.0);
-                                if crate::dialogs::primary(ui, &format!("{}  Installer les exemples", icon::DOWNLOAD_SIMPLE), true).clicked() {
+                                if crate::dialogs::primary(ui, &format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr!("Installer les exemples")), true).clicked() {
                                     action = ManagerAction::InstallExamples;
                                 }
                             });
@@ -340,18 +343,17 @@ impl Manager {
                                         pal.fg,
                                     );
                                     let detail = match (&ext.error, ext.enabled) {
-                                        (Some(_), _) => "Erreur au chargement".to_string(),
-                                        (None, false) => "Désactivée".to_string(),
+                                        (Some(_), _) => tr!("Erreur au chargement").to_string(),
+                                        (None, false) => tr!("Désactivée").to_string(),
                                         (None, true) => {
                                             let n = ext.commands().len();
                                             let version = ext.version();
                                             let commands = match n {
                                                 0 if !ext.importers().is_empty() => {
-                                                    "format d'import".to_string()
+                                                    tr!("format d'import").to_string()
                                                 }
-                                                0 => "automatismes".to_string(),
-                                                1 => "1 commande".to_string(),
-                                                n => format!("{n} commandes"),
+                                                0 => tr!("automatismes").to_string(),
+                                                n => trn!(n, "{} commande", "{} commandes"),
                                             };
                                             if version.is_empty() {
                                                 commands
@@ -395,22 +397,22 @@ impl Manager {
                 );
             });
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked() {
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked() {
                     action = ManagerAction::Close;
                 }
-                if crate::dialogs::button(ui, format!("{}  Recharger", icon::ARROW_CLOCKWISE)).clicked() {
+                if crate::dialogs::button(ui, format!("{}  {}", icon::ARROW_CLOCKWISE, tr!("Recharger"))).clicked() {
                     action = ManagerAction::Reload;
                 }
-                if crate::dialogs::button(ui, format!("{}  Ouvrir le dossier", icon::FOLDER_OPEN)).clicked() {
+                if crate::dialogs::button(ui, format!("{}  {}", icon::FOLDER_OPEN, tr!("Ouvrir le dossier"))).clicked() {
                     action = ManagerAction::OpenFolder;
                 }
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    if crate::dialogs::button(ui, format!("{}  Documentation", icon::BOOK_OPEN)).clicked() {
+                    if crate::dialogs::button(ui, format!("{}  {}", icon::BOOK_OPEN, tr!("Documentation"))).clicked() {
                         action = ManagerAction::Docs;
                     }
                     if !engine.extensions.is_empty()
-                        && crate::dialogs::button(ui, format!("{}  Exemples", icon::DOWNLOAD_SIMPLE))
-                            .on_hover_text("Ajoute les extensions d'exemple qui manquent")
+                        && crate::dialogs::button(ui, format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr!("Exemples")))
+                            .on_hover_text(tr!("Ajoute les extensions d'exemple qui manquent"))
                             .clicked()
                     {
                         action = ManagerAction::InstallExamples;
@@ -442,10 +444,10 @@ impl Manager {
                     );
                     let mut meta = Vec::new();
                     if !ext.version().is_empty() {
-                        meta.push(format!("version {}", ext.version()));
+                        meta.push(tr!("version {}", ext.version()));
                     }
                     if !ext.author().is_empty() {
-                        meta.push(format!("par {}", ext.author()));
+                        meta.push(tr!("par {}", ext.author()));
                     }
                     meta.push(
                         ext.path
@@ -463,7 +465,7 @@ impl Manager {
                 });
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let mut enabled = ext.enabled;
-                    if crate::theme::checkbox(ui, &mut enabled, "Activée").changed() {
+                    if crate::theme::checkbox(ui, &mut enabled, tr!("Activée")).changed() {
                         *action = ManagerAction::Toggle(self.selected, enabled);
                     }
                 });
@@ -476,7 +478,7 @@ impl Manager {
         });
         ui.add_space(14.0);
         if let Some(error) = &ext.error {
-            ui_kit::caption(ui, icon::WARNING, "Erreur au chargement");
+            ui_kit::caption(ui, icon::WARNING, tr!("Erreur au chargement"));
             egui::Frame::new()
                 .fill(pal.negative.gamma_multiply(0.12))
                 .corner_radius(10)
@@ -489,7 +491,7 @@ impl Manager {
         }
         let commands = ext.commands();
         if !commands.is_empty() {
-            ui_kit::section(ui, width - 4.0, icon::COMMAND, "Commandes", |ui| {
+            ui_kit::section(ui, width - 4.0, icon::COMMAND, tr!("Commandes"), |ui| {
                 for (i, c) in commands.iter().enumerate() {
                     if i > 0 {
                         ui.add_space(6.0);
@@ -507,7 +509,7 @@ impl Manager {
                         }
                         if c.needs == Needs::Selection {
                             ui.label(
-                                RichText::new("sur la sélection")
+                                RichText::new(tr!("sur la sélection"))
                                     .size(12.0)
                                     .color(pal.muted),
                             );
@@ -535,19 +537,23 @@ impl Manager {
                 ui,
                 width - 4.0,
                 icon::SHIELD_CHECK,
-                "Fonctionnement",
+                tr!("Fonctionnement"),
                 |ui| {
                     for (name, extensions) in &importers {
                         let suffixes: Vec<String> =
                             extensions.iter().map(|e| format!(".{e}")).collect();
                         ui.label(format!(
-                            "{}  Importe « {name} » ({})",
+                            "{}  {}",
                             icon::DOWNLOAD_SIMPLE,
-                            suffixes.join(", ")
+                            tr!(
+                                "Importe « {name} » ({suffixes})",
+                                name = name,
+                                suffixes = suffixes.join(", ")
+                            )
                         ));
                     }
                     for e in events {
-                        ui.label(format!("{}  Réagit {}", icon::LIGHTNING, event_label(e)));
+                        ui.label(format!("{}  {}", icon::LIGHTNING, event_label(e)));
                     }
                     for p in permissions {
                         let (g, label) = permission_label(&p);
@@ -558,16 +564,22 @@ impl Manager {
         }
         let log = ext.log();
         if !log.is_empty() {
-            ui_kit::section(ui, width - 4.0, icon::TERMINAL, "Journal (print)", |ui| {
-                for line in log.iter().rev().take(40).rev() {
-                    ui.label(
-                        RichText::new(line)
-                            .monospace()
-                            .size(12.0)
-                            .color(pal.fg_dark),
-                    );
-                }
-            });
+            ui_kit::section(
+                ui,
+                width - 4.0,
+                icon::TERMINAL,
+                tr!("Journal (print)"),
+                |ui| {
+                    for line in log.iter().rev().take(40).rev() {
+                        ui.label(
+                            RichText::new(line)
+                                .monospace()
+                                .size(12.0)
+                                .color(pal.fg_dark),
+                        );
+                    }
+                },
+            );
         }
     }
 }

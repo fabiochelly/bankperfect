@@ -152,3 +152,19 @@ fn standard_list_maps_onto_itself() {
         assert!(confidence >= 0.95, "{} → {confidence}", g.slug);
     }
 }
+
+#[test]
+fn words_seen_on_income_say_little_about_an_expense() {
+    // Le nom de famille figure sur les salaires (recettes) : un virement émis
+    // à un kiné du même nom va en santé, pas dans les revenus.
+    let ops = (0..6)
+        .map(|i| op(i, i as i32, "VIR SEPA SALAIRE MARTIN", 200_000, Some(8)))
+        .collect();
+    let c = Categorizer::new(&doc(ops));
+    let o = Operation {
+        details: "Kine".into(),
+        ..op(0, 0, "VIR INST MARTIN DUPONT", -6_000, None)
+    };
+    let best = c.suggest(&Query::of(&o)).best().cloned().unwrap();
+    assert_eq!(best.category, 6, "{best:?}");
+}

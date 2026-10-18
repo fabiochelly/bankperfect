@@ -145,7 +145,8 @@ pub struct Categorizer {
     samples: Vec<Sample>,
     by_full: HashMap<String, Vec<u32>>,
     by_key: HashMap<String, Vec<u32>>,
-    word_categories: HashMap<String, HashMap<u32, f32>>,
+    /// Mot → (catégorie, recette) → nombre d'opérations.
+    word_categories: HashMap<String, HashMap<(u32, bool), f32>>,
     word_documents: HashMap<String, f32>,
     worded_samples: f32,
     /// Catégorie générique → catégories choisies par l'utilisateur pour les
@@ -223,7 +224,7 @@ impl Categorizer {
                 .word_categories
                 .entry(w)
                 .or_default()
-                .entry(category)
+                .entry((category, op.amount.0 > 0))
                 .or_default() += 1.0;
         }
         let nature = Nature::from_label(&op.payee, Some(&op.mode));
@@ -398,6 +399,8 @@ impl Categorizer {
         list.sort();
         list.dedup();
         let mut scores: HashMap<u32, f32> = HashMap::new();
+        // Part des indices venant d'opérations du même sens (1 si tous).
+        let (mut same_sign, mut all_signs) = (0.0f32, 0.0f32);
         for w in &list {
             let (Some(counts), Some(&df)) =
                 (self.word_categories.get(w), self.word_documents.get(w))
@@ -405,11 +408,29 @@ impl Categorizer {
                 continue;
             };
             let idf = (self.worded_samples / df).ln().max(0.0);
-            let total: f32 = counts.values().sum();
-            for (&category, &n) in counts {
-                *scores.entry(category).or_default() += idf * n / total;
+            // Un mot vu sur des recettes dit peu d'une dépense (le nom de
+            // famille des salaires sur un virement émis, par exemple).
+            let credit = query.amount.0 > 0;
+            let weighted = |&(_, c): &(u32, bool), &n: &f32| {
+                if query.amount.0 == 0 || c == credit {
+                    n
+                } else {
+                    n * 0.15
+                }
+            };
+            let total: f32 = counts.iter().map(|(k, n)| weighted(k, n)).sum();
+            let raw: f32 = counts.values().sum();
+            same_sign += idf * total / raw;
+            all_signs += idf;
+            for (key, n) in counts {
+                *scores.entry(key.0).or_default() += idf * weighted(key, n) / total;
             }
         }
+        let sign_factor = if all_signs > 0.0 {
+            same_sign / all_signs
+        } else {
+            1.0
+        };
         let total: f32 = scores.values().sum();
         let top = scores.values().copied().fold(0.0, f32::max);
         let weight = if top > 2.0 { 0.75 } else { 0.5 };
@@ -420,7 +441,7 @@ impl Categorizer {
             .into_iter()
             .map(|(category, share)| Candidate {
                 category,
-                confidence: share * weight,
+                confidence: share * weight * sign_factor,
                 source: Source::Words,
                 reason: "mots déjà vus".into(),
                 generic: None,

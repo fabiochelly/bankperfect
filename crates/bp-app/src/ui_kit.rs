@@ -3,6 +3,7 @@
 //! catégories, pastilles.
 
 use bp_core::model::{Document, Mode};
+use bp_core::tr;
 use egui::{Color32, RichText};
 use egui_phosphor::regular as icon;
 
@@ -254,7 +255,7 @@ fn category_combo_impl(
             let glyph = style.map_or(icon::TAG, |s| s.icon);
             RichText::new(format!("{glyph}  {label}")).color(color)
         }
-        None => RichText::new("Aucune catégorie").color(pal.muted),
+        None => RichText::new(tr!("Aucune catégorie")).color(pal.muted),
     };
     let mut combo = egui::ComboBox::from_id_salt(id)
         .selected_text(selected)
@@ -264,7 +265,7 @@ fn category_combo_impl(
         combo = combo.truncate();
     }
     combo.show_ui(ui, |ui| {
-        ui.selectable_value(category, None, "Aucune catégorie");
+        ui.selectable_value(category, None, tr!("Aucune catégorie"));
         for c in &document.categories {
             let style = styles.get(&c.id).copied();
             let glyph = style.map_or(icon::TAG, |s| s.icon);

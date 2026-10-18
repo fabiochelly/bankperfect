@@ -2,7 +2,8 @@
 //! raccourci et mots-clés. Les menus et la palette de commandes s'en servent,
 //! l'exécution est dans `BankPerfectApp::execute`.
 
-use bp_core::i18n::Lang;
+use bp_core::i18n::{self, Lang};
+use bp_core::{tr, tr_mark, trc};
 use egui::ThemePreference;
 use egui_phosphor::regular as icon;
 
@@ -111,6 +112,17 @@ pub struct Info {
     pub keywords: &'static str,
     pub enabled: bool,
 }
+
+// Groupes des commandes, traduits par `Command::info`.
+const FILE: &str = tr_mark!("Fichier");
+const EDIT: &str = tr_mark!("Édition");
+const OPERATIONS: &str = tr_mark!("Opérations");
+const VIEW: &str = tr_mark!("Affichage");
+const ACCOUNTS: &str = tr_mark!("Comptes");
+const REPORTS: &str = tr_mark!("Rapports");
+const TOOLS: &str = tr_mark!("Outils");
+const HELP: &str = tr_mark!("Aide");
+const EXTENSIONS: &str = tr_mark!("Extensions");
 
 impl Command {
     /// Commandes proposées, dans l'ordre des menus.
@@ -227,209 +239,225 @@ impl Command {
         use Command::*;
         let has_doc = doc.is_some();
         let selection = doc.map_or(0, |d| d.selection.len());
-        let info = |group, label: &str, icon, shortcut, keywords| Info {
-            group,
+        // Groupe, raccourci et mots-clés sont traduits ici (`tr_mark!`).
+        let info = |group: &'static str,
+                    label: &str,
+                    icon,
+                    shortcut: Option<&'static str>,
+                    keywords: &'static str| Info {
+            group: i18n::tr(group),
             label: label.to_string(),
             icon,
-            shortcut,
-            keywords,
+            shortcut: shortcut.map(i18n::tr),
+            keywords: i18n::tr(keywords),
             enabled: true,
         };
         let mut result = match self {
             OpenRecent(i) => {
                 let name = recent_name(i);
                 info(
-                    "Fichier",
-                    &format!("Rouvrir {name}"),
+                    FILE,
+                    &tr!("Rouvrir {}", name),
                     icon::CLOCK,
                     None,
-                    "récent dernier",
+                    tr_mark!("récent dernier"),
                 )
             }
             NewFile => info(
-                "Fichier",
-                "Nouveau fichier de comptes…",
+                FILE,
+                tr!("Nouveau fichier de comptes…"),
                 icon::FILE_PLUS,
                 Some("Ctrl+N"),
-                "créer groupe",
+                tr_mark!("créer groupe"),
             ),
             CloseFile => info(
-                "Fichier",
-                "Fermer le fichier",
+                FILE,
+                tr!("Fermer le fichier"),
                 icon::X_SQUARE,
                 Some("Ctrl+W"),
                 "",
             ),
             SaveAs => info(
-                "Fichier",
-                "Enregistrer sous…",
+                FILE,
+                tr!("Enregistrer sous…"),
                 icon::FLOPPY_DISK_BACK,
                 Some("F12"),
-                "copie renommer",
+                tr_mark!("copie renommer"),
             ),
             SaveCopy => info(
-                "Fichier",
-                "Enregistrer une copie…",
+                FILE,
+                tr!("Enregistrer une copie…"),
                 icon::USB,
                 None,
-                "disque externe clé usb sauvegarde",
+                tr_mark!("disque externe clé usb sauvegarde"),
             ),
             DeleteFile => info(
-                "Fichier",
-                "Supprimer un fichier de comptes…",
+                FILE,
+                tr!("Supprimer un fichier de comptes…"),
                 icon::TRASH_SIMPLE,
                 None,
-                "corbeille effacer",
+                tr_mark!("corbeille effacer"),
             ),
             Open => info(
-                "Fichier",
-                "Ouvrir un fichier…",
+                FILE,
+                tr!("Ouvrir un fichier…"),
                 icon::FOLDER_OPEN,
                 Some("Ctrl+O"),
-                "charger",
+                tr_mark!("charger"),
             ),
             Save => info(
-                "Fichier",
-                "Enregistrer",
+                FILE,
+                tr!("Enregistrer"),
                 icon::FLOPPY_DISK,
                 Some("Ctrl+S"),
-                "sauver sauvegarder",
+                tr_mark!("sauver sauvegarder"),
             ),
             Import => info(
-                "Fichier",
-                "Importer des opérations…",
+                FILE,
+                tr!("Importer des opérations…"),
                 icon::DOWNLOAD_SIMPLE,
                 Some("Ctrl+I"),
-                "qif ofx csv banque relevé télécharger",
+                tr_mark!("qif ofx csv banque relevé télécharger"),
             ),
             Print => info(
-                "Fichier",
-                "Imprimer le relevé…",
+                FILE,
+                tr!("Imprimer le relevé…"),
                 icon::PRINTER,
                 Some("Ctrl+P"),
-                "pdf aperçu relevé impression",
+                tr_mark!("pdf aperçu relevé impression"),
             ),
             ImportJson => info(
-                "Fichier",
-                "Importer un export JSON…",
+                FILE,
+                tr!("Importer un export JSON…"),
                 icon::FILE_ARROW_UP,
                 None,
-                "json restaurer fichier complet format ouvert",
+                tr_mark!("json restaurer fichier complet format ouvert"),
             ),
             ExportJson => info(
-                "Fichier",
-                "Exporter le fichier complet en JSON…",
+                FILE,
+                tr!("Exporter le fichier complet en JSON…"),
                 icon::BRACKETS_CURLY,
                 None,
-                "json format ouvert sauvegarde complète développeur",
+                tr_mark!("json format ouvert sauvegarde complète développeur"),
             ),
             ExportCsv => info(
-                "Fichier",
-                "Exporter en CSV…",
+                FILE,
+                tr!("Exporter en CSV…"),
                 icon::FILE_CSV,
                 None,
-                "tableur excel",
+                tr_mark!("tableur excel"),
             ),
             ExportXlsx => info(
-                "Fichier",
-                "Exporter en tableur (.xlsx)…",
+                FILE,
+                tr!("Exporter en tableur (.xlsx)…"),
                 icon::MICROSOFT_EXCEL_LOGO,
                 None,
-                "excel calc libreoffice classeur lignes affichées",
+                tr_mark!("excel calc libreoffice classeur lignes affichées"),
             ),
             Report(tab) => {
                 let (label, glyph, shortcut, keywords) = match tab {
-                    ReportTab::Accounts => {
-                        ("Total des comptes", icon::BANK, None, "soldes tous comptes")
-                    }
+                    ReportTab::Accounts => (
+                        tr!("Total des comptes"),
+                        icon::BANK,
+                        None,
+                        tr_mark!("soldes tous comptes"),
+                    ),
                     ReportTab::Categories => (
-                        "Totaux par catégorie",
+                        tr!("Totaux par catégorie"),
                         icon::TAG,
                         Some("Ctrl+T"),
-                        "tableau croisé dépenses recettes mois année",
+                        tr_mark!("tableau croisé dépenses recettes mois année"),
                     ),
                     ReportTab::Payees => (
-                        "Totaux par tiers",
+                        tr!("Totaux par tiers"),
                         icon::ADDRESS_BOOK,
                         None,
-                        "tableau croisé bénéficiaires",
+                        tr_mark!("tableau croisé bénéficiaires"),
                     ),
                     ReportTab::Statement => (
-                        "Relevé multicompte",
+                        tr!("Relevé multicompte"),
                         icon::LIST_BULLETS,
                         None,
-                        "plusieurs comptes ensemble",
+                        tr_mark!("plusieurs comptes ensemble"),
                     ),
                 };
-                info("Rapports", label, glyph, shortcut, keywords)
+                info(REPORTS, label, glyph, shortcut, keywords)
             }
             BankSync => info(
-                "Fichier",
-                "Synchroniser avec la banque…",
+                FILE,
+                tr!("Synchroniser avec la banque…"),
                 icon::ARROWS_CLOCKWISE,
                 None,
-                "import automatique banque dsp2 enable banking agrégateur opérations",
+                tr_mark!("import automatique banque dsp2 enable banking agrégateur opérations"),
             ),
             UpdateQuotes => info(
-                "Comptes",
-                "Mettre à jour les cotations…",
+                ACCOUNTS,
+                tr!("Mettre à jour les cotations…"),
                 icon::TREND_UP,
                 None,
-                "titres bourse actions isin cours portefeuille",
+                tr_mark!("titres bourse actions isin cours portefeuille"),
             ),
             Charts => info(
-                "Rapports",
-                "Graphiques…",
+                REPORTS,
+                tr!("Graphiques…"),
                 icon::CHART_BAR,
-                Some("Ctrl+Maj+G"),
-                "camembert anneau barres courbe répartition évolution",
+                Some(tr_mark!("Ctrl+Maj+G")),
+                tr_mark!("camembert anneau barres courbe répartition évolution"),
             ),
             Budget(BudgetTab::Monthly) => info(
-                "Rapports",
-                "Budget mensuel…",
+                REPORTS,
+                tr!("Budget mensuel…"),
                 icon::PIGGY_BANK,
                 Some("Ctrl+B"),
-                "prévu réel catégories dépenses",
+                tr_mark!("prévu réel catégories dépenses"),
             ),
             Budget(BudgetTab::Annual) => info(
-                "Rapports",
-                "Budgets annuels…",
+                REPORTS,
+                tr!("Budgets annuels…"),
                 icon::CALENDAR,
                 None,
-                "prévisions année tableau mois",
+                tr_mark!("prévisions année tableau mois"),
             ),
             ExportQif => info(
-                "Fichier",
-                "Exporter en QIF…",
+                FILE,
+                tr!("Exporter en QIF…"),
                 icon::EXPORT,
                 None,
-                "quicken money",
+                tr_mark!("quicken money"),
             ),
             Protection => info(
-                "Fichier",
-                "Protection du fichier…",
+                FILE,
+                tr!("Protection du fichier…"),
                 icon::SHIELD_CHECK,
                 None,
-                "mot de passe chiffrement sécurité clé de secours",
+                tr_mark!("mot de passe chiffrement sécurité clé de secours"),
             ),
             Backups => info(
-                "Fichier",
-                "Sauvegardes…",
+                FILE,
+                tr!("Sauvegardes…"),
                 icon::CLOCK_COUNTER_CLOCKWISE,
                 None,
-                "restaurer bp0 historique",
+                tr_mark!("restaurer bp0 historique"),
             ),
-            Quit => info("Fichier", "Quitter", icon::SIGN_OUT, None, "fermer sortir"),
+            Quit => info(
+                FILE,
+                tr!("Quitter"),
+                icon::SIGN_OUT,
+                None,
+                tr_mark!("fermer sortir"),
+            ),
             Undo => {
                 let label = doc
                     .and_then(|d| d.undo_label())
-                    .map_or("Annuler".to_string(), |l| format!("Annuler {l}"));
+                    .map_or(trc!("undo", "Annuler").to_string(), |l| {
+                        tr!("Annuler {}", l)
+                    });
                 let mut i = info(
-                    "Édition",
+                    EDIT,
                     &label,
                     icon::ARROW_U_UP_LEFT,
                     Some("Ctrl+Z"),
-                    "défaire",
+                    tr_mark!("défaire"),
                 );
                 i.enabled = doc.is_some_and(|d| d.undo_label().is_some());
                 i
@@ -437,82 +465,82 @@ impl Command {
             Redo => {
                 let label = doc
                     .and_then(|d| d.redo_label())
-                    .map_or("Refaire".to_string(), |l| format!("Refaire {l}"));
+                    .map_or(tr!("Refaire").to_string(), |l| tr!("Refaire {}", l));
                 let mut i = info(
-                    "Édition",
+                    EDIT,
                     &label,
                     icon::ARROW_U_UP_RIGHT,
                     Some("Ctrl+Y"),
-                    "rétablir",
+                    tr_mark!("rétablir"),
                 );
                 i.enabled = doc.is_some_and(|d| d.redo_label().is_some());
                 i
             }
             NewOperation => info(
-                "Édition",
-                "Nouvelle opération",
+                EDIT,
+                tr!("Nouvelle opération"),
                 icon::PLUS,
-                Some("Inser"),
-                "ajouter saisir ligne",
+                Some(tr_mark!("Inser")),
+                tr_mark!("ajouter saisir ligne"),
             ),
             EditOperation => {
                 let mut i = info(
-                    "Édition",
-                    "Modifier l'opération",
+                    EDIT,
+                    tr!("Modifier l'opération"),
                     icon::PENCIL_SIMPLE,
-                    Some("Entrée"),
-                    "éditer ligne",
+                    Some(tr_mark!("Entrée")),
+                    tr_mark!("éditer ligne"),
                 );
                 i.enabled = selection == 1;
                 i
             }
             FocusEntry => info(
-                "Édition",
-                "Aller à la saisie",
+                EDIT,
+                tr!("Aller à la saisie"),
                 icon::CURSOR_TEXT,
                 Some("F8"),
-                "champ date formulaire saisir",
+                tr_mark!("champ date formulaire saisir"),
             ),
             ModifySelected => {
                 let mut i = info(
-                    "Édition",
-                    "Modifier la ligne sélectionnée",
+                    EDIT,
+                    tr!("Modifier la ligne sélectionnée"),
                     icon::PENCIL_SIMPLE_LINE,
-                    Some("Maj+Entrée"),
-                    "éditer enregistrer modification",
+                    Some(tr_mark!("Maj+Entrée")),
+                    tr_mark!("éditer enregistrer modification"),
                 );
                 i.enabled = selection == 1;
                 i
             }
             Delete => {
                 let mut i = info(
-                    "Édition",
-                    "Supprimer les opérations",
+                    EDIT,
+                    tr!("Supprimer les opérations"),
                     icon::TRASH,
-                    Some("Suppr"),
-                    "effacer lignes",
+                    Some(tr_mark!("Suppr")),
+                    tr_mark!("effacer lignes"),
                 );
                 i.enabled = selection > 0;
                 i
             }
             CutLines => {
                 let mut i = info(
-                    "Édition",
-                    "Couper",
+                    EDIT,
+                    tr!("Couper"),
                     icon::SCISSORS,
                     Some("Ctrl+X"),
-                    "déplacer lignes",
+                    tr_mark!("déplacer lignes"),
                 );
                 i.enabled = selection > 0;
                 i
             }
             CopyLines => {
                 let mut i = info(
-                    "Édition",
-                    "Copier",
+                    EDIT,
+                    tr!("Copier"),
                     icon::COPY,
                     Some("Ctrl+C"),
-                    "dupliquer lignes",
+                    tr_mark!("dupliquer lignes"),
                 );
                 i.enabled = selection > 0;
                 i
@@ -520,37 +548,37 @@ impl Command {
             PasteLines => {
                 let n = clipboard_len();
                 let label = match n {
-                    0 | 1 => "Coller".to_string(),
-                    n => format!("Coller {n} lignes"),
+                    0 | 1 => tr!("Coller").to_string(),
+                    n => tr!("Coller {} lignes", n),
                 };
                 let mut i = info(
-                    "Édition",
+                    EDIT,
                     &label,
                     icon::CLIPBOARD_TEXT,
                     Some("Ctrl+V"),
-                    "lignes copiées",
+                    tr_mark!("lignes copiées"),
                 );
                 i.enabled = n > 0;
                 i
             }
             AddToPayees => {
                 let mut i = info(
-                    "Opérations",
-                    "Ajouter aux tiers mémorisés…",
+                    OPERATIONS,
+                    tr!("Ajouter aux tiers mémorisés…"),
                     icon::USER_PLUS,
                     None,
-                    "tiers créer mémoriser",
+                    tr_mark!("tiers créer mémoriser"),
                 );
                 i.enabled = selection == 1;
                 i
             }
             SetMarkDate => {
                 let mut i = info(
-                    "Opérations",
-                    "Date de pointage…",
+                    OPERATIONS,
+                    tr!("Date de pointage…"),
                     icon::CALENDAR_CHECK,
-                    Some("Ctrl+Maj+P"),
-                    "pointage date",
+                    Some(tr_mark!("Ctrl+Maj+P")),
+                    tr_mark!("pointage date"),
                 );
                 i.enabled = selection > 0;
                 i
@@ -558,175 +586,175 @@ impl Command {
             ToggleLock => {
                 let locked = doc.is_some_and(|d| d.locked);
                 let label = if locked {
-                    "Déverrouiller les lignes rapprochées"
+                    tr!("Déverrouiller les lignes rapprochées")
                 } else {
-                    "Verrouiller les lignes rapprochées"
+                    tr!("Verrouiller les lignes rapprochées")
                 };
                 info(
-                    "Opérations",
+                    OPERATIONS,
                     label,
                     icon::LOCK,
                     None,
-                    "verrou protéger rapprochement",
+                    tr_mark!("verrou protéger rapprochement"),
                 )
             }
             ToggleMarkDates => {
                 let on = doc.is_some_and(|d| d.show_mark_dates);
                 let label = if on {
-                    "Masquer les dates de pointage"
+                    tr!("Masquer les dates de pointage")
                 } else {
-                    "Afficher les dates de pointage"
+                    tr!("Afficher les dates de pointage")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::CALENDAR_CHECK,
                     Some("F11"),
-                    "pointage colonne date",
+                    tr_mark!("pointage colonne date"),
                 )
             }
             ToggleBalancePanel => {
                 let on = doc.is_none_or(|d| d.show_balance_panel);
                 let label = if on {
-                    "Masquer le panneau des soldes"
+                    tr!("Masquer le panneau des soldes")
                 } else {
-                    "Afficher le panneau des soldes"
+                    tr!("Afficher le panneau des soldes")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::SQUARES_FOUR,
                     None,
-                    "soldes blocs pointé à venir",
+                    tr_mark!("soldes blocs pointé à venir"),
                 )
             }
             ToggleBalanceCards => {
                 let label = if doc.is_some_and(|d| d.balance_cards) {
-                    "Soldes en équation"
+                    tr!("Soldes en équation")
                 } else {
-                    "Soldes en trois cartes"
+                    tr!("Soldes en trois cartes")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::COLUMNS,
                     None,
-                    "soldes cartes équation panneau bascule",
+                    tr_mark!("soldes cartes équation panneau bascule"),
                 )
             }
             ToggleColumnFilters => {
                 let label = if doc.is_some_and(|d| d.show_column_filters) {
-                    "Masquer les filtres de colonnes"
+                    tr!("Masquer les filtres de colonnes")
                 } else {
-                    "Afficher les filtres de colonnes"
+                    tr!("Afficher les filtres de colonnes")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::MAGNIFYING_GLASS,
                     None,
-                    "filtres colonnes recherche loupe tiers montant",
+                    tr_mark!("filtres colonnes recherche loupe tiers montant"),
                 )
             }
             ToggleBalanceRiver => {
                 let label = if doc.is_none_or(|d| d.show_balance_river) {
-                    "Masquer la courbe du solde"
+                    tr!("Masquer la courbe du solde")
                 } else {
-                    "Afficher la courbe du solde"
+                    tr!("Afficher la courbe du solde")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::CHART_LINE,
                     None,
-                    "courbe solde graphique colonne évolution",
+                    tr_mark!("courbe solde graphique colonne évolution"),
                 )
             }
             ToggleForecast => {
                 let on = doc.is_none_or(|d| d.show_forecast);
                 let label = if on {
-                    "Masquer le solde prévisionnel"
+                    tr!("Masquer le solde prévisionnel")
                 } else {
-                    "Afficher le solde prévisionnel"
+                    tr!("Afficher le solde prévisionnel")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::CHART_LINE,
                     None,
-                    "prévision futur",
+                    tr_mark!("prévision futur"),
                 )
             }
             Rules => info(
-                "Opérations",
-                "Règles automatiques…",
+                OPERATIONS,
+                tr!("Règles automatiques…"),
                 icon::MAGIC_WAND,
                 Some("Ctrl+F"),
-                "calcul automatique des champs catégoriser",
+                tr_mark!("calcul automatique des champs catégoriser"),
             ),
             Categorize => info(
-                "Opérations",
-                "Catégoriser les opérations…",
+                OPERATIONS,
+                tr!("Catégoriser les opérations…"),
                 icon::SPARKLE,
                 Some("Ctrl+J"),
-                "deviner catégories manquantes automatique historique commerçants ia",
+                tr_mark!("deviner catégories manquantes automatique historique commerçants ia"),
             ),
             AutoFilters => info(
-                "Affichage",
-                "Filtres prédéfinis…",
+                VIEW,
+                tr!("Filtres prédéfinis…"),
                 icon::FUNNEL,
                 Some("F7"),
-                "filtrer période mois enregistrés",
+                tr_mark!("filtrer période mois enregistrés"),
             ),
             SaveFilter => info(
-                "Affichage",
-                "Enregistrer le filtre actuel…",
+                VIEW,
+                tr!("Enregistrer le filtre actuel…"),
                 icon::FUNNEL_SIMPLE,
                 None,
-                "mémoriser filtre",
+                tr_mark!("mémoriser filtre"),
             ),
             ApplyFilter(i) => {
                 let name = filter_name(i);
                 info(
-                    "Affichage",
-                    &format!("Filtrer : {name}"),
+                    VIEW,
+                    &tr!("Filtrer : {}", name),
                     icon::FUNNEL_SIMPLE,
                     None,
-                    "filtre prédéfini",
+                    tr_mark!("filtre prédéfini"),
                 )
             }
             ClearFilters => {
                 let mut i = info(
-                    "Affichage",
-                    "Retirer tous les filtres",
+                    VIEW,
+                    tr!("Retirer tous les filtres"),
                     icon::FUNNEL_X,
                     None,
-                    "effacer réinitialiser",
+                    tr_mark!("effacer réinitialiser"),
                 );
                 i.enabled = doc.is_some_and(|d| d.filters.is_active());
                 i
             }
             Scheduler => info(
-                "Comptes",
-                "Échéancier…",
+                ACCOUNTS,
+                tr!("Échéancier…"),
                 icon::CALENDAR_DOTS,
                 Some("Ctrl+E"),
-                "échéances prélèvements récurrents abonnements",
+                tr_mark!("échéances prélèvements récurrents abonnements"),
             ),
             Forecast => info(
-                "Comptes",
-                "Solde prévisionnel…",
+                ACCOUNTS,
+                tr!("Solde prévisionnel…"),
                 icon::CHART_LINE_UP,
                 None,
-                "prévision futur échéances",
+                tr_mark!("prévision futur échéances"),
             ),
             Transfer => {
                 let mut i = info(
-                    "Opérations",
-                    "Transfert de compte à compte…",
+                    OPERATIONS,
+                    tr!("Transfert de compte à compte…"),
                     icon::ARROWS_LEFT_RIGHT,
-                    Some("Ctrl+Maj+T"),
-                    "virement entre comptes épargne",
+                    Some(tr_mark!("Ctrl+Maj+T")),
+                    tr_mark!("virement entre comptes épargne"),
                 );
                 i.enabled = doc.is_some_and(|d| {
                     d.document.accounts.iter().filter(|a| !a.disabled).count() > 1
@@ -735,11 +763,11 @@ impl Command {
             }
             ConvertToTransfer => {
                 let mut i = info(
-                    "Opérations",
-                    "Convertir en transfert…",
+                    OPERATIONS,
+                    tr!("Convertir en transfert…"),
                     icon::LINK,
                     None,
-                    "lier virement autre compte",
+                    tr_mark!("lier virement autre compte"),
                 );
                 i.enabled = selection == 1
                     && doc.is_some_and(|d| {
@@ -753,22 +781,22 @@ impl Command {
             }
             SplitOperation => {
                 let mut i = info(
-                    "Opérations",
-                    "Ventiler l'opération…",
+                    OPERATIONS,
+                    tr!("Ventiler l'opération…"),
                     icon::ARROWS_SPLIT,
                     Some("F6"),
-                    "répartir plusieurs catégories parts",
+                    tr_mark!("répartir plusieurs catégories parts"),
                 );
                 i.enabled = selection == 1;
                 i
             }
             GoToSister => {
                 let mut i = info(
-                    "Opérations",
-                    "Aller à la ligne liée",
+                    OPERATIONS,
+                    tr!("Aller à la ligne liée"),
                     icon::ARROW_SQUARE_OUT,
                     None,
-                    "transfert sœur autre compte",
+                    tr_mark!("transfert sœur autre compte"),
                 );
                 i.enabled = selection == 1
                     && doc.is_some_and(|d| {
@@ -781,112 +809,112 @@ impl Command {
             }
             AddToScheduler => {
                 let mut i = info(
-                    "Opérations",
-                    "Ajouter à l'échéancier…",
+                    OPERATIONS,
+                    tr!("Ajouter à l'échéancier…"),
                     icon::CALENDAR_PLUS,
                     None,
-                    "récurrent mensuel échéance",
+                    tr_mark!("récurrent mensuel échéance"),
                 );
                 i.enabled = selection == 1;
                 i
             }
             ReverseCurrencies => info(
-                "Outils",
-                "Inverser les monnaies du compte…",
+                TOOLS,
+                tr!("Inverser les monnaies du compte…"),
                 icon::ARROWS_LEFT_RIGHT,
                 None,
-                "devise convertir euro franc",
+                tr_mark!("devise convertir euro franc"),
             ),
             Replace => info(
-                "Édition",
-                "Remplacer…",
+                EDIT,
+                tr!("Remplacer…"),
                 icon::SWAP,
                 Some("Ctrl+R"),
-                "rechercher texte tiers détail",
+                tr_mark!("rechercher texte tiers détail"),
             ),
             ToggleHideOld => {
                 let hidden = doc.is_some_and(|d| d.filters.hide_old_lines);
                 let label = if hidden {
-                    "Afficher les lignes inutiles"
+                    tr!("Afficher les lignes inutiles")
                 } else {
-                    "Cacher les lignes inutiles"
+                    tr!("Cacher les lignes inutiles")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::EYE_SLASH,
                     Some("Ctrl+H"),
-                    "masquer anciennes rapprochées",
+                    tr_mark!("masquer anciennes rapprochées"),
                 )
             }
             ToggleTranslucent => {
                 let label = if crate::theme::translucent() {
-                    "Fond opaque"
+                    tr!("Fond opaque")
                 } else {
-                    "Fond translucide (flou du bureau)"
+                    tr!("Fond translucide (flou du bureau)")
                 };
                 info(
-                    "Affichage",
+                    VIEW,
                     label,
                     icon::DROP_HALF,
                     None,
-                    "transparent vitré verre flou",
+                    tr_mark!("transparent vitré verre flou"),
                 )
             }
             Theme(ThemePreference::Dark) => info(
-                "Affichage",
-                "Mode sombre",
+                VIEW,
+                tr!("Mode sombre"),
                 icon::MOON,
                 None,
-                "thème nuit couleurs",
+                tr_mark!("thème nuit couleurs"),
             ),
             Theme(ThemePreference::Light) => info(
-                "Affichage",
-                "Mode clair",
+                VIEW,
+                tr!("Mode clair"),
                 icon::SUN,
                 None,
-                "thème jour couleurs",
+                tr_mark!("thème jour couleurs"),
             ),
             Theme(ThemePreference::System) => info(
-                "Affichage",
-                "Mode : suivre le système",
+                VIEW,
+                tr!("Mode : suivre le système"),
                 icon::DESKTOP,
                 None,
-                "thème automatique couleurs",
+                tr_mark!("thème automatique couleurs"),
             ),
             UseTheme(id) => {
                 let theme = crate::theme::by_id(id).unwrap_or(&crate::theme::THEMES[0]);
                 info(
-                    "Affichage",
-                    &format!("Thème : {}", theme.name),
+                    VIEW,
+                    &tr!("Thème : {}", theme.name),
                     icon::PALETTE,
                     None,
                     if theme.dark {
-                        "couleurs apparence sombre"
+                        tr_mark!("couleurs apparence sombre")
                     } else {
-                        "couleurs apparence clair"
+                        tr_mark!("couleurs apparence clair")
                     },
                 )
             }
             Language(lang) => info(
-                "Affichage",
-                &format!("Langue : {} (language)", lang.native_name()),
+                VIEW,
+                &tr!("Langue : {} (language)", lang.native_name()),
                 icon::TRANSLATE,
                 None,
-                "langue language traduction translation english anglais français french",
+                tr_mark!("langue language traduction translation english anglais français french"),
             ),
             NextAccount => info(
-                "Comptes",
-                "Compte suivant",
+                ACCOUNTS,
+                tr!("Compte suivant"),
                 icon::ARROW_RIGHT,
                 Some("Ctrl+Tab"),
                 "",
             ),
             PreviousAccount => info(
-                "Comptes",
-                "Compte précédent",
+                ACCOUNTS,
+                tr!("Compte précédent"),
                 icon::ARROW_LEFT,
-                Some("Ctrl+Maj+Tab"),
+                Some(tr_mark!("Ctrl+Maj+Tab")),
                 "",
             ),
             SelectAccount(i) => {
@@ -894,150 +922,150 @@ impl Command {
                     .and_then(|d| d.document.accounts.get(i))
                     .map_or(String::new(), |a| a.name.clone());
                 info(
-                    "Comptes",
-                    &format!("Aller au compte {name}"),
+                    ACCOUNTS,
+                    &tr!("Aller au compte {}", name),
                     icon::BANK,
                     None,
-                    "ouvrir afficher",
+                    tr_mark!("ouvrir afficher"),
                 )
             }
             Manage(Tab::Accounts) => info(
-                "Comptes",
-                "Gestion des comptes…",
+                ACCOUNTS,
+                tr!("Gestion des comptes…"),
                 icon::BANK,
                 Some("Ctrl+G"),
-                "créer supprimer renommer iban rib banque",
+                tr_mark!("créer supprimer renommer iban rib banque"),
             ),
             Manage(Tab::Categories) => info(
-                "Comptes",
-                "Catégories…",
+                ACCOUNTS,
+                tr!("Catégories…"),
                 icon::TAG,
                 None,
-                "classement créer renommer",
+                tr_mark!("classement créer renommer"),
             ),
             Manage(Tab::Payees) => info(
-                "Comptes",
-                "Tiers mémorisés…",
+                ACCOUNTS,
+                tr!("Tiers mémorisés…"),
                 icon::ADDRESS_BOOK,
                 Some("F5"),
-                "bénéficiaires",
+                tr_mark!("bénéficiaires"),
             ),
             Manage(Tab::Modes) => info(
-                "Comptes",
-                "Modes de paiement…",
+                ACCOUNTS,
+                tr!("Modes de paiement…"),
                 icon::CREDIT_CARD,
                 None,
-                "carte chèque virement",
+                tr_mark!("carte chèque virement"),
             ),
             Tack => {
                 let mut i = info(
-                    "Opérations",
-                    "Pointer la sélection",
+                    OPERATIONS,
+                    tr!("Pointer la sélection"),
                     icon::CHECK,
-                    Some("Espace"),
-                    "cocher marquer",
+                    Some(tr_mark!("Espace")),
+                    tr_mark!("cocher marquer"),
                 );
                 i.enabled = selection > 0;
                 i
             }
             ReconcileAll => info(
-                "Opérations",
-                "Rapprocher toutes les lignes pointées",
+                OPERATIONS,
+                tr!("Rapprocher toutes les lignes pointées"),
                 icon::CHECKS,
                 None,
-                "relevé banque",
+                tr_mark!("relevé banque"),
             ),
             SmartTack => info(
-                "Opérations",
-                "Pointage intelligent…",
+                OPERATIONS,
+                tr!("Pointage intelligent…"),
                 icon::SEAL_CHECK,
                 None,
-                "pointer automatiquement solde banque relevé deviner",
+                tr_mark!("pointer automatiquement solde banque relevé deviner"),
             ),
             ModifyGroup => {
                 let mut i = info(
-                    "Opérations",
-                    "Modifier le groupe…",
+                    OPERATIONS,
+                    tr!("Modifier le groupe…"),
                     icon::PENCIL_SIMPLE_LINE,
                     Some("Ctrl+M"),
-                    "plusieurs lignes sélection",
+                    tr_mark!("plusieurs lignes sélection"),
                 );
                 i.enabled = selection > 0;
                 i
             }
             ExtraFields => {
                 let mut i = info(
-                    "Opérations",
-                    "Champs supplémentaires…",
+                    OPERATIONS,
+                    tr!("Champs supplémentaires…"),
                     icon::LIST_PLUS,
                     Some("F3"),
-                    "valeurs",
+                    tr_mark!("valeurs"),
                 );
                 i.enabled = selection == 1;
                 i
             }
             Notes => info(
-                "Outils",
-                "Notes",
+                TOOLS,
+                tr!("Notes"),
                 icon::NOTE,
-                Some("Ctrl+Maj+N"),
-                "pense-bête mémo",
+                Some(tr_mark!("Ctrl+Maj+N")),
+                tr_mark!("pense-bête mémo"),
             ),
             Calculator => info(
-                "Outils",
-                "Calculatrice",
+                TOOLS,
+                tr!("Calculatrice"),
                 icon::CALCULATOR,
-                Some("Ctrl+Maj+C"),
-                "calcul",
+                Some(tr_mark!("Ctrl+Maj+C")),
+                tr_mark!("calcul"),
             ),
             Loan => info(
-                "Outils",
-                "Simulateur de crédit…",
+                TOOLS,
+                tr!("Simulateur de crédit…"),
                 icon::HOUSE_LINE,
                 Some("Ctrl+L"),
-                "emprunt prêt immobilier mensualité taux amortissement",
+                tr_mark!("emprunt prêt immobilier mensualité taux amortissement"),
             ),
             Currencies => info(
-                "Outils",
-                "Convertisseur de devises…",
+                TOOLS,
+                tr!("Convertisseur de devises…"),
                 icon::CURRENCY_CIRCLE_DOLLAR,
                 Some("Ctrl+D"),
-                "change cours bce dollar livre franc suisse",
+                tr_mark!("change cours bce dollar livre franc suisse"),
             ),
             Options => info(
-                "Outils",
-                "Options…",
+                TOOLS,
+                tr!("Options…"),
                 icon::SLIDERS,
                 Some("Ctrl+,"),
-                "préférences réglages paramètres",
+                tr_mark!("préférences réglages paramètres"),
             ),
             License => info(
-                "Aide",
-                "Licence…",
+                HELP,
+                tr!("Licence…"),
                 icon::KEY,
                 None,
-                "licence clé enregistrer activer achat",
+                tr_mark!("licence clé enregistrer activer achat"),
             ),
             About => info(
-                "Aide",
-                "À propos de BankPerfect",
+                HELP,
+                tr!("À propos de BankPerfect"),
                 icon::INFO,
                 None,
-                "version licence",
+                tr_mark!("version licence"),
             ),
             Help => info(
-                "Aide",
-                "Aide en ligne",
+                HELP,
+                tr!("Aide en ligne"),
                 icon::QUESTION,
                 None,
-                "manuel documentation",
+                tr_mark!("manuel documentation"),
             ),
             Palette => info(
-                "Outils",
-                "Palette de commandes",
+                TOOLS,
+                tr!("Palette de commandes"),
                 icon::COMMAND,
                 Some("Ctrl+K"),
-                "rechercher",
+                tr_mark!("rechercher"),
             ),
             Extension(index) => match crate::extensions::entry(index) {
                 Some(entry) => Info {
@@ -1053,7 +1081,7 @@ impl Command {
                     },
                 },
                 None => Info {
-                    group: "Extensions",
+                    group: i18n::tr(EXTENSIONS),
                     label: String::new(),
                     icon: icon::PUZZLE_PIECE,
                     shortcut: None,
@@ -1062,25 +1090,25 @@ impl Command {
                 },
             },
             ManageExtensions => info(
-                "Extensions",
-                "Gérer les extensions…",
+                EXTENSIONS,
+                tr!("Gérer les extensions…"),
                 icon::PUZZLE_PIECE,
                 None,
-                "plugins scripts luau modules",
+                tr_mark!("plugins scripts luau modules"),
             ),
             ExtensionsFolder => info(
-                "Extensions",
-                "Ouvrir le dossier des extensions",
+                EXTENSIONS,
+                tr!("Ouvrir le dossier des extensions"),
                 icon::FOLDER_OPEN,
                 None,
-                "plugins scripts luau",
+                tr_mark!("plugins scripts luau"),
             ),
             ExtensionsDocs => info(
-                "Extensions",
-                "Documentation des extensions",
+                EXTENSIONS,
+                tr!("Documentation des extensions"),
                 icon::BOOK_OPEN,
                 None,
-                "api luau développer créer plugin",
+                tr_mark!("api luau développer créer plugin"),
             ),
         };
         if !has_doc
@@ -1173,4 +1201,33 @@ fn filter_name(index: usize) -> String {
         .ok()
         .and_then(|f| f.get(index).cloned())
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bp_core::i18n::with_lang;
+
+    #[test]
+    fn commands_in_english() {
+        with_lang(Lang::En, || {
+            let save = Command::Save.info(None);
+            assert_eq!(save.label, "Save");
+            assert_eq!(save.group, "File");
+            let charts = Command::Charts.info(None);
+            assert_eq!(charts.shortcut, Some("Ctrl+Shift+G"));
+            assert!(charts.keywords.contains("pie"));
+            assert_eq!(Command::Undo.info(None).label, "Undo");
+            assert_eq!(
+                Command::Language(Lang::Fr).info(None).label,
+                "Language: Français"
+            );
+        });
+        with_lang(Lang::Fr, || {
+            let charts = Command::Charts.info(None);
+            assert_eq!(charts.group, "Rapports");
+            assert_eq!(charts.shortcut, Some("Ctrl+Maj+G"));
+            assert_eq!(Command::Undo.info(None).label, "Annuler");
+        });
+    }
 }

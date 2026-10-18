@@ -214,7 +214,7 @@ local courses = compte:operations({ category = "Alimentation", from = bp.today()
 | `amount` | nombre | signé : négatif pour une dépense |
 | `payee`, `details` | texte | tiers et détail |
 | `mode` | texte | `"Carte"`, `"Prélèvement"`, `"Virement reçu"`… ou un mode personnalisé |
-| `category` | texte ou `nil` | libellé complet, `"Habitation > EDF"` ; s'affecte par libellé, par nom s'il est unique, par identifiant ou par table catégorie |
+| `category` | texte ou `nil` | libellé complet, `"Logement > Électricité & gaz"` ; s'affecte par libellé, par nom s'il est unique, par identifiant ou par table catégorie |
 | `category_id` | nombre ou `nil` | lecture seule |
 | `tack` | texte | `"none"`, `"pointed"` ou `"reconciled"` ; un changement met la date de pointage au jour |
 | `mark_date` | date | date de pointage |
@@ -245,7 +245,7 @@ local op = bp.current_account():add({
 	details = "Pain",
 	amount = -4.20,              -- obligatoire ; "4,20" accepté
 	mode = "Carte",              -- par défaut : Carte (dépense) ou Virement reçu (recette)
-	category = "Alimentation > Epicerie",
+	category = "Alimentation > Courses",
 	tack = "pointed",            -- par défaut "none"
 	fields = { ticket = 1234 },  -- champs supplémentaires
 })
@@ -262,7 +262,7 @@ Comme **Opérations › Ventiler l'opération** (F6), `op:split` remplace une op
 ```lua
 local parts = op:split({
 	{ amount = 80, category = "Alimentation", details = "Courses" },
-	{ category = "Habitation", details = "Maison" }, -- sans montant : le reste
+	{ category = "Logement", details = "Maison" }, -- sans montant : le reste
 })
 ```
 
@@ -330,7 +330,7 @@ local loyer = bp.add_schedule({
 	payee = "Loyer",
 	amount = -850,
 	mode = "Prélèvement",
-	category = "Habitation",
+	category = "Logement",
 	next_date = "05/01/2026",
 	every = 1, unit = "months",  -- tous les mois
 	auto = true,                 -- inséré automatiquement à l'ouverture du fichier
@@ -364,7 +364,7 @@ bp.delete_schedule(loyer.index)
 
 ```lua
 bp.budget.set("Alimentation", -400)        -- dépense prévue par mois
-bp.budget.set("Salaire", 2500)             -- recette prévue
+bp.budget.set("Revenus", 2500)             -- recette prévue
 bp.budget.set("Loisirs", nil)              -- retire la catégorie du budget
 print(bp.budget.get("Alimentation"))       -- -400
 
@@ -385,7 +385,7 @@ print(r.expenses.budget, r.expenses.real)
 bp.rules.add({
 	contains = "carrefour+monoprix",  -- mots cherchés, comme dans la fenêtre des règles
 	any = true,                       -- « + » veut dire OU
-	category = "Alimentation > Epicerie",
+	category = "Alimentation > Courses",
 	auto = true,                      -- appliquée à chaque nouvelle ligne
 })
 
@@ -626,7 +626,7 @@ Une cellule est un texte, un nombre, une date, `ui.money(…)` ou `ui.cell(texte
 ```lua
 bp.on("operation_added", function(op)
 	if op.payee:lower():find("carrefour") and op.category == nil then
-		op.category = "Alimentation > Epicerie"
+		op.category = "Alimentation > Courses"
 	end
 end)
 

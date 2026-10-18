@@ -8,7 +8,7 @@
 //! {
 //!   "format": "bankperfect",
 //!   "version": 1,
-//!   "generator": "BankPerfect 9.7.1",
+//!   "generator": "BankPerfect 9.8.0",
 //!   "exported_at": "2026-10-12T04:50:00+02:00",
 //!   "group_name": "Mes comptes",
 //!   "accounts": [{ "name": "Courant", "operations": [{

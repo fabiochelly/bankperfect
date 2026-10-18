@@ -4,6 +4,10 @@
 
 local ui = bp.ui
 
+-- Textes affichés, traduits par l'application (fonction réservée au prélude).
+local text = __bp_text
+__bp_text = nil
+
 local function copy(spec)
 	local t = {}
 	if spec then
@@ -16,7 +20,7 @@ end
 
 local function ask(kind, spec)
 	if not coroutine.isyieldable() then
-		error(`bp.ui.{kind} : impossible ici (construction d'une fenêtre ou chargement de l'extension)`, 3)
+		error(text("not_here", kind), 3)
 	end
 	spec.__bp = kind
 	return coroutine.yield(spec)
@@ -44,7 +48,7 @@ end
 
 function ui.window(spec)
 	if type(spec) ~= "table" then
-		error("bp.ui.window{ … } attend une table", 2)
+		error(text("window_table"), 2)
 	end
 	return ask("window", spec)
 end
@@ -214,9 +218,9 @@ function ui.form(spec)
 		state = state,
 		view = body,
 		buttons = {
-			ui.button({ "Annuler", cancel = true }),
+			ui.button({ text("cancel"), cancel = true }),
 			ui.button({
-				spec.ok or "Valider",
+				spec.ok or text("ok"),
 				primary = true,
 				close = true,
 				on_click = function(s)

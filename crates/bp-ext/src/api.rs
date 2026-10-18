@@ -735,6 +735,69 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         })?,
     )?;
     bp.set(
+        "suggest_category",
+        lua.create_function(|lua, target: Value| {
+            with_session(lua, |s| {
+                let (payee, details, amount, mode) = match &target {
+                    Value::Table(t) => {
+                        let mode = match t.get::<Option<String>>("mode")? {
+                            Some(m) => Some(crate::objects::resolve_mode(&s.document, &m)?),
+                            None => None,
+                        };
+                        let amount = match t.get::<Value>("amount")? {
+                            Value::Nil => Amount::ZERO,
+                            v => amount_from_value(&v)?,
+                        };
+                        (
+                            t.get::<Option<String>>("payee")?.unwrap_or_default(),
+                            t.get::<Option<String>>("details")?.unwrap_or_default(),
+                            amount,
+                            mode,
+                        )
+                    }
+                    other => {
+                        let op = op_from_value(other)?;
+                        let (a, k) = op.locate(s)?;
+                        let o = &s.document.accounts[a].operations[k];
+                        (
+                            o.payee.clone(),
+                            o.details.clone(),
+                            o.amount,
+                            Some(o.mode.clone()),
+                        )
+                    }
+                };
+                let suggestion = s.categorizer().suggest(&bp_core::categorize::Query {
+                    payee: &payee,
+                    details: &details,
+                    amount,
+                    mode: mode.as_ref(),
+                    merchant_code: None,
+                });
+                let describe = |c: &bp_core::categorize::Candidate| -> mlua::Result<Table> {
+                    let t = lua.create_table()?;
+                    t.set("category", s.document.category_label(c.category))?;
+                    t.set("id", c.category)?;
+                    t.set("confidence", (c.confidence as f64 * 100.0).round() / 100.0)?;
+                    t.set("sure", c.confidence >= bp_core::categorize::AUTO_THRESHOLD)?;
+                    t.set("source", c.source.label())?;
+                    t.set("reason", c.reason.clone())?;
+                    Ok(t)
+                };
+                let Some(best) = suggestion.best() else {
+                    return Ok(Value::Nil);
+                };
+                let result = describe(best)?;
+                let alternatives = lua.create_table()?;
+                for c in suggestion.candidates.iter().skip(1) {
+                    alternatives.raw_push(describe(c)?)?;
+                }
+                result.set("alternatives", alternatives)?;
+                Ok(Value::Table(result))
+            })
+        })?,
+    )?;
+    bp.set(
         "file",
         lua.create_function(|lua, ()| {
             let info = lua.app_data_ref::<crate::session::Session>().map(|s| {

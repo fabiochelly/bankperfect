@@ -226,6 +226,7 @@ struct RawTransaction {
     checknum: Option<String>,
     name: Option<String>,
     memo: Option<String>,
+    sic: Option<String>,
 }
 
 impl RawTransaction {
@@ -239,6 +240,7 @@ impl RawTransaction {
             "CHECKNUM" => &mut self.checknum,
             "NAME" => &mut self.name,
             "MEMO" => &mut self.memo,
+            "SIC" => &mut self.sic,
             _ => return,
         };
         if slot.is_none() {
@@ -400,6 +402,7 @@ impl Builder<'_> {
                 .map(str::trim)
                 .filter(|f| !f.is_empty())
                 .map(str::to_string),
+            merchant_code: raw.sic.as_deref().and_then(|s| s.trim().parse().ok()),
         })
     }
 

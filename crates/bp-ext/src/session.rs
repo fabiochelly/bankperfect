@@ -71,6 +71,9 @@ pub(crate) struct Session {
     /// Filtres de la grille ; `filters_changed` : à appliquer.
     pub filters: bp_core::filter::Filters,
     pub filters_changed: bool,
+    /// Index de catégorisation et empreinte du document pour laquelle il a
+    /// été construit (`bp.suggest_category` dans une boucle).
+    categorizer: Option<(u64, std::rc::Rc<bp_core::categorize::Categorizer>)>,
 }
 
 impl Session {
@@ -94,6 +97,31 @@ impl Session {
             select: None,
             filters: ctx.filters.clone(),
             filters_changed: false,
+            categorizer: None,
+        }
+    }
+
+    /// Index de catégorisation à jour (reconstruit si une catégorie, un
+    /// libellé ou une opération a changé depuis le dernier appel).
+    pub fn categorizer(&mut self) -> std::rc::Rc<bp_core::categorize::Categorizer> {
+        use std::hash::{Hash, Hasher};
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        for c in &self.document.categories {
+            (c.id, &c.name, c.is_child).hash(&mut hasher);
+        }
+        for op in self.document.accounts.iter().flat_map(|a| &a.operations) {
+            (op.uid, op.category, &op.payee, &op.details, op.amount).hash(&mut hasher);
+        }
+        bp_core::feature_store::raw(&self.document, bp_core::categorize::ai::STORE_KEY)
+            .hash(&mut hasher);
+        let fingerprint = hasher.finish();
+        match &self.categorizer {
+            Some((f, c)) if *f == fingerprint => c.clone(),
+            _ => {
+                let c = std::rc::Rc::new(bp_core::categorize::Categorizer::new(&self.document));
+                self.categorizer = Some((fingerprint, c.clone()));
+                c
+            }
         }
     }
 

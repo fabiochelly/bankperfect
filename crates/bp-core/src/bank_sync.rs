@@ -362,6 +362,7 @@ fn transaction(t: &Value) -> Option<ImportedOperation> {
         subcategory: None,
         tack: None,
         fitid,
+        merchant_code: text_at(t, &["merchant_category_code"]).and_then(|c| c.trim().parse().ok()),
     })
 }
 
@@ -458,7 +459,7 @@ mod tests {
             r#"{"transactions":[
                 {"entry_reference":"E1","transaction_amount":{"currency":"EUR","amount":"42.50"},
                  "credit_debit_indicator":"DBIT","status":"BOOK","booking_date":"2026-10-02",
-                 "value_date":"2026-10-03","creditor":{"name":"CARREFOUR"},
+                 "value_date":"2026-10-03","creditor":{"name":"CARREFOUR"},"merchant_category_code":"5411",
                  "remittance_information":["CARTE 01/10 CARREFOUR","PARIS"]},
                 {"transaction_id":"T2","transaction_amount":{"currency":"EUR","amount":"1500"},
                  "credit_debit_indicator":"CRDT","status":"BOOK","booking_date":"2026-10-05",
@@ -475,6 +476,8 @@ mod tests {
         assert_eq!(ops[0].payee, "CARREFOUR");
         assert_eq!(ops[0].details, "CARTE 01/10 CARREFOUR PARIS");
         assert_eq!(ops[0].fitid.as_deref(), Some("E1"));
+        assert_eq!(ops[0].merchant_code, Some(5411));
+        assert_eq!(ops[1].merchant_code, None);
         assert_eq!(ops[0].value_date, parse_iso_date("2026-10-03"));
         assert_eq!(ops[1].amount, Amount::from_cents(150_000));
         assert_eq!(ops[1].payee, "EMPLOYEUR SA");

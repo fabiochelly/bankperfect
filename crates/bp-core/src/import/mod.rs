@@ -121,6 +121,9 @@ pub struct ImportedOperation {
     pub tack: Option<Tack>,
     /// Identifiant de la transaction attribué par la banque (OFX `FITID`).
     pub fitid: Option<String>,
+    /// Code commerçant d'un paiement par carte (MCC : OFX `SIC`,
+    /// synchronisation), pour la catégorisation automatique.
+    pub merchant_code: Option<u16>,
 }
 
 /// Compte trouvé dans un fichier, avec ses opérations lisibles.
@@ -1211,6 +1214,7 @@ pub(crate) fn build_operation(
         subcategory: optional(raw.subcategory),
         tack: raw.tack,
         fitid: None,
+        merchant_code: None,
     })
 }
 
@@ -1301,6 +1305,7 @@ pub(crate) mod tests {
             subcategory: None,
             tack: None,
             fitid: None,
+            merchant_code: None,
         }
     }
 

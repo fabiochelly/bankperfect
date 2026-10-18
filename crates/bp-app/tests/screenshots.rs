@@ -876,3 +876,103 @@ fn license_screens() {
         },
     );
 }
+
+/// Relevé OFX fictif pour l'aperçu d'import.
+const SAMPLE_OFX: &str = "OFXHEADER:100\nDATA:OFXSGML\nVERSION:102\n\n<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>EUR\n<BANKACCTFROM><BANKID>30001<BRANCHID>00001<ACCTID>99999999999</BANKACCTFROM>\n<BANKTRANLIST>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261017<TRNAMT>-4.20<FITID>X1<NAME>CB BOULANGERIE DU MARCHE</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261017<TRNAMT>-63.18<FITID>X2<NAME>CB LIDL 4521<SIC>5411</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261016<TRNAMT>-54.90<FITID>X3<NAME>CB TOTAL ACCESS VILLEJUIF</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261016<TRNAMT>-15.99<FITID>X4<NAME>PRLV SEPA ORANGE SA-ORANGE<MEMO>Votre abonnement mobile</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261015<TRNAMT>-12.90<FITID>X5<NAME>CB PHARMACIE DU CENTRE</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261015<TRNAMT>-30.00<FITID>X6<NAME>PRLV SEPA LC FITNESS KREMLIN</STMTTRN>\n\
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261014<TRNAMT>24.46<FITID>X7<NAME>VIR SEPA CPAM DES YVELINES</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261014<TRNAMT>-60.00<FITID>X8<NAME>VIR INST MARTIN DUPONT<MEMO>Kine</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261013<TRNAMT>-23.00<FITID>X9<NAME>VIR Abonnement Claude Pro</STMTTRN>\n\
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261013<TRNAMT>-250.00<FITID>X10<NAME>VIR DEPENSES APPART</STMTTRN>\n\
+</BANKTRANLIST><LEDGERBAL><BALAMT>1000.00<DTASOF>20261017</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>\n";
+
+/// Catégorisation automatique : fenêtre « Catégoriser », baguette magique de
+/// la saisie, colonne des catégories prévues à l'import.
+#[test]
+#[ignore]
+fn categorize_screenshots() {
+    render("70-categoriser", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::J);
+    });
+    render("71-categoriser-clair", egui::Theme::Light, |h| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::J);
+    });
+    render("72-saisie-devinee", egui::Theme::Dark, |h| {
+        h.get_by_label_contains("Nouvelle opération").click();
+        h.run_steps(10);
+        click_at(h, egui::pos2(1210.0, 433.0));
+        h.event(egui::Event::Text(
+            "PRLV SEPA EDF clients particuliers".into(),
+        ));
+        h.run_steps(4);
+    });
+    render("73-saisie-suggestions", egui::Theme::Dark, |h| {
+        h.get_by_label_contains("Nouvelle opération").click();
+        h.run_steps(10);
+        click_at(h, egui::pos2(1210.0, 433.0));
+        h.event(egui::Event::Text("VIR INST MARTIN".into()));
+        click_at(h, egui::pos2(1210.0, 487.0));
+        h.event(egui::Event::Text("Kine".into()));
+        h.run_steps(4);
+    });
+    render("74-baguette", egui::Theme::Dark, |h| {
+        h.get_by_label_contains("Nouvelle opération").click();
+        h.run_steps(10);
+        click_at(h, egui::pos2(1210.0, 433.0));
+        h.event(egui::Event::Text("VIR INST MARTIN".into()));
+        click_at(h, egui::pos2(1210.0, 487.0));
+        h.event(egui::Event::Text("Kine".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::F9);
+        h.run_steps(4);
+    });
+    let dir = tempfile_dir();
+    let ofx = dir.join("releve.ofx");
+    std::fs::write(&ofx, SAMPLE_OFX).unwrap();
+    render("75-import-categories", egui::Theme::Dark, move |h| {
+        h.input_mut()
+            .dropped_files
+            .push(std::sync::Arc::new(DroppedPath(ofx)));
+        h.run_steps(4);
+    });
+}
+
+/// Clic gauche à une position (points logiques).
+fn click_at(h: &mut Harness<'_, bankperfect::BankPerfectApp>, pos: egui::Pos2) {
+    let press = |pressed: bool| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Primary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.event(egui::Event::PointerMoved(pos));
+    h.event(press(true));
+    h.run_steps(1);
+    h.event(press(false));
+    h.run_steps(2);
+}
+
+/// Fichier déposé sur la fenêtre.
+#[derive(Debug)]
+struct DroppedPath(PathBuf);
+
+impl egui::DroppedFile for DroppedPath {
+    fn path(&self) -> &std::path::Path {
+        &self.0
+    }
+
+    fn bytes(&self) -> Result<Vec<u8>, String> {
+        std::fs::read(&self.0).map_err(|e| e.to_string())
+    }
+}
+
+fn tempfile_dir() -> PathBuf {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots/fixtures");
+    std::fs::create_dir_all(&dir).unwrap();
+    dir
+}

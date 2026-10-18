@@ -210,5 +210,6 @@ fn imported_operation(
         subcategory,
         tack,
         fitid,
+        merchant_code: None,
     }))
 }

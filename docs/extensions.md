@@ -315,6 +315,9 @@ Les montants sont des nombres (euros, ou devise du compte), gardés au dix-milli
 | `bp.modes()` | liste de `{ name, debit, custom }` |
 | `bp.add_mode(nom, dépense?)` | crée un mode personnalisé (dépense par défaut) |
 | `bp.payees()` | tiers mémorisés : `{ caption, payee, details, mode, category, amount }` |
+| `bp.suggest_category(op)` | catégorie devinée pour une opération ou une table `{ payee, details, amount, mode }`, ou `nil` : `{ category, id, confidence, sure, source, reason, alternatives }` |
+
+`bp.suggest_category` utilise la même catégorisation automatique que l'application : l'historique du fichier d'abord (même tiers, montant proche), puis le dictionnaire intégré des commerçants. `confidence` va de 0 à 1 ; `sure` vaut `true` au-delà de 0,8, seuil à partir duquel l'application remplit seule la catégorie. `source` dit d'où vient la proposition (`historique`, `mots du libellé`, `commerçant reconnu`, `code commerçant`, `IA`) et `reason` l'explique en clair. `alternatives` liste les deux autres propositions éventuelles. L'index est construit au premier appel puis réutilisé tant que le fichier ne change pas : on peut l'appeler dans une boucle.
 
 ## Échéancier, budget, règles
 
@@ -774,6 +777,30 @@ bp.command({
 })
 ```
 
+### Deviner la catégorie de la sélection, au clic droit
+
+```lua
+bp.command({
+	title = "Deviner les catégories manquantes",
+	icon = "magic-wand",
+	needs = "selection",
+	menu = "grid",
+	run = function()
+		local n = 0
+		for _, op in bp.selection() do
+			if op.category == nil then
+				local guess = bp.suggest_category(op)
+				if guess and guess.sure then
+					op.category = guess.id
+					n += 1
+				end
+			end
+		end
+		bp.ui.toast(`{n} opération(s) catégorisée(s)`)
+	end,
+})
+```
+
 ### Ranger les opérations sans catégorie
 
 ```lua
@@ -834,7 +861,7 @@ bp.accounts{ all? }   bp.account(nom)   bp.current_account()   bp.add_account{ n
 bp.selection()   bp.visible()   bp.find(uid)   bp.select(ops)   bp.transfer{ from, to, amount, date, details, category }
 op:split{ { amount, category, details }, … }   op.split_info
 bp.categories()   bp.category(x)   bp.add_category(nom, mère?)   bp.rename_category(c, nom)   bp.delete_category(c)
-bp.modes()   bp.add_mode(nom, dépense?)   bp.payees()   bp.file()   bp.filter{ … } | bp.filter(false) | bp.filter()
+bp.modes()   bp.add_mode(nom, dépense?)   bp.payees()   bp.suggest_category(op)   bp.file()   bp.filter{ … } | bp.filter(false) | bp.filter()
 
 bp.schedules()   bp.add_schedule{ … }   bp.update_schedule(i, { … })   bp.delete_schedule(i)   bp.forecast(compte, date, { monthly })
 bp.budget.get(cat)   bp.budget.set(cat, montant)   bp.budget.entries()   bp.budget.report{ month | year | all, accounts }

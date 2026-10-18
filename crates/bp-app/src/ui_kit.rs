@@ -220,6 +220,31 @@ pub fn category_combo(
     category: &mut Option<u32>,
     width: f32,
 ) -> bool {
+    category_combo_impl(ui, id, document, styles, category, width, false)
+}
+
+/// Comme [`category_combo`], de largeur fixe : un libellé trop long est
+/// coupé avec « … » (colonnes alignées d'une liste).
+pub fn category_combo_fixed(
+    ui: &mut egui::Ui,
+    id: &str,
+    document: &Document,
+    styles: &std::collections::HashMap<u32, crate::category_icons::CategoryStyle>,
+    category: &mut Option<u32>,
+    width: f32,
+) -> bool {
+    category_combo_impl(ui, id, document, styles, category, width, true)
+}
+
+fn category_combo_impl(
+    ui: &mut egui::Ui,
+    id: &str,
+    document: &Document,
+    styles: &std::collections::HashMap<u32, crate::category_icons::CategoryStyle>,
+    category: &mut Option<u32>,
+    width: f32,
+    fixed: bool,
+) -> bool {
     let pal = palette(ui);
     let before = *category;
     let style = category.and_then(|id| styles.get(&id).copied());
@@ -231,26 +256,29 @@ pub fn category_combo(
         }
         None => RichText::new("Aucune catégorie").color(pal.muted),
     };
-    egui::ComboBox::from_id_salt(id)
+    let mut combo = egui::ComboBox::from_id_salt(id)
         .selected_text(selected)
         .width(width - ui.spacing().button_padding.x)
-        .height(420.0)
-        .show_ui(ui, |ui| {
-            ui.selectable_value(category, None, "Aucune catégorie");
-            for c in &document.categories {
-                let style = styles.get(&c.id).copied();
-                let glyph = style.map_or(icon::TAG, |s| s.icon);
-                let indent = if c.is_child { "      " } else { "" };
-                let mut text = RichText::new(format!("{indent}{glyph}  {}", c.name));
-                if !c.is_child {
-                    text = text.family(crate::theme::semibold());
-                }
-                if let Some(s) = style {
-                    text = text.color(crate::theme::category_color(&pal, s.color));
-                }
-                ui.selectable_value(category, Some(c.id), text);
+        .height(420.0);
+    if fixed {
+        combo = combo.truncate();
+    }
+    combo.show_ui(ui, |ui| {
+        ui.selectable_value(category, None, "Aucune catégorie");
+        for c in &document.categories {
+            let style = styles.get(&c.id).copied();
+            let glyph = style.map_or(icon::TAG, |s| s.icon);
+            let indent = if c.is_child { "      " } else { "" };
+            let mut text = RichText::new(format!("{indent}{glyph}  {}", c.name));
+            if !c.is_child {
+                text = text.family(crate::theme::semibold());
             }
-        });
+            if let Some(s) = style {
+                text = text.color(crate::theme::category_color(&pal, s.color));
+            }
+            ui.selectable_value(category, Some(c.id), text);
+        }
+    });
     *category != before
 }
 
@@ -309,6 +337,16 @@ pub fn icon_field(
 /// Cellule de largeur fixe, texte aligné à gauche (`Min`) ou à droite (`Max`)
 /// et coupé avec « … » s'il déborde.
 pub fn cell(ui: &mut egui::Ui, width: f32, align: egui::Align, text: RichText) {
+    cell_response(ui, width, align, text);
+}
+
+/// Comme [`cell`], en renvoyant la zone (pour une infobulle).
+pub fn cell_response(
+    ui: &mut egui::Ui,
+    width: f32,
+    align: egui::Align,
+    text: RichText,
+) -> egui::Response {
     let layout = if align == egui::Align::Max {
         egui::Layout::right_to_left(egui::Align::Center)
     } else {
@@ -317,7 +355,8 @@ pub fn cell(ui: &mut egui::Ui, width: f32, align: egui::Align, text: RichText) {
     ui.allocate_ui_with_layout(egui::vec2(width, 22.0), layout, |ui| {
         ui.set_min_width(width);
         ui.add(egui::Label::new(text).truncate());
-    });
+    })
+    .response
 }
 
 /// Texte sur une seule ligne, coupé avec « … » au-delà de `max_width`.

@@ -67,6 +67,17 @@ pub struct Settings {
     pub text_scale: f32,
     /// Extensions désactivées (identifiants).
     pub disabled_extensions: Vec<String>,
+    /// Catégoriser les opérations importées que les règles laissent sans
+    /// catégorie (suggestions sûres seulement).
+    pub categorize_on_import: bool,
+    /// Pendant la saisie, remplir la catégorie quand la suggestion est sûre.
+    pub categorize_in_entry: bool,
+    /// Recours à l'IA (API Claude) pour les libellés inconnus, sur demande.
+    pub ai_categorize: bool,
+    /// Clé d'API Anthropic de l'utilisateur.
+    pub ai_api_key: String,
+    /// Modèle utilisé (voir `bp_core::categorize::ai::MODELS`).
+    pub ai_model: String,
     /// Réglages lus sur disque : seuls ceux-là sont réenregistrés (les tests
     /// partent de réglages par défaut et n'écrivent rien).
     #[serde(skip)]
@@ -105,6 +116,11 @@ impl Default for Settings {
             date_format: DateFormat::default(),
             text_scale: 1.0,
             disabled_extensions: Vec::new(),
+            categorize_on_import: true,
+            categorize_in_entry: true,
+            ai_categorize: false,
+            ai_api_key: String::new(),
+            ai_model: bp_core::categorize::ai::DEFAULT_MODEL.into(),
             persist: false,
         }
     }
@@ -252,6 +268,8 @@ pub mod shared {
         Mutex::new((None, super::DateFormat::Long));
     static AUTOCOMPLETE: AtomicBool = AtomicBool::new(true);
     static CENTS: AtomicBool = AtomicBool::new(false);
+    static CATEGORIZE_IMPORT: AtomicBool = AtomicBool::new(true);
+    static CATEGORIZE_ENTRY: AtomicBool = AtomicBool::new(true);
 
     pub fn set(settings: &super::Settings) {
         if let Ok(mut state) = STATE.lock()
@@ -261,6 +279,18 @@ pub mod shared {
         }
         AUTOCOMPLETE.store(settings.autocomplete, Ordering::Relaxed);
         CENTS.store(settings.amounts_in_cents, Ordering::Relaxed);
+        CATEGORIZE_IMPORT.store(settings.categorize_on_import, Ordering::Relaxed);
+        CATEGORIZE_ENTRY.store(settings.categorize_in_entry, Ordering::Relaxed);
+    }
+
+    /// Catégoriser les opérations importées.
+    pub fn categorize_on_import() -> bool {
+        CATEGORIZE_IMPORT.load(Ordering::Relaxed)
+    }
+
+    /// Remplir la catégorie pendant la saisie quand la suggestion est sûre.
+    pub fn categorize_in_entry() -> bool {
+        CATEGORIZE_ENTRY.load(Ordering::Relaxed)
     }
 
     /// Suggestions de tiers pendant la saisie.

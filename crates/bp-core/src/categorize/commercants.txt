@@ -1,0 +1,2237 @@
+# Dictionnaire des commerçants et des mots génériques de BankPerfect.
+#
+# Une section par catégorie générique : [identifiant] (voir taxonomy.rs).
+# Une entrée par ligne : des mots en minuscules sans accents, cherchés comme
+# mots entiers et consécutifs dans le tiers, puis dans le détail. Un « * » en
+# fin de mot accepte toute fin de mot (« boulangeri* »).
+#
+# Options après « ; », séparées par des espaces :
+#   -          dépenses seulement        +       recettes seulement
+#   <30        montant ≤ 30 €            >100    montant ≥ 100 €
+#   20..80     montant entre 20 et 80 €
+#   ~          indice faible (nom ambigu, mot courant)
+#   @cb @prlv @vir @dab @chq   nature de l'opération (préfixe du libellé,
+#              sinon mode de paiement)
+#
+# L'entrée la plus longue l'emporte ; à longueur égale, le tiers passe avant
+# le détail. Un détail plus précis complète un tiers générique (« impôts »
+# puis « prélèvement à la source » → impôt sur le revenu).
+
+# ───────────────────────────── Alimentation ─────────────────────────────
+
+[alimentation.courses]
+carrefour
+carrefour market
+carrefour city
+carrefour express
+carrefour contact
+carrefour proxi
+carrefour drive
+leclerc
+e leclerc
+eleclerc
+centre leclerc
+leclerc drive
+auchan
+auchan supermarche
+my auchan
+intermarche
+intermarche super
+intermarche contact
+itm
+super u
+hyper u
+u express
+utile ; ~
+systeme u
+magasins u
+casino
+geant casino
+petit casino
+monoprix
+monop
+franprix
+lidl
+aldi
+netto
+leader price
+cora
+match
+supermarche match
+spar
+vival
+proxi
+g20
+diagonal
+coccinelle
+colruyt
+grand frais
+picard
+thiriet
+naturalia
+biocoop
+la vie claire
+bio c bon
+satoriz
+l eau vive
+so bio
+bio monde
+les nouveaux robinsons
+day by day
+la grande epicerie
+epicerie ; ~
+epicerie fine ; ~
+superette
+supermarche
+hypermarche
+alimentation generale
+alimentation ; ~
+mini market
+minimarket
+costco
+chronodrive
+houra
+la belle vie
+toogoodtogo
+too good to go
+o tera
+marcel et fils
+cocorico
+nicolas ; ~
+v and b
+cave ; ~
+caviste
+la cave
+lidl plus
+drive ; ~ @cb
+
+[alimentation.commerces]
+boulangerie ; <60
+boulangeries ; <60
+boulangeri* ; <60
+boulange ; <60
+boul ; <30 ~
+boulanger ; <15 ~
+fournil ; <60
+le fournil ; <60
+au fournil ; <60
+patisserie ; <80
+patisseri* ; <80
+patissier ; <80
+viennoiserie* ; <40
+pains ; <30 ~
+pain ; <30 ~
+au pain ; <30
+ble ; <20 ~
+mie ; <30 ~
+maison kayser ; <60
+eric kayser ; <60
+marie blachere ; <60
+ange ; <30 ~
+boulangerie ange ; <60
+feuillette ; <60
+la mie caline ; <40
+banette ; <60
+paul ; <30 ~ @cb
+brioche doree ; <30 ~
+boucherie
+boucher
+charcuterie
+charcutier
+traiteur ; ~
+fromagerie
+fromager
+fromages ; ~
+poissonnerie
+poissonnier
+maree ; ~
+primeur
+primeurs
+fruits et legumes
+maraicher
+marche ; <80 ~
+halles ; ~
+ferme ; ~
+torrefaction
+torrefacteur
+chocolaterie ; ~
+volailler
+rotisserie ; ~
+
+[alimentation.restaurants]
+restaurant
+restaurants
+resto
+restau
+brasserie
+bistro*
+cafe ; <40 ~
+cafes ; <40 ~
+bar ; ~
+pub ; ~
+creperie
+pizzeria
+pizza
+pizzas
+sushi
+sushis
+trattoria
+osteria
+auberge ; ~
+grill ; ~
+kebab
+burger
+burgers
+tacos
+o tacos
+ramen
+poke
+cantina
+taverne
+buffalo grill
+hippopotamus
+courtepaille
+flunch
+leon de bruxelles
+del arte
+pizza hut
+dominos
+domino s
+dominos pizza
+pizza del arte
+big mamma
+starbucks
+columbus cafe
+mcdonald*
+mc donald*
+mcdo
+burger king
+bk ; ~
+quick ; ~
+kfc
+subway
+five guys
+pret a manger
+class croute
+bagelstein
+pomme de pain
+la croissanterie
+exki
+cojean
+big fernand
+deliveroo
+uber eats
+ubereats
+uber eat
+just eat
+justeat
+frichti
+cantine ; ~ -
+self ; ~
+restaurant d entreprise
+rie ; ~
+sodexo
+elior
+eurest
+compass group
+api restauration
+swile
+edenred
+ticket restaurant
+bistrot
+chez ; ~ <80
+la boucherie ; >15
+au bureau
+memphis coffee
+tablapizza
+sushi shop
+planet sushi
+wok ; ~
+tex mex
+indien ; ~
+food ; ~
+snack
+glacier
+
+# ───────────────────────────── Logement ─────────────────────────────
+
+[logement.loyer]
+loyer
+loyers
+quittance
+bail ; ~
+paris habitat
+hlm
+opac
+office public de l habitat
+cdc habitat
+i3f
+immobiliere 3f
+logirep
+batigere
+vilogia
+seqens
+erilia
+icf habitat
+action logement
+foncia ; ~ >300
+nexity ; ~ >300
+citya ; ~ >300
+orpi ; ~ >300
+century 21 ; ~ >300
+sergic ; ~ >300
+oralia ; ~ >300
+square habitat ; ~ >300
+gestion locative
+
+[logement.credit]
+pret immobilier
+pret immo
+credit immobilier
+pret habitat
+echeance pret
+ech pret
+ech pret immo
+remboursement pret
+pret ; ~ @prlv >200
+credit logement
+cardif ; ~
+assurance emprunteur
+crd pret
+pret ptz
+ptz
+
+[logement.charges]
+syndic
+syndicat des coproprietaires
+copropriete
+copro
+charges ; ~
+charges copro*
+matera
+bellman
+homeland
+loiselet
+foncia ; ~
+nexity ; ~
+citya ; ~
+sergic ; ~
+oralia ; ~
+lamy ; ~
+
+[logement.energie]
+edf
+edf clients particuliers
+electricite de france
+gaz de france
+engie
+grdf
+enedis
+totalenergies ; @prlv
+total energies ; @prlv
+total direct energie
+direct energie
+ekwateur
+planete oui
+mint energie
+ohm energie
+vattenfall
+eni ; @prlv
+eni gas
+enercoop
+octopus energy
+alpiq
+iberdrola
+ilek
+happ e
+sowee
+gaz ; ~ @prlv
+electricite
+fioul
+butagaz
+primagaz
+antargaz
+bois de chauffage
+granules ; ~
+
+[logement.eau]
+veolia
+veolia eau
+suez eau
+suez ; ~ @prlv
+saur
+eau de paris
+eaux de
+eau du grand lyon
+lyonnaise des eaux
+sede
+regie des eaux
+eau potable
+service des eaux
+compagnie des eaux
+
+[logement.assurance]
+assurance habitation
+multirisque habitation
+mrh
+luko
+lovys
+leocare
+acheel
+hiscox
+assurance logement
+
+[logement.travaux]
+leroy merlin
+castorama
+brico depot
+bricomarche
+bricorama
+mr bricolage
+monsieur bricolage
+weldom
+point p
+gedimat
+big mat
+bigmat
+lapeyre
+jardiland
+truffaut
+botanic
+gamm vert
+villaverde
+jardinerie
+bricolage
+quincaillerie
+plombier
+plomberie
+electricien
+serrurier
+serrurerie
+manomano
+brico ; ~
+tollens
+zolpan
+cedeo
+point vert
+kiloutou
+loxam
+ramonage
+chauffagiste
+vitrier
+peinture ; ~
+menuiserie
+artisan ; ~
+pepiniere
+espace emeraude
+
+[logement.equipement]
+ikea
+but ; ~ >20
+conforama
+maisons du monde
+maison du monde
+alinea
+habitat ; ~
+zara home
+h m home
+casa ; ~
+westwing
+made com
+camif
+roche bobois
+cuir center
+atlas ; ~
+vente unique
+home24
+la foir fouille
+foir fouille
+tediber
+emma matelas
+maison de la literie
+la compagnie du lit
+literie
+bouchara
+leroy merlin deco
+la redoute interieurs
+fly ; ~
+gifi ; ~
+hema ; ~
+centrakor ; ~
+ameublement
+meubles
+mobilier
+decoration
+deco ; ~
+luminaire*
+cuisinella
+schmidt ; ~
+mobalpa
+darty cuisine
+
+[logement.services]
+cesu
+cheque emploi service
+urssaf cesu
+shiva
+o2 care
+o2
+wecasa
+helpling
+family sphere
+domidom
+aide a domicile
+menage ; ~
+aide menagere
+femme de menage
+ad seniors
+zenia
+petits fils
+jardinier ; ~
+
+# ───────────────────────────── Abonnements ─────────────────────────────
+
+[abonnements.telecom]
+orange
+orange sa
+orange sa orange
+sosh
+sfr
+red by sfr
+sfr box
+bouygues
+bouygues telecom
+bytel
+b and you
+free mobile
+free telecom
+freebox
+free hautdebit
+free haut debit
+free pro
+la poste mobile
+prixtel
+nrj mobile
+syma
+syma mobile
+lebara
+lycamobile
+coriolis
+auchan telecom
+cic mobile
+credit mutuel mobile
+cm mobile
+nordnet
+k net
+zeop
+starlink
+videofutur
+virgin mobile
+youprice
+reglo mobile
+telephone ; ~
+abonnement mobile ; ~
+forfait ; ~ @prlv
+
+[abonnements.medias]
+netflix
+spotify
+deezer
+disney plus
+disneyplus
+disney ; ~ <30 @prlv
+amazon prime
+prime video
+primevideo
+canal
+canal plus
+canalplus
+canal sat
+mycanal
+molotov
+apple music
+apple tv
+youtube premium
+youtube
+paramount
+paramount plus
+max ; ~ <30
+hbo max
+ocs
+salto
+audible
+kindle unlimited
+qobuz
+tidal
+le monde
+le figaro
+liberation
+mediapart
+les echos
+l equipe
+le parisien
+ouest france
+cafeyn
+abonnement presse
+dazn
+bein sports
+bein
+rmc sport
+crunchyroll
+twitch
+telerama
+le point
+l express
+courrier international
+arte ; ~
+france tv
+
+[abonnements.logiciels]
+apple com bill
+apple com
+itunes
+icloud
+google storage
+google one
+google play
+google ; ~
+google workspace
+microsoft
+office 365
+microsoft 365
+msft
+adobe
+dropbox
+1password
+nordvpn
+proton
+protonmail
+openai
+chatgpt
+claude
+claude pro
+claude ai
+anthropic
+github
+ovh
+ovhcloud
+o2switch
+gandi
+ionos
+notion
+canva
+zoom
+linkedin
+patreon
+bitwarden
+dashlane
+expressvpn
+surfshark
+setapp
+jetbrains
+cursor
+perplexity
+mistral ; ~
+squarespace
+wix
+shopify
+infomaniak
+scaleway
+hostinger
+heroku
+digitalocean
+
+# ───────────────────────────── Transports ─────────────────────────────
+
+[transports.carburant]
+total ; @cb
+totalenergies ; @cb
+total energies ; @cb
+total access
+relais total
+station total
+esso
+esso express
+bp ; @cb
+shell
+avia
+agip
+dyneff
+elan ; ~
+station ; ~ 10..200
+station service
+station u
+station leclerc
+leclerc station
+e leclerc carburant
+station carrefour
+carrefour station
+auchan carburant
+intermarche carburant
+super u carburant
+carburant
+carburants
+gazole
+essence ; ~
+sp95
+sp98
+ionity
+tesla supercharger
+supercharger
+freshmile
+chargemap
+electra
+fastned
+izivia
+allego
+powerdot
+recharge electrique
+borne de recharge
+bornes
+total wash ; ~
+
+[transports.entretien]
+garage
+norauto
+feu vert
+midas
+speedy
+point s
+euromaster
+carglass
+france pare brise
+vulco
+roady
+controle technique
+autosur
+dekra
+securitest
+autovision
+auto securite
+lavage ; ~
+elephant bleu
+station de lavage
+pneu*
+carrosserie
+carrossier
+oscaro
+mister auto
+yakarouler
+auto5
+centre auto
+renault ; ~
+peugeot ; ~
+citroen ; ~
+dacia ; ~
+toyota ; ~
+volkswagen ; ~
+mecanique
+depannage
+remorquage
+vidange
+
+[transports.assurance]
+direct assurance
+l olivier
+olivier assurance
+amaguiz
+eurofil
+ornikar assurance
+assurance auto
+assurance voiture
+assurance moto
+amv
+allianz auto
+macif auto ; ~
+maaf auto ; ~
+
+[transports.credit]
+diac
+rci banque
+mobilize financial
+mobilize
+credipar
+psa banque
+stellantis financial
+stellantis financial services
+toyota france financement
+volkswagen financial
+volkswagen bank
+bmw financial
+bmw finance
+mercedes benz financial
+ford credit
+leasys
+arval
+free2move lease
+ayvens
+ald automotive
+lld
+loa
+leasing ; ~
+credit auto
+pret auto
+
+[transports.peages]
+sanef
+aprr
+asf
+vinci autoroutes
+autoroutes du sud
+cofiroute
+area ; ~
+escota
+bip and go
+bip go
+ulys
+peage
+peages
+autoroute
+autoroutes
+atmb
+sftrf
+alis
+albea
+arcour
+sapn
+parking
+parkings
+indigo
+parkindigo
+saemes
+effia
+q park
+qpark
+onepark
+zenpark
+parclick
+paybyphone
+flowbird
+easypark
+opngo
+stationnement
+horodateur
+parcmetre
+interparking
+urbis park
+sareco
+parking aeroport
+telepeage
+liber t
+
+[transports.commun]
+ratp
+navigo
+transilien
+comutitres
+ile de france mobilites
+idf mobilites
+iledefrance mobilites
+tcl
+rtm
+tisseo
+keolis
+transdev
+tbm
+ilevia
+cts ; ~
+lignes d azur
+fil bleu
+star rennes
+tan ; ~
+semitag
+mettis
+twisto
+tango
+astuce
+velib
+velo v
+vlille
+lime
+dott
+tier ; ~
+bird ; ~
+cityscoot
+cooltra
+blablacar daily
+ter ; ~
+sncf transilien
+metro ; ~
+tramway
+bus ; ~
+abonnement transport
+pass navigo
+
+[transports.taxi]
+taxi
+taxis
+g7
+taxi g7
+uber ; ~
+uber trip
+uber bv
+bolt
+heetch
+freenow
+free now
+marcel ; ~
+le cab
+lecab
+allocab
+vtc
+chauffeur prive
+
+# ───────────────────────────── Santé ─────────────────────────────
+
+[sante.medecins]
+dr
+docteur
+medecin
+medecins
+cabinet medical
+centre medical
+centre de sante
+maison de sante
+maison medicale
+doctolib
+laboratoire
+labo ; ~
+biogroup
+cerballiance
+eurofins
+synlab
+unilabs
+biomnis
+inovie
+lbm
+laboratoire d analyses
+analyses medicales
+radiologie
+radiologue
+imagerie
+imagerie medicale
+irm
+scanner
+echographie
+hopital
+chu
+ch ; ~
+clinique
+ap hp
+aphp
+polyclinique
+sos medecins
+pediatre
+dermatologue
+dermato
+gynecologue
+gyneco
+ophtalmo*
+orl
+cardiologue
+psychiatre
+generaliste
+consultation
+urgences
+
+[sante.pharmacie]
+pharmacie
+pharmacies
+pharma ; ~
+parapharmacie
+pharmacien
+grande pharmacie
+pharmacie principale
+pharmacie centrale
+pharmacie de la gare
+pharmavie
+pharmacie lafayette
+newpharma
+shop pharmacie
+
+[sante.dentaire]
+dentiste
+dentaire
+cabinet dentaire
+centre dentaire
+chirurgien dentiste
+orthodontiste
+orthodontie
+opticien
+optique
+optic ; ~
+krys
+afflelou
+alain afflelou
+optical center
+generale d optique
+grand optical
+atol
+lissac
+optic 2000
+acuitis
+jimmy fairly
+sensee
+audika
+amplifon
+audioprothesiste
+lunettes
+lentilles
+lensoffer
+
+[sante.paramedical]
+kine
+kines
+kinesitherapeute
+kinesitherapie
+kinesitherapeutes
+masseur kinesitherapeute
+masseur kine
+osteo*
+orthophoniste
+orthophonie
+podologue
+pedicure
+pedicure podologue
+psychologue
+psy
+psychotherapeute
+infirmier*
+cabinet infirmier
+sage femme
+sages femmes
+dieteticien*
+nutritionniste
+ergotherapeute
+psychomotricien*
+chiropracteur
+sophrologue
+acupuncteur
+orthoptiste
+
+[sante.mutuelle]
+mutuelle
+mutuelles
+harmonie mutuelle
+mgen
+malakoff humanis
+malakoff
+ag2r
+ag2r la mondiale
+alan
+baloo
+apivia
+swiss life ; ~
+swisslife ; ~
+april sante
+april ; ~
+mutuelle generale
+mnt
+mgefi
+groupama sante
+smatis
+solimut
+ociane
+macif sante
+axa sante
+henner
+almerys
+mutuelle bleue
+mutuelle familiale
+mutuelle generale de l education nationale
+mgp
+mmj
+adrea
+eovi
+aesio
+aesio mutuelle
+mutex
+cnp ; ~ <80
+cnp assurances ; ~ <80
+complementaire sante
+vir sante
+
+[revenus.sante]
+cpam
+ameli
+assurance maladie
+caisse primaire
+caisse primaire d assurance maladie
+msa ; ~
+remboursement sante
+rbt sante
+remb sante
+vir sante
+prestations sante
+sante ; ~ +
+
+# ───────────────────────────── Enfants ─────────────────────────────
+
+[enfants.garde]
+creche
+creches
+micro creche
+microcreche
+halte garderie
+garderie
+assistante maternelle
+assistant maternel
+nounou
+pajemploi
+urssaf pajemploi
+babysitting
+baby sitting
+babysitter
+yoopies
+kinougarde
+babychou
+people and baby
+les petits chaperons rouges
+la maison bleue
+babilou
+grandir
+centre de loisirs
+accueil de loisirs
+periscolaire
+garde d enfants
+
+[enfants.ecole]
+cantine scolaire
+restauration scolaire
+ecole
+ecoles
+college
+lycee
+universite
+scolarite
+frais de scolarite
+apel
+fournitures scolaires
+cned
+acadomia
+cours particuliers
+superprof
+kartable
+transport scolaire
+caisse des ecoles
+ogec
+etablissement scolaire
+inscription ; ~
+cantine ; ~
+fournitures ; ~
+parcoursup
+crous
+classe verte
+sortie scolaire
+
+[enfants.activites]
+conservatoire
+ecole de musique
+centre aere
+colonie
+colonie de vacances
+colo ; ~
+scout*
+eclaireurs
+judo
+karate
+danse ; ~
+ecole de danse
+gymnastique
+equitation
+poney
+club hippique
+natation ; ~
+stage ; ~
+eveil ; ~
+atelier ; ~
+mjc
+maison des jeunes
+
+[enfants.jouets]
+king jouet
+la grande recre
+grande recre
+joueclub
+toys r us
+picwictoys
+jouet*
+aubert
+bebe 9
+natalys
+orchestra
+vertbaudet ; ~
+autour de bebe
+lego
+smyths
+oxybul
+puericulture
+couches
+pampers
+lait bebe
+bebe ; ~
+cultura jeux ; ~
+
+# ───────────────────────────── Shopping ─────────────────────────────
+
+[shopping.vetements]
+zara
+h m
+hm
+h and m
+uniqlo
+kiabi
+primark
+celio
+jules
+brice
+promod
+camaieu
+etam
+undiz
+pimkie
+bershka
+pull and bear
+pull bear
+mango
+c and a
+c a
+gap ; ~
+levi*
+la halle
+gemo
+besson
+besson chaussures
+eram
+andre
+san marina
+minelli
+bocage
+jonak
+foot locker
+courir
+jd sports
+galeries lafayette ; ~
+printemps ; ~
+vinted ; -
+zalando
+asos
+shein
+sarenza
+spartoo
+la redoute
+ba sh
+sandro
+maje
+the kooples
+zadig
+zadig et voltaire
+petit bateau
+okaidi
+cyrillus
+jacadi
+sergent major
+tape a l oeil
+dpam
+du pareil au meme
+devred
+kaporal
+le slip francais
+armor lux
+lacoste
+nike
+adidas
+puma ; ~
+new balance
+converse
+vans ; ~
+timberland
+the north face
+columbia ; ~
+superdry
+tommy hilfiger
+ralph lauren
+ikks
+cache cache
+bonobo
+mim
+naf naf
+morgan ; ~
+jennyfer
+calzedonia
+intimissimi
+tezenis
+darjeeling
+aubade
+dim ; ~
+monoprix mode
+pressing
+retouche*
+cordonnerie
+cordonnier
+mister minit
+minit
+vetements
+vetement
+chaussures
+chaussure
+pret a porter
+boutique ; ~
+
+[shopping.beaute]
+coiffure
+coiffeur
+coiffeuse
+salon de coiffure
+barbier
+barber
+barbershop
+franck provost
+jean louis david
+dessange
+tchip
+saint algue
+camille albane
+institut ; ~
+institut de beaute
+esthetique
+estheticienne
+beaute ; ~
+onglerie
+nail*
+ongles
+spa ; ~ >30
+sephora
+nocibe
+marionnaud
+yves rocher
+kiko
+l occitane
+occitane
+lush
+rituals
+the body shop
+body shop
+aroma zone
+beauty success
+parfumerie
+epilation
+manucure
+maquillage
+cosmetique*
+la rosee
+typology
+mixa ; ~
+
+[shopping.hightech]
+boulanger ; >30
+darty
+fnac ; ~
+fnac com
+fnac darty ; ~ @cb
+apple store
+apple ; ~ @cb
+samsung
+ldlc
+materiel net
+rue du commerce
+grosbill
+top achat
+topachat
+backmarket
+back market
+electro depot
+ubaldi
+son video
+cobra ; ~
+digitec
+bose
+sony ; ~
+xiaomi
+huawei
+dell
+hp ; ~
+lenovo
+logitech
+gopro
+sonos
+dyson
+miele
+seb ; ~
+moulinex
+nespresso
+krups
+delonghi
+thermomix
+vorwerk
+electromenager
+informatique ; ~
+high tech
+hifi
+multimedia
+telephonie ; ~
+cdiscount electromenager ; ~
+
+[shopping.divers]
+amazon
+amazon fr
+amazon eu
+amazon marketplace
+amzn
+amzn mktp
+amazon payments
+cdiscount
+aliexpress
+alibaba
+temu
+ebay
+leboncoin ; -
+rakuten
+wish
+veepee
+showroomprive
+showroom prive
+vente privee
+paypal ; ~ -
+action
+la poste ; ~
+laposte ; ~
+colissimo
+mondial relay
+chronopost
+stokomani
+noz
+babou
+maxi bazar
+bazar
+tiger
+flying tiger
+hema
+bhv
+le bon marche
+bon marche
+centrakor
+gifi
+cultura ; ~
+klarna ; ~
+alma ; ~
+vinted ; ~ -
+etsy
+manutan
+lapeyre ; ~
+achat ; ~
+achats ; ~
+
+# ───────────────────────────── Loisirs ─────────────────────────────
+
+[loisirs.sports]
+decathlon
+intersport
+go sport
+sport 2000
+basic fit
+basicfit
+fitness park
+fitness
+lc fitness
+keep cool
+l orange bleue
+orange bleue
+neoness
+on air
+magic form
+club med gym
+cmg sports
+cmg sports club
+salle de sport
+gym ; ~
+piscine
+ucpa
+tennis
+tennis club
+golf
+club sportif
+federation ; ~
+licence ; ~
+escalade
+arkose
+climb up
+block out
+urban soccer
+le five
+foot ; ~
+football
+yoga
+pilates
+crossfit
+sport ; ~
+sports ; ~
+running
+marathon
+ski
+forfait ski
+remontees mecaniques
+station de ski ; ~
+skiset
+skimium
+intersport location ; ~
+alltricks
+wiggle
+probikeshop
+snowleader
+au vieux campeur
+ekosport
+i run
+private sport shop
+padel
+
+[loisirs.sorties]
+cinema
+cinemas
+pathe
+gaumont
+pathe gaumont
+ugc
+mk2
+cgr
+kinepolis
+megarama
+cine ; ~
+theatre
+opera
+concert
+concerts
+fnac spectacles
+ticketmaster
+see tickets
+digitick
+billetreduc
+festival
+musee
+musees
+exposition
+zoo
+parc asterix
+disneyland
+disneyland paris
+futuroscope
+puy du fou
+aquarium
+bowling
+laser game
+escape game
+karaoke
+discotheque
+boite de nuit
+billetterie
+shotgun
+dice ; ~
+weezevent
+fnac billetterie
+spectacle
+spectacles
+cirque
+parc d attractions
+walibi
+europa park
+vulcania
+jardin d acclimatation
+palais des congres
+olympia
+accor arena
+zenith
+stade de france
+
+[loisirs.culture]
+librairie
+librairies
+gibert
+gibert joseph
+decitre
+furet du nord
+mollat
+cultura
+espace culturel
+espace culturel leclerc
+kindle
+kobo
+bdfugue
+france loisirs
+chapitre
+leslibraires
+momox
+recyclivre
+livre ; ~
+livres ; ~
+bd ; ~
+bande dessinee
+manga ; ~
+relay livres ; ~
+cd ; ~
+vinyle*
+disquaire
+dvd ; ~
+blu ray ; ~
+fnac livre ; ~
+bibliotheque
+mediatheque
+
+[loisirs.jeux]
+steam
+steampowered
+valve ; ~
+playstation
+psn
+sony playstation
+nintendo
+nintendo eshop
+xbox
+microsoft xbox
+epic games
+micromania
+instant gaming
+riot games
+blizzard
+ubisoft
+electronic arts
+roblox
+gog
+humble bundle
+philibert
+ludum
+jeux ; ~
+jeu ; ~
+jeux video
+rougier et ple
+rougier ple
+le geant des beaux arts
+loisirs creatifs
+mercerie
+photobox
+cewe
+pixum
+flickr
+modelisme
+maquette ; ~
+games workshop
+warhammer
+cartes pokemon ; ~
+board game
+
+# ───────────────────────────── Vacances ─────────────────────────────
+
+[vacances.hebergement]
+hotel
+hotels
+ibis
+ibis budget
+ibis styles
+novotel
+mercure
+accor
+accorhotels
+all accor
+b and b hotel
+b b hotel
+b b hotels
+campanile
+kyriad
+premiere classe
+formule 1
+hotelf1
+best western
+hilton
+marriott
+holiday inn
+radisson
+airbnb ; -
+booking ; -
+booking com ; -
+abritel
+gites de france
+gite
+camping
+campings
+pierre et vacances
+center parcs
+belambra
+vvf
+odalys
+huttopia
+yelloh
+yelloh village
+sunelia
+homair
+club med
+chambre d hotes
+chambres d hotes
+auberge de jeunesse
+hostel
+hostelworld
+expedia
+hotels com
+trivago
+logis hotels
+relais et chateaux
+appart city
+adagio
+citadines
+residhome
+madame vacances
+interhome
+homeaway
+lagrange
+maeva
+tohapi
+capfun
+siblu
+
+[vacances.transport]
+sncf
+sncf connect
+sncf voyageurs
+oui sncf
+ouisncf
+ouigo
+tgv
+inoui
+tgv inoui
+eurostar
+thalys
+trenitalia
+renfe
+lyria
+tgv lyria
+db bahn
+deutsche bahn
+air france
+airfrance
+easyjet
+ryanair
+transavia
+vueling
+volotea
+lufthansa
+klm
+british airways
+corsair
+air caraibes
+french bee
+air austral
+emirates
+qatar airways
+qatar ; ~
+turkish airlines
+iberia
+tap portugal
+aeroport
+aeroports de paris
+opodo
+edreams
+lastminute
+go voyages
+govoyages
+kiwi com
+flixbus
+blablacar
+blablacar bus
+corsica ferries
+brittany ferries
+corsica linea
+la meridionale
+moby
+dfds
+trainline
+kombo
+hertz
+avis ; ~
+europcar
+sixt
+ada ; ~
+rent a car
+enterprise ; ~
+getaround
+leasys rent
+ucar
+virtuo
+booking cars
+rentalcars
+skyscanner
+air corsica
+air tahiti
+bus ; ~ >30
+
+# ───────────────────────────── Impôts ─────────────────────────────
+
+[impots]
+dgfip
+drfip
+ddfip
+direction generale des finances publiques
+direction generale des finances
+direction generale des finance*
+direction generale des fin*
+finances publiques
+tresor public
+tresorerie
+sip ; ~
+service des impots
+impots gouv
+impots
+impot
+taxes ; ~
+
+[impots.revenu]
+impot sur le revenu
+impot revenu
+prelevement a la source
+prelevement source
+pas revenus
+acompte ir
+ir ; ~
+revenus 20* ; ~
+contributions sociales ; ~
+csg ; ~
+
+[impots.foncier]
+taxe fonciere
+taxes foncieres
+impot foncier
+foncier ; ~
+tf ; ~
+
+[impots.autres]
+taxe d habitation
+taxe habitation
+th ; ~
+amende
+amendes
+antai
+amende forfaitaire
+ants
+timbre fiscal
+timbres fiscaux
+redevance
+contravention
+fourriere
+prefecture
+carte grise
+passeport
+service public ; ~
+taxe ordures ; ~
+cfe
+
+# ───────────────────────────── Banque & assurances ─────────────────────────────
+
+[banque.frais]
+frais ; ~ -
+frais bancaires
+frais de tenue de compte
+frais tenue de compte
+tenue de compte
+commission ; ~ -
+commissions ; ~ -
+commission d intervention
+cotisation carte
+cotisation ; ~ -
+cotisation mensuelle ; ~ -
+cotis ; ~ -
+agios
+interets debiteurs
+frais de rejet
+frais offre ; -
+offre metal ; -
+frais offre metal
+cotisation offre ; -
+frais carte
+frais paiement etranger
+frais retrait
+commission paiement
+abonnement bancaire
+package ; ~ -
+visa premier ; -
+gold mastercard ; -
+visa infinite ; -
+frais sms
+alerte sms ; ~
+
+[banque.credit]
+cofidis
+sofinco
+cetelem
+franfinance
+oney
+floa
+floa bank
+younited
+younited credit
+carrefour banque
+cofinoga
+ca consumer finance
+credit agricole consumer finance
+bnp paribas personal finance
+my money bank
+credit conso
+credit consommation
+pret personnel
+pret perso
+pret travaux
+remboursement credit
+echeance credit
+mensualite ; ~
+credit renouvelable
+klarna ; ~ @prlv
+alma ; ~ @prlv
+scalapay
+paypal 4x ; ~
+
+[banque.assurances]
+maif
+macif
+matmut
+gmf
+maaf
+axa ; ~
+axa france
+allianz ; ~
+allianz iard
+groupama
+mma
+pacifica
+sogessur
+avanssur
+aviva
+abeille assurances
+generali iard
+thelem
+smacl
+mutuelle de poitiers
+mutuelle de poitiers assurances
+gan
+covea
+assu 2000
+prevoyance
+assurance deces
+assurance obseques
+obseques
+garantie accident
+assurance scolaire
+assurance ; ~
+assurances ; ~
+fnac darty services ; @prlv
+darty max
+spb
+spb assurance
+assurance mobile
+hiscox ; ~
+cardif prevoyance
+
+[banque.retraits]
+retrait
+retraits
+retrait dab
+retrait especes
+dab
+distributeur
+retrait guichet
+especes ; ~
+wdl
+cash ; ~ @dab
+
+# ───────────────────────────── Épargne ─────────────────────────────
+
+[epargne.livrets]
+livret a
+livret ; ~
+ldd
+ldds
+lep
+pel
+cel
+epargne ; ~
+versement epargne
+livret bleu
+livret jeune
+compte epargne
+sur le pel
+vers livret
+vir livret
+plan epargne
+epargne salariale
+
+[epargne.assurance_vie]
+assurance vie
+generali vie
+allianz vie
+axa vie
+spirica
+suravenir
+cnp assurances vie
+linxea
+placement direct
+yomoni
+nalo
+ramify
+goodvest
+lucya
+mes placements
+predica
+sogecap
+cardif vie
+apicil
+mutavie
+afer
+gaipare
+swisslife vie ; ~
+generali patrimoine
+per ; ~
+plan epargne retraite
+
+[epargne.bourse]
+pea
+compte titres
+trade republic
+traderepublic
+degiro
+boursorama bourse
+bourse direct
+fortuneo bourse
+interactive brokers
+etoro
+binance
+coinbase
+kraken
+bitpanda
+bitstack
+scpi
+la premiere brique
+anaxago
+homunity
+october ; ~
+enerfip
+lendosphere
+mon petit placement
+moniwan
+bourse ; ~
+crypto ; ~
+ordre de bourse
+achat titres
+
+# ───────────────────────────── Revenus ─────────────────────────────
+
+[revenus.salaires]
+salaire
+salaires
+paie
+paye
+remuneration ; ~
+prime ; ~
+primes ; ~
+interessement
+participation ; ~
+net a payer
+virement salaire
+vir salaire
+acompte salaire
+acompte sur salaire
+indemnite ; ~
+treizieme mois
+13eme mois
+
+[revenus.allocations]
+caf
+c a f
+caisse d allocations familiales
+allocations familiales
+allocation ; ~
+allocations ; ~
+pole emploi
+france travail
+apl ; ~
+prime d activite
+aah
+indemnites journalieres
+ij ; ~
+chomage
+msa prestations
+paje
+prestation ; ~
+aide ; ~
+bourse etudiant ; ~
+crous ; ~
+
+[revenus.retraites]
+retraite
+retraites
+carsat
+cnav
+agirc
+arrco
+agirc arrco
+ircantec
+pension ; ~
+cnracl
+pension de retraite
+pension alimentaire
+ag2r retraite
+retraite complementaire
+
+[revenus.locatifs]
+loyer
+loyers
+locataire
+airbnb
+booking
+abritel
+gites de france
+revenus locatifs
+
+[revenus.financiers]
+interets
+interets crediteurs
+remuneration livret
+dividende*
+coupon ; ~
+coupons ; ~
+plus value ; ~
+
+[revenus.autres]
+remboursement ; ~
+rembt ; ~
+rbt ; ~
+avoir ; ~
+cashback
+avantages ; ~
+avantage ; ~
+parrainage
+vinted
+leboncoin
+lydia ; ~
+paypal ; ~
+remise ; ~
+vente ; ~
+cadeau ; ~
+gain ; ~
+francaise des jeux ; ~
+fdj ; ~
+
+# ───────────────────────────── Divers ─────────────────────────────
+
+[divers.animaux]
+veterinaire
+veterinaires
+veto
+clinique veterinaire
+cabinet veterinaire
+animalerie
+maxi zoo
+maxizoo
+tom and co
+tom co
+zooplus
+wanimo
+croquettes
+animalis
+medor et compagnie
+toilettage
+toiletteur
+pension animaux ; ~
+pet ; ~
+animaux
+
+[divers.cadeaux]
+cadeau
+cadeaux
+fleurs
+fleuriste
+interflora
+aquarelle
+monceau fleurs
+au nom de la rose
+nature et decouvertes
+smartbox
+wonderbox
+bijouterie
+bijoux
+histoire d or
+marc orian
+pandora
+swarovski
+carte cadeau
+cartes cadeaux
+jeff de bruges
+leonidas
+de neuville
+chocolat* ; ~
+tape a l oeil cadeau ; ~
+liste de naissance ; ~
+cagnotte
+leetchi
+lepotcommun
+
+[divers.dons]
+don
+dons
+association ; ~
+asso ; ~
+helloasso
+croix rouge
+restos du coeur
+unicef
+secours populaire
+secours catholique
+msf
+medecins sans frontieres
+fondation ; ~
+la spa
+societe protectrice des animaux
+amnesty
+wwf
+greenpeace
+denier du culte
+denier de l eglise
+paroisse
+eglise
+adhesion ; ~
+cotisation association
+telethon
+emmaus
+action contre la faim
+handicap international
+fondation de france
+ligue contre le cancer
+institut pasteur
+
+[divers.tabac]
+tabac
+tabacs
+bar tabac
+le tabac
+civette
+buraliste
+presse ; ~
+maison de la presse
+relay
+journaux
+francaise des jeux
+fdj
+pmu
+loto
+point presse
+le khedive ; ~
+
+# ───────────────────────────── Virements internes ─────────────────────────────
+
+[virements]
+vir cpte a cpte
+virt cpte a cpte
+virement de compte a compte
+cpte a cpte
+compte a compte
+virement interne
+vir interne
+transfert interne
+virement vers ; ~
+virement emis vers ; ~
+alimentation compte ; ~
+approvisionnement ; ~

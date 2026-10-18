@@ -6,6 +6,7 @@ pub mod backup;
 pub mod bank_sync;
 pub mod budget;
 pub mod calc;
+pub mod categorize;
 pub mod codec_v5;
 pub mod currencies;
 pub mod edit;

@@ -179,10 +179,10 @@ fn adds_and_edits_operations_with_one_undo_step() {
         bp.command{ title = "Ajouter…", run = function()
             local acc = bp.current_account()
             local op = acc:add{ date = "05/03/2026", payee = "Boulangerie", amount = -4.2,
-                                category = "Alimentation > Epicerie", fields = { ticket = 12 } }
+                                category = "Alimentation > Courses", fields = { ticket = 12 } }
             assert(op.mode == "Carte")
             assert(op.date == bp.date(2026, 3, 5))
-            assert(op.category == "Alimentation > Epicerie")
+            assert(op.category == "Alimentation > Courses")
             assert(op:field("ticket") == "12")
             op.details = "pain; croissants"
             local salaire = acc:add{ payee = "Salaire", amount = "1 800,50", mode = "Virement reçu" }
@@ -263,13 +263,13 @@ fn filters_and_dates() {
             local acc = bp.current_account()
             for i = 1, 12 do
                 acc:add{ date = bp.date(2025, i, 10), payee = if i % 2 == 0 then "EDF" else "Loyer",
-                         amount = -i, category = if i % 2 == 0 then "EDF" else "Loyer" }
+                         amount = -i, category = if i % 2 == 0 then "Électricité & gaz" else "Loyer" }
             end
             local edf = acc:operations{ payee = "edf" }
             assert(#edf == 6, #edf)
             local h1 = acc:operations{ from = "01/01/2025", to = bp.date(2025, 6, 30) }
             assert(#h1 == 6)
-            local habitation = acc:operations{ category = "Habitation" }
+            local habitation = acc:operations{ category = "Logement" }
             assert(#habitation == 12, "la catégorie mère inclut ses sous-catégories")
             local big = acc:operations{ max = -10 }
             assert(#big == 3)
@@ -301,7 +301,7 @@ fn categories_and_modes() {
             assert(child.label == "Vacances > Hôtel" and child.parent == "Vacances")
             assert(bp.add_category("Hôtel", "Vacances").id == child.id, "pas de doublon")
             local ok, err = pcall(function() return bp.category("Assurance").id end)
-            assert(bp.category("Transport > Assurance") ~= nil)
+            assert(bp.category("Transports > Assurance auto") ~= nil)
             assert(bp.add_mode("Crypto", false) == "Crypto")
             local op = bp.current_account():add{ amount = 5, mode = "crypto", category = child }
             assert(op.mode == "Crypto")
@@ -544,7 +544,7 @@ fn hooks_merge_into_the_triggering_step() {
         r#"
         bp.on("operation_added", function(op)
             if op.payee:lower():find("carrefour") then
-                op.category = "Alimentation > Epicerie"
+                op.category = "Alimentation > Courses"
             end
         end)
         "#,
@@ -567,7 +567,7 @@ fn hooks_merge_into_the_triggering_step() {
     let label = f
         .document
         .category_label(f.document.accounts[0].operations[1].category.unwrap());
-    assert_eq!(label.as_deref(), Some("Alimentation > Epicerie"));
+    assert_eq!(label.as_deref(), Some("Alimentation > Courses"));
 }
 
 #[test]
@@ -577,10 +577,10 @@ fn suggest_category_from_history_and_dictionary() {
         bp.command{ title = "Deviner", run = function()
             local guess = bp.suggest_category(bp.current_account():operations()[3])
             assert(guess and guess.sure, "suggestion sûre attendue")
-            assert(guess.category == "Alimentation > Epicerie", guess.category)
+            assert(guess.category == "Alimentation > Courses", guess.category)
             assert(guess.source == "historique", guess.source)
             local fuel = bp.suggest_category{ payee = "CB ESSO EXPRESS", amount = -60 }
-            assert(fuel and fuel.category == "Transport > Essence", fuel and fuel.category)
+            assert(fuel and fuel.category == "Transports > Carburant", fuel and fuel.category)
             assert(fuel.source == "commerçant reconnu")
             assert(bp.suggest_category{ payee = "XYZ 123" } == nil)
             for _, op in bp.current_account():operations() do
@@ -596,7 +596,7 @@ fn suggest_category_from_history_and_dictionary() {
         .document
         .categories
         .iter()
-        .find(|c| c.name == "Epicerie")
+        .find(|c| c.name == "Courses")
         .unwrap()
         .id;
     let base = f.document.accounts[0].operations[0].clone();

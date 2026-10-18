@@ -14,6 +14,11 @@ use egui_phosphor::regular as icon;
 
 /// (mots-clés normalisés, icône). Les entrées les plus spécifiques d'abord.
 const RULES: &[(&[&str], &str)] = &[
+    // Activités des enfants (avant « loisirs »).
+    (
+        &["extrascolaire", "extrascolaires", "periscolaire"],
+        icon::PUZZLE_PIECE,
+    ),
     // Alimentation et restauration
     (
         &[
@@ -418,7 +423,15 @@ const RULES: &[(&[&str], &str)] = &[
         icon::GRADUATION_CAP,
     ),
     (
-        &["animal", "veterinaire", "veto", "chien", "chat", "pet"],
+        &[
+            "animal",
+            "animaux",
+            "veterinaire",
+            "veto",
+            "chien",
+            "chat",
+            "pet",
+        ],
         icon::PAW_PRINT,
     ),
     (&["cadeau", "gift", "noel"], icon::GIFT),
@@ -555,5 +568,18 @@ mod tests {
         assert_eq!(icon_for("Rbt santé"), Some(icon::ARROW_U_UP_LEFT));
         assert_eq!(icon_for("Coiffeur"), Some(icon::SCISSORS));
         assert_eq!(icon_for("Xyzzy"), None);
+    }
+}
+
+#[cfg(test)]
+mod standard_list {
+    #[test]
+    fn every_standard_category_has_an_icon() {
+        let missing: Vec<&str> = bp_core::categorize::taxonomy::GENERICS
+            .iter()
+            .map(|g| g.name)
+            .filter(|name| super::icon_for(name).is_none())
+            .collect();
+        assert!(missing.is_empty(), "sans icône : {missing:?}");
     }
 }

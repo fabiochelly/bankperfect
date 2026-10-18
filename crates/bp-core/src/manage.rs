@@ -430,21 +430,17 @@ pub fn delete_mode(document: &mut Document, index: usize, replacement: Mode) -> 
     changed
 }
 
-/// Catégories d'un nouveau fichier (celles de l'ancienne version) ; un
-/// retrait de cinq espaces marque une sous-catégorie.
-const DEFAULT_CATEGORIES: &str = "Alimentation;     Epicerie;     Restaurant;Loisirs;     Sorties Spectacles;     Sports;     Hifi Vidéo;     Téléphonie;Habillement;Habitation;     EDF;     Téléphone;     Loyer;     Equipement;     Rangement/Déco;     Abonnements;     Assurance;Santé;     Médecine;     Pharmacie;Transport;     Essence;     Assurance;     Equipement/Réparations;     Public;     Parking;     Péage;Remboursements;     Rbt santé;     Autres;Salaire;     Paye;     Revenus annexes";
-
 /// Nouveau fichier de comptes : un compte « Courant » avec son solde
-/// initial et les catégories par défaut.
+/// initial et les catégories standard (celles de la catégorisation
+/// automatique, voir [`crate::categorize::taxonomy`]).
 pub fn new_document(name: &str, initial: Amount) -> Document {
-    let categories = DEFAULT_CATEGORIES
-        .split(';')
-        .filter(|c| !c.trim().is_empty())
+    let categories = crate::categorize::taxonomy::GENERICS
+        .iter()
         .enumerate()
-        .map(|(id, c)| Category {
+        .map(|(id, g)| Category {
             id: id as u32,
-            name: c.trim().to_string(),
-            is_child: c.starts_with(' '),
+            name: g.name.to_string(),
+            is_child: g.slug.contains('.'),
         })
         .collect();
     let mut document = Document {
@@ -693,11 +689,11 @@ mod tests {
         assert_eq!(doc.accounts[0].name, "Courant");
         assert_eq!(doc.accounts[0].balance(), Amount::parse("150").unwrap());
         assert_eq!(doc.account_order, vec![0]);
-        assert_eq!(doc.categories.len(), 33);
+        assert_eq!(doc.categories.len(), 77);
         assert!(!doc.categories[0].is_child && doc.categories[1].is_child);
         assert_eq!(
             doc.category_label(1).as_deref(),
-            Some("Alimentation > Epicerie")
+            Some("Alimentation > Courses")
         );
     }
 

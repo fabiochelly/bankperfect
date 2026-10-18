@@ -976,3 +976,41 @@ fn tempfile_dir() -> PathBuf {
     std::fs::create_dir_all(&dir).unwrap();
     dir
 }
+
+/// Pointage intelligent : solde simulé d'après le fichier (lignes non
+/// pointées passées depuis plus de trois jours, sauf les chèques récents).
+#[test]
+#[ignore]
+fn smart_tack_screenshots() {
+    let file = std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE");
+    let document = bp_core::file::open(file.as_ref(), None).unwrap().document;
+    let account = &document.accounts[document.account_order[0]];
+    let today = bp_core::model::Date::today();
+    let cleared: bp_core::model::Amount = account
+        .operations
+        .iter()
+        .filter(|o| o.tack == bp_core::model::Tack::None && o.date.0 <= today.0 - 3)
+        .map(|o| o.amount)
+        .sum();
+    let balance = bp_core::smart_tack::pointed_balance(account, Some(today)) + cleared;
+    let open = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.run_steps(2);
+        h.event(egui::Event::Text("pointage intelligent".into()));
+        h.run_steps(2);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(4);
+    };
+    render("80-pointage-vide", egui::Theme::Dark, |h| open(h));
+    let text = balance.format(2, ',');
+    render("81-pointage", egui::Theme::Dark, move |h| {
+        open(h);
+        click_at(h, egui::pos2(SMART_TACK_FIELD.0, SMART_TACK_FIELD.1));
+        h.event(egui::Event::Text(text));
+        h.key_press(egui::Key::Enter);
+        h.run_steps(30);
+    });
+}
+
+/// Champ du solde dans la fenêtre de pointage intelligent (points logiques).
+const SMART_TACK_FIELD: (f32, f32) = (453.0, 242.0);

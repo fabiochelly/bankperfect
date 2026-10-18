@@ -1250,6 +1250,9 @@ impl ImportForm {
                 })
                 .collect();
             total += doc.import_into(target, operations);
+            if let Some(balance) = account.balance {
+                doc.remember_bank_balance(target, balance.amount, balance.date);
+            }
         }
         (total, guessed)
     }

@@ -79,6 +79,9 @@ pub struct OpenDoc {
     /// Index de catégorisation automatique et révision pour laquelle il a
     /// été construit (reconstruit à la demande après une modification).
     categorizer: std::cell::RefCell<Option<(u64, Arc<bp_core::categorize::Categorizer>)>>,
+    /// Dernier solde annoncé par la banque pour chaque compte (import,
+    /// synchronisation) pendant la session : montant et date.
+    bank_balances: std::collections::HashMap<usize, (Amount, Option<Date>)>,
 }
 
 /// Évènement pour les extensions : évènement, lignes (compte, identifiant),
@@ -264,6 +267,7 @@ impl OpenDoc {
             revision: 0,
             undo_tag: 0,
             categorizer: std::cell::RefCell::new(None),
+            bank_balances: std::collections::HashMap::new(),
         };
         doc.category_styles = crate::category_icons::styles(&doc.document);
         doc.refresh();
@@ -927,6 +931,49 @@ impl OpenDoc {
             self.view.indexed_account = None;
             self.view.series_key = None;
             self.touch();
+        }
+        changed
+    }
+
+    /// Dernier solde connu de la banque pour un compte.
+    pub fn bank_balance(&self, account: usize) -> Option<(Amount, Option<Date>)> {
+        self.bank_balances.get(&account).copied()
+    }
+
+    /// Retient le solde annoncé par la banque (import d'un relevé).
+    pub fn remember_bank_balance(&mut self, account: usize, amount: Amount, date: Option<Date>) {
+        self.bank_balances.insert(account, (amount, date));
+    }
+
+    /// Pointe des opérations non pointées d'un compte (pointage intelligent),
+    /// en une étape d'annulation ; renvoie le nombre de lignes pointées.
+    pub fn point_lines(&mut self, account: usize, lines: &[usize]) -> usize {
+        if lines.is_empty() || account >= self.document.accounts.len() {
+            return 0;
+        }
+        self.snapshot_accounts("pointage intelligent", account, &[account]);
+        // Pointage simple : une ligne pointée est enregistrée « rapprochée ».
+        let to = if self.disable_reconcile {
+            Tack::Reconciled
+        } else {
+            Tack::Pointed
+        };
+        let today = Date::today();
+        let ops = &mut self.document.accounts[account].operations;
+        let mut changed = 0;
+        for &i in lines {
+            if let Some(op) = ops.get_mut(i)
+                && op.tack == Tack::None
+            {
+                op.tack = to;
+                op.mark_date = today;
+                changed += 1;
+            }
+        }
+        if changed == 0 {
+            self.undo.pop();
+        } else {
+            self.touch_tacks();
         }
         changed
     }

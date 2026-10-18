@@ -26,6 +26,7 @@ pub mod pyvalue;
 pub mod quotes;
 pub mod reports;
 pub mod scheduler;
+pub mod smart_tack;
 pub mod split;
 pub mod v5_text;
 pub mod view;

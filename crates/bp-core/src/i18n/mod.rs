@@ -132,6 +132,14 @@ pub fn tr(fr: &str) -> &str {
     }
 }
 
+/// Traduction de `key` (`contexte|texte`), sinon le texte français `fr`.
+pub fn tr_in_context<'a>(key: &str, fr: &'a str) -> &'a str {
+    match catalog(lang()) {
+        Some(map) => map.get(key).copied().unwrap_or(fr),
+        None => fr,
+    }
+}
+
 /// Le singulier convient-il pour `n` ? (0 et 1 en français, 1 en anglais.)
 pub fn singular(n: i64) -> bool {
     match lang() {
@@ -320,6 +328,30 @@ macro_rules! tr {
     ($fr:literal $(, $value:expr)+ $(,)?) => {
         $crate::i18n::format(
             $crate::i18n::tr($fr),
+            &[$(&$value as &dyn ::std::fmt::Display),+],
+            &[],
+        )
+    };
+}
+
+/// Texte à double sens, précisé par un contexte : `trc!("undo", "Annuler")`
+/// cherche `undo|Annuler` au catalogue et affiche « Annuler » en français.
+/// Des valeurs peuvent suivre, comme pour [`tr!`].
+#[macro_export]
+macro_rules! trc {
+    ($ctx:literal, $fr:literal $(,)?) => {
+        $crate::i18n::tr_in_context(concat!($ctx, "|", $fr), $fr)
+    };
+    ($ctx:literal, $fr:literal $(, $name:ident = $value:expr)+ $(,)?) => {
+        $crate::i18n::format(
+            $crate::i18n::tr_in_context(concat!($ctx, "|", $fr), $fr),
+            &[],
+            &[$((stringify!($name), &$value as &dyn ::std::fmt::Display)),+],
+        )
+    };
+    ($ctx:literal, $fr:literal $(, $value:expr)+ $(,)?) => {
+        $crate::i18n::format(
+            $crate::i18n::tr_in_context(concat!($ctx, "|", $fr), $fr),
             &[$(&$value as &dyn ::std::fmt::Display),+],
             &[],
         )

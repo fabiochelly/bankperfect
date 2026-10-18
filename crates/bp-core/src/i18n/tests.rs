@@ -29,9 +29,13 @@ fn macros_fill_values() {
         );
     });
     with_lang(Lang::En, || {
+        assert_eq!(trc!("test", "Inconnu"), "Inconnu");
         assert!(!singular(0));
         assert!(singular(1));
-        assert_eq!(tr!("Annuler"), "Cancel");
+        assert_eq!(
+            super::tr("Texte absent du catalogue"),
+            "Texte absent du catalogue"
+        );
     });
 }
 
@@ -166,7 +170,7 @@ fn uses_in(path: &Path, out: &mut Vec<Use>) {
             }
             let word: String = src[start..i].iter().collect();
             let preceded = start > 0 && (src[start - 1] == ':' || src[start - 1] == '.');
-            let is_macro = matches!(word.as_str(), "tr" | "trn" | "tr_mark");
+            let is_macro = matches!(word.as_str(), "tr" | "trn" | "trc" | "tr_mark");
             if !is_macro || src.get(i) != Some(&'!') || (preceded && src[start - 1] == '.') {
                 continue;
             }
@@ -176,6 +180,17 @@ fn uses_in(path: &Path, out: &mut Vec<Use>) {
             }
             let place = format!("{}:{}", path.display(), line_of(start));
             let mut j = skip_ws(open + 1);
+            let mut context = String::new();
+            if word == "trc" {
+                assert_eq!(
+                    src.get(j),
+                    Some(&'"'),
+                    "{place} : trc! attend un contexte littéral"
+                );
+                let (text, after) = string_literal(&src, j);
+                context = format!("{text}|");
+                j = skip_ws(skip_ws(after) + 1);
+            }
             let wanted = if word == "trn" {
                 // Sauter le nombre jusqu'à la virgule de premier niveau.
                 let mut depth = 0;

@@ -571,6 +571,53 @@ fn hooks_merge_into_the_triggering_step() {
 }
 
 #[test]
+fn suggest_category_from_history_and_dictionary() {
+    let mut f = Fixture::new(
+        r#"
+        bp.command{ title = "Deviner", run = function()
+            local guess = bp.suggest_category(bp.current_account():operations()[3])
+            assert(guess and guess.sure, "suggestion sûre attendue")
+            assert(guess.category == "Alimentation > Epicerie", guess.category)
+            assert(guess.source == "historique", guess.source)
+            local fuel = bp.suggest_category{ payee = "CB ESSO EXPRESS", amount = -60 }
+            assert(fuel and fuel.category == "Transport > Essence", fuel and fuel.category)
+            assert(fuel.source == "commerçant reconnu")
+            assert(bp.suggest_category{ payee = "XYZ 123" } == nil)
+            for _, op in bp.current_account():operations() do
+                if op.category == nil then
+                    local g = bp.suggest_category(op)
+                    if g and g.sure then op.category = g.id end
+                end
+            end
+        end }
+        "#,
+    );
+    let epicerie = f
+        .document
+        .categories
+        .iter()
+        .find(|c| c.name == "Epicerie")
+        .unwrap()
+        .id;
+    let base = f.document.accounts[0].operations[0].clone();
+    for (uid, category) in [(90, Some(epicerie)), (91, Some(epicerie)), (92, None)] {
+        let mut op = base.clone();
+        op.uid = uid;
+        op.payee = "CB CARREFOUR 12/10".into();
+        op.amount = Amount::from_cents(-4_500);
+        op.category = category;
+        op.tack = Tack::None;
+        f.document.accounts[0].operations.push(op);
+    }
+    let fx = f.run(0);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    assert_eq!(
+        f.document.accounts[0].operations[3].category,
+        Some(epicerie)
+    );
+}
+
+#[test]
 fn event_arguments() {
     let mut f = Fixture::new(
         r#"
@@ -1115,5 +1162,7 @@ fn documentation_recipes() {
     let mut ctx = f.ctx();
     ctx.selection = vec![0];
     let fx = engine.run_command(0, index("Rechercher le tiers"), Some(&mut ctx));
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    let fx = engine.run_command(0, index("Deviner les catégories"), Some(&mut ctx));
     assert!(fx.errors.is_empty(), "{:?}", fx.errors);
 }

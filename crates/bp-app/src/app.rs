@@ -48,6 +48,7 @@ fn islands_top(ctx: &egui::Context) -> f32 {
 const SHORTCUT_NOTES: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::N);
 const SHORTCUT_RULES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::F);
+const SHORTCUT_CATEGORIZE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::J);
 const SHORTCUT_CATEGORY_TOTALS: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND, Key::T);
 const SHORTCUT_CHARTS: KeyboardShortcut =
@@ -94,6 +95,7 @@ const BUILTIN_SHORTCUTS: &[KeyboardShortcut] = &[
     SHORTCUT_PAYEES,
     SHORTCUT_NOTES,
     SHORTCUT_RULES,
+    SHORTCUT_CATEGORIZE,
     SHORTCUT_CATEGORY_TOTALS,
     SHORTCUT_CHARTS,
     SHORTCUT_BUDGET,
@@ -735,6 +737,9 @@ impl BankPerfectApp {
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_RULES)) {
             return self.execute(ctx, Command::Rules);
         }
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_CATEGORIZE)) {
+            return self.execute(ctx, Command::Categorize);
+        }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_BUDGET)) {
             return self.execute(ctx, Command::Budget(BudgetTab::Monthly));
         }
@@ -1185,6 +1190,16 @@ impl BankPerfectApp {
             Command::ReverseCurrencies => self.confirm_reverse = true,
             Command::Rules => {
                 self.tool = Some(Tool::Rules(Box::new(crate::rules_ui::RulesForm::new(doc))))
+            }
+            Command::Categorize => {
+                let ai = crate::categorize_ui::AiSettings {
+                    enabled: self.settings.ai_categorize,
+                    api_key: self.settings.ai_api_key.clone(),
+                    model: self.settings.ai_model.clone(),
+                };
+                self.tool = Some(Tool::Categorize(Box::new(
+                    crate::categorize_ui::CategorizeForm::new(doc, ai),
+                )))
             }
             Command::AutoFilters => {
                 self.tool = Some(Tool::Filters(Box::new(
@@ -1947,6 +1962,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, GoToSister);
                 menu::separator(ui);
                 self.menu_command(ui, Rules);
+                self.menu_command(ui, Categorize);
                 self.menu_command(ui, AddToPayees);
                 self.menu_command(ui, AddToScheduler);
                 self.extension_items(ui, "operations");

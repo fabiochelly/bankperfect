@@ -23,6 +23,24 @@ use crate::ui_kit;
 const STATUS_WIDTH: f32 = 160.0;
 /// Place laissée à droite des lignes pour la barre de défilement.
 const SCROLLBAR_GUTTER: f32 = crate::theme::SCROLLBAR_WIDTH + 4.0;
+/// Colonne de la catégorie dans l'aperçu.
+const CATEGORY_WIDTH: f32 = 200.0;
+
+/// Catégorie qu'aura une ligne importée.
+#[derive(Clone, Debug, PartialEq)]
+enum LineCategory {
+    None,
+    /// Lue dans le fichier (par nom).
+    File(String),
+    /// Imposée par une règle automatique.
+    Rule(u32),
+    /// Suggestion : appliquée si sûre et si la catégorisation est cochée.
+    Suggested {
+        category: u32,
+        confidence: f32,
+        reason: String,
+    },
+}
 
 /// Champ affecté à une colonne CSV.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -120,6 +138,10 @@ pub struct ImportForm {
     /// Pastille du format (format d'une extension) ; par défaut QIF, OFX,
     /// CSV ou Banque.
     format_name: Option<String>,
+    /// Catégorie prévue de chaque ligne (comme `statuses`).
+    categories: Vec<Vec<LineCategory>>,
+    /// Appliquer les suggestions sûres.
+    categorize: bool,
 }
 
 impl ImportForm {
@@ -160,6 +182,8 @@ impl ImportForm {
             recheck: true,
             source: None,
             format_name: None,
+            categories: Vec::new(),
+            categorize: crate::settings::shared::categorize_on_import(),
             data,
         };
         match format {
@@ -248,6 +272,8 @@ impl ImportForm {
             recheck: true,
             source: Some(source),
             format_name: None,
+            categories: Vec::new(),
+            categorize: crate::settings::shared::categorize_on_import(),
         }
     }
 
@@ -339,6 +365,95 @@ impl ImportForm {
             .iter()
             .map(|s| s.iter().map(|st| st.is_new()).collect())
             .collect();
+        self.plan_categories(doc);
+    }
+
+    /// Catégorie prévue de chaque ligne : celle du fichier, sinon celle
+    /// qu'imposera une règle automatique, sinon une suggestion.
+    fn plan_categories(&mut self, doc: &OpenDoc) {
+        let accounts = self
+            .parsed
+            .as_ref()
+            .map(|p| p.accounts.as_slice())
+            .unwrap_or(&[]);
+        let options = ConvertOptions {
+            default_tack: self.default_tack,
+            store_fitid: false,
+        };
+        let rules = bp_core::autofields::AutoFieldRules::load(
+            &doc.document,
+            &bp_core::legacy_pickle::parse_py,
+        )
+        .unwrap_or_default();
+        let categorizer = doc.categorizer();
+        self.categories = accounts
+            .iter()
+            .zip(&self.targets)
+            .map(|(account, target)| {
+                let operations: Vec<_> = account
+                    .operations
+                    .iter()
+                    .map(|op| import::to_operation(&doc.document, op, &options))
+                    .collect();
+                // Simulation des règles sur une copie, comme à l'import.
+                let copy = target
+                    .unwrap_or(doc.account)
+                    .min(doc.document.accounts.len().saturating_sub(1));
+                let mut copy = doc.document.accounts[copy].clone_header();
+                copy.operations = operations;
+                let lines: Vec<usize> = (0..copy.operations.len()).collect();
+                rules.apply_to_new_lines(&doc.document.categories, &mut copy, &lines);
+                account
+                    .operations
+                    .iter()
+                    .zip(&copy.operations)
+                    .map(|(imported, converted)| {
+                        let named = [&imported.category, &imported.subcategory]
+                            .into_iter()
+                            .flatten()
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .collect::<Vec<_>>()
+                            .join(" > ");
+                        if !named.is_empty() {
+                            return LineCategory::File(named);
+                        }
+                        if let Some(category) = converted.category {
+                            return LineCategory::Rule(category);
+                        }
+                        let query = bp_core::categorize::Query {
+                            payee: &imported.payee,
+                            details: &imported.details,
+                            amount: imported.amount,
+                            mode: Some(&imported.mode),
+                            merchant_code: imported.merchant_code,
+                        };
+                        match categorizer.suggest(&query).best() {
+                            Some(best) => LineCategory::Suggested {
+                                category: best.category,
+                                confidence: best.confidence,
+                                reason: best.reason.clone(),
+                            },
+                            None => LineCategory::None,
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+    }
+
+    /// Suggestion appliquée à la ligne `line` du compte `k` du fichier.
+    fn applied_suggestion(&self, k: usize, line: usize) -> Option<u32> {
+        match self.categories.get(k)?.get(line)? {
+            LineCategory::Suggested {
+                category,
+                confidence,
+                ..
+            } if self.categorize && *confidence >= bp_core::categorize::AUTO_THRESHOLD => {
+                Some(*category)
+            }
+            _ => None,
+        }
     }
 
     fn selected_count(&self) -> usize {
@@ -778,8 +893,9 @@ impl ImportForm {
                         );
                         // Libellé : la place laissée par les colonnes fixes et
                         // la barre de défilement, pour ne pas élargir la fenêtre.
-                        let fixed = 130.0 + 110.0 + 12.0 + STATUS_WIDTH + SCROLLBAR_GUTTER;
-                        let w = (ui.available_width() - fixed - 4.0 * ui.spacing().item_spacing.x)
+                        let fixed =
+                            CATEGORY_WIDTH + 130.0 + 110.0 + 12.0 + STATUS_WIDTH + SCROLLBAR_GUTTER;
+                        let w = (ui.available_width() - fixed - 5.0 * ui.spacing().item_spacing.x)
                             .max(160.0);
                         let text = if op.details.is_empty() || op.details == op.payee {
                             op.payee.clone()
@@ -788,6 +904,7 @@ impl ImportForm {
                         };
                         let color = if include { pal.fg } else { pal.muted };
                         ui_kit::cell(ui, w, egui::Align::Min, RichText::new(text).color(color));
+                        self.category_cell(ui, doc, shown, k);
                         ui_kit::cell(
                             ui,
                             130.0,
@@ -836,6 +953,65 @@ impl ImportForm {
                 }
             });
         self.rejected(ui, &parsed, width);
+    }
+
+    /// Catégorie prévue d'une ligne de l'aperçu.
+    fn category_cell(&self, ui: &mut egui::Ui, doc: &OpenDoc, k: usize, line: usize) {
+        let pal = palette(ui);
+        // Nom seul dans la colonne, libellé complet dans l'infobulle.
+        let label = |id: u32| {
+            doc.document
+                .category(id)
+                .map(|c| c.name.clone())
+                .unwrap_or_default()
+        };
+        let full = |id: u32| doc.document.category_label(id).unwrap_or_default();
+        let planned = self
+            .categories
+            .get(k)
+            .and_then(|v| v.get(line))
+            .cloned()
+            .unwrap_or(LineCategory::None);
+        let (text, hover) = match planned {
+            LineCategory::None => (RichText::new("—").color(pal.muted), None),
+            LineCategory::File(name) => (
+                RichText::new(name).color(pal.fg_dark),
+                Some("Catégorie lue dans le fichier".to_string()),
+            ),
+            LineCategory::Rule(id) => (
+                RichText::new(format!("{}  {}", icon::LIGHTNING, label(id))).color(pal.fg_dark),
+                Some(format!("{} : imposée par une règle automatique", full(id))),
+            ),
+            LineCategory::Suggested {
+                category,
+                confidence,
+                reason,
+            } => {
+                let percent = (confidence * 100.0).round();
+                if self.applied_suggestion(k, line).is_some() {
+                    (
+                        RichText::new(format!("{}  {}", icon::MAGIC_WAND, label(category)))
+                            .color(pal.accent),
+                        Some(format!(
+                            "Catégorie devinée ({reason}, confiance {percent} %)"
+                        )),
+                    )
+                } else {
+                    (
+                        RichText::new(format!("{} ?", label(category))).color(pal.muted),
+                        Some(format!(
+                            "{} : suggestion à confirmer ({reason}, confiance {percent} %), \
+                             non appliquée ; « Catégoriser les opérations… » permet de la valider",
+                            full(category)
+                        )),
+                    )
+                }
+            }
+        };
+        let response = ui_kit::cell_response(ui, CATEGORY_WIDTH, egui::Align::Min, text);
+        if let Some(hover) = hover {
+            response.on_hover_text(hover);
+        }
     }
 
     /// Solde annoncé par la banque et solde pointé du compte une fois l'import
@@ -982,6 +1158,12 @@ impl ImportForm {
                 "Créer les catégories manquantes",
             );
             ui.add_space(16.0);
+            crate::theme::checkbox(ui, &mut self.categorize, "Deviner les catégories")
+                .on_hover_text(
+                    "Applique les suggestions sûres (historique, commerçants connus) aux \
+                     opérations que le fichier et les règles laissent sans catégorie",
+                );
+            ui.add_space(16.0);
             let before = (self.tolerance, self.match_mode);
             ui.label(RichText::new("Doublons : écart toléré").color(pal.fg_dark));
             ui.add(
@@ -1002,9 +1184,12 @@ impl ImportForm {
                 import::operation_count_label(count)
             );
             if crate::dialogs::primary(ui, &label, count > 0).clicked() {
-                let n = self.import(doc);
-                *outcome =
-                    Outcome::Done(format!("{} importée(s)", import::operation_count_label(n)));
+                let (n, guessed) = self.import(doc);
+                let mut message = format!("{} importée(s)", import::operation_count_label(n));
+                if guessed > 0 {
+                    message.push_str(&format!(", {guessed} catégorisée(s) automatiquement"));
+                }
+                *outcome = Outcome::Done(message);
             }
             if crate::dialogs::button(ui, "Annuler").clicked()
                 || ui.input(|i| i.key_pressed(Key::Escape))
@@ -1014,11 +1199,13 @@ impl ImportForm {
         });
     }
 
-    /// Ajoute les lignes cochées aux comptes de destination.
-    fn import(&mut self, doc: &mut OpenDoc) -> usize {
+    /// Ajoute les lignes cochées aux comptes de destination ; renvoie le
+    /// nombre de lignes importées et de catégories devinées.
+    fn import(&mut self, doc: &mut OpenDoc) -> (usize, usize) {
         let Ok(parsed) = self.parsed.clone() else {
-            return 0;
+            return (0, 0);
         };
+        let mut guessed = 0;
         let options = ConvertOptions {
             default_tack: self.default_tack,
             store_fitid: self.store_fitid,
@@ -1028,7 +1215,7 @@ impl ImportForm {
             let Some(target) = self.targets.get(k).copied().flatten() else {
                 continue;
             };
-            let chosen: Vec<&import::ImportedOperation> = account
+            let chosen: Vec<(usize, &import::ImportedOperation)> = account
                 .operations
                 .iter()
                 .enumerate()
@@ -1039,21 +1226,32 @@ impl ImportForm {
                         .copied()
                         .unwrap_or(false)
                 })
-                .map(|(_, op)| op)
                 .collect();
             if chosen.is_empty() {
                 continue;
             }
             if self.create_categories {
-                import::create_missing_categories(&mut doc.document, chosen.iter().copied());
+                import::create_missing_categories(
+                    &mut doc.document,
+                    chosen.iter().map(|&(_, op)| op),
+                );
             }
             let operations: Vec<_> = chosen
                 .iter()
-                .map(|op| import::to_operation(&doc.document, op, &options))
+                .map(|&(i, op)| {
+                    let mut operation = import::to_operation(&doc.document, op, &options);
+                    if operation.category.is_none()
+                        && let Some(category) = self.applied_suggestion(k, i)
+                    {
+                        operation.category = Some(category);
+                        guessed += 1;
+                    }
+                    operation
+                })
                 .collect();
             total += doc.import_into(target, operations);
         }
-        total
+        (total, guessed)
     }
 }
 

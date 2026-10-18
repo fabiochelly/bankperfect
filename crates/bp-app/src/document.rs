@@ -76,6 +76,9 @@ pub struct OpenDoc {
     revision: u64,
     /// Dernière étiquette d'étape d'annulation attribuée.
     undo_tag: u64,
+    /// Index de catégorisation automatique et révision pour laquelle il a
+    /// été construit (reconstruit à la demande après une modification).
+    categorizer: std::cell::RefCell<Option<(u64, Arc<bp_core::categorize::Categorizer>)>>,
 }
 
 /// Évènement pour les extensions : évènement, lignes (compte, identifiant),
@@ -260,6 +263,7 @@ impl OpenDoc {
             redo: Vec::new(),
             revision: 0,
             undo_tag: 0,
+            categorizer: std::cell::RefCell::new(None),
         };
         doc.category_styles = crate::category_icons::styles(&doc.document);
         doc.refresh();
@@ -877,6 +881,63 @@ impl OpenDoc {
             self.touch();
         }
         changed
+    }
+
+    /// Index de catégorisation automatique à jour.
+    pub fn categorizer(&self) -> Arc<bp_core::categorize::Categorizer> {
+        let mut cache = self.categorizer.borrow_mut();
+        match &*cache {
+            Some((revision, c)) if *revision == self.revision => c.clone(),
+            _ => {
+                let c = Arc::new(bp_core::categorize::Categorizer::new(&self.document));
+                *cache = Some((self.revision, c.clone()));
+                c
+            }
+        }
+    }
+
+    /// Attribue des catégories : (compte, opération, catégorie), en une seule
+    /// étape d'annulation. Renvoie le nombre d'opérations modifiées.
+    pub fn set_categories(&mut self, changes: &[(usize, usize, u32)], label: &str) -> usize {
+        let mut accounts: Vec<usize> = changes.iter().map(|&(a, _, _)| a).collect();
+        accounts.sort_unstable();
+        accounts.dedup();
+        if accounts.is_empty() {
+            return 0;
+        }
+        self.snapshot_accounts(label, self.account, &accounts);
+        let locked = self.locked;
+        let mut changed = 0;
+        for &(a, line, category) in changes {
+            if let Some(op) = self
+                .document
+                .accounts
+                .get_mut(a)
+                .and_then(|acc| acc.operations.get_mut(line))
+                && op.category != Some(category)
+                && !(locked && op.tack == Tack::Reconciled)
+            {
+                op.category = Some(category);
+                changed += 1;
+            }
+        }
+        if changed == 0 {
+            self.undo.pop();
+        } else {
+            self.view.indexed_account = None;
+            self.view.series_key = None;
+            self.touch();
+        }
+        changed
+    }
+
+    /// Range des réponses de l'IA dans le fichier (elles ne seront plus
+    /// redemandées).
+    pub fn store_ai_answers(&mut self, answers: &[(String, String)]) {
+        if bp_core::categorize::ai::store(&mut self.document, answers).is_ok() {
+            self.dirty = true;
+            *self.categorizer.borrow_mut() = None;
+        }
     }
 
     /// Règles « appliquer automatiquement » sur des lignes ajoutées ou

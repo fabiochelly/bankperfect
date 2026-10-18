@@ -36,6 +36,17 @@ BankPerfect se connecte aussi à Internet dans les cas suivants :
 - **Licence** : si vous avez acheté BankPerfect, votre clé de licence est
   envoyée une fois au serveur de chelly.net, qui renvoie un certificat
   signé. Ensuite, la vérification se fait hors connexion.
+- **Catégorisation par l'IA** (désactivée par défaut) : la catégorisation
+  automatique fonctionne hors connexion, d'après votre historique et un
+  dictionnaire intégré. Si vous activez l'option et indiquez votre propre
+  clé d'API Anthropic, le bouton « Demander à l'IA » de la fenêtre
+  « Catégoriser les opérations » envoie à Anthropic, et seulement à ce
+  moment-là, les libellés que BankPerfect ne sait pas classer : nettoyés
+  (sans chiffres, références ni dates), avec le sens et un ordre de
+  grandeur du montant, et la liste de vos noms de catégories. Ni vos comptes,
+  ni vos soldes, ni les montants exacts ne sont transmis. Le traitement par
+  Anthropic relève de sa propre
+  [politique de confidentialité](https://www.anthropic.com/legal/privacy).
 
 ## Contact
 
@@ -57,6 +68,10 @@ user's computer and stores transactions only in the user's file.
 
 Other connections: exchange rates (European Central Bank), security quotes
 (Yahoo Finance, for the tickers the user follows), and a one-time licence
-activation on chelly.net for paying users.
+activation on chelly.net for paying users. Automatic categorisation works
+offline; only if the user enables the AI option and supplies their own
+Anthropic API key, clicking "Demander à l'IA" sends the labels BankPerfect
+cannot classify (stripped of numbers and references), the direction and
+rough size of the amount, and the user's category names to Anthropic.
 
 Contact: Fabio Chelly — fabio@chelly.net

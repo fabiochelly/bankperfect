@@ -3,6 +3,7 @@
 
 use std::collections::BTreeSet;
 
+use bp_core::categorize::{Query, Suggestion};
 use bp_core::model::{Amount, Date, Document, Mode, Operation, Tack};
 use chrono::Months;
 use egui::{Key, RichText};
@@ -34,7 +35,19 @@ pub struct Editor {
     overflow: bool,
     /// Entrée tapée dans le montant de la barre du bas : validation.
     pending_submit: bool,
+    /// Catégories proposées pour la saisie en cours, et texte (tiers,
+    /// détail, montant) pour lequel elles ont été calculées.
+    suggestion: Option<Suggestion>,
+    suggestion_key: String,
+    /// Catégorie remplie automatiquement (remplacée tant que l'utilisateur
+    /// n'en choisit pas une autre).
+    auto_category: Option<u32>,
+    /// Message de la baguette magique (rien à proposer).
+    category_hint: Option<String>,
 }
+
+/// Bouton « baguette magique » à côté de la catégorie.
+const WAND_WIDTH: f32 = 36.0;
 
 pub enum EditorAction {
     None,
@@ -61,6 +74,10 @@ impl Editor {
             focus_requested: true,
             overflow: false,
             pending_submit: false,
+            suggestion: None,
+            suggestion_key: String::new(),
+            auto_category: None,
+            category_hint: None,
         }
     }
 
@@ -83,6 +100,10 @@ impl Editor {
             focus_requested: true,
             overflow: false,
             pending_submit: false,
+            suggestion: None,
+            suggestion_key: String::new(),
+            auto_category: None,
+            category_hint: None,
         }
     }
 
@@ -109,6 +130,7 @@ impl Editor {
     }
 
     pub fn show(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) -> EditorAction {
+        self.refresh_suggestion(doc);
         let document = &doc.document;
         let pal = palette(ui);
         let mut action = EditorAction::None;
@@ -234,39 +256,20 @@ impl Editor {
                 });
 
                 section(ui, card_width, icon::TAG, "Classement", |ui| {
-                    let style = self
-                        .category
-                        .and_then(|id| doc.category_styles.get(&id).copied());
-                    let selected = match self.category.and_then(|id| document.category_label(id)) {
-                        Some(label) => {
-                            let color = style
-                                .map_or(pal.fg, |s| crate::theme::category_color(&pal, s.color));
-                            let glyph = style.map_or(icon::TAG, |s| s.icon);
-                            RichText::new(format!("{glyph}  {label}")).color(color)
-                        }
-                        None => RichText::new("Aucune catégorie").color(pal.muted),
-                    };
-                    egui::ComboBox::from_id_salt("category")
-                        .selected_text(selected)
-                        .width(ui.available_width())
-                        .height(420.0)
-                        .show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.category, None, "Aucune catégorie");
-                            for c in &document.categories {
-                                let style = doc.category_styles.get(&c.id).copied();
-                                let glyph = style.map_or(icon::TAG, |s| s.icon);
-                                let indent = if c.is_child { "      " } else { "" };
-                                let mut text =
-                                    RichText::new(format!("{indent}{glyph}  {}", c.name));
-                                if !c.is_child {
-                                    text = text.family(crate::theme::semibold());
-                                }
-                                if let Some(s) = style {
-                                    text = text.color(crate::theme::category_color(&pal, s.color));
-                                }
-                                ui.selectable_value(&mut self.category, Some(c.id), text);
-                            }
-                        });
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 8.0;
+                        let width = ui.available_width() - WAND_WIDTH - 8.0;
+                        crate::ui_kit::category_combo(
+                            ui,
+                            "category",
+                            document,
+                            &doc.category_styles,
+                            &mut self.category,
+                            width,
+                        );
+                        self.wand_button(ui, doc);
+                    });
+                    self.suggestion_hints(ui, doc);
                     ui.add_space(14.0);
                     crate::ui_kit::segmented(
                         ui,
@@ -337,16 +340,20 @@ impl Editor {
             ui.separator();
         });
 
-        let (enter, escape, load, clear) = ui.input_mut(|i| {
+        let (enter, escape, load, clear, guess) = ui.input_mut(|i| {
             (
                 i.modifiers.command && i.key_pressed(Key::Enter),
                 i.key_pressed(Key::Escape),
                 i.consume_key(egui::Modifiers::NONE, Key::F10),
                 i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
+                i.consume_key(egui::Modifiers::NONE, Key::F9),
             )
         });
         if load {
             self.load_payee(doc);
+        }
+        if guess {
+            self.guess_category(doc);
         }
         if clear {
             self.clear(document);
@@ -391,6 +398,7 @@ impl Editor {
     /// Barre de saisie du bas (option) : mêmes champs que le panneau de
     /// droite, sur une ou deux lignes selon la largeur.
     pub fn show_bar(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) -> EditorAction {
+        self.refresh_suggestion(doc);
         let document = &doc.document;
         let pal = palette(ui);
         let mut action = EditorAction::None;
@@ -474,7 +482,7 @@ impl Editor {
             // Tiers et détail se partagent la place restante, jusqu'au bord
             // droit (en large, après eux : catégorie, signe, montant, pointage).
             let after = if wide {
-                cat_w + sign_w + amount_w + tack_w + 4.0 * GAP
+                cat_w + WAND_WIDTH + sign_w + amount_w + tack_w + 5.0 * GAP
             } else {
                 0.0
             };
@@ -504,6 +512,7 @@ impl Editor {
                 &mut this.category,
                 cat_w,
             );
+            this.wand_button(ui, doc);
             let sign = if this.credit { "+" } else { "−" };
             if ui
                 .add_sized(
@@ -569,16 +578,20 @@ impl Editor {
         if std::mem::take(&mut self.pending_submit) {
             action = self.validate();
         }
-        let (enter, escape, load, clear) = ui.input_mut(|i| {
+        let (enter, escape, load, clear, guess) = ui.input_mut(|i| {
             (
                 focused && i.modifiers.command && i.key_pressed(Key::Enter),
                 focused && i.key_pressed(Key::Escape),
                 focused && i.consume_key(egui::Modifiers::NONE, Key::F10),
                 focused && i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
+                focused && i.consume_key(egui::Modifiers::NONE, Key::F9),
             )
         });
         if load {
             self.load_payee(doc);
+        }
+        if guess {
+            self.guess_category(doc);
         }
         if clear {
             self.clear(document);
@@ -762,6 +775,9 @@ impl Editor {
         self.amount.clear();
         self.tack = Tack::None;
         self.error = None;
+        self.suggestion = None;
+        self.auto_category = None;
+        self.category_hint = None;
         self.focus_requested = true;
     }
 
@@ -837,6 +853,164 @@ impl Editor {
                     self.payee = name;
                 }
             }
+        }
+    }
+
+    /// Montant signé saisi (zéro s'il est vide ou illisible).
+    fn typed_amount(&self) -> Amount {
+        let amount = Amount::parse(self.amount.trim())
+            .unwrap_or(Amount::ZERO)
+            .abs();
+        if self.credit {
+            amount
+        } else {
+            Amount(-amount.0)
+        }
+    }
+
+    fn compute_suggestion(&self, doc: &OpenDoc) -> Suggestion {
+        doc.categorizer().suggest(&Query {
+            payee: &self.payee,
+            details: &self.details,
+            amount: self.typed_amount(),
+            mode: Some(&self.mode),
+            merchant_code: None,
+        })
+    }
+
+    /// Recalcule les suggestions quand le tiers, le détail, le montant ou le
+    /// sens changent ; remplit la catégorie vide si la suggestion est sûre.
+    fn refresh_suggestion(&mut self, doc: &OpenDoc) {
+        if self.auto_category.is_some() && self.category != self.auto_category {
+            // L'utilisateur a choisi une autre catégorie.
+            self.auto_category = None;
+        }
+        let key = format!(
+            "{}\u{1}{}\u{1}{}\u{1}{}\u{1}{}",
+            self.payee,
+            self.details,
+            self.amount,
+            self.credit,
+            doc.revision()
+        );
+        if key == self.suggestion_key {
+            return;
+        }
+        self.suggestion_key = key;
+        self.category_hint = None;
+        if self.payee.trim().is_empty() && self.details.trim().is_empty() {
+            self.suggestion = None;
+            if self.auto_category.take().is_some() {
+                self.category = None;
+            }
+            return;
+        }
+        let suggestion = self.compute_suggestion(doc);
+        if crate::settings::shared::categorize_in_entry()
+            && (self.category.is_none() || self.auto_category.is_some())
+        {
+            match suggestion.confident() {
+                Some(category) => {
+                    self.category = Some(category);
+                    self.auto_category = Some(category);
+                }
+                None => {
+                    if self.auto_category.take().is_some() {
+                        self.category = None;
+                    }
+                }
+            }
+        }
+        self.suggestion = Some(suggestion);
+    }
+
+    /// Baguette magique : devine la catégorie tout de suite, même peu sûre.
+    fn guess_category(&mut self, doc: &OpenDoc) {
+        let suggestion = self.compute_suggestion(doc);
+        match suggestion.best() {
+            Some(best) => {
+                self.category = Some(best.category);
+                self.auto_category = Some(best.category);
+                self.category_hint = None;
+            }
+            None => {
+                self.category_hint = Some(if self.payee.trim().is_empty() {
+                    "Saisissez d'abord le tiers".into()
+                } else {
+                    "Aucune catégorie à proposer pour ce libellé".into()
+                });
+            }
+        }
+        self.suggestion = Some(suggestion);
+    }
+
+    fn wand_button(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) {
+        let pal = palette(ui);
+        let button =
+            egui::Button::new(RichText::new(icon::MAGIC_WAND).size(17.0).color(pal.accent))
+                .min_size(egui::vec2(WAND_WIDTH, 32.0));
+        if ui
+            .add(button)
+            .on_hover_text("Deviner la catégorie d'après le tiers, le détail et le montant (F9)")
+            .clicked()
+        {
+            self.guess_category(doc);
+        }
+    }
+
+    /// Sous la catégorie : origine d'une catégorie devinée, ou suggestions à
+    /// un clic quand aucune n'est sûre.
+    fn suggestion_hints(&mut self, ui: &mut egui::Ui, doc: &OpenDoc) {
+        let pal = palette(ui);
+        let percent = |c: f32| (c * 100.0).round();
+        if let Some(hint) = &self.category_hint {
+            ui.add_space(6.0);
+            ui.label(RichText::new(hint).color(pal.muted).size(12.5));
+            return;
+        }
+        let Some(suggestion) = &self.suggestion else {
+            return;
+        };
+        if let Some(auto) = self.auto_category.filter(|&a| self.category == Some(a))
+            && let Some(c) = suggestion.candidates.iter().find(|c| c.category == auto)
+        {
+            ui.add_space(6.0);
+            ui.label(
+                RichText::new(format!(
+                    "{}  Devinée : {} · {} %",
+                    icon::SPARKLE,
+                    c.reason,
+                    percent(c.confidence)
+                ))
+                .color(pal.muted)
+                .size(12.5),
+            );
+            return;
+        }
+        if self.category.is_some() || suggestion.is_empty() {
+            return;
+        }
+        let mut chosen = None;
+        ui.add_space(6.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
+            ui.label(RichText::new("Suggestions").color(pal.muted).size(12.5));
+            for c in &suggestion.candidates {
+                let label = doc.document.category_label(c.category).unwrap_or_default();
+                let text =
+                    RichText::new(format!("{label}  {} %", percent(c.confidence))).size(12.5);
+                if ui
+                    .add(egui::Button::new(text).small())
+                    .on_hover_text(format!("D'après : {}", c.reason))
+                    .clicked()
+                {
+                    chosen = Some(c.category);
+                }
+            }
+        });
+        if let Some(category) = chosen {
+            self.category = Some(category);
+            self.auto_category = None;
         }
     }
 

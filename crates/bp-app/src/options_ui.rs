@@ -134,6 +134,68 @@ impl OptionsForm {
                 "Saisie en série : le formulaire reste ouvert et vidé après chaque ajout",
             );
         });
+        ui_kit::section(
+            ui,
+            width,
+            icon::MAGIC_WAND,
+            "Catégorisation automatique",
+            |ui| {
+                crate::theme::checkbox(
+                    ui,
+                    &mut d.categorize_in_entry,
+                    "Pendant la saisie, remplir la catégorie quand la suggestion est sûre",
+                );
+                ui.add_space(8.0);
+                crate::theme::checkbox(
+                    ui,
+                    &mut d.categorize_on_import,
+                    "À l'import, catégoriser les opérations que les règles laissent sans catégorie",
+                );
+                ui.add_space(8.0);
+                crate::theme::checkbox(
+                    ui,
+                    &mut d.ai_categorize,
+                    "Proposer de demander à l'IA (Claude) pour les libellés inconnus",
+                );
+                if d.ai_categorize {
+                    ui.add_space(10.0);
+                    ui_kit::row(ui, "Clé d'API Anthropic", LABEL_WIDTH, |ui| {
+                        ui.add(
+                            crate::theme::field(&mut d.ai_api_key)
+                                .password(true)
+                                .hint_text("sk-ant-…")
+                                .desired_width(ui.available_width().min(380.0)),
+                        );
+                    });
+                    ui.add_space(8.0);
+                    ui_kit::row(ui, "Modèle", LABEL_WIDTH, |ui| {
+                        let current = bp_core::categorize::ai::MODELS
+                            .iter()
+                            .find(|(id, _)| *id == d.ai_model)
+                            .map_or(d.ai_model.as_str(), |(_, label)| label);
+                        egui::ComboBox::from_id_salt("ai_model")
+                            .selected_text(current)
+                            .width(ui.available_width().min(380.0))
+                            .show_ui(ui, |ui| {
+                                for (id, label) in bp_core::categorize::ai::MODELS {
+                                    ui.selectable_value(&mut d.ai_model, id.to_string(), label);
+                                }
+                            });
+                    });
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(
+                            "Seulement quand vous cliquez sur « Demander à l'IA » : les libellés \
+                         inconnus sont envoyés à Anthropic sans numéros ni références, avec \
+                         le sens et un ordre de grandeur du montant et vos noms de \
+                         catégories. La clé reste dans les réglages de cet ordinateur.",
+                        )
+                        .color(pal.muted)
+                        .size(12.5),
+                    );
+                }
+            },
+        );
         ui_kit::section(ui, width, icon::CALCULATOR, "Pointage et soldes", |ui| {
             crate::theme::checkbox(
                 ui,

@@ -123,6 +123,15 @@ end
 type Category = { id: number, name: string, label: string, is_child: boolean, parent: string? }
 type Mode = { name: string, debit: boolean, custom: boolean }
 type Payee = { caption: string, payee: string, details: string, mode: string, category: string?, amount: number? }
+type CategoryGuess = {
+	category: string,
+	id: number,
+	confidence: number,
+	sure: boolean,
+	source: string,
+	reason: string,
+	alternatives: { CategoryGuess }?,
+}
 
 declare class BPWindowHandle
 	function close(self, value: any?): ()
@@ -301,6 +310,7 @@ declare bp: {
 	modes: () -> { Mode },
 	add_mode: (name: string, debit: boolean?) -> string,
 	payees: () -> { Payee },
+	suggest_category: (target: BPOperation | { payee: string?, details: string?, amount: number?, mode: string? }) -> CategoryGuess?,
 
 	date: ((year: number, month: number, day: number) -> BPDate) & ((text: DateLike?) -> BPDate),
 	today: () -> BPDate,

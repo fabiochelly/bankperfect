@@ -3581,12 +3581,14 @@ fn ensure_protection(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
     Ok(recovery)
 }
 
+/// Garde l'original d'un fichier v5 avant sa conversion : `<nom>.version8.bp`
+/// à côté, que BankPerfect 8 ouvre directement (jamais écrasé).
 fn backup_v5_original(path: &Path) -> std::io::Result<()> {
     let stem = path
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
-    let backup = path.with_file_name(format!("{stem}_v5.bp0"));
+    let backup = path.with_file_name(format!("{stem}.version8.bp"));
     if !backup.exists() {
         std::fs::copy(path, backup)?;
     }

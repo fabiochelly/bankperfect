@@ -221,7 +221,7 @@ fn uses_in(path: &Path, out: &mut Vec<Use>) {
                         src.get(next) != Some(&')')
                     };
                 out.push(Use {
-                    text,
+                    text: format!("{context}{text}"),
                     with_values,
                     marked: word == "tr_mark",
                     place: place.clone(),

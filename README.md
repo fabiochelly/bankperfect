@@ -25,6 +25,8 @@ BankPerfect 9 est la réécriture complète en Rust du logiciel BankPerfect (Del
 | ![Saisie](docs/captures/saisie.png) | ![Graphiques](docs/captures/graphiques.png) |
 | **Budget** | **Simulateur de crédit** |
 | ![Budget](docs/captures/budget.png) | ![Simulateur de crédit](docs/captures/simulateur-credit.png) |
+| **Catégories devinées à l'import** | **Baguette magique de la saisie** |
+| ![Catégorisation à l'import](docs/captures/categorisation-import.png) | ![Catégorie devinée pendant la saisie](docs/captures/categorisation-saisie.png) |
 
 ## Installation
 

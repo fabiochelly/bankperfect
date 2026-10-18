@@ -2,6 +2,7 @@
 //! raccourci et mots-clés. Les menus et la palette de commandes s'en servent,
 //! l'exécution est dans `BankPerfectApp::execute`.
 
+use bp_core::i18n::Lang;
 use egui::ThemePreference;
 use egui_phosphor::regular as icon;
 
@@ -74,6 +75,8 @@ pub enum Command {
     Theme(ThemePreference),
     /// Thème de la galerie, par identifiant.
     UseTheme(&'static str),
+    /// Langue de l'interface.
+    Language(Lang),
     NextAccount,
     PreviousAccount,
     SelectAccount(usize),
@@ -207,6 +210,7 @@ impl Command {
             Theme(ThemePreference::System),
         ]);
         list.extend(crate::theme::THEMES.iter().map(|t| UseTheme(t.id)));
+        list.extend(Lang::ALL.map(Language));
         list.extend(
             crate::extensions::entries()
                 .iter()
@@ -864,6 +868,13 @@ impl Command {
                     },
                 )
             }
+            Language(lang) => info(
+                "Affichage",
+                &format!("Langue : {} (language)", lang.native_name()),
+                icon::TRANSLATE,
+                None,
+                "langue language traduction translation english anglais français french",
+            ),
             NextAccount => info(
                 "Comptes",
                 "Compte suivant",
@@ -1084,6 +1095,7 @@ impl Command {
                     | Calculator
                     | Theme(_)
                     | UseTheme(_)
+                    | Language(_)
                     | ToggleTranslucent
                     | Palette
                     | Options

@@ -1,8 +1,8 @@
 # Installation : brew install --cask fabiochelly/bankperfect/bankperfect
 # (le dépôt sert de « tap » : brew tap fabiochelly/bankperfect https://github.com/fabiochelly/bankperfect)
 cask "bankperfect" do
-  version "9.8.0"
-  sha256 "61ad4d7836dfaab2420ab562f3be9d4a10eceff1eaf8268f4edf0a85a99fd5d4"
+  version "9.8.2"
+  sha256 "11ac7729ba3ccf11e7e5fb3b2652a16e4218a41055b495b9fd1672fddf4d6b4e"
 
   url "https://github.com/fabiochelly/bankperfect/releases/download/v#{version}/BankPerfect-#{version}-macos-universal.zip"
   name "BankPerfect"

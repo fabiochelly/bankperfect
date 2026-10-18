@@ -41,6 +41,7 @@ mod rules_ui;
 mod scheduler_ui;
 mod settings;
 mod sidebar;
+mod smart_tack_ui;
 mod spreadsheet;
 mod statement_pdf;
 pub mod theme;

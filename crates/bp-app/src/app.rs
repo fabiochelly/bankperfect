@@ -1253,6 +1253,11 @@ impl BankPerfectApp {
                 }
             }
             Command::ReconcileAll => doc.reconcile_all_pointed(),
+            Command::SmartTack => {
+                self.tool = Some(Tool::SmartTack(Box::new(
+                    crate::smart_tack_ui::SmartTackForm::new(doc),
+                )))
+            }
             Command::ModifyGroup => {
                 self.tool = Some(Tool::ModifyGroup(crate::tools::GroupForm::new()))
             }
@@ -1945,6 +1950,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, Tack);
                 self.menu_command(ui, SetMarkDate);
                 self.menu_command(ui, ReconcileAll);
+                self.menu_command(ui, SmartTack);
                 let mut locked = self.settings.lock_reconciled;
                 if menu::toggle(ui, &mut locked, "Verrouiller les lignes rapprochées", None)
                     .clicked()

@@ -80,6 +80,7 @@ pub enum Command {
     Manage(Tab),
     Tack,
     ReconcileAll,
+    SmartTack,
     ModifyGroup,
     ExtraFields,
     Notes,
@@ -142,6 +143,7 @@ impl Command {
                 Tack,
                 SetMarkDate,
                 ReconcileAll,
+                SmartTack,
                 ToggleLock,
                 ModifyGroup,
                 ExtraFields,
@@ -933,6 +935,13 @@ impl Command {
                 icon::CHECKS,
                 None,
                 "relevé banque",
+            ),
+            SmartTack => info(
+                "Opérations",
+                "Pointage intelligent…",
+                icon::SEAL_CHECK,
+                None,
+                "pointer automatiquement solde banque relevé deviner",
             ),
             ModifyGroup => {
                 let mut i = info(

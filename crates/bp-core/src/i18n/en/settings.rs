@@ -1,3 +1,3 @@
 //! Catalogue anglais : textes français → traduction.
 
-pub const ENTRIES: &[(&str, &str)] = &[("Annuler", "Cancel")];
+pub const ENTRIES: &[(&str, &str)] = &[];

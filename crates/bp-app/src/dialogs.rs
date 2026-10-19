@@ -91,6 +91,7 @@ pub fn danger(ui: &mut egui::Ui, text: &str) -> egui::Response {
 pub struct PasswordPrompt {
     pub path: PathBuf,
     pub input: String,
+    pub show_password: bool,
     pub use_recovery_key: bool,
     pub can_use_recovery_key: bool,
     pub error: Option<String>,
@@ -128,10 +129,12 @@ impl PasswordPrompt {
                 )
             } else {
                 ui.label(tr!("Mot de passe :"));
-                ui.add(
-                    crate::theme::field(&mut self.input)
-                        .password(true)
-                        .desired_width(f32::INFINITY),
+                crate::theme::password_field(
+                    ui,
+                    "open_password",
+                    &mut self.input,
+                    &mut self.show_password,
+                    f32::INFINITY,
                 )
             };
             response.request_focus();

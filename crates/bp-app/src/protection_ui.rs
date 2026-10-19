@@ -20,6 +20,8 @@ pub struct ProtectionForm {
     current: String,
     new: String,
     confirm: String,
+    show_current: bool,
+    show_new: bool,
     error: Option<String>,
 }
 
@@ -69,10 +71,12 @@ impl ProtectionForm {
                 .show(ui, |ui| {
                     if protected {
                         ui.label(tr!("Mot de passe actuel"));
-                        ui.add(
-                            crate::theme::field(&mut self.current)
-                                .password(true)
-                                .desired_width(260.0),
+                        crate::theme::password_field(
+                            ui,
+                            "protection_current",
+                            &mut self.current,
+                            &mut self.show_current,
+                            260.0,
                         );
                         ui.end_row();
                     }
@@ -81,17 +85,22 @@ impl ProtectionForm {
                     } else {
                         tr!("Mot de passe")
                     });
-                    let response = ui.add(
-                        crate::theme::field(&mut self.new)
-                            .password(true)
-                            .desired_width(260.0),
+                    // Un seul œil pour le mot de passe et sa confirmation.
+                    let response = crate::theme::password_field(
+                        ui,
+                        "protection_new",
+                        &mut self.new,
+                        &mut self.show_new,
+                        260.0,
                     );
                     ui.end_row();
                     ui.label(tr!("Confirmation"));
-                    let confirm = ui.add(
-                        crate::theme::field(&mut self.confirm)
-                            .password(true)
-                            .desired_width(260.0),
+                    let confirm = crate::theme::password_field(
+                        ui,
+                        "protection_confirm",
+                        &mut self.confirm,
+                        &mut self.show_new,
+                        260.0,
                     );
                     ui.end_row();
                     if (response.lost_focus() || confirm.lost_focus())

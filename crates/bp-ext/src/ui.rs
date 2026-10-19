@@ -1154,7 +1154,7 @@ impl Window {
                 Ok(change(self, &key))
             }
             UiEvent::Mode { key, mode } => {
-                self.state.set(key.as_str(), mode.label())?;
+                self.state.set(key.as_str(), mode.name())?;
                 Ok(change(self, &key))
             }
             UiEvent::Click { button } => {

@@ -216,7 +216,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Nouvelle", "New"),
     ("Nouvelle note", "New note"),
     ("Supprimer la note", "Delete note"),
-    ("Titre", "Title"),
+    ("note|Titre", "Title"),
     (
         "Afficher à l'ouverture d'un fichier",
         "Show when a file is opened",

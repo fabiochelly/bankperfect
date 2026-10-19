@@ -256,6 +256,8 @@ type FileFilters = { [string]: { string } }
 declare bp: {
 	version: string,
 	id: string,
+	-- Langue de l'interface : "fr" ou "en" (extensions rechargées quand elle change).
+	language: string,
 
 	extension: (spec: { name: string?, description: string?, version: string?, author: string?, permissions: { string }?, requires: string? }) -> (),
 	command: (spec: CommandSpec) -> (),

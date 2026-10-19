@@ -1235,3 +1235,23 @@ fn check_documentation_recipes(doc: &RecipeDoc) {
     let fx = engine.run_command(0, index(doc.guess_categories), Some(&mut ctx));
     assert!(fx.errors.is_empty(), "{:?}", fx.errors);
 }
+
+#[test]
+fn language_and_stable_mode_names() {
+    use bp_core::i18n::{Lang, with_lang};
+    let source = r#"
+        bp.command{ title = "x", run = function()
+            assert(bp.language == "en", bp.language)
+            local op = bp.current_account():add{ amount = -5, mode = "Carte" }
+            assert(op.mode == "Carte", op.mode)
+        end }
+        "#;
+    let mut f = with_lang(Lang::En, || Fixture::new(source));
+    let fx = with_lang(Lang::En, || f.run(0));
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+    let mut f = with_lang(Lang::Fr, || {
+        Fixture::new(&source.replace("\"en\"", "\"fr\""))
+    });
+    let fx = f.run(0);
+    assert!(fx.errors.is_empty(), "{:?}", fx.errors);
+}

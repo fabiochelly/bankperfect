@@ -477,7 +477,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Aucune échéance. Créez-en une, ou ajoutez une opération récurrente depuis la grille (clic droit).",
         "No scheduled transactions. Create one, or add a recurring transaction from the grid (right-click).",
     ),
-    ("compte inexistant", "missing account"),
+    ("compte inexistant", "account does not exist"),
     ("(sans tiers)", "(no payee)"),
     ("{} · transfert", "{} · transfer"),
     ("terminée · {}", "finished · {}"),

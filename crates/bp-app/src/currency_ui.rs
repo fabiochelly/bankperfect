@@ -452,7 +452,7 @@ impl CurrencyForm {
                 .filter(|(code, name)| {
                     key.is_empty()
                         || search_key(code).contains(&key)
-                        || search_key(name).contains(&key)
+                        || search_key(bp_core::i18n::tr(name)).contains(&key)
                 })
                 .collect();
             egui::ScrollArea::vertical()
@@ -464,6 +464,7 @@ impl CurrencyForm {
                         ui.label(RichText::new(tr!("Aucune devise trouvée.")).color(pal.muted));
                     }
                     for (code, name) in matches {
+                        let name = bp_core::i18n::tr(name);
                         let available = self.saved.rates.rate(code).is_some();
                         let text = if available {
                             format!("{code}  {name}")
@@ -481,7 +482,8 @@ impl CurrencyForm {
                     .filter(|(code, _)| !self.saved.currencies.iter().any(|c| c == code))
                     .find(|(code, name)| {
                         !key.is_empty()
-                            && (search_key(code).contains(&key) || search_key(name).contains(&key))
+                            && (search_key(code).contains(&key)
+                                || search_key(bp_core::i18n::tr(name)).contains(&key))
                     })
             {
                 chosen = Some(code.to_string());

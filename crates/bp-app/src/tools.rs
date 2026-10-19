@@ -3,7 +3,7 @@
 use bp_core::edit::GroupEdit;
 use bp_core::export::{CsvField, CsvOptions};
 use bp_core::model::{Amount, Date, Mode, Tack};
-use bp_core::{tr, tr_mark, trn};
+use bp_core::{tr, tr_mark, trc, trn};
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Color32, Key, RichText};
 use egui_phosphor::regular as icon;
@@ -1430,7 +1430,7 @@ impl NotesForm {
                             Some(note) => {
                                 ui.add(
                                     crate::theme::field(&mut note.title)
-                                        .hint_text(tr!("Titre"))
+                                        .hint_text(trc!("note", "Titre"))
                                         .desired_width(f32::INFINITY),
                                 );
                                 ui.add(

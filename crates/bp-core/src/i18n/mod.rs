@@ -164,6 +164,28 @@ pub fn thousands_separator() -> char {
     }
 }
 
+/// Retire d'un nombre tapé les séparateurs des milliers à l'anglaise : en
+/// anglais, une virgule entre un chiffre et exactement trois chiffres
+/// (« 1,234.56 », « -1,500 ») ; ailleurs elle reste décimale (« 12,50 »).
+/// En français, le texte est rendu tel quel.
+pub fn strip_thousands(text: &str) -> String {
+    if lang() != Lang::En {
+        return text.to_string();
+    }
+    let chars: Vec<char> = text.chars().collect();
+    let digit = |i: usize| chars.get(i).is_some_and(char::is_ascii_digit);
+    chars
+        .iter()
+        .enumerate()
+        .filter(|&(i, &c)| {
+            let thousands =
+                c == ',' && i > 0 && digit(i - 1) && (1..=3).all(|k| digit(i + k)) && !digit(i + 4);
+            !thousands
+        })
+        .map(|(_, &c)| c)
+        .collect()
+}
+
 /// Nom du mois (`month0` de 0 à 11) : « janvier », « January ».
 pub fn month_name(month0: usize) -> &'static str {
     const FR: [&str; 12] = [

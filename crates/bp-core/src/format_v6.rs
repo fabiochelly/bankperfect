@@ -34,6 +34,7 @@ use chacha20poly1305::aead::{Aead, KeyInit, Payload};
 use chacha20poly1305::{XChaCha20Poly1305, XNonce};
 use hkdf::Hkdf;
 use sha2::Sha256;
+use unicode_normalization::UnicodeNormalization;
 use zeroize::Zeroizing;
 
 use crate::error::{Error, Result};
@@ -342,8 +343,11 @@ fn cipher(key: &[u8; KEY_LEN]) -> XChaCha20Poly1305 {
     XChaCha20Poly1305::new_from_slice(key).expect("clé de 32 octets")
 }
 
+/// Le mot de passe est normalisé en NFC (RFC 8265) : un « é » composé ou
+/// décomposé (copier-coller, gestionnaire de mots de passe…) donne la même clé.
 fn derive_password_key(password: &str, salt: &[u8], m_kib: u32, t: u32, p: u32) -> Result<Key> {
     let params = Params::new(m_kib, t, p, Some(KEY_LEN)).map_err(|_| Error::Corrupted)?;
+    let password = Zeroizing::new(password.nfc().collect::<String>());
     let mut key = Zeroizing::new([0u8; KEY_LEN]);
     Argon2::new(Algorithm::Argon2id, Version::V0x13, params)
         .hash_password_into(password.as_bytes(), salt, key.as_mut())
@@ -496,6 +500,17 @@ mod tests {
         let resaved = reopened.seal(b"modifie").unwrap();
         let (content, _) = Protection::open(&resaved, Unlock::Password("secret")).unwrap();
         assert_eq!(content, b"modifie");
+    }
+
+    #[test]
+    fn password_is_normalized() {
+        let composed = "caf\u{e9}";
+        let decomposed = "cafe\u{301}";
+        assert_ne!(composed.as_bytes(), decomposed.as_bytes());
+        let (protection, _) = fast_password(composed);
+        let file = protection.seal(CONTENT).unwrap();
+        let (content, _) = Protection::open(&file, Unlock::Password(decomposed)).unwrap();
+        assert_eq!(content, CONTENT);
     }
 
     #[test]

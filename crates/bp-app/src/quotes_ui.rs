@@ -6,8 +6,10 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use bp_core::currencies::Rates;
+use bp_core::i18n;
 use bp_core::model::Amount;
 use bp_core::quotes::{self, Quote, StockLine};
+use bp_core::{tr, tr_mark, trn};
 use egui::{Key, RichText, vec2};
 use egui_phosphor::regular as icon;
 
@@ -118,7 +120,9 @@ impl QuotesForm {
     fn new_value(&self, line: &StockLine, doc: &OpenDoc) -> Option<Result<(f64, Amount), String>> {
         let quote = self.quotes.get(&line.identifier)?;
         Some(quote.clone().and_then(|q| {
-            let quantity = line.quantity.ok_or("quantité illisible en tête du tiers")?;
+            let quantity = line
+                .quantity
+                .ok_or(tr!("quantité illisible en tête du tiers"))?;
             let rates = (!self.rates.per_euro.is_empty()).then_some(&self.rates);
             let price = quotes::price_in_account_currency(
                 q.price,
@@ -141,10 +145,10 @@ impl QuotesForm {
         crate::dialogs::modal(ctx, "quotes").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::TREND_UP, pal.accent, "Cotations des titres");
+            crate::dialogs::header(ui, icon::TREND_UP, pal.accent, tr!("Cotations des titres"));
             ui_kit::subtitle(
                 ui,
-                format!(
+                tr!(
                     "Compte « {} » : la valeur de chaque ligne « Titre » devient le cours du jour multiplié par la quantité.",
                     doc.current_account().name
                 ),
@@ -156,7 +160,7 @@ impl QuotesForm {
             }
             ui.add_space(8.0);
             ui.label(
-                RichText::new(format!(
+                RichText::new(tr!(
                     "{}  Cours de Yahoo Finance (service public non officiel, souvent différé), à titre indicatif.",
                     icon::INFO
                 ))
@@ -169,31 +173,34 @@ impl QuotesForm {
             crate::dialogs::footer(ui, |ui| {
                 let changes = self.changes(doc);
                 if self.downloaded {
-                    let label = format!("{}  Appliquer ({})", icon::CHECK, changes.len());
+                    let label = tr!("{}  Appliquer ({})", icon::CHECK, changes.len());
                     if crate::dialogs::primary(ui, &label, !changes.is_empty()).clicked() {
                         apply = true;
                     }
                 } else if let Some((done, total)) = running {
                     ui.add(egui::Spinner::new());
-                    ui.label(RichText::new(format!("Téléchargement {done}/{total}…")).color(pal.muted));
+                    ui.label(RichText::new(tr!("Téléchargement {}/{}…", done, total)).color(pal.muted));
                 } else {
-                    let label = format!("{}  Télécharger les cours", icon::DOWNLOAD_SIMPLE);
+                    let label = tr!("{}  Télécharger les cours", icon::DOWNLOAD_SIMPLE);
                     if crate::dialogs::primary(ui, &label, !self.lines.is_empty()).clicked() {
                         self.start(ctx, doc);
                     }
                 }
-                if crate::dialogs::button(ui, "Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, tr!("Fermer")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
             });
         });
         if apply {
             let changes = self.changes(doc);
-            let n = doc.set_amounts(&changes, "mise à jour des cotations");
+            let n = doc.set_amounts(&changes, tr_mark!("mise à jour des cotations"));
             outcome = Outcome::Done(match n {
-                0 => "Aucune valeur modifiée".into(),
-                1 => "1 ligne « Titre » mise à jour".into(),
-                n => format!("{n} lignes « Titre » mises à jour"),
+                0 => tr!("Aucune valeur modifiée").into(),
+                n => trn!(
+                    n,
+                    "{} ligne « Titre » mise à jour",
+                    "{} lignes « Titre » mises à jour"
+                ),
             });
         }
         outcome
@@ -215,13 +222,13 @@ impl QuotesForm {
         let currency = account.currency.clone();
         let inner = width - 16.0;
         let cols = [
-            (inner * 0.26, egui::Align::Min, "Titre"),
-            (inner * 0.15, egui::Align::Min, "Code"),
-            (inner * 0.09, egui::Align::Max, "Quantité"),
-            (inner * 0.13, egui::Align::Max, "Valeur actuelle"),
-            (inner * 0.11, egui::Align::Max, "Cours"),
-            (inner * 0.13, egui::Align::Max, "Nouvelle valeur"),
-            (inner * 0.13, egui::Align::Max, "Écart"),
+            (inner * 0.26, egui::Align::Min, tr!("Titre")),
+            (inner * 0.15, egui::Align::Min, tr!("Code")),
+            (inner * 0.09, egui::Align::Max, tr!("Quantité")),
+            (inner * 0.13, egui::Align::Max, tr!("Valeur actuelle")),
+            (inner * 0.11, egui::Align::Max, tr!("Cours")),
+            (inner * 0.13, egui::Align::Max, tr!("Nouvelle valeur")),
+            (inner * 0.13, egui::Align::Max, tr!("Écart")),
         ];
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
@@ -274,9 +281,9 @@ impl QuotesForm {
                         egui::Align::Min,
                         RichText::new(name).color(pal.fg_dark),
                     );
-                    let quantity = line
-                        .quantity
-                        .map_or("?".to_string(), |q| format!("{q}").replace('.', ","));
+                    let quantity = line.quantity.map_or("?".to_string(), |q| {
+                        format!("{q}").replace('.', &i18n::decimal_separator().to_string())
+                    });
                     ui_kit::cell(
                         ui,
                         cols[2].0,
@@ -300,7 +307,8 @@ impl QuotesForm {
                             );
                         }
                         Some(Ok((price, amount))) => {
-                            let price = format!("{price:.2}").replace('.', ",");
+                            let price = format!("{price:.2}")
+                                .replace('.', &i18n::decimal_separator().to_string());
                             ui_kit::cell(
                                 ui,
                                 cols[4].0,
@@ -348,12 +356,12 @@ impl QuotesForm {
 fn empty_state(ui: &mut egui::Ui, pal: &Palette) {
     ui_kit::card(ui, ui.available_width(), |ui| {
         ui.vertical(|ui| {
-            ui.label(RichText::new("Aucune ligne « Titre » avec un code dans ce compte.").family(crate::theme::semibold()));
+            ui.label(RichText::new(tr!("Aucune ligne « Titre » avec un code dans ce compte.")).family(crate::theme::semibold()));
             ui.add_space(4.0);
             ui.label(
-                RichText::new(
-                    "Pour suivre un titre : mode de paiement « Titre », code ISIN (FR0000133308) ou symbole (AAPL) en début de détail, et quantité en tête du tiers (« 10 Orange »).",
-                )
+                RichText::new(tr!(
+                    "Pour suivre un titre : mode de paiement « Titre », code ISIN (FR0000133308) ou symbole (AAPL) en début de détail, et quantité en tête du tiers (« 10 Orange »)."
+                ))
                 .color(pal.fg_dark),
             );
         });
@@ -373,7 +381,7 @@ fn fetch_quote(identifier: &str) -> Result<Quote, String> {
     };
     let symbol = if quotes::looks_like_isin(identifier) {
         let json = get(format!("{}{}", quotes::SEARCH_URL, identifier))?;
-        quotes::parse_search(&json).ok_or("code ISIN introuvable")?
+        quotes::parse_search(&json).ok_or(tr!("code ISIN introuvable"))?
     } else {
         identifier.to_string()
     };
@@ -384,12 +392,12 @@ fn fetch_quote(identifier: &str) -> Result<Quote, String> {
     ))
     .map_err(|e| {
         if e.contains("404") {
-            format!("symbole {symbol} inconnu")
+            tr!("symbole {} inconnu", symbol)
         } else {
             e
         }
     })?;
-    quotes::parse_chart(&json).ok_or_else(|| format!("aucun cours pour {symbol}"))
+    quotes::parse_chart(&json).ok_or_else(|| tr!("aucun cours pour {}", symbol))
 }
 
 #[cfg(test)]

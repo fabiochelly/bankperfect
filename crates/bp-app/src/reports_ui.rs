@@ -5,6 +5,7 @@ use std::collections::HashSet;
 
 use bp_core::model::{Amount, Tack};
 use bp_core::reports::{self, AccountScope, Pivot, PivotGoal, PivotOptions};
+use bp_core::{tr, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -129,7 +130,7 @@ impl ReportsForm {
                 ui.allocate_ui_with_layout(
                     egui::vec2(220.0, 36.0),
                     egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| crate::dialogs::header(ui, icon::TABLE, pal.accent, "Rapports"),
+                    |ui| crate::dialogs::header(ui, icon::TABLE, pal.accent, tr!("Rapports")),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     ui_kit::segmented(
@@ -139,25 +140,25 @@ impl ReportsForm {
                             (
                                 ReportTab::Accounts,
                                 icon::BANK,
-                                "Total des comptes",
+                                tr!("Total des comptes"),
                                 pal.accent,
                             ),
                             (
                                 ReportTab::Categories,
                                 icon::TAG,
-                                "Par catégorie",
+                                tr!("Par catégorie"),
                                 pal.accent,
                             ),
                             (
                                 ReportTab::Payees,
                                 icon::ADDRESS_BOOK,
-                                "Par tiers",
+                                tr!("Par tiers"),
                                 pal.accent,
                             ),
                             (
                                 ReportTab::Statement,
                                 icon::LIST_BULLETS,
-                                "Relevé multicompte",
+                                tr!("Relevé multicompte"),
                                 pal.accent,
                             ),
                         ],
@@ -187,7 +188,7 @@ impl ReportsForm {
                 ui.label(RichText::new(format!("{}  {message}", icon::INFO)).color(pal.accent));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
@@ -195,7 +196,7 @@ impl ReportsForm {
                 if let Some((name, rows)) = export
                     && crate::dialogs::button(
                         ui,
-                        format!("{}  Exporter vers un tableur…", icon::MICROSOFT_EXCEL_LOGO),
+                        tr!("{}  Exporter vers un tableur…", icon::MICROSOFT_EXCEL_LOGO),
                     )
                     .clicked()
                 {
@@ -221,10 +222,10 @@ impl ReportsForm {
         let pal = palette(ui);
         let totals = reports::account_totals(&doc.document);
         let mut rows = vec![vec![
-            Cell::Bold("Compte".into()),
-            Cell::Bold("Pointé".into()),
-            Cell::Bold("À venir".into()),
-            Cell::Bold("Solde".into()),
+            Cell::Bold(tr!("Compte").into()),
+            Cell::Bold(tr!("Pointé").into()),
+            Cell::Bold(tr!("À venir").into()),
+            Cell::Bold(tr!("Solde").into()),
         ]];
         let mut select = None;
         egui::ScrollArea::vertical()
@@ -258,7 +259,7 @@ impl ReportsForm {
                     add(&mut child);
                 };
                 row(ui, 0, false, &mut |ui| {
-                    for (k, title) in ["Compte", "Pointé", "À venir", "Solde"]
+                    for (k, title) in [tr!("Compte"), tr!("Pointé"), tr!("À venir"), tr!("Solde")]
                         .into_iter()
                         .enumerate()
                     {
@@ -285,7 +286,7 @@ impl ReportsForm {
                                         RichText::new(format!("{}  {}", icon::BANK, line.name))
                                             .family(crate::theme::medium()),
                                     )
-                                    .on_hover_text("Afficher ce compte")
+                                    .on_hover_text(tr!("Afficher ce compte"))
                                     .clicked()
                                 {
                                     select = Some(line.account);
@@ -312,7 +313,7 @@ impl ReportsForm {
                         ui,
                         NAME,
                         egui::Align::Min,
-                        RichText::new("Total").family(crate::theme::semibold()),
+                        RichText::new(tr!("Total")).family(crate::theme::semibold()),
                     );
                     for value in [
                         totals.total.pointed,
@@ -323,22 +324,24 @@ impl ReportsForm {
                     }
                 });
                 rows.push(vec![
-                    Cell::Bold("Total".into()),
+                    Cell::Bold(tr!("Total").into()),
                     Cell::BoldMoney(totals.total.pointed.as_f64()),
                     Cell::BoldMoney(totals.total.upcoming.as_f64()),
                     Cell::BoldMoney(totals.total.balance.as_f64()),
                 ]);
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new("Les comptes virtuels ne sont pas comptés dans le total.")
-                        .size(12.5)
-                        .color(pal.muted),
+                    RichText::new(tr!(
+                        "Les comptes virtuels ne sont pas comptés dans le total."
+                    ))
+                    .size(12.5)
+                    .color(pal.muted),
                 );
             });
         if let Some(i) = select {
             doc.select_account(i);
         }
-        *export = Some(("Total des comptes".into(), rows));
+        *export = Some((tr!("Total des comptes").into(), rows));
     }
 
     // ─────────────────────────── Tableaux croisés ───────────────────────────
@@ -359,8 +362,8 @@ impl ReportsForm {
                 ui,
                 &mut self.all_accounts,
                 &[
-                    (true, "", "Tous les comptes", pal.accent),
-                    (false, "", "Compte courant", pal.accent),
+                    (true, "", tr!("Tous les comptes"), pal.accent),
+                    (false, "", tr!("Compte courant"), pal.accent),
                 ],
                 32.0,
                 Some(300.0),
@@ -370,12 +373,12 @@ impl ReportsForm {
                 ui,
                 &mut self.goal,
                 &[
-                    (PivotGoal::MonthlyTotals, "", "Par mois", pal.accent),
-                    (PivotGoal::YearlyTotals, "", "Par année", pal.accent),
+                    (PivotGoal::MonthlyTotals, "", tr!("Par mois"), pal.accent),
+                    (PivotGoal::YearlyTotals, "", tr!("Par année"), pal.accent),
                     (
                         PivotGoal::YearlyAverages,
                         "",
-                        "Moyenne mensuelle",
+                        tr!("Moyenne mensuelle"),
                         pal.accent,
                     ),
                 ],
@@ -388,10 +391,10 @@ impl ReportsForm {
                 egui::ComboBox::from_id_salt("pivot_year")
                     .selected_text(
                         self.year
-                            .map_or("Toutes années".to_string(), |y| y.to_string()),
+                            .map_or(tr!("Toutes années").to_string(), |y| y.to_string()),
                     )
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut self.year, None, "Toutes années");
+                        ui.selectable_value(&mut self.year, None, tr!("Toutes années"));
                         for y in years.iter().rev() {
                             ui.selectable_value(&mut self.year, Some(*y), y.to_string());
                         }
@@ -404,20 +407,20 @@ impl ReportsForm {
                 crate::theme::checkbox(
                     ui,
                     &mut self.remove_numbers,
-                    "Regrouper les tiers sans dates ni numéros",
+                    tr!("Regrouper les tiers sans dates ni numéros"),
                 );
             } else {
                 crate::theme::checkbox(
                     ui,
                     &mut self.all_categories,
-                    "Détailler les sous-catégories",
+                    tr!("Détailler les sous-catégories"),
                 );
             }
             ui.add_space(12.0);
             crate::theme::checkbox(
                 ui,
                 &mut self.line_totals,
-                "Dépenses et recettes calculées opération par opération",
+                tr!("Dépenses et recettes calculées opération par opération"),
             );
         });
         ui.add_space(10.0);
@@ -429,13 +432,20 @@ impl ReportsForm {
         };
         pivot_table(ui, &pivot, width, body - 90.0, by_payee);
         let title = if by_payee {
-            "Totaux par tiers"
+            tr!("Totaux par tiers")
         } else {
-            "Totaux par catégorie"
+            tr!("Totaux par catégorie")
         };
         *export = Some((
             title.into(),
-            pivot_rows(&pivot, if by_payee { "Tiers" } else { "Catégorie" }),
+            pivot_rows(
+                &pivot,
+                if by_payee {
+                    tr!("Tiers")
+                } else {
+                    tr!("Catégorie")
+                },
+            ),
         ));
     }
 
@@ -453,7 +463,7 @@ impl ReportsForm {
         self.statement_accounts
             .resize(doc.document.accounts.len(), false);
         ui.horizontal_wrapped(|ui| {
-            ui.label(RichText::new("Comptes :").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Comptes :")).color(pal.fg_dark));
             for &i in &doc.document.account_order {
                 crate::theme::checkbox(
                     ui,
@@ -466,7 +476,7 @@ impl ReportsForm {
         crate::theme::checkbox(
             ui,
             &mut self.statement_filtered,
-            "Appliquer les filtres de la grille à chaque compte",
+            tr!("Appliquer les filtres de la grille à chaque compte"),
         );
         ui.add_space(10.0);
         let chosen: Vec<usize> = doc
@@ -485,29 +495,35 @@ impl ReportsForm {
         ui.horizontal(|ui| {
             ui_kit::pill(
                 ui,
-                &format!("{} ligne(s)", statement.lines.len()),
+                &trn!(statement.lines.len(), "{} ligne", "{} lignes"),
                 pal.accent,
             );
             ui_kit::pill(
                 ui,
-                &format!("Pointé {}", money(statement.totals.pointed, "€")),
+                &tr!("Pointé {}", money(statement.totals.pointed, "€")),
                 pal.pointed,
             );
             ui_kit::pill(
                 ui,
-                &format!("À venir {}", money(statement.totals.upcoming, "€")),
+                &tr!("À venir {}", money(statement.totals.upcoming, "€")),
                 pal.future,
             );
             ui_kit::pill(
                 ui,
-                &format!("Solde {}", money(statement.totals.balance, "€")),
+                &tr!("Solde {}", money(statement.totals.balance, "€")),
                 pal.positive,
             );
         });
         ui.add_space(8.0);
         let mut rows = vec![
             [
-                "Date", "Compte", "Mode", "Tiers", "Détail", "Montant", "Pointage",
+                tr!("Date"),
+                tr!("Compte"),
+                tr!("Mode"),
+                tr!("Tiers"),
+                tr!("Détail"),
+                tr!("Montant"),
+                tr!("Pointage"),
             ]
             .map(|t| Cell::Bold(t.into()))
             .into_iter()
@@ -516,11 +532,11 @@ impl ReportsForm {
         let payee_width = (width - 600.0).max(160.0);
         ui.horizontal(|ui| {
             for (w, align, title) in [
-                (96.0, egui::Align::Min, "Date"),
-                (140.0, egui::Align::Min, "Compte"),
-                (130.0, egui::Align::Min, "Mode"),
-                (payee_width, egui::Align::Min, "Tiers"),
-                (120.0, egui::Align::Max, "Montant"),
+                (96.0, egui::Align::Min, tr!("Date")),
+                (140.0, egui::Align::Min, tr!("Compte")),
+                (130.0, egui::Align::Min, tr!("Mode")),
+                (payee_width, egui::Align::Min, tr!("Tiers")),
+                (120.0, egui::Align::Max, tr!("Montant")),
             ] {
                 ui_kit::cell(
                     ui,
@@ -591,14 +607,20 @@ impl ReportsForm {
                 Cell::Text(op.payee.clone()),
                 Cell::Text(op.details.clone()),
                 Cell::Money(op.amount.as_f64()),
-                Cell::Text(match op.tack {
-                    Tack::None => String::new(),
-                    Tack::Pointed => "P".into(),
-                    Tack::Reconciled => "R".into(),
-                }),
+                Cell::Text(tack_letter(op.tack).into()),
             ]);
         }
-        *export = Some(("Relevé multicompte".into(), rows));
+        *export = Some((tr!("Relevé multicompte").into(), rows));
+    }
+}
+
+/// Pointage dans les exports : `P` (pointé), `R` (rapproché) ; `C`
+/// (cleared) pour le pointé en anglais.
+fn tack_letter(tack: Tack) -> &'static str {
+    match tack {
+        Tack::None => "",
+        Tack::Pointed => tr!("P"),
+        Tack::Reconciled => "R",
     }
 }
 
@@ -634,9 +656,9 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
         lines.push(Line::Carried(carried));
     }
     lines.extend(pivot.rows.iter().map(Line::Row));
-    lines.push(Line::Total("Dépenses", &pivot.debit));
-    lines.push(Line::Total("Recettes", &pivot.credit));
-    lines.push(Line::Total("Total", &pivot.total));
+    lines.push(Line::Total(tr!("Dépenses"), &pivot.debit));
+    lines.push(Line::Total(tr!("Recettes"), &pivot.credit));
+    lines.push(Line::Total(tr!("Total"), &pivot.total));
     let first_total = lines.len() - 3;
     let fixed = |ui: &mut egui::Ui, w: f32, align: egui::Align, text: RichText| {
         let layout = if align == egui::Align::Max {
@@ -679,14 +701,16 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
                     ui.set_width(label_width);
                     for line in &lines {
                         let text = match line {
-                            Line::Header => {
-                                RichText::new(if by_payee { "Tiers" } else { "Catégorie" })
-                                    .family(crate::theme::semibold())
-                                    .color(pal.fg_dark)
-                            }
-                            Line::Carried(_) => {
-                                RichText::new("Solde reporté").italics().color(pal.muted)
-                            }
+                            Line::Header => RichText::new(if by_payee {
+                                tr!("Tiers")
+                            } else {
+                                tr!("Catégorie")
+                            })
+                            .family(crate::theme::semibold())
+                            .color(pal.fg_dark),
+                            Line::Carried(_) => RichText::new(tr!("Solde reporté"))
+                                .italics()
+                                .color(pal.muted),
                             Line::Row(row) if row.is_child => {
                                 RichText::new(format!("      {}", row.label)).color(pal.fg_dark)
                             }
@@ -778,7 +802,7 @@ fn pivot_rows(pivot: &Pivot, first: &str) -> Vec<Vec<Cell>> {
     header.extend(pivot.columns.iter().map(|c| Cell::Bold(c.clone())));
     rows.push(header);
     if let Some(carried) = &pivot.carried_balance {
-        let mut row = vec![Cell::Text("Solde reporté".into())];
+        let mut row = vec![Cell::Text(tr!("Solde reporté").into())];
         row.extend(carried.iter().map(|v| Cell::Money(v.as_f64())));
         rows.push(row);
     }
@@ -799,9 +823,9 @@ fn pivot_rows(pivot: &Pivot, first: &str) -> Vec<Vec<Cell>> {
         rows.push(row);
     }
     for (label, values) in [
-        ("Dépenses", &pivot.debit),
-        ("Recettes", &pivot.credit),
-        ("Total", &pivot.total),
+        (tr!("Dépenses"), &pivot.debit),
+        (tr!("Recettes"), &pivot.credit),
+        (tr!("Total"), &pivot.total),
     ] {
         let mut row = vec![Cell::Bold(label.into())];
         row.extend(values.iter().map(|v| Cell::BoldMoney(v.as_f64())));
@@ -816,14 +840,14 @@ pub fn visible_rows(doc: &mut OpenDoc) -> Vec<Vec<Cell>> {
     doc.refresh();
     let mut rows = vec![
         [
-            "Date",
-            "Mode",
-            "Tiers",
-            "Détail",
-            "Catégorie",
-            "Montant",
-            "Solde",
-            "Pointage",
+            tr!("Date"),
+            tr!("Mode"),
+            tr!("Tiers"),
+            tr!("Détail"),
+            tr!("Catégorie"),
+            tr!("Montant"),
+            tr!("Solde"),
+            tr!("Pointage"),
         ]
         .map(|t| Cell::Bold(t.into()))
         .into_iter()
@@ -845,11 +869,7 @@ pub fn visible_rows(doc: &mut OpenDoc) -> Vec<Vec<Cell>> {
             ),
             Cell::Money(op.amount.as_f64()),
             Cell::Money(doc.balance_of(line).as_f64()),
-            Cell::Text(match op.tack {
-                Tack::None => String::new(),
-                Tack::Pointed => "P".into(),
-                Tack::Reconciled => "R".into(),
-            }),
+            Cell::Text(tack_letter(op.tack).into()),
         ]);
     }
     rows

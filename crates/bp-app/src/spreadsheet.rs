@@ -1,6 +1,8 @@
 //! Export tableur (.xlsx) : lignes affichées de la grille et tableaux des
 //! rapports. Remplace l'ancien export SYLK déguisé en `.xls`.
 
+use bp_core::i18n::{self, Lang};
+use bp_core::tr;
 use rust_xlsxwriter::{Format, Workbook};
 
 /// Cellule d'un tableau exporté.
@@ -8,7 +10,7 @@ pub enum Cell {
     Text(String),
     /// Texte en gras (en-têtes, totaux).
     Bold(String),
-    /// Montant en monnaie (format `# ##0,00`).
+    /// Montant en monnaie (format `# ##0,00`, `#,##0.00` en anglais).
     Money(f64),
     /// Montant en gras (totaux).
     BoldMoney(f64),
@@ -28,13 +30,16 @@ pub fn write(path: &std::path::Path, sheet: &str, rows: &[Vec<Cell>]) -> Result<
         .take(31)
         .collect();
     worksheet
-        .set_name(if name.is_empty() { "Feuille" } else { &name })
+        .set_name(if name.is_empty() {
+            tr!("Feuille")
+        } else {
+            &name
+        })
         .map_err(|e| e.to_string())?;
     let bold = Format::new().set_bold();
-    let money = Format::new().set_num_format("# ##0.00;[Red]-# ##0.00");
-    let bold_money = Format::new()
-        .set_bold()
-        .set_num_format("# ##0.00;[Red]-# ##0.00");
+    let money_format = money_format();
+    let money = Format::new().set_num_format(money_format);
+    let bold_money = Format::new().set_bold().set_num_format(money_format);
     let mut widths: Vec<usize> = Vec::new();
     for (r, row) in rows.iter().enumerate() {
         for (c, cell) in row.iter().enumerate() {
@@ -91,6 +96,15 @@ pub fn write(path: &std::path::Path, sheet: &str, rows: &[Vec<Cell>]) -> Result<
     workbook.save(path).map_err(|e| e.to_string())
 }
 
+/// Format des montants : séparateur des milliers en espace en français,
+/// en virgule en anglais (les cellules restent des nombres).
+fn money_format() -> &'static str {
+    match i18n::lang() {
+        Lang::Fr => "# ##0.00;[Red]-# ##0.00",
+        Lang::En => "#,##0.00;[Red]-#,##0.00",
+    }
+}
+
 /// Tableau en attente d'écriture : l'emplacement est demandé sans bloquer
 /// l'interface, puis [`finished`] écrit le fichier.
 #[derive(Clone)]
@@ -115,10 +129,10 @@ pub fn export(
         return;
     }
     let dialog = rfd::FileDialog::new()
-        .set_title("Exporter vers un tableur")
+        .set_title(tr!("Exporter vers un tableur"))
         .set_directory(default_dir)
         .set_file_name(format!("{file_name}.xlsx"))
-        .add_filter("Classeur Excel", &["xlsx"]);
+        .add_filter(tr!("Classeur Excel"), &["xlsx"]);
     let pending = PendingExport {
         sheet: sheet.to_string(),
         rows: std::sync::Arc::new(rows),
@@ -141,8 +155,8 @@ pub fn finished(ctx: &egui::Context) -> Option<String> {
         path.set_extension("xlsx");
     }
     Some(match write(&path, &pending.sheet, &pending.rows) {
-        Ok(()) => format!("Tableau exporté : {}", path.display()),
-        Err(e) => format!("Export impossible : {e}"),
+        Ok(()) => tr!("Tableau exporté : {}", path.display()),
+        Err(e) => tr!("Export impossible : {}", e),
     })
 }
 

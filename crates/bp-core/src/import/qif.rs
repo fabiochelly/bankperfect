@@ -18,6 +18,7 @@ use super::{
     build_operation, decode_text, parse_amount,
 };
 use crate::model::{Date, Tack};
+use crate::tr;
 
 /// Champ BankPerfect associé à une lettre QIF.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,13 +35,13 @@ pub enum QifField {
 impl QifField {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Date => "Date",
-            Self::Mode => "Mode",
-            Self::Payee => "Tiers",
-            Self::Details => "Détails",
-            Self::Category => "Catégorie",
-            Self::Amount => "Montant",
-            Self::Tack => "Pointage",
+            Self::Date => tr!("Date"),
+            Self::Mode => tr!("Mode"),
+            Self::Payee => tr!("Tiers"),
+            Self::Details => tr!("Détails"),
+            Self::Category => tr!("Catégorie"),
+            Self::Amount => tr!("Montant"),
+            Self::Tack => tr!("Pointage"),
         }
     }
 }

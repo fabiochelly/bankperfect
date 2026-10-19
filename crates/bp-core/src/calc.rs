@@ -10,6 +10,7 @@
 //! - [`rib_key`], [`iban_is_valid`], [`iban_from_bban`] : RIB et IBAN.
 
 use crate::model::Amount;
+use crate::tr;
 
 // ---------------------------------------------------------------------------
 // Simulateur de crédit
@@ -54,10 +55,17 @@ pub struct Loan {
 /// Échec d'un calcul de crédit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
 pub enum LoanError {
-    #[error("les valeurs saisies ne permettent pas ce calcul")]
     Impossible,
-    #[error("le calcul du taux ne converge pas")]
     NoConvergence,
+}
+
+impl std::fmt::Display for LoanError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Impossible => tr!("les valeurs saisies ne permettent pas ce calcul"),
+            Self::NoConvergence => tr!("le calcul du taux ne converge pas"),
+        })
+    }
 }
 
 /// Coût d'un crédit.
@@ -618,9 +626,9 @@ impl CardStatus {
     /// Message affiché : « Le numéro est valide/incorrect/incomplet ».
     pub fn label(self) -> &'static str {
         match self {
-            Self::Valid => "valide",
-            Self::Invalid => "incorrect",
-            Self::Incomplete => "incomplet",
+            Self::Valid => tr!("valide"),
+            Self::Invalid => tr!("incorrect"),
+            Self::Incomplete => tr!("incomplet"),
         }
     }
 }

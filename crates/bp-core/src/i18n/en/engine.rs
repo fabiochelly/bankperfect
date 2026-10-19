@@ -1,3 +1,803 @@
 //! Catalogue anglais : textes français → traduction.
 
-pub const ENTRIES: &[(&str, &str)] = &[];
+pub const ENTRIES: &[(&str, &str)] = &[
+    // error.rs
+    ("erreur d'entrée/sortie : {}", "input/output error: {}"),
+    (
+        "fichier BankPerfect non reconnu",
+        "unrecognized BankPerfect file",
+    ),
+    (
+        "fichier v5 non reconnu (en-tête BP-FILE-5 absent après décodage)",
+        "unrecognized v5 file (BP-FILE-5 header missing after decoding)",
+    ),
+    (
+        "version du format v6 non prise en charge : {}",
+        "unsupported v6 format version: {}",
+    ),
+    (
+        "ce fichier est protégé par un mot de passe",
+        "this file is password-protected",
+    ),
+    (
+        "mot de passe ou clé de secours incorrect",
+        "incorrect password or recovery phrase",
+    ),
+    (
+        "clé de secours invalide : {}",
+        "invalid recovery phrase: {}",
+    ),
+    (
+        "fichier corrompu ou modifié",
+        "file corrupted or tampered with",
+    ),
+    ("erreur cryptographique : {}", "cryptographic error: {}"),
+    ("export JSON : {}", "JSON export: {}"),
+    (
+        "donnée « {key} » illisible : {message}",
+        "unreadable data “{key}”: {message}",
+    ),
+    // model.rs
+    ("Carte", "Card"),
+    ("Retrait DAB", "ATM withdrawal"),
+    ("Chèque émis", "Cheque issued"),
+    ("Prélèvement", "Direct debit"),
+    ("Virement émis", "Outgoing transfer"),
+    ("TIP", "TIP"),
+    ("Versement", "Deposit"),
+    ("Dépôt de chèque", "Cheque deposit"),
+    ("Virement reçu", "Incoming transfer"),
+    ("Titre", "Securities"),
+    // autofields.rs
+    ("Tiers", "Payee"),
+    ("Détails", "Memo"),
+    ("Tiers ou Détails", "Payee or Memo"),
+    ("condition", "condition"),
+    ("tiers", "payee"),
+    ("détail", "memo"),
+    ("date", "date"),
+    ("la valeur cherchée est vide", "the search value is empty"),
+    (
+        "formule de {part} invalide : {error}",
+        "invalid {part} formula: {error}",
+    ),
+    (
+        "formule de {part} : variable inconnue « {name} »",
+        "{part} formula: unknown variable “{name}”",
+    ),
+    (
+        "la catégorie à appliquer n'existe pas",
+        "the category to apply does not exist",
+    ),
+    ("Mode: {}", "Method: {}"),
+    ("Tiers: {}", "Payee: {}"),
+    ("Détails: {}", "Memo: {}"),
+    ("- Aucune -", "- None -"),
+    ("Categ: {}", "Category: {}"),
+    ("Date: {}", "Date: {}"),
+    ("règle : dictionnaire attendu", "rule: dictionary expected"),
+    (
+        "règle : valeur cherchée absente",
+        "rule: search value missing",
+    ),
+    (
+        "règle : champ testé invalide",
+        "rule: invalid field to test",
+    ),
+    ("règle : mode invalide", "rule: invalid payment method"),
+    (
+        "règle : catégorie invalide ({id})",
+        "rule: invalid category ({id})",
+    ),
+    (
+        "« {text} » n'est pas une date JJ/MM/AAAA",
+        "“{text}” is not a DD/MM/YYYY date",
+    ),
+    (
+        "le fichier ne contient pas de règles à importer",
+        "the file contains no rules to import",
+    ),
+    ("ligne {line} : {message}", "line {line}: {message}"),
+    ("règles : liste attendue", "rules: list expected"),
+    // autofilters.rs
+    ("le nom du filtre est vide", "the filter name is empty"),
+    (
+        "date « {expr} » invalide : {message}",
+        "invalid date “{expr}”: {message}",
+    ),
+    ("nombre trop grand", "number too large"),
+    ("un nombre entier est attendu", "a whole number is expected"),
+    (
+        "format jour/mois/année attendu",
+        "day/month/year format expected",
+    ),
+    ("année hors limites", "year out of range"),
+    ("décalage de jours trop grand", "day offset too large"),
+    ("date impossible", "impossible date"),
+    ("pointées et rapprochées", "cleared and reconciled"),
+    ("rapprochées", "reconciled"),
+    ("pointées", "cleared"),
+    ("non pointées", "not cleared"),
+    ("du {a} au {b}", "from {a} to {b}"),
+    ("à partir du {a}", "from {a}"),
+    ("jusqu'au {b}", "until {b}"),
+    (
+        "ayant « {} » comme mode de paiement",
+        "with “{}” as payment method",
+    ),
+    (
+        "ayant « {} » dans le champ tiers",
+        "with “{}” in the payee field",
+    ),
+    ("ventilées dans la catégorie « {} »", "in the category “{}”"),
+    ("ayant pour montant « {} »", "with amount “{}”"),
+    (
+        "Opérations concernées : toutes",
+        "Transactions included: all",
+    ),
+    (
+        "Opérations concernées : toutes les lignes {}",
+        "Transactions included: all lines {}",
+    ),
+    (
+        "filtre « {name} » : dictionnaire attendu",
+        "filter “{name}”: dictionary expected",
+    ),
+    (
+        "filtres prédéfinis : dictionnaire attendu",
+        "preset filters: dictionary expected",
+    ),
+    (
+        "filtres prédéfinis : nom de filtre non textuel",
+        "preset filters: non-text filter name",
+    ),
+    // bank_sync.rs
+    (
+        "collez l'adresse de la page de retour",
+        "paste the address of the return page",
+    ),
+    (
+        "adresse ou code non reconnu",
+        "address or code not recognized",
+    ),
+    (
+        "la banque a refusé l'accès ({error}) {description}",
+        "the bank denied access ({error}) {description}",
+    ),
+    (
+        "cette adresse ne correspond pas à la connexion en cours",
+        "this address does not match the current connection",
+    ),
+    (
+        "aucun code dans l'adresse collée",
+        "no code in the pasted address",
+    ),
+    ("Compte", "Account"),
+    // budget.rs
+    ("[Sans catégorie]", "[Uncategorized]"),
+    (
+        "identifiant de catégorie invalide : {id}",
+        "invalid category ID: {id}",
+    ),
+    (
+        "identifiant de catégorie non entier",
+        "non-integer category ID",
+    ),
+    ("montant non numérique", "non-numeric amount"),
+    ("Dépense", "Expense"),
+    ("Recette", "Income"),
+    (
+        "Opérations concernées : toutes les lignes du mois {month} {year}",
+        "Transactions included: all lines for {month} {year}",
+    ),
+    (
+        "Opérations concernées : toutes les lignes de l'année {year}",
+        "Transactions included: all lines for the year {year}",
+    ),
+    ("singulier|{} mois", "{} month"),
+    ("{} mois", "{} months"),
+    ("{} jour", "{} day"),
+    ("{} jours", "{} days"),
+    ("{months} et {days}", "{months} and {days}"),
+    (
+        "budget : dictionnaire attendu",
+        "budget: dictionary expected",
+    ),
+    (
+        "le nom spécifié est incorrect (2 caractères au moins)",
+        "the name is invalid (at least 2 characters)",
+    ),
+    ("le nom spécifié existe déjà", "the name already exists"),
+    (
+        "l'année saisie est incorrecte (1900 à 9999)",
+        "the year is invalid (1900 to 9999)",
+    ),
+    (
+        "le titre est incorrect (2 caractères au moins)",
+        "the title is invalid (at least 2 characters)",
+    ),
+    (
+        "vous devez sélectionner au moins une catégorie à affecter",
+        "you must select at least one category to assign",
+    ),
+    ("tableau inexistant", "table not found"),
+    ("ligne inexistante", "line not found"),
+    ("mois invalide (0 à 11)", "invalid month (0 to 11)"),
+    (
+        "le réalisé de cette ligne est calculé automatiquement",
+        "the actual amount of this line is calculated automatically",
+    ),
+    ("Totaux", "Totals"),
+    (
+        "budget annuel : dictionnaire attendu",
+        "annual budget: dictionary expected",
+    ),
+    (
+        "budget annuel : année manquante",
+        "annual budget: year missing",
+    ),
+    (
+        "budget annuel : liste de comptes attendue",
+        "annual budget: list of accounts expected",
+    ),
+    (
+        "budget annuel : liste de lignes attendue",
+        "annual budget: list of lines expected",
+    ),
+    (
+        "ligne de budget : dictionnaire attendu",
+        "budget line: dictionary expected",
+    ),
+    (
+        "ligne de budget : « {key} » doit être une liste",
+        "budget line: “{key}” must be a list",
+    ),
+    (
+        "ligne de budget : catégories en liste attendues",
+        "budget line: list of categories expected",
+    ),
+    ("Copie de {}", "Copy of {}"),
+    (
+        "budgets annuels : liste attendue",
+        "annual budgets: list expected",
+    ),
+    // calc.rs
+    (
+        "les valeurs saisies ne permettent pas ce calcul",
+        "this calculation is not possible with the values entered",
+    ),
+    (
+        "le calcul du taux ne converge pas",
+        "the rate calculation does not converge",
+    ),
+    ("valide", "valid"),
+    ("incorrect", "incorrect"),
+    ("incomplet", "incomplete"),
+    // currencies.rs
+    ("Euro", "Euro"),
+    ("Dollar américain", "US dollar"),
+    ("Livre sterling", "Pound sterling"),
+    ("Franc suisse", "Swiss franc"),
+    ("Yen japonais", "Japanese yen"),
+    ("Dollar canadien", "Canadian dollar"),
+    ("Dollar australien", "Australian dollar"),
+    ("Dollar néo-zélandais", "New Zealand dollar"),
+    ("Yuan chinois", "Chinese yuan"),
+    ("Dollar de Hong Kong", "Hong Kong dollar"),
+    ("Dollar de Singapour", "Singapore dollar"),
+    ("Won sud-coréen", "South Korean won"),
+    ("Roupie indienne", "Indian rupee"),
+    ("Roupie indonésienne", "Indonesian rupiah"),
+    ("Ringgit malaisien", "Malaysian ringgit"),
+    ("Peso philippin", "Philippine peso"),
+    ("Baht thaïlandais", "Thai baht"),
+    ("Shekel israélien", "Israeli shekel"),
+    ("Livre turque", "Turkish lira"),
+    ("Rand sud-africain", "South African rand"),
+    ("Réal brésilien", "Brazilian real"),
+    ("Peso mexicain", "Mexican peso"),
+    ("Couronne suédoise", "Swedish krona"),
+    ("Couronne norvégienne", "Norwegian krone"),
+    ("Couronne danoise", "Danish krone"),
+    ("Couronne islandaise", "Icelandic króna"),
+    ("Couronne tchèque", "Czech koruna"),
+    ("Zloty polonais", "Polish zloty"),
+    ("Forint hongrois", "Hungarian forint"),
+    ("Leu roumain", "Romanian leu"),
+    ("Lev bulgare", "Bulgarian lev"),
+    ("Rouble russe", "Russian ruble"),
+    ("Hryvnia ukrainienne", "Ukrainian hryvnia"),
+    ("Dinar serbe", "Serbian dinar"),
+    ("Dirham marocain", "Moroccan dirham"),
+    ("Dinar tunisien", "Tunisian dinar"),
+    ("Dinar algérien", "Algerian dinar"),
+    ("Franc CFA (BCEAO)", "West African CFA franc (BCEAO)"),
+    ("Franc CFA (BEAC)", "Central African CFA franc (BEAC)"),
+    ("Franc Pacifique", "CFP franc"),
+    ("Livre égyptienne", "Egyptian pound"),
+    ("Dirham des Émirats", "UAE dirham"),
+    ("Riyal saoudien", "Saudi riyal"),
+    ("Riyal qatari", "Qatari riyal"),
+    ("Peso argentin", "Argentine peso"),
+    ("Peso chilien", "Chilean peso"),
+    ("Peso colombien", "Colombian peso"),
+    ("Sol péruvien", "Peruvian sol"),
+    ("Dong vietnamien", "Vietnamese dong"),
+    ("Dollar taïwanais", "New Taiwan dollar"),
+    (
+        "le flux de la BCE ne contient aucun cours",
+        "the ECB feed contains no rates",
+    ),
+    // export.rs
+    ("Date", "Date"),
+    ("Mode", "Method"),
+    ("Catégorie", "Category"),
+    ("Sous-catégorie", "Subcategory"),
+    ("Montant", "Amount"),
+    ("Pointage", "Clearing"),
+    // feature_store.rs
+    (
+        "données « {key} » illisibles : {message}",
+        "unreadable data “{key}”: {message}",
+    ),
+    (
+        "données « {key} » impossibles à enregistrer : {message}",
+        "data “{key}” could not be saved: {message}",
+    ),
+    (
+        "ancienne donnée « {key} » : pickle illisible",
+        "legacy data “{key}”: unreadable pickle",
+    ),
+    (
+        "ancienne donnée « {key} » : {source}",
+        "legacy data “{key}”: {source}",
+    ),
+    // filter.rs
+    ("Non pointées", "Not cleared"),
+    ("Pointées", "Cleared"),
+    ("Rapprochées", "Reconciled"),
+    ("Pointées et rapprochées", "Cleared and reconciled"),
+    ("Toutes", "All"),
+    // formula.rs
+    ("booléen", "boolean"),
+    ("entier", "integer"),
+    ("nombre décimal", "float"),
+    ("chaîne", "string"),
+    ("liste", "list"),
+    (
+        "erreur de syntaxe (caractère {position}) : {message}",
+        "syntax error (character {position}): {message}",
+    ),
+    ("formule trop longue", "formula too long"),
+    (
+        "élément inattendu après la fin de l'expression",
+        "unexpected element after the end of the expression",
+    ),
+    (
+        "caractère « {op} » non autorisé",
+        "character “{op}” not allowed",
+    ),
+    (
+        "caractère « {c} » non autorisé",
+        "character “{c}” not allowed",
+    ),
+    (
+        "les chaînes entre triples guillemets ne sont pas acceptées",
+        "triple-quoted strings are not accepted",
+    ),
+    ("chaîne non terminée", "unterminated string"),
+    ("échappement \\x invalide", "invalid \\x escape"),
+    ("échappement \\u invalide", "invalid \\u escape"),
+    ("nombre mal formé", "malformed number"),
+    ("« {op} » attendu", "“{op}” expected"),
+    ("expression trop imbriquée", "expression nested too deeply"),
+    ("nom de méthode attendu", "method name expected"),
+    ("méthode inconnue : « {name} »", "unknown method: “{name}”"),
+    (
+        "« ( » attendu après le nom de méthode",
+        "“(” expected after the method name",
+    ),
+    (
+        "seules les fonctions connues peuvent être appelées",
+        "only known functions can be called",
+    ),
+    (
+        "fonction inconnue : « {name} »",
+        "unknown function: “{name}”",
+    ),
+    ("index attendu", "index expected"),
+    ("expression incomplète", "incomplete expression"),
+    ("« {w} » inattendu", "unexpected “{w}”"),
+    ("« {op} » inattendu", "unexpected “{op}”"),
+    ("nom inconnu : « {name} »", "unknown name: “{name}”"),
+    (
+        "« + » impossible sur une {}",
+        "“+” not supported for type {}",
+    ),
+    ("dépassement de capacité", "overflow"),
+    (
+        "« - » impossible sur une {}",
+        "“-” not supported for type {}",
+    ),
+    ("chaîne trop longue", "string too long"),
+    ("division par zéro", "division by zero"),
+    (
+        "opération impossible entre une {} et une {}",
+        "unsupported operation between types {} and {}",
+    ),
+    ("comparaison impossible", "comparison not possible"),
+    (
+        "comparaison impossible entre une {} et une {}",
+        "cannot compare types {} and {}",
+    ),
+    (
+        "« in » impossible entre une {} et une {}",
+        "“in” not supported between types {} and {}",
+    ),
+    ("{what} : entier attendu", "{what}: integer expected"),
+    ("index hors limites", "index out of range"),
+    (
+        "une {} ne peut pas être indexée",
+        "type {} cannot be indexed",
+    ),
+    ("tranche", "slice"),
+    (
+        "une {} ne peut pas être découpée",
+        "type {} cannot be sliced",
+    ),
+    (
+        "{name}() : nombre d'arguments incorrect",
+        "{name}(): wrong number of arguments",
+    ),
+    (
+        "len() impossible sur une {}",
+        "len() not supported for type {}",
+    ),
+    (
+        "int() : « {s} » n'est pas un entier",
+        "int(): “{s}” is not an integer",
+    ),
+    (
+        "int() impossible sur une {}",
+        "int() not supported for type {}",
+    ),
+    (
+        "float() : « {s} » n'est pas un nombre",
+        "float(): “{s}” is not a number",
+    ),
+    (
+        "float() impossible sur une {}",
+        "float() not supported for type {}",
+    ),
+    (
+        "abs() impossible sur une {}",
+        "abs() not supported for type {}",
+    ),
+    (
+        "round() impossible sur une {}",
+        "round() not supported for type {}",
+    ),
+    ("{name}() : aucun argument", "{name}(): no arguments"),
+    (
+        "{method}() : chaîne attendue",
+        "{method}(): string expected",
+    ),
+    (
+        "méthode « {name} » inconnue pour une {kind}",
+        "unknown method “{name}” for type {kind}",
+    ),
+    (
+        "split() : séparateur invalide",
+        "split(): invalid separator",
+    ),
+    ("join() : liste attendue", "join(): list expected"),
+    (
+        "join() : liste de chaînes attendue",
+        "join(): list of strings expected",
+    ),
+    // format_v6.rs
+    ("chiffrement impossible", "encryption failed"),
+    (
+        "impossible de créer un fichier temporaire",
+        "unable to create a temporary file",
+    ),
+    ("chiffrement de la clé impossible", "key encryption failed"),
+    // import/csv.rs
+    (
+        "la colonne de la date n'est pas indiquée",
+        "the date column is not specified",
+    ),
+    (
+        "indiquez soit la colonne Montant, soit les colonnes Débit et Crédit",
+        "specify either the Amount column or the Debit and Credit columns",
+    ),
+    (
+        "la colonne du montant n'est pas indiquée",
+        "the amount column is not specified",
+    ),
+    // import/mod.rs
+    (
+        "le fichier n'est pas un fichier QIF correct",
+        "the file is not a valid QIF file",
+    ),
+    (
+        "le fichier n'est pas un fichier OFX correct",
+        "the file is not a valid OFX file",
+    ),
+    (
+        "paramètres d'import incorrects : {}",
+        "invalid import settings: {}",
+    ),
+    ("n° {}", "No. {}"),
+    ("date absente", "missing date"),
+    ("date incorrecte « {text} »", "invalid date “{text}”"),
+    ("montant absent", "missing amount"),
+    ("montant incorrect « {text} »", "invalid amount “{text}”"),
+    ("montant nul", "zero amount"),
+    ("aucune opération", "no transactions"),
+    ("une opération", "one transaction"),
+    ("{n} opérations", "{n} transactions"),
+    ("JMA", "DMY"),
+    ("MJA", "MDY"),
+    ("AMJ", "YMD"),
+    // json.rs
+    ("JSON invalide : {e}", "invalid JSON: {e}"),
+    (
+        "ce fichier n'est pas un export JSON de BankPerfect",
+        "this file is not a BankPerfect JSON export",
+    ),
+    (
+        "version {version} du format JSON non prise en charge (version {max} au plus)",
+        "unsupported JSON format version {version} (version {max} at most)",
+    ),
+    ("inconnue", "unknown"),
+    (
+        "« account_order » doit contenir chaque compte une fois (0 à {})",
+        "“account_order” must contain each account once (0 to {})",
+    ),
+    (
+        "« default_account » : compte {} inexistant",
+        "“default_account”: account {} does not exist",
+    ),
+    (
+        "catégorie {} définie deux fois",
+        "category {} defined twice",
+    ),
+    (
+        "compte « {} » : identifiant d'opération {} invalide",
+        "account “{}”: invalid transaction ID {}",
+    ),
+    (
+        "compte « {} » : identifiant d'opération {} en double",
+        "account “{}”: duplicate transaction ID {}",
+    ),
+    (
+        "donnée « {} » présente deux fois",
+        "data “{}” present twice",
+    ),
+    (
+        "compte « {name} », opération {uid} : {message}",
+        "account “{name}”, transaction {uid}: {message}",
+    ),
+    (
+        "mode « {id} » inconnu (modes personnalisés : {{\"custom\": \"{id}\"}})",
+        "unknown payment method “{id}” (custom methods: {{\"custom\": \"{id}\"}})",
+    ),
+    (
+        "date « {text} » invalide (AAAA-MM-JJ attendu)",
+        "invalid date “{text}” (YYYY-MM-DD expected)",
+    ),
+    (
+        "montant « {text} » invalide (ex. \"-12.50\")",
+        "invalid amount “{text}” (e.g. \"-12.50\")",
+    ),
+    ("montant {n} invalide", "invalid amount {n}"),
+    (
+        "donnée « {} » : il faut soit « data », soit « base64 »",
+        "data “{}”: either “data” or “base64” is required",
+    ),
+    ("base64 invalide", "invalid base64"),
+    // legacy_pickle.rs
+    (
+        "pickle illisible (position {position}) : {message}",
+        "unreadable pickle (position {position}): {message}",
+    ),
+    ("flottant invalide", "invalid float"),
+    ("OBJ sans classe", "OBJ without a class"),
+    (
+        "protocole {version} non pris en charge",
+        "unsupported protocol {version}",
+    ),
+    ("opcode inconnu 0x{op}", "unknown opcode 0x{op}"),
+    ("fin de données inattendue", "unexpected end of data"),
+    ("longueur négative", "negative length"),
+    ("longueur trop grande", "length too large"),
+    ("fin de ligne manquante", "missing end of line"),
+    ("pile vide", "empty stack"),
+    ("marque inattendue", "unexpected mark"),
+    ("marque absente", "missing mark"),
+    (
+        "nombre impair d'éléments pour un dictionnaire",
+        "odd number of items for a dictionary",
+    ),
+    (
+        "ajout à un objet qui n'est pas une liste",
+        "append to an object that is not a list",
+    ),
+    (
+        "affectation dans un objet qui n'est pas un dictionnaire",
+        "assignment to an object that is not a dictionary",
+    ),
+    (
+        "référence au mémo {index} inconnue",
+        "unknown memo reference {index}",
+    ),
+    ("texte attendu", "text expected"),
+    ("entier invalide", "invalid integer"),
+    ("entier invalide : {text}", "invalid integer: {text}"),
+    ("index de mémo invalide", "invalid memo index"),
+    ("entier long trop grand", "long integer too large"),
+    ("chaîne sans guillemets", "unquoted string"),
+    (
+        "structure trop profonde ou récursive",
+        "structure too deep or recursive",
+    ),
+    ("structure trop volumineuse", "structure too large"),
+    // pyvalue.rs
+    (
+        "littéral Python invalide (caractère {position}) : {message}",
+        "invalid Python literal (character {position}): {message}",
+    ),
+    ("structure inattendue : {}", "unexpected structure: {}"),
+    (
+        "contenu inattendu après la valeur",
+        "unexpected content after the value",
+    ),
+    ("imbrication trop profonde", "nesting too deep"),
+    ("« , » attendue", "“,” expected"),
+    ("valeur attendue", "value expected"),
+    ("« : » attendu", "“:” expected"),
+    ("valeur non reconnue", "unrecognized value"),
+    ("nombre invalide", "invalid number"),
+    ("échappement invalide", "invalid escape"),
+    // quotes.rs
+    (
+        "cours en {currency}, non convertible en {target}",
+        "price in {currency}, cannot be converted to {target}",
+    ),
+    // reports.rs
+    ("Sans catégorie", "Uncategorized"),
+    ("Sans tiers", "No payee"),
+    ("Total", "Total"),
+    ("Opérations pointées", "Cleared transactions"),
+    ("A venir", "Upcoming"),
+    ("Solde", "Balance"),
+    ("Catégories", "Categories"),
+    ("Jan", "Jan"),
+    ("Fév", "Feb"),
+    ("Mar", "Mar"),
+    ("Avr", "Apr"),
+    ("Mai", "May"),
+    ("Jun", "Jun"),
+    ("Jul", "Jul"),
+    ("Aoû", "Aug"),
+    ("Sep", "Sep"),
+    ("Oct", "Oct"),
+    ("Nov", "Nov"),
+    ("Déc", "Dec"),
+    ("Répartition mensuelle", "Monthly breakdown"),
+    ("Modes de paiement", "Payment methods"),
+    ("De {} à {}", "From {} to {}"),
+    ("Niveaux des opérations", "Transaction amount ranges"),
+    ("Le 1er", "1st"),
+    ("Le {}", "{}"),
+    ("Répartition au cours du mois", "Breakdown by day of month"),
+    // scheduler.rs
+    ("Tous les jours", "Every day"),
+    ("Toutes les semaines", "Every week"),
+    ("Tous les mois", "Every month"),
+    ("Tous les ans", "Every year"),
+    ("Tous les {n} jours", "Every {n} days"),
+    ("Toutes les {n} semaines", "Every {n} weeks"),
+    ("Tous les {n} mois", "Every {n} months"),
+    ("Tous les {n} ans", "Every {n} years"),
+    ("compte inexistant", "account does not exist"),
+    (
+        "compte du transfert inexistant",
+        "transfer account does not exist",
+    ),
+    (
+        "transfert vers le même compte",
+        "transfer to the same account",
+    ),
+    ("intervalle nul", "zero interval"),
+    ("Echéancier :", "Scheduler:"),
+    ("Lignes insérées :", "Inserted lines:"),
+    (
+        "Compte {} : échéance \"{}\" du {} (montant : {})",
+        "Account {}: scheduled transaction \"{}\" on {} (amount: {})",
+    ),
+    ("Lignes refusées :", "Rejected lines:"),
+    (
+        "Compte {} : échéance \"{}\" du {} (montant : {})... {}",
+        "Account {}: scheduled transaction \"{}\" on {} (amount: {})... {}",
+    ),
+    ("Solde actuel", "Current balance"),
+    (
+        "échéance « {} » : prochaine échéance invalide {}",
+        "scheduled transaction “{}”: invalid next date {}",
+    ),
+    (
+        "ancien échéancier illisible : {e}",
+        "unreadable old scheduler: {e}",
+    ),
+    ("version {} non prise en charge", "unsupported version {}"),
+    (
+        "échéancier de l'ancienne version illisible : {e}",
+        "unreadable scheduler from the previous version: {e}",
+    ),
+    // split.rs
+    ("compte introuvable", "account not found"),
+    ("opération introuvable", "transaction not found"),
+    ("aucune part à ventiler", "no parts to split"),
+    (
+        "la part n°{} a un montant nul ou négatif",
+        "part #{} has a zero or negative amount",
+    ),
+    (
+        "le montant d'origine n'a pas été totalement ventilé (reste {})",
+        "the original amount has not been fully split ({} remaining)",
+    ),
+    (
+        "les deux comptes liés au transfert doivent être différents",
+        "the two accounts of the transfer must be different",
+    ),
+    (
+        "le montant est incorrect (il ne doit pas être nul)",
+        "the amount is invalid (it must not be zero)",
+    ),
+    (
+        "le mode de paiement de la ligne ne permet pas de créer un transfert",
+        "the payment method of this line does not allow creating a transfer",
+    ),
+    (
+        "la ligne est déjà un transfert",
+        "the line is already a transfer",
+    ),
+    ("Virement", "Transfer"),
+    ("Chèque", "Cheque"),
+    ("Espèces", "Cash"),
+    // v5_text.rs
+    (
+        "{} bloc d'opérations sans compte correspondant a été ignoré",
+        "{} transaction block without a matching account was ignored",
+    ),
+    (
+        "{} blocs d'opérations sans compte correspondant ont été ignorés",
+        "{} transaction blocks without a matching account were ignored",
+    ),
+    (
+        "ligne d'opération illisible ignorée : {} champs",
+        "unreadable transaction line ignored: {} fields",
+    ),
+    (
+        "date invalide « {} » remplacée par la date du jour",
+        "invalid date “{}” replaced with today's date",
+    ),
+    (
+        "montant invalide « {text} » remplacé par 0",
+        "invalid amount “{text}” replaced with 0",
+    ),
+    (
+        "mode de paiement « {field} » absent de la liste : recréé",
+        "payment method “{field}” missing from the list: recreated",
+    ),
+    (
+        "{} opération sans identifiant a reçu un nouvel identifiant",
+        "{} transaction without an ID was given a new ID",
+    ),
+    (
+        "{} opérations sans identifiant ont reçu un nouvel identifiant",
+        "{} transactions without an ID were given a new ID",
+    ),
+];

@@ -11,18 +11,15 @@ use chrono::Datelike;
 
 use crate::filter::normalize;
 use crate::model::{Amount, Date, Document, Operation, Tack};
+use crate::tr;
 use crate::view::payee_without_ventilation;
 
-/// Noms courts des mois, en en-tête des tableaux croisés.
-pub const MONTH_NAMES: [&str; 12] = [
-    "Janv", "Févr", "Mars", "Avr", "Mai", "Juin", "Juil", "Août", "Sept", "Oct", "Nov", "Déc",
-];
+/// Libellé de la ligne des opérations sans catégorie (à traduire par
+/// [`crate::i18n::tr`] ; les rapports le donnent déjà traduit).
+pub const NO_CATEGORY: &str = crate::tr_mark!("Sans catégorie");
 
-/// Libellé de la ligne des opérations sans catégorie.
-pub const NO_CATEGORY: &str = "Sans catégorie";
-
-/// Libellé de la ligne des opérations sans tiers.
-pub const NO_PAYEE: &str = "Sans tiers";
+/// Libellé de la ligne des opérations sans tiers (même remarque).
+pub const NO_PAYEE: &str = crate::tr_mark!("Sans tiers");
 
 /// Filtre de lignes : `(compte, index de l'opération, opération)` → gardée ?
 /// Permet de restreindre un rapport aux lignes visibles (filtres courants).
@@ -296,7 +293,9 @@ fn build_pivot<K: Ord + Clone>(
     // compte n'avait aucune opération.
     let first_year = entries.iter().map(|e| e.year).min();
     let columns: Vec<String> = match options.goal {
-        PivotGoal::MonthlyTotals => MONTH_NAMES.iter().map(|m| m.to_string()).collect(),
+        PivotGoal::MonthlyTotals => (0..12)
+            .map(|m| crate::i18n::month_abbr(m).to_string())
+            .collect(),
         PivotGoal::YearlyTotals | PivotGoal::YearlyAverages => {
             match (first_year, entries.iter().map(|e| e.year).max()) {
                 (Some(first), Some(last)) => (first..=last).map(|y| y.to_string()).collect(),
@@ -394,7 +393,7 @@ fn build_pivot<K: Ord + Clone>(
         _ => None,
     };
     let mut columns = columns;
-    columns.push("Total".to_string());
+    columns.push(tr!("Total").to_string());
     Pivot {
         columns,
         carried_balance,
@@ -452,7 +451,7 @@ pub fn category_totals(document: &Document, options: &PivotOptions) -> Pivot {
     let mut rows = vec![(
         None,
         PivotKey::Category(None),
-        NO_CATEGORY.to_string(),
+        crate::i18n::tr(NO_CATEGORY).to_string(),
         false,
     )];
     rows.extend(
@@ -535,7 +534,7 @@ pub fn payee_totals(document: &Document, options: &PivotOptions) -> Pivot {
             options.goal != PivotGoal::MonthlyTotals || options.year.is_none_or(|y| y == year);
         if shown && !labels.contains_key(&key) {
             let label = if key.is_empty() {
-                NO_PAYEE.to_string()
+                crate::i18n::tr(NO_PAYEE).to_string()
             } else {
                 clean(&op.payee)
             };
@@ -703,12 +702,12 @@ pub fn chart_account_balances(document: &Document, detailed: bool) -> ChartData 
     };
     let series = if detailed {
         vec![
-            series("Opérations pointées", |t| t.pointed),
-            series("A venir", |t| t.upcoming),
-            series("Solde", |t| t.balance),
+            series(tr!("Opérations pointées"), |t| t.pointed),
+            series(tr!("A venir"), |t| t.upcoming),
+            series(tr!("Solde"), |t| t.balance),
         ]
     } else {
-        vec![series("Solde", |t| t.balance)]
+        vec![series(tr!("Solde"), |t| t.balance)]
     };
     ChartData {
         unit: ChartUnit::Amount,
@@ -730,7 +729,7 @@ pub fn chart_categories(
         *sum = add(*sum, op.amount);
     }
     let value = |key: Option<u32>| sums.get(&key).copied().unwrap_or_default().as_f64();
-    let mut points = vec![(NO_CATEGORY.to_string(), value(None))];
+    let mut points = vec![(crate::i18n::tr(NO_CATEGORY).to_string(), value(None))];
     points.extend(
         document
             .categories
@@ -743,14 +742,25 @@ pub fn chart_categories(
                 (label, value(Some(c.id)))
             }),
     );
-    ChartData::single(ChartUnit::Amount, "Catégories", points)
+    ChartData::single(ChartUnit::Amount, tr!("Catégories"), points)
 }
 
 /// Répartition mensuelle : total des opérations par mois de l'année, toutes
 /// années confondues.
 pub fn chart_months(document: &Document, scope: &AccountScope, keep: LineFilter) -> ChartData {
     const NAMES: [&str; 12] = [
-        "Jan", "Fév", "Mar", "Avr", "Mai", "Jun", "Jul", "Aoû", "Sep", "Oct", "Nov", "Déc",
+        crate::tr_mark!("Jan"),
+        crate::tr_mark!("Fév"),
+        crate::tr_mark!("Mar"),
+        crate::tr_mark!("Avr"),
+        crate::tr_mark!("Mai"),
+        crate::tr_mark!("Jun"),
+        crate::tr_mark!("Jul"),
+        crate::tr_mark!("Aoû"),
+        crate::tr_mark!("Sep"),
+        crate::tr_mark!("Oct"),
+        crate::tr_mark!("Nov"),
+        crate::tr_mark!("Déc"),
     ];
     let mut values = [Amount::ZERO; 12];
     for (_, _, op) in selected_operations(document, scope, keep) {
@@ -760,9 +770,9 @@ pub fn chart_months(document: &Document, scope: &AccountScope, keep: LineFilter)
     let points = NAMES
         .iter()
         .zip(values)
-        .map(|(name, v)| (name.to_string(), v.as_f64()))
+        .map(|(name, v)| (crate::i18n::tr(name).to_string(), v.as_f64()))
         .collect();
-    ChartData::single(ChartUnit::Amount, "Répartition mensuelle", points)
+    ChartData::single(ChartUnit::Amount, tr!("Répartition mensuelle"), points)
 }
 
 /// Total par mode de paiement (modes standard puis personnalisés ; un chèque
@@ -780,7 +790,7 @@ pub fn chart_modes(document: &Document, scope: &AccountScope, keep: LineFilter) 
         .zip(values)
         .map(|(mode, v)| (mode.label().to_string(), v.as_f64()))
         .collect();
-    ChartData::single(ChartUnit::Amount, "Modes de paiement", points)
+    ChartData::single(ChartUnit::Amount, tr!("Modes de paiement"), points)
 }
 
 /// Bornes des tranches de montant (en unités monétaires).
@@ -809,14 +819,29 @@ pub fn chart_amount_levels(
     let points = (0..n)
         .map(|i| {
             let label = if i + 1 < n {
-                format!("De {} à {}", AMOUNT_LEVELS[i], AMOUNT_LEVELS[i + 1])
+                tr!("De {} à {}", AMOUNT_LEVELS[i], AMOUNT_LEVELS[i + 1])
             } else {
                 format!("> {}", AMOUNT_LEVELS[n - 1])
             };
             (label, counts[i] as f64)
         })
         .collect();
-    ChartData::single(ChartUnit::Count, "Niveaux des opérations", points)
+    ChartData::single(ChartUnit::Count, tr!("Niveaux des opérations"), points)
+}
+
+/// Numéro du jour, ordinal en anglais (« 2nd », « 23rd ») : complète « Le {} ».
+fn day_ordinal(day: usize) -> String {
+    if crate::i18n::lang() != crate::i18n::Lang::En {
+        return day.to_string();
+    }
+    let suffix = match (day % 10, day % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{day}{suffix}")
 }
 
 /// Total des opérations par jour du mois (« Le 1er » à « Le 31 »).
@@ -835,14 +860,18 @@ pub fn chart_day_of_month(
         .enumerate()
         .map(|(i, v)| {
             let label = if i == 0 {
-                "Le 1er".to_string()
+                tr!("Le 1er").to_string()
             } else {
-                format!("Le {}", i + 1)
+                tr!("Le {}", day_ordinal(i + 1))
             };
             (label, v.as_f64())
         })
         .collect();
-    ChartData::single(ChartUnit::Amount, "Répartition au cours du mois", points)
+    ChartData::single(
+        ChartUnit::Amount,
+        tr!("Répartition au cours du mois"),
+        points,
+    )
 }
 
 /// Pas de la courbe du solde.
@@ -896,7 +925,7 @@ pub fn chart_balance_over_time(
             }
         }
     }
-    ChartData::single(ChartUnit::Amount, "Solde", points)
+    ChartData::single(ChartUnit::Amount, tr!("Solde"), points)
 }
 
 #[cfg(test)]

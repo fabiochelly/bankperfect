@@ -49,6 +49,7 @@ use std::collections::{BTreeMap, HashMap};
 use serde::{Deserialize, Serialize};
 
 use crate::model::Document;
+use crate::tr;
 
 /// Valeur Python reconstruite à partir d'un pickle.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -153,10 +154,19 @@ impl Value {
 
 /// Erreur de lecture d'un pickle.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("pickle illisible (position {position}) : {message}")]
 pub struct PickleError {
     pub position: usize,
     pub message: String,
+}
+
+impl std::fmt::Display for PickleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&tr!(
+            "pickle illisible (position {position}) : {message}",
+            position = self.position,
+            message = self.message
+        ))
+    }
 }
 
 /// Lit un pickle Python 2 (protocoles 0 à 2 ; quelques opcodes des protocoles
@@ -264,8 +274,8 @@ impl<'a> Parser<'a> {
                 }
                 b'F' => {
                     let line = self.line()?;
-                    let value =
-                        parse_float_text(line).ok_or_else(|| self.error("flottant invalide"))?;
+                    let value = parse_float_text(line)
+                        .ok_or_else(|| self.error(tr!("flottant invalide")))?;
                     self.push_leaf(Value::Float(value));
                 }
                 b'S' => {
@@ -477,7 +487,7 @@ impl<'a> Parser<'a> {
                 b'o' => {
                     let mut items = self.pop_mark()?;
                     if items.is_empty() {
-                        return Err(self.error("OBJ sans classe"));
+                        return Err(self.error(tr!("OBJ sans classe")));
                     }
                     let class = items.remove(0);
                     let args = self.alloc(Node::Tuple(items));
@@ -491,13 +501,16 @@ impl<'a> Parser<'a> {
                 0x80 => {
                     let version = self.byte()?;
                     if version > 5 {
-                        return Err(self.error(format!("protocole {version} non pris en charge")));
+                        return Err(self.error(tr!(
+                            "protocole {version} non pris en charge",
+                            version = version
+                        )));
                     }
                 }
                 0x95 => {
                     self.array::<8>()?;
                 }
-                _ => return Err(self.error(format!("opcode inconnu 0x{op:02x}"))),
+                _ => return Err(self.error(tr!("opcode inconnu 0x{op}", op = format!("{op:02x}")))),
             }
         }
     }
@@ -508,7 +521,7 @@ impl<'a> Parser<'a> {
         let b = *self
             .data
             .get(self.pos)
-            .ok_or_else(|| self.error("fin de données inattendue"))?;
+            .ok_or_else(|| self.error(tr!("fin de données inattendue")))?;
         self.pos += 1;
         Ok(b)
     }
@@ -518,7 +531,7 @@ impl<'a> Parser<'a> {
             .pos
             .checked_add(n)
             .filter(|&end| end <= self.data.len())
-            .ok_or_else(|| self.error("fin de données inattendue"))?;
+            .ok_or_else(|| self.error(tr!("fin de données inattendue")))?;
         let slice = &self.data[self.pos..end];
         self.pos = end;
         Ok(slice)
@@ -533,12 +546,12 @@ impl<'a> Parser<'a> {
 
     fn len32(&mut self) -> Result<usize, PickleError> {
         let n = i32::from_le_bytes(self.array::<4>()?);
-        usize::try_from(n).map_err(|_| self.error("longueur négative"))
+        usize::try_from(n).map_err(|_| self.error(tr!("longueur négative")))
     }
 
     fn len64(&mut self) -> Result<usize, PickleError> {
         let n = u64::from_le_bytes(self.array::<8>()?);
-        usize::try_from(n).map_err(|_| self.error("longueur trop grande"))
+        usize::try_from(n).map_err(|_| self.error(tr!("longueur trop grande")))
     }
 
     /// Ligne terminée par `\n` (un `\r` final, laissé par une écriture en mode
@@ -548,7 +561,7 @@ impl<'a> Parser<'a> {
         let len = rest
             .iter()
             .position(|&b| b == b'\n')
-            .ok_or_else(|| self.error("fin de ligne manquante"))?;
+            .ok_or_else(|| self.error(tr!("fin de ligne manquante")))?;
         self.pos += len + 1;
         let line = &rest[..len];
         Ok(line.strip_suffix(b"\r").unwrap_or(line))
@@ -571,21 +584,21 @@ impl<'a> Parser<'a> {
     }
 
     fn pop_slot(&mut self) -> Result<Slot, PickleError> {
-        self.stack.pop().ok_or_else(|| self.error("pile vide"))
+        self.stack.pop().ok_or_else(|| self.error(tr!("pile vide")))
     }
 
     fn pop(&mut self) -> Result<usize, PickleError> {
         match self.pop_slot()? {
             Slot::Node(index) => Ok(index),
-            Slot::Mark => Err(self.error("marque inattendue")),
+            Slot::Mark => Err(self.error(tr!("marque inattendue"))),
         }
     }
 
     fn peek(&self) -> Result<usize, PickleError> {
         match self.stack.last() {
             Some(Slot::Node(index)) => Ok(*index),
-            Some(Slot::Mark) => Err(self.error("marque inattendue")),
-            None => Err(self.error("pile vide")),
+            Some(Slot::Mark) => Err(self.error(tr!("marque inattendue"))),
+            None => Err(self.error(tr!("pile vide"))),
         }
     }
 
@@ -595,7 +608,7 @@ impl<'a> Parser<'a> {
             .stack
             .iter()
             .rposition(|slot| matches!(slot, Slot::Mark))
-            .ok_or_else(|| self.error("marque absente"))?;
+            .ok_or_else(|| self.error(tr!("marque absente")))?;
         let items = self.stack.split_off(mark + 1);
         self.stack.pop();
         Ok(items
@@ -609,7 +622,7 @@ impl<'a> Parser<'a> {
 
     fn pairs(&self, items: Vec<usize>) -> Result<Vec<(usize, usize)>, PickleError> {
         if !items.len().is_multiple_of(2) {
-            return Err(self.error("nombre impair d'éléments pour un dictionnaire"));
+            return Err(self.error(tr!("nombre impair d'éléments pour un dictionnaire")));
         }
         Ok(items.chunks(2).map(|c| (c[0], c[1])).collect())
     }
@@ -620,7 +633,7 @@ impl<'a> Parser<'a> {
             Node::List(items) => Ok(items),
             _ => Err(PickleError {
                 position,
-                message: "ajout à un objet qui n'est pas une liste".into(),
+                message: tr!("ajout à un objet qui n'est pas une liste").into(),
             }),
         }
     }
@@ -650,7 +663,7 @@ impl<'a> Parser<'a> {
             }
             _ => Err(PickleError {
                 position,
-                message: "affectation dans un objet qui n'est pas un dictionnaire".into(),
+                message: tr!("affectation dans un objet qui n'est pas un dictionnaire").into(),
             }),
         }
     }
@@ -659,7 +672,7 @@ impl<'a> Parser<'a> {
         let node = *self
             .memo
             .get(&index)
-            .ok_or_else(|| self.error(format!("référence au mémo {index} inconnue")))?;
+            .ok_or_else(|| self.error(tr!("référence au mémo {index} inconnue", index = index)))?;
         self.stack.push(Slot::Node(node));
         Ok(())
     }
@@ -669,8 +682,8 @@ impl<'a> Parser<'a> {
             Node::Leaf(v) => v
                 .as_str()
                 .map(str::to_string)
-                .ok_or_else(|| self.error("texte attendu")),
-            _ => Err(self.error("texte attendu")),
+                .ok_or_else(|| self.error(tr!("texte attendu"))),
+            _ => Err(self.error(tr!("texte attendu"))),
         }
     }
 
@@ -678,7 +691,7 @@ impl<'a> Parser<'a> {
 
     fn parse_int_text(&self, text: &[u8]) -> Result<Value, PickleError> {
         let text = std::str::from_utf8(text)
-            .map_err(|_| self.error("entier invalide"))?
+            .map_err(|_| self.error(tr!("entier invalide")))?
             .trim();
         if let Ok(v) = text.parse::<i64>() {
             return Ok(Value::Int(v));
@@ -687,7 +700,7 @@ impl<'a> Parser<'a> {
         if !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) {
             Ok(Value::BigInt(text.trim_start_matches('+').to_string()))
         } else {
-            Err(self.error(format!("entier invalide : {text}")))
+            Err(self.error(tr!("entier invalide : {text}", text = text)))
         }
     }
 
@@ -695,7 +708,7 @@ impl<'a> Parser<'a> {
         std::str::from_utf8(text)
             .ok()
             .and_then(|s| s.trim().parse().ok())
-            .ok_or_else(|| self.error("index de mémo invalide"))
+            .ok_or_else(|| self.error(tr!("index de mémo invalide")))
     }
 
     /// Entier long binaire (complément à deux, petit-boutiste).
@@ -704,7 +717,7 @@ impl<'a> Parser<'a> {
             return Ok(Value::Int(0));
         }
         if bytes.len() > 16 {
-            return Err(self.error("entier long trop grand"));
+            return Err(self.error(tr!("entier long trop grand")));
         }
         let negative = bytes[bytes.len() - 1] & 0x80 != 0;
         let mut buf = [if negative { 0xff } else { 0 }; 16];
@@ -722,7 +735,7 @@ impl<'a> Parser<'a> {
             && (line[0] == b'\'' || line[0] == b'"')
             && line[line.len() - 1] == line[0];
         if !quoted {
-            return Err(self.error("chaîne sans guillemets"));
+            return Err(self.error(tr!("chaîne sans guillemets")));
         }
         Ok(escape_decode(&line[1..line.len() - 1]))
     }
@@ -731,11 +744,11 @@ impl<'a> Parser<'a> {
 
     fn build(&self, index: usize, depth: usize, budget: &mut usize) -> Result<Value, PickleError> {
         if depth > MAX_DEPTH {
-            return Err(self.error("structure trop profonde ou récursive"));
+            return Err(self.error(tr!("structure trop profonde ou récursive")));
         }
         *budget = budget
             .checked_sub(1)
-            .ok_or_else(|| self.error("structure trop volumineuse"))?;
+            .ok_or_else(|| self.error(tr!("structure trop volumineuse")))?;
         let child = |i: usize, budget: &mut usize| self.build(i, depth + 1, budget);
         Ok(match &self.arena[index] {
             Node::Leaf(v) => v.clone(),

@@ -176,6 +176,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
 
     bp.set("version", env!("CARGO_PKG_VERSION"))?;
     bp.set("id", id.clone())?;
+    // Langue de l'interface au chargement ; l'application recharge les
+    // extensions quand elle change (Luau fige les lectures de `bp.*`).
+    bp.set("language", bp_core::i18n::lang().code())?;
 
     // ─────────────────────── Déclarations ───────────────────────
     {
@@ -712,7 +715,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 let list = lua.create_table()?;
                 for m in s.document.mode_list() {
                     let t = lua.create_table()?;
-                    t.set("name", m.label())?;
+                    t.set("name", m.name())?;
                     t.set("debit", bp_core::edit::mode_is_debit(&s.document, &m))?;
                     t.set("custom", matches!(m, bp_core::model::Mode::Custom(_)))?;
                     list.raw_push(t)?;
@@ -726,7 +729,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         lua.create_function(|lua, (name, debit): (String, Option<bool>)| {
             with_session(lua, |s| {
                 if let Ok(mode) = crate::objects::resolve_mode(&s.document, &name) {
-                    return Ok(mode.label().to_string());
+                    return Ok(mode.name().to_string());
                 }
                 Ok(bp_core::manage::add_mode(
                     s.referentials_mut(),
@@ -746,7 +749,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     t.set("caption", p.caption.clone())?;
                     t.set("payee", p.payee.clone())?;
                     t.set("details", p.details.clone())?;
-                    t.set("mode", p.mode.label())?;
+                    t.set("mode", p.mode.name())?;
                     t.set(
                         "category",
                         p.category.and_then(|id| s.document.category_label(id)),
@@ -1187,6 +1190,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
     }
 
     crate::features::install(lua, &bp)?;
+
     lua.globals().set("bp", bp)?;
     Ok(())
 }

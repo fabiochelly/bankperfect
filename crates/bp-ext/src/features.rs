@@ -78,7 +78,7 @@ fn schedule_table(lua: &Lua, s: &Session, index: usize, sc: &Schedule) -> mlua::
     t.set("transfer", sc.transfer.as_deref().and_then(account))?;
     t.set("payee", sc.payee.clone())?;
     t.set("details", sc.details.clone())?;
-    t.set("mode", sc.mode.label().to_string())?;
+    t.set("mode", sc.mode.name().to_string())?;
     t.set(
         "category",
         sc.category.and_then(|id| s.document.category_label(id)),

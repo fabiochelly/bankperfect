@@ -599,7 +599,7 @@ pub(crate) fn operation_copy(
     t.set("payee", op.payee.clone())?;
     t.set("details", op.details.clone())?;
     t.set("amount", amount_to_f64(op.amount))?;
-    t.set("mode", op.mode.label().to_string())?;
+    t.set("mode", op.mode.name().to_string())?;
     let category = op.category.and_then(|id| {
         lua.app_data_ref::<Session>()
             .and_then(|s| s.document.category_label(id))
@@ -776,7 +776,7 @@ impl UserData for OpRef {
             })
         });
         fields.add_field_method_get("mode", |lua, o| {
-            o.get(lua, |_, op| Ok(op.mode.label().to_string()))
+            o.get(lua, |_, op| Ok(op.mode.name().to_string()))
         });
         fields.add_field_method_set("mode", |lua, o, value: String| {
             o.update(lua, |document, op| {

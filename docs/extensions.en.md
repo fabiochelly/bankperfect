@@ -769,6 +769,12 @@ Without `permissions = { "network" }`, `bp.http` refuses. `bp.open_url(url)` ope
 - **Errors.** A loading error (syntax, refused call) is shown in the management window with the offending line, and the extension adds nothing. An error during a command or a reaction is shown in an error window, with the file and line.
 - **Reload.** The **Reload** button reloads every extension: their open windows close and their variables start again from scratch. Whatever must survive goes in `bp.store` or `bp.prefs`. Disabling and re-enabling an extension also reloads it.
 - **Versions.** `bp.version` gives the BankPerfect version (`"9.8.2"`); `requires` in `bp.extension` cleanly refuses a version that is too old. `bp.id` is the extension's identifier (the name of its file or folder).
+- **Language.** `bp.language` is `"fr"` or `"en"`, the interface language. Extensions are reloaded when the user switches language, so command names and texts can be chosen at load time.
+
+  ```lua
+  local en = bp.language == "en"
+  bp.command{ title = en and "Monthly summary" or "Synthèse du mois", run = function() … end }
+  ```
 - **Editor.** The definitions file [`bankperfect.en.d.luau`](bankperfect.en.d.luau) (comments in English; [`bankperfect.d.luau`](bankperfect.d.luau) is the same with French comments) provides autocompletion and type checking (see [Quick reference](#quick-reference)).
 
 ## Recipes
@@ -899,7 +905,7 @@ ui.chart{ style, labels, series | data, unit, currency, height }
 
 bp.store.get/set   bp.prefs.get/set   bp.json.encode/decode
 bp.files.open{…}   bp.files.save{…}   bp.http.get(url, opts)   bp.http.post(url, body, opts)   bp.open_url(url)
-print(…) | bp.log(…)   require("module")   bp.version   bp.id
+print(…) | bp.log(…)   require("module")   bp.version   bp.id   bp.language
 
 Menus: file  export  edit  view  accounts  operations  reports  tools  extensions  grid  account
 Events: operation_added  operation_changed  operation_deleted  account_selected  selection_changed

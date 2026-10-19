@@ -748,6 +748,12 @@ Sans `permissions = { "network" }`, `bp.http` refuse. `bp.open_url(url)` ouvre u
 - **Erreurs.** Une erreur au chargement (syntaxe, appel refusé) est affichée dans la fenêtre de gestion avec la ligne fautive, et l'extension n'ajoute rien. Une erreur pendant une commande ou une réaction s'affiche dans une fenêtre d'erreur, avec le fichier et la ligne.
 - **Recharger.** Le bouton **Recharger** relit toutes les extensions : leurs fenêtres ouvertes se ferment et leurs variables repartent de zéro. Ce qui doit survivre va dans `bp.store` ou `bp.prefs`. Désactiver puis réactiver une extension la recharge aussi.
 - **Versions.** `bp.version` donne la version de BankPerfect (`"9.8.2"`) ; `requires` dans `bp.extension` refuse proprement une version trop ancienne. `bp.id` est l'identifiant de l'extension (nom de son fichier ou dossier).
+- **Langue.** `bp.language` vaut `"fr"` ou `"en"`, la langue de l'interface. Les extensions sont rechargées quand l'utilisateur change de langue : on peut donc choisir les noms des commandes et les textes dès le chargement.
+
+  ```lua
+  local en = bp.language == "en"
+  bp.command{ title = en and "Monthly summary" or "Synthèse du mois", run = function() … end }
+  ```
 - **Éditeur.** Le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) (commentaires en français ; [`bankperfect.en.d.luau`](bankperfect.en.d.luau) est le même, commenté en anglais) donne l'auto-complétion et la vérification des types (voir [Référence rapide](#référence-rapide)).
 
 ## Recettes
@@ -878,7 +884,7 @@ ui.chart{ style, labels, series | data, unit, currency, height }
 
 bp.store.get/set   bp.prefs.get/set   bp.json.encode/decode
 bp.files.open{…}   bp.files.save{…}   bp.http.get(url, opts)   bp.http.post(url, corps, opts)   bp.open_url(url)
-print(…) | bp.log(…)   require("module")   bp.version   bp.id
+print(…) | bp.log(…)   require("module")   bp.version   bp.id   bp.language
 
 Menus : file  export  edit  view  accounts  operations  reports  tools  extensions  grid  account
 Évènements : operation_added  operation_changed  operation_deleted  account_selected  selection_changed

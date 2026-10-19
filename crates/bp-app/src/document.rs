@@ -102,6 +102,9 @@ struct View {
     /// premier filtre de texte).
     indexed_account: Option<usize>,
     index: SearchIndex,
+    /// Langue de la vue : l'index de recherche et le tri contiennent des
+    /// textes traduits (modes), à recalculer après un changement de langue.
+    lang: bp_core::i18n::Lang,
     order: Vec<usize>,
     /// Solde progressif, indexé par opération.
     balance_of: Vec<Amount>,
@@ -290,6 +293,13 @@ impl OpenDoc {
     }
 
     pub fn refresh(&mut self) {
+        let lang = bp_core::i18n::lang();
+        if self.view.lang != lang {
+            self.view.lang = lang;
+            self.view.key = None;
+            self.view.filters = None;
+            self.view.indexed_account = None;
+        }
         let key = (self.account, self.sort, self.ascending, self.revision);
         if self.view.key != Some(key) {
             let account = &self.document.accounts[self.account];

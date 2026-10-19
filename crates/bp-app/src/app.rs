@@ -277,6 +277,17 @@ impl BankPerfectApp {
 
     /// Charge les extensions d'un dossier (application : dossier de
     /// l'utilisateur ; tests : exemples).
+    /// Applique la langue des réglages ; les extensions sont rechargées pour
+    /// que `bp.language` et les noms qu'elles en tirent suivent.
+    fn language_changed(&mut self) {
+        let before = bp_core::i18n::lang();
+        crate::settings::shared::set(&self.settings);
+        if bp_core::i18n::lang() != before {
+            self.extensions.load_all(&self.settings.disabled_extensions);
+            crate::extensions::refresh(&self.extensions);
+        }
+    }
+
     pub fn load_extensions(&mut self, dir: PathBuf) {
         self.extensions = crate::extensions::engine(Some(dir), &self.settings.disabled_extensions);
         crate::extensions::refresh(&self.extensions);
@@ -969,7 +980,7 @@ impl BankPerfectApp {
             Command::Language(lang) => {
                 self.settings.language = Some(lang.code().into());
                 self.settings.save();
-                return crate::settings::shared::set(&self.settings);
+                return self.language_changed();
             }
             Command::ToggleTranslucent => {
                 let on = !self.settings.translucent();
@@ -2455,6 +2466,7 @@ impl BankPerfectApp {
                     let translucent_before = self.settings.translucent();
                     self.settings = *settings;
                     self.settings.save();
+                    self.language_changed();
                     crate::theme::select(
                         ctx,
                         &self.settings.dark_theme,
@@ -2499,7 +2511,7 @@ impl BankPerfectApp {
                     .max_height(320.0)
                     .show(ui, |ui| {
                         for line in summary.lines().skip(1).filter(|l| !l.trim().is_empty()) {
-                            let refused = line.contains("refusées") || line.contains("...");
+                            let refused = line == tr!("Lignes refusées :") || line.contains("...");
                             let color = if refused { pal.warning } else { pal.fg };
                             ui.label(RichText::new(line).color(color));
                         }

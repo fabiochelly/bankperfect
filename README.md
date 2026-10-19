@@ -1,3 +1,5 @@
+**Français** · [English](README.en.md)
+
 # BankPerfect
 
 Gestion de comptes bancaires personnels, rapide et moderne, pour Linux, Windows et macOS.

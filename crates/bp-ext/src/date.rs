@@ -1,6 +1,7 @@
 //! Dates côté Luau : `bp.date(2026, 10, 12)`, `bp.today() + 30`, `d.month`…
 
 use bp_core::model::Date;
+use bp_core::tr;
 use chrono::{Datelike, Months, NaiveDate};
 use mlua::{Lua, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
 
@@ -121,7 +122,7 @@ impl UserData for LuaDate {
             let days = crate::objects::number(&days)
                 .map(|f| f.round() as i64)
                 .ok_or_else(|| {
-                    mlua::Error::runtime("une date s'additionne avec un nombre de jours")
+                    mlua::Error::runtime(tr!("une date s'additionne avec un nombre de jours"))
                 })?;
             Ok(LuaDate(Date(date.0 + days as i32)))
         });
@@ -144,13 +145,13 @@ pub(crate) fn to_date(_lua: &Lua, value: &Value) -> mlua::Result<Date> {
         Value::UserData(ud) => ud
             .borrow::<LuaDate>()
             .map(|d| d.0)
-            .map_err(|_| mlua::Error::runtime("une date est attendue")),
+            .map_err(|_| mlua::Error::runtime(tr!("une date est attendue"))),
         Value::String(s) => {
             let text = s.to_str()?.to_string();
             parse_text(&text)
-                .ok_or_else(|| mlua::Error::runtime(format!("date invalide : « {text} »")))
+                .ok_or_else(|| mlua::Error::runtime(tr!("date invalide : « {} »", text)))
         }
-        _ => Err(mlua::Error::runtime(format!(
+        _ => Err(mlua::Error::runtime(tr!(
             "une date est attendue (reçu : {})",
             value.type_name()
         ))),

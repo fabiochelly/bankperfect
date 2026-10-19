@@ -25,6 +25,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+use bp_core::tr;
 use mlua::thread::ThreadStatus;
 use mlua::{Lua, MultiValue, Table, Thread, UserData, UserDataMethods, Value, VmState};
 
@@ -80,19 +81,19 @@ pub struct CommandInfo {
 }
 
 /// Emplacements possibles d'une commande (`menu = …` dans `bp.command`) :
-/// identifiant et libellé.
+/// identifiant et libellé (à traduire avec [`bp_core::i18n::tr`]).
 pub const MENUS: &[(&str, &str)] = &[
-    ("file", "Fichier"),
-    ("export", "Fichier › Exporter"),
-    ("edit", "Édition"),
-    ("view", "Affichage"),
-    ("accounts", "Comptes"),
-    ("operations", "Opérations"),
-    ("reports", "Rapports"),
-    ("tools", "Outils"),
-    ("extensions", "Extensions"),
-    ("grid", "clic droit sur les opérations"),
-    ("account", "clic droit sur un compte"),
+    ("file", bp_core::tr_mark!("Fichier")),
+    ("export", bp_core::tr_mark!("Fichier › Exporter")),
+    ("edit", bp_core::tr_mark!("Édition")),
+    ("view", bp_core::tr_mark!("Affichage")),
+    ("accounts", bp_core::tr_mark!("Comptes")),
+    ("operations", bp_core::tr_mark!("Opérations")),
+    ("reports", bp_core::tr_mark!("Rapports")),
+    ("tools", bp_core::tr_mark!("Outils")),
+    ("extensions", bp_core::tr_mark!("Extensions")),
+    ("grid", bp_core::tr_mark!("clic droit sur les opérations")),
+    ("account", bp_core::tr_mark!("clic droit sur un compte")),
 ];
 
 /// Évènements auxquels une extension peut réagir (`bp.on`).
@@ -354,7 +355,7 @@ fn event_args(lua: &Lua, event: Event, file: u64, item: &EventItem) -> mlua::Res
         let before = item
             .before
             .as_ref()
-            .ok_or_else(|| objects::runtime("état d'avant manquant"))?;
+            .ok_or_else(|| objects::runtime(tr!("état d'avant manquant")))?;
         objects::operation_copy(lua, file, item.account, before).map(Value::Table)
     };
     Ok(match event {
@@ -411,6 +412,20 @@ fn main_file(path: &Path) -> Option<(String, PathBuf)> {
     Some((id.to_string(), path.to_path_buf()))
 }
 
+/// Texte du prélude Luau désigné par `key`, dans la langue en cours.
+fn prelude_text(key: &str, value: &str) -> String {
+    match key {
+        "cancel" => tr!("Annuler").to_string(),
+        "ok" => tr!("Valider").to_string(),
+        "not_here" => tr!(
+            "bp.ui.{} : impossible ici (construction d'une fenêtre ou chargement de l'extension)",
+            value
+        ),
+        "window_table" => tr!("{} attend une table", "bp.ui.window{ … }"),
+        other => other.to_string(),
+    }
+}
+
 fn error_text(e: &mlua::Error) -> String {
     let text = match e {
         mlua::Error::CallbackError { traceback, cause } => {
@@ -430,7 +445,7 @@ fn error_text(e: &mlua::Error) -> String {
             message.clone()
         }
         mlua::Error::MemoryError(_) => {
-            "mémoire insuffisante (limite des extensions atteinte)".into()
+            tr!("mémoire insuffisante (limite des extensions atteinte)").into()
         }
         other => other.to_string(),
     };
@@ -537,13 +552,21 @@ impl Engine {
                 registry: registry.clone(),
             },
         )?;
+        // Textes du prélude, traduits à l'appel ; le prélude garde la
+        // fonction pour lui et retire la variable globale.
+        lua.globals().set(
+            "__bp_text",
+            lua.create_function(|_, (key, value): (String, Option<String>)| {
+                Ok(prelude_text(&key, value.as_deref().unwrap_or_default()))
+            })?,
+        )?;
         lua.load(PRELUDE).set_name("=prelude").exec()?;
         lua.set_interrupt(|lua| {
             if lua
                 .app_data_ref::<Deadline>()
                 .is_some_and(|d| Instant::now() > d.0)
             {
-                return Err(mlua::Error::runtime(format!(
+                return Err(mlua::Error::runtime(tr!(
                     "l'extension a dépassé le temps maximal ({} s)",
                     TIME_LIMIT.as_secs()
                 )));
@@ -552,7 +575,7 @@ impl Engine {
         });
         lua.sandbox(true)?;
         let source = std::fs::read_to_string(&ext.path)
-            .map_err(|e| mlua::Error::runtime(format!("lecture impossible : {e}")))?;
+            .map_err(|e| mlua::Error::runtime(tr!("lecture impossible : {}", e)))?;
         lua.set_app_data(Deadline(Instant::now() + TIME_LIMIT));
         lua.set_app_data(Outbox::default());
         let name = if ext.path.file_name().is_some_and(|n| n == "init.luau") {
@@ -628,15 +651,16 @@ impl Engine {
                 let name = self.extensions[ext].name();
                 self.with_doc(ext, Some(ctx), |_, lua, _| {
                     outcome = run_importer(lua, &spec, path, data)
-                        .map_err(|e| format!("{name} : {}", error_text(&e)))
+                        .map_err(|e| tr!("{ext} : {error}", ext = name, error = error_text(&e)))
                         .transpose();
                     if let Some(mut s) = lua.app_data_mut::<Session>()
                         && s.has_changes()
                     {
                         let before = s.accounts_before();
                         s.rollback(before);
-                        outcome = Some(Err(format!(
-                            "{name} : un format d'import lit le fichier sans modifier les comptes"
+                        outcome = Some(Err(tr!(
+                            "{ext} : un format d'import lit le fichier sans modifier les comptes",
+                            ext = name
                         )));
                     }
                 });
@@ -726,7 +750,11 @@ impl Engine {
             .get(ext)
             .map(|e| e.name())
             .unwrap_or_default();
-        fx.errors.push(format!("{name} : {}", error_text(error)));
+        fx.errors.push(tr!(
+            "{ext} : {error}",
+            ext = name,
+            error = error_text(error)
+        ));
     }
 
     /// Reprend une coroutine, inscrit ses modifications et traite ce qu'elle
@@ -752,9 +780,9 @@ impl Engine {
                         Some(Value::Table(request)) => self.request(ext, lua, run, &request, fx),
                         _ => self.report(
                             ext,
-                            &mlua::Error::runtime(
-                                "coroutine.yield n'est pas utilisable dans une commande",
-                            ),
+                            &mlua::Error::runtime(tr!(
+                                "coroutine.yield n'est pas utilisable dans une commande"
+                            )),
                             fx,
                         ),
                     }
@@ -789,7 +817,7 @@ impl Engine {
                         message: text("message")?,
                         ok: request
                             .get::<Option<String>>("ok")?
-                            .unwrap_or_else(|| "Confirmer".into()),
+                            .unwrap_or_else(|| tr!("Confirmer").into()),
                         danger: request.get::<Option<bool>>("danger")?.unwrap_or(false),
                     },
                 },
@@ -803,7 +831,7 @@ impl Engine {
                         placeholder: request.get("placeholder")?,
                         ok: request
                             .get::<Option<String>>("ok")?
-                            .unwrap_or_else(|| "Valider".into()),
+                            .unwrap_or_else(|| tr!("Valider").into()),
                     },
                 },
                 "window" => {
@@ -815,7 +843,9 @@ impl Engine {
                         window,
                     }
                 }
-                other => return Err(mlua::Error::runtime(format!("demande inconnue : {other}"))),
+                other => {
+                    return Err(mlua::Error::runtime(tr!("demande inconnue : {}", other)));
+                }
             })
         })();
         match parsed {
@@ -882,7 +912,7 @@ impl Engine {
         };
         if info.needs != Needs::Nothing && ctx.is_none() {
             return Effects {
-                errors: vec!["Ouvrez d'abord un fichier de comptes.".into()],
+                errors: vec![tr!("Ouvrez d'abord un fichier de comptes.").into()],
                 ..Default::default()
             };
         }

@@ -5,7 +5,7 @@ use bp_core::budget::{
     AnnualBudgets, BudgetKind, BudgetOptions, BudgetPeriod, BudgetReport, BudgetTotal, LineInput,
     MonthCounting, MonthlyBudget, Spread, ValueKind, parse_amount_input,
 };
-use bp_core::i18n::{self, Lang};
+use bp_core::i18n;
 use bp_core::model::{Amount, Date};
 use bp_core::{tr, trc, trn};
 use chrono::Datelike;
@@ -1479,6 +1479,7 @@ fn annual_rows(report: &bp_core::budget::AnnualReport) -> Vec<Vec<Cell>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bp_core::i18n::Lang;
 
     #[test]
     fn reads_english_thousands() {

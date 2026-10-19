@@ -176,6 +176,9 @@ pub struct BankPerfectApp {
     drawer_opened_at: f64,
     menus: menu::MenuBar,
     profiler: crate::profiler::Profiler,
+    /// Une composition est en cours dans la méthode de saisie (pré-saisie
+    /// non vide), voir `raw_input_hook`.
+    ime_composing: bool,
     settings: crate::settings::Settings,
     /// Le thème des réglages reste à appliquer (première image).
     theme_pending: bool,
@@ -255,6 +258,7 @@ impl BankPerfectApp {
             drawer_opened_at: 0.0,
             menus: menu::MenuBar::default(),
             profiler: crate::profiler::Profiler::from_env(),
+            ime_composing: false,
             settings,
             theme_pending: false,
             interactive: false,
@@ -3039,7 +3043,24 @@ impl eframe::App for BankPerfectApp {
     /// Molette sans lissage : egui étale chaque cran sur ~0,1 s, ce qui donne
     /// une impression de mollesse. On convertit les crans en points et on
     /// passe par le chemin « tactile » d'egui, appliqué immédiatement.
+    ///
+    /// Les pré-saisies vides hors composition sont écartées : egui-winit
+    /// renvoie la zone du curseur à la méthode de saisie après toute image
+    /// qui a reçu un événement, et fcitx5 y répond par une pré-saisie vide,
+    /// d'où une boucle qui redessine sans arrêt tant qu'un champ a le focus.
     fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        raw_input.events.retain(|event| match event {
+            egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => {
+                let keep = self.ime_composing || !text.is_empty();
+                self.ime_composing = !text.is_empty();
+                keep
+            }
+            egui::Event::Ime(egui::ImeEvent::Commit(_)) => {
+                self.ime_composing = false;
+                true
+            }
+            _ => true,
+        });
         self.profiler.note_events(&raw_input.events);
         let mut events = Vec::with_capacity(raw_input.events.len() + 2);
         for event in raw_input.events.drain(..) {

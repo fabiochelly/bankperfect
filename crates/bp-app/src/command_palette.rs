@@ -214,7 +214,12 @@ impl CommandPalette {
                         .margin(egui::Margin::symmetric(4, 10))
                         .desired_width(f32::INFINITY);
                     let response = ui.add(edit);
-                    response.request_focus();
+                    // Seulement s'il l'a perdu : chaque `request_focus` coupe et
+                    // relance la méthode de saisie (fcitx5), qui perd alors des
+                    // touches ou leur relâchement.
+                    if !response.has_focus() {
+                        response.request_focus();
+                    }
                     if response.changed() {
                         self.selected = 0;
                         self.scroll_to_selected = true;

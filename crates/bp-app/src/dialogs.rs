@@ -137,7 +137,12 @@ impl PasswordPrompt {
                     f32::INFINITY,
                 )
             };
-            response.request_focus();
+            // Seulement s'il l'a perdu : chaque `request_focus` coupe et relance
+            // la méthode de saisie (fcitx5), qui perd alors des touches ou leur
+            // relâchement (répétition sans fin).
+            if !response.has_focus() {
+                response.request_focus();
+            }
             if let Some(error) = &self.error {
                 ui.label(RichText::new(error).color(palette(ui).negative));
             }

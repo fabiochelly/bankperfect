@@ -76,6 +76,8 @@ pub struct BudgetForm {
     confirm_delete: bool,
     error: Option<String>,
     message: Option<String>,
+    /// Devise des montants (devise principale du fichier).
+    currency: String,
 }
 
 impl BudgetForm {
@@ -114,6 +116,7 @@ impl BudgetForm {
             confirm_delete: false,
             error: None,
             message: None,
+            currency: doc.main_currency().to_string(),
         };
         form.select_table(selected);
         form
@@ -412,6 +415,7 @@ impl BudgetForm {
                 icon::ARROW_DOWN_RIGHT,
                 &report.expenses,
                 Some(BudgetKind::Expense),
+                &self.currency,
                 pal,
             );
             summary_tile(
@@ -421,6 +425,7 @@ impl BudgetForm {
                 icon::ARROW_UP_RIGHT,
                 &report.income,
                 Some(BudgetKind::Income),
+                &self.currency,
                 pal,
             );
             summary_tile(
@@ -430,6 +435,7 @@ impl BudgetForm {
                 icon::SCALES,
                 &report.total,
                 None,
+                &self.currency,
                 pal,
             );
         });
@@ -549,7 +555,7 @@ impl BudgetForm {
                     }
                 } else {
                     let text = match row.budget {
-                        Some(b) => RichText::new(money(b, "€")).color(amount_color(b, pal)),
+                        Some(b) => RichText::new(money(b, &self.currency)).color(amount_color(b, pal)),
                         None => RichText::new("—").color(pal.muted.gamma_multiply(0.6)),
                     };
                     let response = ui
@@ -576,9 +582,9 @@ impl BudgetForm {
                         ));
                     }
                 }
-                ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(money(row.real, "€")).color(amount_color(row.real, pal)));
+                ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(money(row.real, &self.currency)).color(amount_color(row.real, pal)));
                 match row.difference {
-                    Some(d) => ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(signed(d)).color(difference_color(d, row.kind, pal))),
+                    Some(d) => ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(signed(d, &self.currency)).color(difference_color(d, row.kind, pal))),
                     None => ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new("")),
                 }
                 ui.add_space(24.0);
@@ -1287,11 +1293,11 @@ fn amount_color(v: Amount, pal: &Palette) -> Color32 {
     }
 }
 
-fn signed(v: Amount) -> String {
+fn signed(v: Amount, currency: &str) -> String {
     if v.0 > 0 {
-        format!("+{}", money(v, "€"))
+        format!("+{}", money(v, currency))
     } else {
-        money(v, "€")
+        money(v, currency)
     }
 }
 
@@ -1338,6 +1344,7 @@ fn summary_tile(
     glyph: &str,
     total: &BudgetTotal,
     kind: Option<BudgetKind>,
+    currency: &str,
     pal: &Palette,
 ) {
     ui_kit::card(ui, width, |ui| {
@@ -1351,7 +1358,7 @@ fn summary_tile(
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new(tr!("prévu {}", money(total.budget, "€")))
+                        RichText::new(tr!("prévu {}", money(total.budget, currency)))
                             .size(12.5)
                             .color(pal.muted),
                     );
@@ -1360,7 +1367,7 @@ fn summary_tile(
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(money(total.real, "€"))
+                    RichText::new(money(total.real, currency))
                         .size(22.0)
                         .family(crate::theme::semibold())
                         .color(amount_color(total.real, pal)),
@@ -1368,11 +1375,8 @@ fn summary_tile(
                 if total.budget.0 != 0 {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            RichText::new(signed(total.difference)).color(difference_color(
-                                total.difference,
-                                kind,
-                                pal,
-                            )),
+                            RichText::new(signed(total.difference, currency))
+                                .color(difference_color(total.difference, kind, pal)),
                         );
                     });
                 }

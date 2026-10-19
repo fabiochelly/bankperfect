@@ -38,15 +38,17 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "unreadable data “{key}”: {message}",
     ),
     // model.rs
+    ("Transfert vers le compte {}", "Transfer to {}"),
+    ("Transfert depuis le compte {}", "Transfer from {}"),
     ("Carte", "Card"),
     ("Retrait DAB", "ATM withdrawal"),
-    ("Chèque émis", "Cheque issued"),
+    ("Chèque émis", "Check"),
     ("Prélèvement", "Direct debit"),
-    ("Virement émis", "Outgoing transfer"),
+    ("Virement émis", "Transfer out"),
     ("TIP", "TIP"),
     ("Versement", "Deposit"),
-    ("Dépôt de chèque", "Cheque deposit"),
-    ("Virement reçu", "Incoming transfer"),
+    ("Dépôt de chèque", "Check deposit"),
+    ("Virement reçu", "Transfer in"),
     ("Titre", "Securities"),
     // autofields.rs
     ("Tiers", "Payee"),
@@ -765,7 +767,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "the line is already a transfer",
     ),
     ("Virement", "Transfer"),
-    ("Chèque", "Cheque"),
+    ("Chèque", "Check"),
     ("Espèces", "Cash"),
     // v5_text.rs
     (

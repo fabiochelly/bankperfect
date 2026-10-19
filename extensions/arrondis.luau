@@ -60,6 +60,11 @@ bp.command({
 	icon = "piggy-bank",
 	run = function()
 		local s = settings()
+		-- « 5 € », « $5 » : dans la devise du compte affiché.
+		local cur = bp.current_account().currency
+		local function step_label(n)
+			return tr(`{n} {cur}`, `{cur}{n}`)
+		end
 		local values = ui.form({
 			title = tr("Épargne par arrondis", "Round-up savings"),
 			icon = "piggy-bank",
@@ -79,10 +84,10 @@ bp.command({
 				label = tr("Arrondir à", "Round up to"),
 				value = s.step,
 				options = {
-					{ 1, tr("1 €", "€1") },
-					{ 2, tr("2 €", "€2") },
-					{ 5, tr("5 €", "€5") },
-					{ 10, tr("10 €", "€10") },
+					{ 1, step_label(1) },
+					{ 2, step_label(2) },
+					{ 5, step_label(5) },
+					{ 10, step_label(10) },
 				},
 			}),
 			validate = function(v)

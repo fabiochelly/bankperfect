@@ -18,6 +18,7 @@ use bp_core::format_v6::Protection;
 use bp_core::i18n::Lang;
 use bp_core::model::*;
 use bp_core::scheduler::{self, Period, PeriodUnit};
+use bp_core::split::{SISTER_ACCOUNT_KEY, SISTER_LINE_KEY, TRANSFER_FROM, TRANSFER_TO};
 use chrono::{Datelike, NaiveDate};
 
 /// Générateur pseudo-aléatoire déterministe (xorshift).
@@ -392,11 +393,13 @@ fn main() {
             if current.balance() > n(20_000.0, 25_000.0) {
                 amount += n(1_500.0, 2_000.0);
             }
+            // Transfert de compte à compte : deux lignes liées (tiers
+            // enregistrés en français, comme le fait l'application).
             let category = s("Épargne", "Savings accounts");
             current.add(
                 date,
                 StandardMode::VirementEmis,
-                s("Épargne", "Savings"),
+                &format!("{TRANSFER_TO}{}", s("Épargne", "Savings")),
                 s("Épargne mensuelle", "Monthly savings"),
                 category,
                 -amount,
@@ -404,7 +407,7 @@ fn main() {
             savings.add(
                 date,
                 StandardMode::VirementRecu,
-                s("Compte courant", "Checking"),
+                &format!("{TRANSFER_FROM}{}", s("Compte courant", "Checking")),
                 s("Épargne mensuelle", "Monthly savings"),
                 category,
                 amount,
@@ -677,7 +680,18 @@ fn main() {
         }
         ops
     };
-    let current_ops = finish(current, &mut rng);
+    let mut current_ops = finish(current, &mut rng);
+    // Quelques achats récents pas encore classés, comme après un import :
+    // de quoi remplir la fenêtre « Catégoriser ».
+    for op in &mut current_ops {
+        let age = today.0 - op.date.0;
+        if (0..=20).contains(&age)
+            && op.mode == Mode::Standard(StandardMode::Carte)
+            && op.uid % 3 == 0
+        {
+            op.category = None;
+        }
+    }
     let joint_ops = finish(joint, &mut rng);
     let savings_ops = finish(savings, &mut rng);
 
@@ -745,6 +759,7 @@ fn main() {
         feature_data: Vec::new(),
         unknown_header: Vec::new(),
     };
+    link_transfers(&mut document);
     add_features(&mut document, lang, today, end);
     bp_core::file::save(out.as_ref(), &document, &Protection::none().unwrap()).unwrap();
 
@@ -762,6 +777,39 @@ fn main() {
             total,
             acc.currency
         );
+    }
+}
+
+/// Relie chaque transfert du compte courant vers l'épargne à sa ligne sœur
+/// (même date, montant opposé), comme le ferait la saisie d'un transfert.
+fn link_transfers(document: &mut Document) {
+    let (current, savings) = (0, 2);
+    let uids = (
+        document.accounts[current].uid.clone(),
+        document.accounts[savings].uid.clone(),
+    );
+    let mut pairs = Vec::new();
+    for (i, op) in document.accounts[current].operations.iter().enumerate() {
+        if !op.payee.starts_with(TRANSFER_TO) {
+            continue;
+        }
+        if let Some(j) = document.accounts[savings].operations.iter().position(|o| {
+            o.payee.starts_with(TRANSFER_FROM) && o.date == op.date && o.amount == -op.amount
+        }) {
+            pairs.push((i, j));
+        }
+    }
+    for (i, j) in pairs {
+        let uid_i = document.accounts[current].operations[i].uid;
+        let uid_j = document.accounts[savings].operations[j].uid;
+        document.accounts[current].operations[i].extra = vec![
+            (SISTER_ACCOUNT_KEY.into(), uids.1.clone()),
+            (SISTER_LINE_KEY.into(), uid_j.to_string()),
+        ];
+        document.accounts[savings].operations[j].extra = vec![
+            (SISTER_ACCOUNT_KEY.into(), uids.0.clone()),
+            (SISTER_LINE_KEY.into(), uid_i.to_string()),
+        ];
     }
 }
 
@@ -800,24 +848,62 @@ fn add_features(document: &mut Document, lang: Lang, today: Date, end: Date) {
         ),
         (0, "Netflix", PeriodUnit::Months),
         (0, "Spotify", PeriodUnit::Months),
-        (0, s("Épargne", "Savings"), PeriodUnit::Months),
         (0, s("Club de sport", "Planet Fitness"), PeriodUnit::Years),
         (1, s("Alex Martin", "Taylor Miller"), PeriodUnit::Months),
     ];
+    // Prime de décembre et remboursements de soins : pas des échéances.
+    let skipped = [
+        s("Prime de fin d'année", "Year-end bonus"),
+        s("Remboursement soins", "Claim reimbursement"),
+    ];
     let mut schedules = Vec::new();
+    let mut payees = Vec::new();
     for &(account, payee, unit) in recurring {
         let Some(last) = document.accounts[account]
             .operations
             .iter()
-            .filter(|op| op.payee == payee && op.amount.0.abs() < 500_000)
+            .filter(|op| op.payee == payee && !skipped.contains(&op.details.as_str()))
             .next_back()
         else {
             continue;
         };
+        // Tiers enregistré : remplit la saisie d'après le début du nom.
+        payees.push(Payee {
+            caption: payee.to_string(),
+            mode: last.mode.clone(),
+            category: last.category,
+            payee: payee.to_string(),
+            // Sans les libellés datés (« Payroll October 2026 »).
+            details: if last.details.contains(char::is_numeric) {
+                String::new()
+            } else {
+                last.details.clone()
+            },
+            amount: String::new(),
+        });
         let mut schedule =
             scheduler::schedule_from_operation(document, account, last).expect("compte valide");
         schedule.period = Period { every: 1, unit };
         schedule.next_date = last.date;
+        while schedule.next_date <= end {
+            schedule.next_date =
+                scheduler::add_period(schedule.next_date, schedule.period, schedule.anchor_day, 1)
+                    .expect("date valide");
+        }
+        schedules.push(schedule);
+    }
+    document.payees = payees;
+    // Virement mensuel vers l'épargne : échéance de transfert.
+    if let Some(last) = document.accounts[0]
+        .operations
+        .iter()
+        .rfind(|op| op.payee.starts_with(TRANSFER_TO))
+    {
+        let mut schedule =
+            scheduler::schedule_from_operation(document, 0, last).expect("compte valide");
+        schedule.transfer = Some(document.accounts[2].uid.clone());
+        schedule.payee = s("Épargne", "Savings").to_string();
+        schedule.amount = Amount::from_cents(if en { -40_000 } else { -20_000 });
         while schedule.next_date <= end {
             schedule.next_date =
                 scheduler::add_period(schedule.next_date, schedule.period, schedule.anchor_day, 1)

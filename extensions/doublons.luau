@@ -66,7 +66,7 @@ bp.command({
 						op.payee,
 						ui.cell(op.details, { color = "muted" }),
 						ui.cell(tr(`doublon du {p.first.date}`, `duplicate of {p.first.date}`), { color = "warning" }),
-						ui.money(op.amount),
+						ui.money(op.amount, { currency = account.currency }),
 						id = op,
 					})
 				end

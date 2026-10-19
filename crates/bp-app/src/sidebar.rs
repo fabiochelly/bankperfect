@@ -100,7 +100,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
                 ui.visuals().strong_text_color()
             };
             ui.label(
-                RichText::new(money(total, "€"))
+                RichText::new(money(total, doc.main_currency()))
                     .family(crate::theme::semibold())
                     .color(color),
             );

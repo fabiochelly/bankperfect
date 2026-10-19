@@ -279,7 +279,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Fond opaque", "Opaque background"),
     (
         "Fond translucide (flou du bureau)",
-        "Translucent background (desktop blur)",
+        "Translucent background (blur)",
     ),
     (
         "transparent vitré verre flou",
@@ -314,7 +314,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Tiers mémorisés…", "Saved payees…"),
     ("bénéficiaires", "beneficiaries payees"),
     ("Modes de paiement…", "Payment methods…"),
-    ("carte chèque virement", "card cheque check transfer"),
+    ("carte chèque virement", "card check cheque transfer"),
     ("Pointer la sélection", "Mark selection as cleared"),
     ("Espace", "Space"),
     ("cocher marquer", "tick check mark clear"),

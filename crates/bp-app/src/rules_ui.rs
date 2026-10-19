@@ -489,7 +489,7 @@ impl RulesForm {
                                 "{} · {} · {}",
                                 op.date,
                                 op.payee,
-                                crate::format::money(op.amount, "€")
+                                crate::format::money(op.amount, &doc.current_account().currency)
                             ))
                             .size(12.5)
                             .color(pal.fg_dark),

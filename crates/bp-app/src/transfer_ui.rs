@@ -135,7 +135,7 @@ impl TransferForm {
                     });
                 });
             });
-            ui_kit::section(ui, width, icon::CURRENCY_EUR, tr!("Transfert"), |ui| {
+            ui_kit::section(ui, width, crate::format::currency_icon(doc.main_currency()), tr!("Transfert"), |ui| {
                 ui.horizontal(|ui| {
                     crate::datepicker::date_field(ui, "transfer_date", &mut self.date, 200.0, crate::datepicker::Placement::Popup);
                     ui.add_space(12.0);

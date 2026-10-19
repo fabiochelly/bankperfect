@@ -937,7 +937,9 @@ impl BankPerfectApp {
                 )));
             }
             Command::Loan => {
-                return self.tool = Some(Tool::Loan(Box::new(crate::loan_ui::LoanForm::new())));
+                let currency = self.doc.as_ref().map_or("€", |d| d.main_currency());
+                let form = crate::loan_ui::LoanForm::new(currency);
+                return self.tool = Some(Tool::Loan(Box::new(form)));
             }
             Command::Palette => {
                 self.menus = menu::MenuBar::default();

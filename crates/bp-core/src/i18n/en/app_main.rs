@@ -114,7 +114,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Thèmes clairs", "Light themes"),
     (
         "Fond translucide (flou du bureau)",
-        "Translucent background (desktop blur)",
+        "Translucent background (blur)",
     ),
     ("Langue", "Language"),
     ("Verrouiller les lignes rapprochées", "Lock reconciled rows"),
@@ -277,7 +277,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Catégorie", "Category"),
     ("Montant", "Amount"),
     ("Mode", "Method"),
-    ("carte, chq…", "card, cheque…"),
+    ("carte, chq…", "card, check…"),
     ("Tiers", "Payee"),
     ("Filtrer tiers et détail", "Filter payee and memo"),
     ("Filtrer", "Filter"),
@@ -324,7 +324,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     (
         "Note, référence, n° de chèque…",
-        "Note, reference, cheque no.…",
+        "Note, reference, check #…",
     ),
     ("Classement", "Classification"),
     ("À pointer", "Not cleared"),

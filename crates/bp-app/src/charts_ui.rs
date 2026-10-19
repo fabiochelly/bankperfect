@@ -223,7 +223,7 @@ impl ChartsForm {
                         ui.add_space(12.0);
                         let data = self.data(doc);
                         let currency = if self.all_accounts {
-                            "€".to_string()
+                            doc.main_currency().to_string()
                         } else {
                             doc.current_account().currency.clone()
                         };

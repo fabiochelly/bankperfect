@@ -161,7 +161,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Budgets", "Budgets"),
     ("Budget mensuel", "Monthly budget"),
     ("Budgets annuels", "Annual budgets"),
-    ("Exporter vers un tableur…", "Export to a spreadsheet…"),
+    ("Exporter vers un tableur…", "Export to spreadsheet…"),
     ("Un mois", "One month"),
     ("Une année", "One year"),
     ("Tout", "All"),

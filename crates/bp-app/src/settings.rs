@@ -268,6 +268,13 @@ impl DateFormat {
                 i18n::weekday_abbr(d.weekday().num_days_from_monday() as usize),
                 d.format("%d/%m/%y")
             ),
+            // « 31 janv. 2026 », « Jan 31, 2026 ».
+            DateFormat::Text if i18n::lang() == Lang::En => format!(
+                "{} {}, {}",
+                i18n::month_abbr_in_date(d.month0() as usize),
+                d.day(),
+                d.year()
+            ),
             DateFormat::Text => format!(
                 "{} {} {}",
                 d.day(),

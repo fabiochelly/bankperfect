@@ -49,6 +49,22 @@ fn render_with(
         .or_else(|_| std::env::var("BP_SCREENSHOT_FILE"))
         .map(PathBuf::from)
         .expect("BP_SCREENSHOT_FILE");
+    render_at(name, theme, size, extensions, settings, file, 20, setup);
+}
+
+/// Comme [`render_with`], avec le fichier ouvert et le nombre de pas joués
+/// avant la capture (un pas = 0,25 s simulée) donnés explicitement.
+#[allow(clippy::too_many_arguments)]
+fn render_at(
+    name: &str,
+    theme: egui::Theme,
+    size: egui::Vec2,
+    extensions: Option<PathBuf>,
+    settings: bankperfect::Settings,
+    file: PathBuf,
+    final_steps: usize,
+    setup: impl FnOnce(&mut Harness<'_, bankperfect::BankPerfectApp>),
+) {
     let mut harness = Harness::builder()
         .with_size(size)
         .with_pixels_per_point(2.0)
@@ -71,7 +87,7 @@ fn render_with(
         });
     harness.run_steps(4);
     setup(&mut harness);
-    harness.run_steps(20);
+    harness.run_steps(final_steps);
     let image = harness.render().expect("rendu");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots");
     std::fs::create_dir_all(&dir).unwrap();
@@ -355,6 +371,78 @@ fn protection_screenshots() {
         h.run_steps(2);
         open(h);
     });
+}
+
+/// Champs de mot de passe : dernier caractère tapé visible un instant, œil
+/// pour afficher le mot de passe, demande à l'ouverture d'un fichier protégé.
+#[test]
+#[ignore]
+fn password_field_screenshots() {
+    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    let size = egui::vec2(1440.0, 900.0);
+    let open_protection = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.get_by_label("Fichier").click();
+        h.run_steps(3);
+        h.get_by_label("Protection du fichier…").click();
+        h.run_steps(2);
+        h.query_all_by_role(egui::accesskit::Role::PasswordInput)
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(2);
+        h.event(egui::Event::Text("motdepass".into()));
+        h.run_steps(2);
+        h.event(egui::Event::Text("e".into()));
+    };
+    let shot = |name: &str, steps: usize, setup: &dyn Fn(&mut Harness<'_, _>)| {
+        render_at(
+            name,
+            egui::Theme::Dark,
+            size,
+            None,
+            Default::default(),
+            file.clone(),
+            steps,
+            setup,
+        );
+    };
+    // Le dernier caractère reste lisible une seconde (4 pas), puis disparaît.
+    shot("17c-mot-de-passe-dernier-car", 2, &|h| open_protection(h));
+    shot("17d-mot-de-passe-masque", 8, &|h| open_protection(h));
+    shot("17e-mot-de-passe-visible", 2, &|h| {
+        open_protection(h);
+        h.run_steps(8);
+        h.get_all_by_label(egui_phosphor::regular::EYE)
+            .next()
+            .unwrap()
+            .click();
+    });
+
+    let document = bp_core::file::open(&file, None).unwrap().document;
+    let (protection, _) = bp_core::format_v6::Protection::with_password("motdepasse").unwrap();
+    let protected = tempfile_dir().join("protege.bp");
+    bp_core::file::save(&protected, &document, &protection).unwrap();
+    shot_protected(&protected, "17f-ouverture-mot-de-passe", false);
+    shot_protected(&protected, "17g-ouverture-visible", true);
+}
+
+fn shot_protected(file: &std::path::Path, name: &str, reveal: bool) {
+    render_at(
+        name,
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        Default::default(),
+        file.to_path_buf(),
+        2,
+        |h| {
+            h.event(egui::Event::Text("motdepasse".into()));
+            h.run_steps(8);
+            if reveal {
+                h.get_by_label(egui_phosphor::regular::EYE).click();
+            }
+        },
+    );
 }
 
 #[test]

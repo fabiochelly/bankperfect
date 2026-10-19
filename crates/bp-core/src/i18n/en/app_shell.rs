@@ -380,6 +380,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Fichier protégé", "Protected file"),
     ("Clé de secours (24 mots) :", "Recovery phrase (24 words):"),
     ("Mot de passe :", "Password:"),
+    ("Afficher le mot de passe", "Show password"),
+    ("Masquer le mot de passe", "Hide password"),
     ("Utiliser le mot de passe", "Use the password"),
     (
         "Mot de passe oublié ? Utiliser la clé de secours",

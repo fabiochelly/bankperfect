@@ -600,6 +600,7 @@ impl BankPerfectApp {
                     can_use_recovery_key: bp_core::format_v6::is_v6(data),
                     path,
                     input: String::new(),
+                    show_password: false,
                     use_recovery_key: false,
                     error: None,
                 })

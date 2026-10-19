@@ -975,21 +975,7 @@ pub fn field(text: &mut String) -> egui::TextEdit<'_> {
         .vertical_align(egui::Align::Center)
 }
 
-/// Durée pendant laquelle le dernier caractère tapé reste lisible dans un mot
-/// de passe masqué.
-const PASSWORD_PEEK_SECS: f64 = 1.0;
-
-/// Dernier caractère tapé dans un mot de passe masqué : seulement sa position
-/// et la longueur du texte, jamais le texte lui-même.
-#[derive(Clone, Copy, Default)]
-struct PasswordPeek {
-    chars: usize,
-    index: Option<usize>,
-    until: f64,
-}
-
 /// Champ de mot de passe avec un œil pour l'afficher en clair (`visible`).
-/// Masqué, le dernier caractère tapé reste lisible un court instant.
 pub fn password_field(
     ui: &mut egui::Ui,
     id_salt: &str,
@@ -998,79 +984,41 @@ pub fn password_field(
     width: f32,
 ) -> egui::Response {
     let id = ui.make_persistent_id(id_salt);
-    let now = ui.input(|i| i.time);
-    let mut peek: PasswordPeek = ui.data(|d| d.get_temp(id)).unwrap_or_default();
-    let chars = text.chars().count();
-
-    // Même rendu que le masquage d'egui, sauf pour le caractère montré.
+    // Affiché en clair, le champ reste un champ mot de passe pour egui :
+    // seul le rendu change. La saisie passe ainsi par le même chemin dans
+    // les deux modes (un champ ordinaire active la méthode de saisie, et
+    // fcitx5 sous Wayland y perdait ou répétait des touches), et la copie
+    // reste interdite.
     let font = egui::FontSelection::default().resolve(ui.style());
     let line_height = ui.fonts_mut(|f| f.row_height(&font)) + ui.spacing().extra_text_line_spacing;
     let color = ui
         .visuals()
         .override_text_color
         .unwrap_or_else(|| ui.visuals().widgets.inactive.text_color());
-    let mut layouter = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap_width: f32| {
-        let text = buf.as_str();
-        let shown = peek
-            .index
-            .filter(|_| now < peek.until && peek.chars == text.chars().count());
-        let masked: String = text
-            .chars()
-            .enumerate()
-            .map(|(i, c)| {
-                if Some(i) == shown {
-                    c
-                } else {
-                    egui::epaint::text::PASSWORD_REPLACEMENT_CHAR
-                }
-            })
-            .collect();
-        let mut job = egui::text::LayoutJob::simple_singleline(masked, font.clone(), color);
+    let mut plain = |ui: &egui::Ui, buf: &dyn egui::TextBuffer, _wrap_width: f32| {
+        let mut job =
+            egui::text::LayoutJob::simple_singleline(buf.as_str().to_owned(), font.clone(), color);
         job.keep_trailing_whitespace = true;
         for section in &mut job.sections {
             section.format.line_height = Some(line_height);
         }
         ui.fonts_mut(|f| f.layout_job(job))
     };
-
-    // `password(true)` garde ses autres effets (copie interdite, clavier
-    // virtuel et accessibilité en mode mot de passe) ; le masquage passe
-    // par notre `layouter`.
     let mut edit = egui::TextEdit::singleline(text)
         .id(id)
         .margin(egui::Margin {
             left: 10,
-            right: 36,
+            right: 38,
             top: 8,
             bottom: 8,
         })
         .vertical_align(egui::Align::Center)
         .desired_width(width)
-        .password(!*visible);
-    if !*visible {
-        edit = edit.layouter(&mut layouter);
+        .password(true);
+    if *visible {
+        edit = edit.layouter(&mut plain);
     }
-    let output = edit.show(ui);
-    let response = output.response.response;
-
-    let typed_one = response.changed() && text.chars().count() == chars + 1;
-    if typed_one && !*visible {
-        peek = PasswordPeek {
-            chars: chars + 1,
-            index: output
-                .cursor_range
-                .and_then(|range| range.primary.index.0.checked_sub(1)),
-            until: now + PASSWORD_PEEK_SECS,
-        };
-        ui.ctx().request_repaint();
-    } else if response.changed() || response.lost_focus() || now >= peek.until {
-        peek = PasswordPeek::default();
-    }
-    if peek.index.is_some() {
-        ui.ctx()
-            .request_repaint_after(std::time::Duration::from_secs_f64(peek.until - now));
-    }
-    ui.data_mut(|d| d.insert_temp(id, peek));
+    let response = edit.show(ui).response.response;
 
     let (glyph, tip) = if *visible {
         (
@@ -1083,22 +1031,35 @@ pub fn password_field(
             bp_core::tr!("Afficher le mot de passe"),
         )
     };
-    // Le glyphe Phosphor est dessiné un peu bas : on le remonte de 3 points.
+    // L'œil capte aussi le glisser : sinon le champ dessous, qui le capte,
+    // resterait survolé et garderait son curseur texte.
     let eye_rect = egui::Rect::from_center_size(
-        egui::pos2(response.rect.right() - 18.0, response.rect.center().y - 3.0),
+        egui::pos2(response.rect.right() - 19.0, response.rect.center().y),
         egui::vec2(28.0, 28.0),
     );
     let eye = ui
-        .put(
-            eye_rect,
-            egui::Button::new(
-                egui::RichText::new(glyph)
-                    .size(16.0)
-                    .color(palette(ui).muted),
-            )
-            .frame(false),
-        )
+        .interact(eye_rect, id.with("eye"), egui::Sense::click_and_drag())
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text(tip);
+    eye.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+    let pal = palette(ui);
+    let hovered = eye.hovered() || eye.is_pointer_button_down_on();
+    if hovered {
+        ui.painter()
+            .rect_filled(eye_rect, CornerRadius::same(6), pal.bg_highlight);
+    }
+    let color = match (*visible, hovered) {
+        (true, _) => pal.accent,
+        (false, true) => pal.fg,
+        (false, false) => pal.muted,
+    };
+    ui.painter().text(
+        eye_rect.center(),
+        egui::Align2::CENTER_CENTER,
+        glyph,
+        FontId::proportional(20.0),
+        color,
+    );
     if eye.clicked() {
         *visible = !*visible;
         response.request_focus();

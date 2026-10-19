@@ -155,7 +155,13 @@ pub fn price_in_account_currency(
     }
     rates
         .and_then(|r| r.convert(price, currency, &target))
-        .ok_or_else(|| format!("cours en {currency}, non convertible en {target}"))
+        .ok_or_else(|| {
+            crate::tr!(
+                "cours en {currency}, non convertible en {target}",
+                currency = currency,
+                target = target
+            )
+        })
 }
 
 #[cfg(test)]

@@ -10,6 +10,7 @@
 //! filtrer revient ensuite à des recherches de sous-chaînes sans allocation.
 
 use crate::model::{Account, Amount, Date, Document, Operation, Tack};
+use crate::tr;
 
 /// Normalisation `SimpleString` : minuscules, accents retirés, chiffres et
 /// virgule conservés, tout autre caractère remplacé par une espace.
@@ -153,11 +154,11 @@ impl TackFilter {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::NotPointed => "Non pointées",
-            Self::Pointed => "Pointées",
-            Self::Reconciled => "Rapprochées",
-            Self::PointedOrReconciled => "Pointées et rapprochées",
-            Self::All => "Toutes",
+            Self::NotPointed => tr!("Non pointées"),
+            Self::Pointed => tr!("Pointées"),
+            Self::Reconciled => tr!("Rapprochées"),
+            Self::PointedOrReconciled => tr!("Pointées et rapprochées"),
+            Self::All => tr!("Toutes"),
         }
     }
 

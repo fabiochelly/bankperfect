@@ -1,6 +1,7 @@
 //! Exports CSV et QIF (ex-scripts `export_csv.py` et `export_qif.py`).
 
 use crate::model::{Account, Document, Mode, Operation, StandardMode, Tack};
+use crate::tr;
 
 /// Colonnes possibles d'un export CSV.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,14 +30,14 @@ impl CsvField {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Date => "Date",
-            Self::Mode => "Mode",
-            Self::Payee => "Tiers",
-            Self::Details => "Détails",
-            Self::Category => "Catégorie",
-            Self::SubCategory => "Sous-catégorie",
-            Self::Amount => "Montant",
-            Self::Tack => "Pointage",
+            Self::Date => tr!("Date"),
+            Self::Mode => tr!("Mode"),
+            Self::Payee => tr!("Tiers"),
+            Self::Details => tr!("Détails"),
+            Self::Category => tr!("Catégorie"),
+            Self::SubCategory => tr!("Sous-catégorie"),
+            Self::Amount => tr!("Montant"),
+            Self::Tack => tr!("Pointage"),
         }
     }
 }
@@ -96,7 +97,13 @@ pub fn csv(
     options: &CsvOptions,
 ) -> String {
     let sep = options.separator;
-    let decimal = if sep == ',' { '.' } else { ',' };
+    // Séparateur décimal de la langue, sauf s'il se confond avec celui des
+    // colonnes.
+    let decimal = match crate::i18n::decimal_separator() {
+        d if d == sep && d == ',' => '.',
+        d if d == sep => ',',
+        d => d,
+    };
     let clean = |s: &str| s.replace(sep, " ").replace(['\r', '\n'], " ");
     let fields: Vec<CsvField> = options
         .fields

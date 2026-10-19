@@ -22,14 +22,26 @@ use crate::filter::{Filters, TackFilter, normalize};
 use crate::formula::{Formula, Value};
 use crate::model::{Date, Document};
 use crate::pyvalue::{LegacyError, PyValue};
+use crate::tr;
 
 /// Erreur de saisie d'un filtre prédéfini.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AutoFilterError {
-    #[error("le nom du filtre est vide")]
     EmptyName,
-    #[error("date « {expr} » invalide : {message}")]
     InvalidDate { expr: String, message: String },
+}
+
+impl std::fmt::Display for AutoFilterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyName => f.write_str(tr!("le nom du filtre est vide")),
+            Self::InvalidDate { expr, message } => f.write_str(&tr!(
+                "date « {expr} » invalide : {message}",
+                expr = expr,
+                message = message
+            )),
+        }
+    }
 }
 
 /// Nombre de jours du mois `month` (1 à 12) de l'année `year`.
@@ -56,7 +68,7 @@ fn eval_part(expr: &str, part: &str, vars: &[(&str, i64)]) -> Result<i64, AutoFi
     if !part.is_empty() && part.chars().all(|c| c.is_ascii_digit()) {
         return part
             .parse()
-            .map_err(|_| date_error(expr, "nombre trop grand"));
+            .map_err(|_| date_error(expr, tr!("nombre trop grand")));
     }
     let formula = Formula::parse(part).map_err(|e| date_error(expr, e.to_string()))?;
     let value = formula
@@ -68,7 +80,7 @@ fn eval_part(expr: &str, part: &str, vars: &[(&str, i64)]) -> Result<i64, AutoFi
         .map_err(|e| date_error(expr, e.to_string()))?;
     match value {
         Value::Int(i) => Ok(i),
-        _ => Err(date_error(expr, "un nombre entier est attendu")),
+        _ => Err(date_error(expr, tr!("un nombre entier est attendu"))),
     }
 }
 
@@ -84,7 +96,7 @@ pub fn eval_dynamic_date(expr: &str, today: Date) -> Result<Option<Date>, AutoFi
     }
     let parts: Vec<&str> = expr.split('/').collect();
     let [day_part, month_part, year_part] = parts[..] else {
-        return Err(date_error(expr, "format jour/mois/année attendu"));
+        return Err(date_error(expr, tr!("format jour/mois/année attendu")));
     };
     let now = today.to_naive();
     let year = eval_part(expr, year_part, &[("a", i64::from(now.year()))])?;
@@ -92,15 +104,15 @@ pub fn eval_dynamic_date(expr: &str, today: Date) -> Result<Option<Date>, AutoFi
     // Report des mois hors de 1..12 sur l'année.
     let mut year = year
         .checked_add((month - 1).div_euclid(12))
-        .ok_or_else(|| date_error(expr, "année hors limites"))?;
+        .ok_or_else(|| date_error(expr, tr!("année hors limites")))?;
     let mut month = (month - 1).rem_euclid(12) + 1;
     if !(1..=9999).contains(&year) {
-        return Err(date_error(expr, "année hors limites"));
+        return Err(date_error(expr, tr!("année hors limites")));
     }
     let mut last = i64::from(last_day(month as u32, year as i32));
     let mut day = eval_part(expr, day_part, &[("dj", last), ("j", i64::from(now.day()))])?;
     if day.abs() > MAX_DAY_OFFSET {
-        return Err(date_error(expr, "décalage de jours trop grand"));
+        return Err(date_error(expr, tr!("décalage de jours trop grand")));
     }
     while day < 1 {
         month -= 1;
@@ -121,11 +133,11 @@ pub fn eval_dynamic_date(expr: &str, today: Date) -> Result<Option<Date>, AutoFi
         last = i64::from(last_day(month as u32, year as i32));
     }
     if !(1..=9999).contains(&year) {
-        return Err(date_error(expr, "année hors limites"));
+        return Err(date_error(expr, tr!("année hors limites")));
     }
     Date::from_ymd(year as i32, month as u32, day as u32)
         .map(Some)
-        .ok_or_else(|| date_error(expr, "date impossible"))
+        .ok_or_else(|| date_error(expr, tr!("date impossible")))
 }
 
 /// Code de pointage des anciens scripts (`mrk`) : 4 = toutes, 3 = pointées et
@@ -231,31 +243,40 @@ impl AutoFilter {
         let (from, to) = self.date_range(today);
         let tack = match self.tack {
             TackFilter::All => String::new(),
-            TackFilter::PointedOrReconciled => "pointées et rapprochées".into(),
-            TackFilter::Reconciled => "rapprochées".into(),
-            TackFilter::Pointed => "pointées".into(),
-            TackFilter::NotPointed => "non pointées".into(),
+            TackFilter::PointedOrReconciled => tr!("pointées et rapprochées").into(),
+            TackFilter::Reconciled => tr!("rapprochées").into(),
+            TackFilter::Pointed => tr!("pointées").into(),
+            TackFilter::NotPointed => tr!("non pointées").into(),
         };
         let dates = match (from, to) {
-            (Some(a), Some(b)) => format!("du {a} au {b}"),
-            (Some(a), None) => format!("à partir du {a}"),
-            (None, Some(b)) => format!("jusqu'au {b}"),
+            (Some(a), Some(b)) => tr!("du {a} au {b}", a = a, b = b),
+            (Some(a), None) => tr!("à partir du {a}", a = a),
+            (None, Some(b)) => tr!("jusqu'au {b}", b = b),
             (None, None) => String::new(),
         };
         let quoted = |text: &str, template: &str| {
             if text.is_empty() {
                 String::new()
             } else {
-                template.replace("{}", text)
+                crate::i18n::format(crate::i18n::tr(template), &[&text], &[])
             }
         };
         let parts = [
             tack,
             dates,
-            quoted(&self.mode, "ayant « {} » comme mode de paiement"),
-            quoted(&self.payee, "ayant « {} » dans le champ tiers"),
-            quoted(&self.category, "ventilées dans la catégorie « {} »"),
-            quoted(&self.amount, "ayant pour montant « {} »"),
+            quoted(
+                &self.mode,
+                crate::tr_mark!("ayant « {} » comme mode de paiement"),
+            ),
+            quoted(
+                &self.payee,
+                crate::tr_mark!("ayant « {} » dans le champ tiers"),
+            ),
+            quoted(
+                &self.category,
+                crate::tr_mark!("ventilées dans la catégorie « {} »"),
+            ),
+            quoted(&self.amount, crate::tr_mark!("ayant pour montant « {} »")),
         ];
         let details: Vec<&str> = parts
             .iter()
@@ -263,9 +284,9 @@ impl AutoFilter {
             .filter(|s| !s.is_empty())
             .collect();
         if details.is_empty() {
-            "Opérations concernées : toutes".into()
+            tr!("Opérations concernées : toutes").into()
         } else {
-            format!(
+            tr!(
                 "Opérations concernées : toutes les lignes {}",
                 details.join(", ")
             )
@@ -276,8 +297,9 @@ impl AutoFilter {
     /// `{"dt1", "dt2", "mde", "who", "ctg", "val", "mrk"}`.
     pub fn from_legacy(name: &str, value: &PyValue) -> Result<Self, LegacyError> {
         if value.as_dict().is_none() {
-            return Err(LegacyError::Structure(format!(
-                "filtre « {name} » : dictionnaire attendu"
+            return Err(LegacyError::Structure(tr!(
+                "filtre « {name} » : dictionnaire attendu",
+                name = name
             )));
         }
         Ok(Self {
@@ -378,7 +400,7 @@ impl AutoFilters {
     pub fn from_legacy(value: &PyValue) -> Result<Self, LegacyError> {
         let Some(items) = value.as_dict() else {
             return Err(LegacyError::Structure(
-                "filtres prédéfinis : dictionnaire attendu".into(),
+                tr!("filtres prédéfinis : dictionnaire attendu").into(),
             ));
         };
         if items.is_empty() {
@@ -388,7 +410,7 @@ impl AutoFilters {
         for (key, value) in items {
             let Some(name) = key.as_str() else {
                 return Err(LegacyError::Structure(
-                    "filtres prédéfinis : nom de filtre non textuel".into(),
+                    tr!("filtres prédéfinis : nom de filtre non textuel").into(),
                 ));
             };
             filters.push(AutoFilter::from_legacy(name, value)?);

@@ -227,7 +227,9 @@ impl StandardMode {
         Self::Titre,
     ];
 
-    pub fn label(self) -> &'static str {
+    /// Nom du mode tel qu'enregistré (fichiers v5, formules des règles,
+    /// API des extensions) : toujours en français.
+    pub fn name(self) -> &'static str {
         match self {
             Self::Carte => "Carte",
             Self::RetraitDab => "Retrait DAB",
@@ -240,6 +242,22 @@ impl StandardMode {
             Self::VirementRecu => "Virement reçu",
             Self::Titre => "Titre",
         }
+    }
+
+    /// Nom affiché, dans la langue de l'interface.
+    pub fn label(self) -> &'static str {
+        crate::i18n::tr(match self {
+            Self::Carte => crate::tr_mark!("Carte"),
+            Self::RetraitDab => crate::tr_mark!("Retrait DAB"),
+            Self::ChequeEmis => crate::tr_mark!("Chèque émis"),
+            Self::Prelevement => crate::tr_mark!("Prélèvement"),
+            Self::VirementEmis => crate::tr_mark!("Virement émis"),
+            Self::Tip => crate::tr_mark!("TIP"),
+            Self::Versement => crate::tr_mark!("Versement"),
+            Self::DepotCheque => crate::tr_mark!("Dépôt de chèque"),
+            Self::VirementRecu => crate::tr_mark!("Virement reçu"),
+            Self::Titre => crate::tr_mark!("Titre"),
+        })
     }
 
     /// Code utilisé dans les fichiers v5 et par l'API des scripts (20–25, 40–43).
@@ -259,10 +277,25 @@ impl StandardMode {
         self.index() < 6
     }
 
-    pub fn from_label(label: &str) -> Option<Self> {
+    /// Mode d'après son nom enregistré (français) seulement, sans distinction
+    /// de casse : pour relire les fichiers.
+    pub fn from_name(name: &str) -> Option<Self> {
+        let wanted = name.to_lowercase();
         Self::ALL
             .into_iter()
-            .find(|m| m.label().to_lowercase() == label.to_lowercase())
+            .find(|m| m.name().to_lowercase() == wanted)
+    }
+
+    /// Mode d'après son nom dans l'une des langues de l'interface (un fichier
+    /// exporté en anglais se relit en français), sans distinction de casse.
+    pub fn from_label(label: &str) -> Option<Self> {
+        let wanted = label.to_lowercase();
+        Self::ALL.into_iter().find(|m| {
+            m.name().to_lowercase() == wanted
+                || crate::i18n::Lang::ALL
+                    .into_iter()
+                    .any(|lang| crate::i18n::with_lang(lang, || m.label().to_lowercase() == wanted))
+        })
     }
 }
 
@@ -275,9 +308,18 @@ pub enum Mode {
 }
 
 impl Mode {
+    /// Nom affiché, dans la langue de l'interface.
     pub fn label(&self) -> &str {
         match self {
             Mode::Standard(m) => m.label(),
+            Mode::Custom(name) => name,
+        }
+    }
+
+    /// Nom enregistré (en français pour un mode standard).
+    pub fn name(&self) -> &str {
+        match self {
+            Mode::Standard(m) => m.name(),
             Mode::Custom(name) => name,
         }
     }
@@ -339,8 +381,18 @@ impl Operation {
     /// Libellé affiché dans la colonne Mode : `Chq 1234` pour un chèque numéroté.
     pub fn mode_label(&self) -> String {
         match self.cheque_number() {
+            // « Chq » convient aussi en anglais (abréviation de cheque).
             Some(number) => format!("Chq {number}"),
             None => self.mode.label().to_string(),
+        }
+    }
+
+    /// Comme [`Operation::mode_label`], avec le nom enregistré du mode (en
+    /// français) : sert aux formules des règles.
+    pub fn mode_name(&self) -> String {
+        match self.cheque_number() {
+            Some(number) => format!("Chq {number}"),
+            None => self.mode.name().to_string(),
         }
     }
 
@@ -644,6 +696,28 @@ mod tests {
         assert_eq!(
             StandardMode::from_label("prélèvement"),
             Some(StandardMode::Prelevement)
+        );
+    }
+
+    #[test]
+    fn standard_mode_names_in_english() {
+        use crate::i18n::{Lang, with_lang};
+        with_lang(Lang::En, || {
+            assert_eq!(StandardMode::Prelevement.label(), "Direct debit");
+            assert_eq!(StandardMode::Prelevement.name(), "Prélèvement");
+            // Nom enregistré comme nom affiché.
+            assert_eq!(
+                StandardMode::from_label("prélèvement"),
+                Some(StandardMode::Prelevement)
+            );
+            assert_eq!(
+                StandardMode::from_label("direct DEBIT"),
+                Some(StandardMode::Prelevement)
+            );
+        });
+        assert_eq!(
+            StandardMode::from_label("ATM withdrawal"),
+            Some(StandardMode::RetraitDab)
         );
     }
 }

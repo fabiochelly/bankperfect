@@ -16,6 +16,7 @@
 //! décodés en CP1252 (`\x80` → `€`), et l'écriture réencode en CP1252.
 
 use crate::formula::cp1252_char;
+use crate::tr;
 
 /// Valeur Python 2 (sous-ensemble des pickles et `repr` des anciens scripts).
 #[derive(Debug, Clone, PartialEq)]
@@ -115,10 +116,21 @@ impl PyValue {
 /// Erreur de lecture d'une donnée héritée.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum LegacyError {
-    #[error("littéral Python invalide (caractère {position}) : {message}")]
     Syntax { position: usize, message: String },
-    #[error("structure inattendue : {0}")]
     Structure(String),
+}
+
+impl std::fmt::Display for LegacyError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            Self::Syntax { position, message } => tr!(
+                "littéral Python invalide (caractère {position}) : {message}",
+                position = position,
+                message = message
+            ),
+            Self::Structure(message) => tr!("structure inattendue : {}", message),
+        })
+    }
 }
 
 /// Profondeur maximale d'imbrication acceptée dans un littéral.
@@ -134,7 +146,7 @@ pub fn parse_repr(text: &str) -> Result<PyValue, LegacyError> {
     let value = parser.value()?;
     parser.skip_ws();
     if parser.pos < parser.chars.len() {
-        return parser.error("contenu inattendu après la valeur");
+        return parser.error(tr!("contenu inattendu après la valeur"));
     }
     Ok(value)
 }
@@ -176,7 +188,7 @@ impl ReprParser {
     fn value(&mut self) -> Result<PyValue, LegacyError> {
         self.depth += 1;
         if self.depth > MAX_DEPTH {
-            return self.error("imbrication trop profonde");
+            return self.error(tr!("imbrication trop profonde"));
         }
         let result = self.value_inner();
         self.depth -= 1;
@@ -195,7 +207,7 @@ impl ReprParser {
                 return Ok(items);
             }
             if !self.eat(',') {
-                return self.error("« , » attendue");
+                return self.error(tr!("« , » attendue"));
             }
         }
     }
@@ -203,7 +215,7 @@ impl ReprParser {
     fn value_inner(&mut self) -> Result<PyValue, LegacyError> {
         self.skip_ws();
         let Some(c) = self.peek() else {
-            return self.error("valeur attendue");
+            return self.error(tr!("valeur attendue"));
         };
         match c {
             '{' => {
@@ -215,7 +227,7 @@ impl ReprParser {
                     }
                     let key = self.value()?;
                     if !self.eat(':') {
-                        return self.error("« : » attendu");
+                        return self.error(tr!("« : » attendu"));
                     }
                     let value = self.value()?;
                     items.push((key, value));
@@ -223,7 +235,7 @@ impl ReprParser {
                         return Ok(PyValue::Dict(items));
                     }
                     if !self.eat(',') {
-                        return self.error("« , » attendue");
+                        return self.error(tr!("« , » attendue"));
                     }
                 }
             }
@@ -256,7 +268,7 @@ impl ReprParser {
                     "None" => Ok(PyValue::None),
                     _ => {
                         self.pos = start;
-                        self.error("valeur non reconnue")
+                        self.error(tr!("valeur non reconnue"))
                     }
                 }
             }
@@ -287,7 +299,7 @@ impl ReprParser {
             Ok(f) => Ok(PyValue::Float(f)),
             Err(_) => {
                 self.pos = start;
-                self.error("nombre invalide")
+                self.error(tr!("nombre invalide"))
             }
         }
     }
@@ -298,7 +310,7 @@ impl ReprParser {
         let mut out = String::new();
         loop {
             let Some(c) = self.peek() else {
-                return self.error("chaîne non terminée");
+                return self.error(tr!("chaîne non terminée"));
             };
             self.pos += 1;
             if c == quote {
@@ -309,7 +321,7 @@ impl ReprParser {
                 continue;
             }
             let Some(e) = self.peek() else {
-                return self.error("chaîne non terminée");
+                return self.error(tr!("chaîne non terminée"));
             };
             self.pos += 1;
             match e {
@@ -329,7 +341,7 @@ impl ReprParser {
                         .map(|d| d.iter().collect())
                         .unwrap_or_default();
                     let Ok(code) = u32::from_str_radix(&digits, 16) else {
-                        return self.error("échappement invalide");
+                        return self.error(tr!("échappement invalide"));
                     };
                     self.pos += len;
                     out.push(if unicode {

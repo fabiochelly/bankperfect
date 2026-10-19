@@ -1,10 +1,23 @@
 //! Génère un fichier de démonstration réaliste (foyer fictif, trois ans
 //! d'historique jusqu'à un mois après aujourd'hui), pour les captures d'écran
 //! de la documentation. Aucune donnée personnelle.
-//! Usage : cargo run -p bp-core --example gen_demo -- <sortie.bp>
+//!
+//! Usage : cargo run -p bp-core --example gen_demo -- [--lang en] <sortie.bp>
+//!
+//! - français (par défaut) : foyer Martin à Paris, comptes en euros ;
+//! - `--lang en` : foyer américain (Miller, Chicago), comptes en dollars et
+//!   catégories standard anglaises, pour les captures de la version anglaise.
+//!
+//! Les deux variantes suivent le même scénario (mêmes tirages) et remplissent
+//! les mêmes écrans : opérations pointées et rapprochées, échéancier, budget
+//! mensuel, budget annuel et règles automatiques.
 
+use bp_core::autofields::{AutoFieldRules, CategoryChange, Rule, RuleField};
+use bp_core::budget::{AnnualBudget, AnnualBudgets, AnnualLine, MonthlyBudget};
 use bp_core::format_v6::Protection;
+use bp_core::i18n::Lang;
 use bp_core::model::*;
+use bp_core::scheduler::{self, Period, PeriodUnit};
 use chrono::{Datelike, NaiveDate};
 
 /// Générateur pseudo-aléatoire déterministe (xorshift).
@@ -36,8 +49,8 @@ impl Rng {
     }
 }
 
-/// Catégories : parent suivi de ses sous-catégories.
-const CATEGORIES: &[(&str, &[&str])] = &[
+/// Catégories de la démo française : parent suivi de ses sous-catégories.
+const CATEGORIES_FR: &[(&str, &[&str])] = &[
     ("Alimentation", &["Courses", "Boulangerie", "Restaurant"]),
     (
         "Logement",
@@ -53,9 +66,17 @@ const CATEGORIES: &[(&str, &[&str])] = &[
     ("Téléphone", &[]),
 ];
 
-fn categories() -> Vec<Category> {
+/// Catégories : la liste de la démo française, ou la liste standard anglaise
+/// (celle que reçoit un nouveau fichier créé en anglais).
+fn categories(lang: Lang) -> Vec<Category> {
+    if lang == Lang::En {
+        return bp_core::i18n::with_lang(
+            Lang::En,
+            bp_core::categorize::taxonomy::standard_categories,
+        );
+    }
     let mut out = Vec::new();
-    for (parent, children) in CATEGORIES {
+    for (parent, children) in CATEGORIES_FR {
         out.push(Category {
             id: out.len() as u32,
             name: parent.to_string(),
@@ -72,6 +93,14 @@ fn categories() -> Vec<Category> {
     out
 }
 
+fn category_id(categories: &[Category], name: &str) -> u32 {
+    categories
+        .iter()
+        .find(|c| c.name == name)
+        .unwrap_or_else(|| panic!("catégorie {name}"))
+        .id
+}
+
 /// Opérations d'un compte en cours de construction.
 struct Ledger<'a> {
     categories: &'a [Category],
@@ -79,14 +108,6 @@ struct Ledger<'a> {
 }
 
 impl Ledger<'_> {
-    fn category(&self, name: &str) -> u32 {
-        self.categories
-            .iter()
-            .find(|c| c.name == name)
-            .unwrap_or_else(|| panic!("catégorie {name}"))
-            .id
-    }
-
     fn add(
         &mut self,
         date: Date,
@@ -94,9 +115,9 @@ impl Ledger<'_> {
         payee: &str,
         details: &str,
         category: &str,
-        euros: f64,
+        amount: f64,
     ) {
-        let cents = (euros * 100.0).round() as i64;
+        let cents = (amount * 100.0).round() as i64;
         self.ops.push(Operation {
             uid: 0,
             date,
@@ -105,7 +126,7 @@ impl Ledger<'_> {
             mode: Mode::Standard(mode),
             payee: payee.to_string(),
             details: details.to_string(),
-            category: Some(self.category(category)),
+            category: Some(category_id(self.categories, category)),
             amount: Amount::from_cents(cents),
             extra: Vec::new(),
         });
@@ -115,21 +136,6 @@ impl Ledger<'_> {
         self.ops.iter().map(|op| op.amount.as_f64()).sum()
     }
 }
-
-const MONTHS: [&str; 12] = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-];
 
 fn day(year: i32, month: u32, day: u32) -> Date {
     // Le 31 d'un mois de 30 jours devient le dernier jour du mois.
@@ -147,10 +153,38 @@ fn business_day(date: Date) -> Date {
     d
 }
 
+/// Arguments : `[--lang fr|en] <sortie.bp>`.
+fn parse_args() -> (Lang, String) {
+    let mut lang = Lang::Fr;
+    let mut out = None;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        let code = match arg.strip_prefix("--lang") {
+            Some("") => args.next(),
+            Some(rest) => rest.strip_prefix('=').map(str::to_string),
+            None => {
+                out = Some(arg);
+                continue;
+            }
+        };
+        lang = code
+            .as_deref()
+            .and_then(Lang::from_code)
+            .unwrap_or_else(|| panic!("langue inconnue : {code:?} (fr ou en)"));
+    }
+    (
+        lang,
+        out.expect("usage : gen_demo [--lang fr|en] <sortie.bp>"),
+    )
+}
+
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    let out = args.get(1).expect("chemin de sortie");
-    let categories = categories();
+    let (lang, out) = parse_args();
+    let en = lang == Lang::En;
+    // Texte (ou valeur) de la variante choisie : `s(français, anglais)`.
+    let s = |fr: &'static str, english: &'static str| if en { english } else { fr };
+    let n = |fr: f64, english: f64| if en { english } else { fr };
+    let categories = categories(lang);
     let mut rng = Rng(0x9E37_79B9_7F4A_7C15);
 
     let today = Date::today();
@@ -171,32 +205,34 @@ fn main() {
         categories: &categories,
         ops: Vec::new(),
     };
+    let opening = s("Solde à l'ouverture", "Opening balance");
+    let income = s("Revenus", "Income");
     current.add(
         start,
         StandardMode::Versement,
-        "Solde à l'ouverture",
+        opening,
         "",
-        "Revenus",
-        2_480.35,
+        income,
+        n(2_480.35, 3_215.40),
     );
     joint.add(
         start,
         StandardMode::Versement,
-        "Solde à l'ouverture",
+        opening,
         "",
-        "Revenus",
-        1_215.60,
+        income,
+        n(1_215.60, 1_540.25),
     );
     savings.add(
         start,
         StandardMode::Versement,
-        "Solde à l'ouverture",
+        opening,
         "",
-        "Épargne",
-        3_400.00,
+        s("Épargne", "Savings accounts"),
+        n(3_400.00, 6_800.00),
     );
 
-    let mut cheque = 4_512_300u32;
+    let mut cheque: u32 = if en { 1_040 } else { 4_512_300 };
     let (mut year, mut month) = (first.year(), first.month());
     loop {
         let month_start = day(year, month, 1);
@@ -208,26 +244,33 @@ fn main() {
         let in_range = |d: Date| d >= start && d <= end;
         let summer = month == 7 || month == 8;
         let december = month == 12;
+        let month_name =
+            bp_core::i18n::with_lang(lang, || bp_core::i18n::month_name(month as usize - 1));
 
         // ── Revenus et charges fixes du compte courant ──
         let salary_day = business_day(day(year, month, 27));
         if in_range(salary_day) {
-            let salary = 3_050.0 * 1.025f64.powi(year - first.year());
+            let salary = n(3_050.0, 4_860.0) * 1.025f64.powi(year - first.year());
+            let employer = s("Société Exemple SA", "Example Corp");
             current.add(
                 salary_day,
                 StandardMode::VirementRecu,
-                "Société Exemple SA",
-                &format!("Salaire {} {year}", MONTHS[month as usize - 1]),
-                "Salaire",
+                employer,
+                &if en {
+                    format!("Payroll {month_name} {year}")
+                } else {
+                    format!("Salaire {month_name} {year}")
+                },
+                s("Salaire", "Salary & bonuses"),
                 (salary * 100.0).round() / 100.0,
             );
             if december {
                 current.add(
                     salary_day,
                     StandardMode::VirementRecu,
-                    "Société Exemple SA",
-                    "Prime de fin d'année",
-                    "Salaire",
+                    employer,
+                    s("Prime de fin d'année", "Year-end bonus"),
+                    s("Salaire", "Salary & bonuses"),
                     (salary * 0.55).round(),
                 );
             }
@@ -236,90 +279,90 @@ fn main() {
             (
                 5,
                 StandardMode::Prelevement,
-                "Agence du Parc",
-                "Loyer et charges",
-                "Loyer",
-                -1_190.0 * 1.03f64.powi(year - first.year()),
+                s("Agence du Parc", "Lakeview Apartments"),
+                s("Loyer et charges", "Monthly rent"),
+                s("Loyer", "Rent"),
+                -n(1_190.0, 1_850.0) * 1.03f64.powi(year - first.year()),
             ),
             (
                 10,
                 StandardMode::Prelevement,
-                "EDF",
-                "Mensualité électricité",
-                "Électricité",
-                -(74.0 * inflation).round(),
+                s("EDF", "ComEd"),
+                s("Mensualité électricité", "Electric bill"),
+                s("Électricité", "Electricity & gas"),
+                -(n(74.0, 92.0) * inflation).round(),
             ),
             (
                 14,
                 StandardMode::Prelevement,
-                "Free",
-                "Freebox",
-                "Internet",
-                -29.99,
+                s("Free", "Xfinity"),
+                s("Freebox", "Home internet"),
+                s("Internet", "Internet & phone"),
+                -n(29.99, 65.00),
             ),
             (
                 18,
                 StandardMode::Prelevement,
-                "Bouygues Telecom",
-                "Forfait mobile",
-                "Téléphone",
-                -15.99,
+                s("Bouygues Telecom", "Verizon Wireless"),
+                s("Forfait mobile", "Mobile plan"),
+                s("Téléphone", "Internet & phone"),
+                -n(15.99, 70.00),
             ),
             (
                 6,
                 StandardMode::Prelevement,
-                "Mutuelle Horizon",
-                "Cotisation mensuelle",
-                "Mutuelle",
-                -41.80,
+                s("Mutuelle Horizon", "Blue Cross Blue Shield"),
+                s("Cotisation mensuelle", "Monthly premium"),
+                s("Mutuelle", "Health insurance"),
+                -n(41.80, 186.40),
             ),
             (
                 3,
                 StandardMode::Prelevement,
-                "Assurances du Centre",
-                "Multirisque habitation",
-                "Assurance habitation",
-                -18.45,
+                s("Assurances du Centre", "State Farm"),
+                s("Multirisque habitation", "Renters insurance"),
+                s("Assurance habitation", "Home insurance"),
+                -n(18.45, 16.25),
             ),
             (
                 2,
                 StandardMode::Prelevement,
-                "Navigo",
-                "Forfait mensuel",
-                "Transports en commun",
-                -86.40,
+                s("Navigo", "Ventra"),
+                s("Forfait mensuel", "30-day pass"),
+                s("Transports en commun", "Public transit"),
+                -n(86.40, 75.00),
             ),
             (
                 12,
                 StandardMode::Carte,
                 "Netflix",
-                "Abonnement",
-                "Abonnements",
-                -13.49,
+                s("Abonnement", "Subscription"),
+                s("Abonnements", "Streaming & news"),
+                -n(13.49, 15.49),
             ),
             (
                 21,
                 StandardMode::Carte,
                 "Spotify",
-                "Abonnement",
-                "Abonnements",
-                -11.12,
+                s("Abonnement", "Subscription"),
+                s("Abonnements", "Streaming & news"),
+                -n(11.12, 11.99),
             ),
             (
                 8,
                 StandardMode::Prelevement,
-                "Banque Exemple",
-                "Cotisation carte",
-                "Frais bancaires",
-                -2.95,
+                s("Banque Exemple", "Example Bank"),
+                s("Cotisation carte", "Monthly service fee"),
+                s("Frais bancaires", "Bank fees"),
+                -n(2.95, 5.00),
             ),
             (
                 1,
                 StandardMode::VirementEmis,
-                "Compte joint",
-                "Participation au foyer",
-                "Courses",
-                -330.0,
+                s("Compte joint", "Joint Checking"),
+                s("Participation au foyer", "Household contribution"),
+                s("Courses", "Internal transfers"),
+                -n(330.0, 450.0),
             ),
         ];
         for (d, mode, payee, details, category, amount) in fixed {
@@ -334,10 +377,10 @@ fn main() {
                 current.add(
                     date,
                     StandardMode::Carte,
-                    "Club de sport",
-                    "Abonnement annuel",
-                    "Sport",
-                    -360.0,
+                    s("Club de sport", "Planet Fitness"),
+                    s("Abonnement annuel", "Annual membership"),
+                    s("Sport", "Sports"),
+                    -n(360.0, 299.0),
                 );
             }
         }
@@ -345,37 +388,42 @@ fn main() {
         // ── Épargne : versement mensuel, plus un surplus si le compte est bien garni ──
         let date = day(year, month, 2);
         if in_range(date) && date <= today {
-            let mut amount = 200.0;
-            if current.balance() > 20_000.0 {
-                amount += 1_500.0;
+            let mut amount = n(200.0, 400.0);
+            if current.balance() > n(20_000.0, 25_000.0) {
+                amount += n(1_500.0, 2_000.0);
             }
+            let category = s("Épargne", "Savings accounts");
             current.add(
                 date,
                 StandardMode::VirementEmis,
-                "Épargne",
-                "Épargne mensuelle",
-                "Épargne",
+                s("Épargne", "Savings"),
+                s("Épargne mensuelle", "Monthly savings"),
+                category,
                 -amount,
             );
             savings.add(
                 date,
                 StandardMode::VirementRecu,
-                "Compte courant",
-                "Épargne mensuelle",
-                "Épargne",
+                s("Compte courant", "Checking"),
+                s("Épargne mensuelle", "Monthly savings"),
+                category,
                 amount,
             );
         }
         if month == 12 {
             let date = day(year, 12, 31);
             if in_range(date) {
-                let interest = (savings.balance() * 0.026 * 100.0).round() / 100.0;
+                let interest = (savings.balance() * n(0.026, 0.0385) * 100.0).round() / 100.0;
                 savings.add(
                     date,
                     StandardMode::VirementRecu,
-                    "Banque Exemple",
-                    &format!("Intérêts {year}"),
-                    "Intérêts",
+                    s("Banque Exemple", "Example Bank"),
+                    &if en {
+                        format!("Interest {year}")
+                    } else {
+                        format!("Intérêts {year}")
+                    },
+                    s("Intérêts", "Investment income"),
                     interest,
                 );
             }
@@ -390,52 +438,74 @@ fn main() {
             let weekday = date.to_naive().weekday().num_days_from_monday();
             let weekend = weekday >= 5;
             if rng.chance(if weekend { 0.55 } else { 0.35 }) {
-                let shop = rng.pick(&["Boulangerie Paul", "Maison Lenôtre", "Au Bon Pain"]);
+                let shop = rng.pick(if en {
+                    &["Starbucks", "Dunkin'", "Corner Bakery Cafe"]
+                } else {
+                    &["Boulangerie Paul", "Maison Lenôtre", "Au Bon Pain"]
+                });
                 current.add(
                     date,
                     StandardMode::Carte,
                     shop,
                     "",
-                    "Boulangerie",
+                    s("Boulangerie", "Bakery & market"),
                     -rng.range(1.2, 11.5),
                 );
             }
             if rng.chance(if weekend { 0.30 } else { 0.10 }) {
-                let shop = rng.pick(&["Monoprix", "Franprix", "Biocoop"]);
+                let shop = rng.pick(if en {
+                    &["Trader Joe's", "Whole Foods Market", "Walgreens"]
+                } else {
+                    &["Monoprix", "Franprix", "Biocoop"]
+                });
                 current.add(
                     date,
                     StandardMode::Carte,
                     shop,
                     "",
-                    "Courses",
+                    s("Courses", "Groceries"),
                     -rng.range(9.0, 48.0) * inflation,
                 );
             }
             if weekday == 5 && rng.chance(0.85) {
-                let shop = rng.pick(&["Carrefour", "Leclerc", "Intermarché"]);
+                let shop = rng.pick(if en {
+                    &["Costco", "Jewel-Osco", "Target"]
+                } else {
+                    &["Carrefour", "Leclerc", "Intermarché"]
+                });
                 joint.add(
                     date,
                     StandardMode::Carte,
                     shop,
-                    "Courses de la semaine",
-                    "Courses",
-                    -rng.range(65.0, 165.0) * inflation,
+                    s("Courses de la semaine", "Weekly groceries"),
+                    s("Courses", "Groceries"),
+                    -rng.range(65.0, 165.0) * n(1.0, 1.3) * inflation,
                 );
             }
             if rng.chance(if summer { 0.22 } else { 0.11 }) {
-                let place = rng.pick(&[
-                    "Le Petit Bistrot",
-                    "Pizzeria Napoli",
-                    "Sushi Bar",
-                    "Café de la Gare",
-                    "Brasserie du Marché",
-                ]);
+                let place = rng.pick(if en {
+                    &[
+                        "Chipotle",
+                        "Lou Malnati's Pizzeria",
+                        "Sushi Station",
+                        "Shake Shack",
+                        "The Corner Diner",
+                    ]
+                } else {
+                    &[
+                        "Le Petit Bistrot",
+                        "Pizzeria Napoli",
+                        "Sushi Bar",
+                        "Café de la Gare",
+                        "Brasserie du Marché",
+                    ]
+                });
                 current.add(
                     date,
                     StandardMode::Carte,
                     place,
                     "",
-                    "Restaurant",
+                    s("Restaurant", "Restaurants"),
                     -rng.range(14.0, 68.0),
                 );
             }
@@ -443,20 +513,30 @@ fn main() {
                 current.add(
                     date,
                     StandardMode::Carte,
-                    "TotalEnergies",
+                    s("TotalEnergies", "Shell"),
                     "",
-                    "Carburant",
+                    s("Carburant", "Fuel"),
                     -rng.range(42.0, 78.0),
                 );
             }
             if rng.chance(if december { 0.18 } else { 0.06 }) {
-                let (shop, category) = *rng.pick(&[
-                    ("Amazon", "High-tech"),
-                    ("Fnac", "Cadeaux"),
-                    ("Decathlon", "Sport"),
-                    ("Uniqlo", "Vêtements"),
-                    ("Zara", "Vêtements"),
-                ]);
+                let (shop, category) = *rng.pick(if en {
+                    &[
+                        ("Amazon", "Electronics & appliances"),
+                        ("Barnes & Noble", "Gifts"),
+                        ("REI", "Sports"),
+                        ("Old Navy", "Clothing & shoes"),
+                        ("Target", "Clothing & shoes"),
+                    ]
+                } else {
+                    &[
+                        ("Amazon", "High-tech"),
+                        ("Fnac", "Cadeaux"),
+                        ("Decathlon", "Sport"),
+                        ("Uniqlo", "Vêtements"),
+                        ("Zara", "Vêtements"),
+                    ]
+                });
                 let high = if december { 140.0 } else { 85.0 };
                 current.add(
                     date,
@@ -471,19 +551,19 @@ fn main() {
                 current.add(
                     date,
                     StandardMode::Carte,
-                    "Cinéma Le Grand Rex",
-                    "2 places",
-                    "Cinéma",
-                    -23.80,
+                    s("Cinéma Le Grand Rex", "AMC Theatres"),
+                    s("2 places", "2 tickets"),
+                    s("Cinéma", "Entertainment & events"),
+                    -n(23.80, 31.50),
                 );
             }
             if rng.chance(0.035) {
                 current.add(
                     date,
                     StandardMode::Carte,
-                    "Pharmacie du Centre",
+                    s("Pharmacie du Centre", "CVS Pharmacy"),
                     "",
-                    "Pharmacie",
+                    s("Pharmacie", "Pharmacy"),
                     -rng.range(6.5, 38.0),
                 );
             }
@@ -492,9 +572,9 @@ fn main() {
                 current.add(
                     date,
                     StandardMode::RetraitDab,
-                    "Retrait DAB",
-                    "Paris 11e",
-                    "Retraits",
+                    s("Retrait DAB", "ATM withdrawal"),
+                    s("Paris 11e", "Chicago, IL"),
+                    s("Retraits", "Cash withdrawals"),
                     -amount,
                 );
             }
@@ -503,20 +583,24 @@ fn main() {
                 current.add(
                     date,
                     StandardMode::ChequeEmis,
-                    "Cabinet médical",
-                    &format!("Chèque n° {cheque}"),
-                    "Médecin",
-                    -30.0,
+                    s("Cabinet médical", "Lakeshore Medical Group"),
+                    &if en {
+                        format!("Check #{cheque}")
+                    } else {
+                        format!("Chèque n° {cheque}")
+                    },
+                    s("Médecin", "Doctors & tests"),
+                    -n(30.0, 40.0),
                 );
                 let refund = Date(date.0 + rng.range(3.0, 8.0) as i32);
                 if refund <= today {
                     current.add(
                         refund,
                         StandardMode::VirementRecu,
-                        "CPAM",
-                        "Remboursement soins",
-                        "Remboursements",
-                        21.0,
+                        s("CPAM", "Blue Cross Blue Shield"),
+                        s("Remboursement soins", "Claim reimbursement"),
+                        s("Remboursements", "Health reimbursements"),
+                        n(21.0, 28.0),
                     );
                 }
             }
@@ -525,21 +609,23 @@ fn main() {
         // ── Compte joint : participations et vacances ──
         let date = day(year, month, 1);
         if in_range(date) {
+            let contribution = n(330.0, 450.0);
+            let details = s("Participation au foyer", "Household contribution");
             joint.add(
                 date,
                 StandardMode::VirementRecu,
-                "Compte courant",
-                "Participation au foyer",
-                "Revenus",
-                330.0,
+                s("Compte courant", "Checking"),
+                details,
+                s("Revenus", "Internal transfers"),
+                contribution,
             );
             joint.add(
                 date,
                 StandardMode::VirementRecu,
-                "Alex Martin",
-                "Participation au foyer",
-                "Revenus",
-                330.0,
+                s("Alex Martin", "Taylor Miller"),
+                details,
+                s("Revenus", "Other income"),
+                contribution,
             );
         }
         if month == 7 {
@@ -548,18 +634,18 @@ fn main() {
                 joint.add(
                     date,
                     StandardMode::Carte,
-                    "SNCF Connect",
-                    "Paris – Marseille",
-                    "Train",
-                    -rng.range(160.0, 240.0),
+                    s("SNCF Connect", "United Airlines"),
+                    s("Paris – Marseille", "Chicago – Denver"),
+                    s("Train", "Trains, flights & car rental"),
+                    -rng.range(160.0, 240.0) * n(1.0, 2.2),
                 );
                 joint.add(
                     Date(date.0 + 2),
                     StandardMode::Carte,
-                    "Location Les Pins",
-                    "Vacances d'été",
-                    "Vacances",
-                    -rng.range(820.0, 1_150.0),
+                    s("Location Les Pins", "Airbnb"),
+                    s("Vacances d'été", "Summer vacation"),
+                    s("Vacances", "Lodging"),
+                    -rng.range(820.0, 1_150.0) * n(1.0, 1.2),
                 );
             }
         }
@@ -595,48 +681,60 @@ fn main() {
     let joint_ops = finish(joint, &mut rng);
     let savings_ops = finish(savings, &mut rng);
 
-    let account = |name: &str, number: &str, iban: &str, ops: Vec<Operation>| Account {
-        uid: bp_core::v5_text::new_account_uid(0),
-        name: name.to_string(),
-        bank_name: "Banque Exemple".into(),
-        agency_name: "Agence Bastille".into(),
-        agency_address: String::new(),
-        number: number.into(),
-        bank_code: "30001".into(),
-        agency_code: "00011".into(),
-        bic: String::new(),
-        iban: iban.into(),
-        logo: "Aucun".into(),
-        currency: "€".into(),
-        currency_rate: 1.0,
-        secondary_currency: "F".into(),
-        secondary_rate: 6.55957,
-        is_virtual: false,
-        disabled: false,
-        operations: ops,
+    let account = |index: usize, name: &str, number: &str, iban: &str, ops: Vec<Operation>| {
+        let mut account = Account {
+            uid: bp_core::v5_text::new_account_uid(index),
+            name: name.to_string(),
+            bank_name: s("Banque Exemple", "Example Bank").into(),
+            agency_name: s("Agence Bastille", "Lincoln Park branch").into(),
+            agency_address: String::new(),
+            number: number.into(),
+            bank_code: s("30001", "").into(),
+            agency_code: s("00011", "").into(),
+            bic: String::new(),
+            iban: iban.into(),
+            logo: "Aucun".into(),
+            currency: "€".into(),
+            currency_rate: 1.0,
+            secondary_currency: "F".into(),
+            secondary_rate: 6.55957,
+            is_virtual: false,
+            disabled: false,
+            operations: ops,
+        };
+        if en {
+            // Dollar, avec l'euro en devise secondaire (taux indicatif).
+            account.currency = "$".into();
+            account.secondary_currency = "€".into();
+            account.secondary_rate = 0.86;
+        }
+        account
     };
-    let document = Document {
-        group_name: "Famille Martin".into(),
+    let mut document = Document {
+        group_name: s("Famille Martin", "The Miller Family").into(),
         guid: bp_core::v5_text::new_file_guid(),
-        user_name: "Camille Martin".into(),
+        user_name: s("Camille Martin", "Jordan Miller").into(),
         custom_modes: Vec::new(),
         accounts: vec![
             account(
-                "Compte courant",
-                "00012345601",
-                "FR76 3000 1000 1100 0123 4560 142",
+                0,
+                s("Compte courant", "Checking"),
+                s("00012345601", "4401 2345 6601"),
+                s("FR76 3000 1000 1100 0123 4560 142", ""),
                 current_ops,
             ),
             account(
-                "Compte joint",
-                "00012345602",
-                "FR76 3000 1000 1100 0123 4560 239",
+                1,
+                s("Compte joint", "Joint Checking"),
+                s("00012345602", "4401 2345 6602"),
+                s("FR76 3000 1000 1100 0123 4560 239", ""),
                 joint_ops,
             ),
             account(
-                "Épargne",
-                "00012345603",
-                "FR76 3000 1000 1100 0123 4560 336",
+                2,
+                s("Épargne", "Savings"),
+                s("00012345603", "4401 2345 6603"),
+                s("FR76 3000 1000 1100 0123 4560 336", ""),
                 savings_ops,
             ),
         ],
@@ -647,6 +745,7 @@ fn main() {
         feature_data: Vec::new(),
         unknown_header: Vec::new(),
     };
+    add_features(&mut document, lang, today, end);
     bp_core::file::save(out.as_ref(), &document, &Protection::none().unwrap()).unwrap();
 
     for acc in &document.accounts {
@@ -657,10 +756,217 @@ fn main() {
             .filter(|op| op.tack == Tack::None)
             .count();
         println!(
-            "{:<15} {:>5} opérations  solde {:>10.2} €  {pending} non pointées",
+            "{:<15} {:>5} opérations  solde {:>10.2} {}  {pending} non pointées",
             acc.name,
             acc.operations.len(),
-            total
+            total,
+            acc.currency
         );
     }
+}
+
+/// Échéancier, budgets et règles automatiques, tirés des opérations générées.
+fn add_features(document: &mut Document, lang: Lang, today: Date, end: Date) {
+    let en = lang == Lang::En;
+    let s = |fr: &'static str, english: &'static str| if en { english } else { fr };
+    let categories = document.categories.clone();
+    let id = |name: &str| category_id(&categories, name);
+
+    // ── Échéancier : les charges fixes et le salaire, reprises de leur
+    // dernière opération ; prochaine échéance après les opérations à venir
+    // déjà présentes (rien n'est inséré en double à l'ouverture).
+    let recurring: &[(usize, &str, PeriodUnit)] = &[
+        (
+            0,
+            s("Société Exemple SA", "Example Corp"),
+            PeriodUnit::Months,
+        ),
+        (
+            0,
+            s("Agence du Parc", "Lakeview Apartments"),
+            PeriodUnit::Months,
+        ),
+        (0, s("EDF", "ComEd"), PeriodUnit::Months),
+        (0, s("Free", "Xfinity"), PeriodUnit::Months),
+        (
+            0,
+            s("Bouygues Telecom", "Verizon Wireless"),
+            PeriodUnit::Months,
+        ),
+        (
+            0,
+            s("Mutuelle Horizon", "Blue Cross Blue Shield"),
+            PeriodUnit::Months,
+        ),
+        (0, "Netflix", PeriodUnit::Months),
+        (0, "Spotify", PeriodUnit::Months),
+        (0, s("Épargne", "Savings"), PeriodUnit::Months),
+        (0, s("Club de sport", "Planet Fitness"), PeriodUnit::Years),
+        (1, s("Alex Martin", "Taylor Miller"), PeriodUnit::Months),
+    ];
+    let mut schedules = Vec::new();
+    for &(account, payee, unit) in recurring {
+        let Some(last) = document.accounts[account]
+            .operations
+            .iter()
+            .filter(|op| op.payee == payee && op.amount.0.abs() < 500_000)
+            .next_back()
+        else {
+            continue;
+        };
+        let mut schedule =
+            scheduler::schedule_from_operation(document, account, last).expect("compte valide");
+        schedule.period = Period { every: 1, unit };
+        schedule.next_date = last.date;
+        while schedule.next_date <= end {
+            schedule.next_date =
+                scheduler::add_period(schedule.next_date, schedule.period, schedule.anchor_day, 1)
+                    .expect("date valide");
+        }
+        schedules.push(schedule);
+    }
+    scheduler::save(document, &schedules).unwrap();
+
+    // ── Budget mensuel ──
+    let monthly: &[(&str, f64)] = if en {
+        &[
+            ("Salary & bonuses", 5_150.0),
+            ("Groceries", -620.0),
+            ("Bakery & market", -110.0),
+            ("Restaurants", -240.0),
+            ("Rent", -1_960.0),
+            ("Electricity & gas", -100.0),
+            ("Internet & phone", -135.0),
+            ("Public transit", -75.0),
+            ("Fuel", -60.0),
+            ("Streaming & news", -28.0),
+            ("Entertainment & events", -50.0),
+            ("Clothing & shoes", -80.0),
+            ("Health insurance", -186.4),
+            ("Pharmacy", -20.0),
+            ("Cash withdrawals", -150.0),
+            ("Savings accounts", -400.0),
+        ]
+    } else {
+        &[
+            ("Salaire", 3_200.0),
+            ("Courses", -450.0),
+            ("Boulangerie", -110.0),
+            ("Restaurant", -180.0),
+            ("Loyer", -1_270.0),
+            ("Électricité", -80.0),
+            ("Internet", -30.0),
+            ("Téléphone", -16.0),
+            ("Transports en commun", -86.4),
+            ("Carburant", -60.0),
+            ("Abonnements", -25.0),
+            ("Cinéma", -40.0),
+            ("Vêtements", -60.0),
+            ("Mutuelle", -41.8),
+            ("Pharmacie", -20.0),
+            ("Retraits", -120.0),
+            ("Épargne", -200.0),
+        ]
+    };
+    let mut budget = MonthlyBudget::default();
+    for &(name, amount) in monthly {
+        budget.set_signed(Some(id(name)), Amount::from_cents((amount * 100.0) as i64));
+    }
+    budget.save(document).unwrap();
+
+    // ── Budget annuel de l'année en cours ──
+    let year = today.to_naive().year();
+    let lines: &[(&str, &[&str], f64)] = if en {
+        &[
+            ("Salary", &["Salary & bonuses"], 5_150.0),
+            (
+                "Housing",
+                &["Rent", "Electricity & gas", "Home insurance"],
+                -2_080.0,
+            ),
+            (
+                "Food",
+                &["Groceries", "Bakery & market", "Restaurants"],
+                -970.0,
+            ),
+            ("Getting around", &["Public transit", "Fuel"], -140.0),
+            (
+                "Health",
+                &["Health insurance", "Pharmacy", "Doctors & tests"],
+                -230.0,
+            ),
+            (
+                "Leisure",
+                &["Streaming & news", "Entertainment & events", "Sports"],
+                -110.0,
+            ),
+        ]
+    } else {
+        &[
+            ("Salaire", &["Salaire"], 3_200.0),
+            (
+                "Logement",
+                &["Loyer", "Électricité", "Assurance habitation"],
+                -1_370.0,
+            ),
+            (
+                "Alimentation",
+                &["Courses", "Boulangerie", "Restaurant"],
+                -740.0,
+            ),
+            ("Transports", &["Transports en commun", "Carburant"], -150.0),
+            ("Santé", &["Mutuelle", "Pharmacie", "Médecin"], -80.0),
+            ("Loisirs", &["Abonnements", "Cinéma", "Sport"], -95.0),
+        ]
+    };
+    let mut table = AnnualBudget::new(format!("Budget {year}"), year);
+    for &(title, names, amount) in lines {
+        table.lines.push(AnnualLine {
+            title: title.to_string(),
+            auto_real: true,
+            categories: names.iter().map(|name| Some(id(name))).collect(),
+            budget: [Amount::from_cents((amount * 100.0) as i64); 12],
+            real: [Amount::ZERO; 12],
+        });
+    }
+    AnnualBudgets {
+        tables: vec![table],
+    }
+    .save(document)
+    .unwrap();
+
+    // ── Règles automatiques ──
+    let rule = |contains: &str, mode: Option<StandardMode>, category: &str| Rule {
+        field: RuleField::Payee,
+        contains: contains.to_string(),
+        plus_is_or: true,
+        set_mode: mode,
+        set_payee: None,
+        set_details: None,
+        set_date: None,
+        set_category: Some(CategoryChange::Set(id(category))),
+        only_uncategorized: true,
+        active: true,
+        auto_apply: true,
+    };
+    let rules = if en {
+        vec![
+            rule(
+                "Netflix+Spotify",
+                Some(StandardMode::Carte),
+                "Streaming & news",
+            ),
+            rule("ATM", Some(StandardMode::RetraitDab), "Cash withdrawals"),
+            rule("Shell", Some(StandardMode::Carte), "Fuel"),
+            rule("CVS+Walgreens", None, "Pharmacy"),
+        ]
+    } else {
+        vec![
+            rule("Netflix+Spotify", Some(StandardMode::Carte), "Abonnements"),
+            rule("Retrait DAB", Some(StandardMode::RetraitDab), "Retraits"),
+            rule("TotalEnergies", Some(StandardMode::Carte), "Carburant"),
+            rule("Pharmacie", None, "Pharmacie"),
+        ]
+    };
+    AutoFieldRules { rules }.save(document).unwrap();
 }

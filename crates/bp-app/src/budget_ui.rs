@@ -7,7 +7,7 @@ use bp_core::budget::{
 };
 use bp_core::i18n::{self, Lang};
 use bp_core::model::{Amount, Date};
-use bp_core::{tr, trn};
+use bp_core::{tr, trc, trn};
 use chrono::Datelike;
 use egui::{Color32, Key, RichText, vec2};
 use egui_phosphor::regular as icon;
@@ -871,7 +871,7 @@ impl BudgetForm {
             }
             ui.add_space(12.0);
             if ui
-                .button(format!("{}  {}", icon::PLUS, tr!("Ligne")))
+                .button(format!("{}  {}", icon::PLUS, trc!("budget", "Ligne")))
                 .clicked()
             {
                 self.line_editor = Some(LineEditor {
@@ -1002,7 +1002,7 @@ impl BudgetForm {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(title_w);
-                    fixed(ui, title_w, egui::Align::Min, RichText::new(tr!("Ligne")).family(crate::theme::semibold()).color(pal.fg_dark));
+                    fixed(ui, title_w, egui::Align::Min, RichText::new(trc!("budget", "Ligne")).family(crate::theme::semibold()).color(pal.fg_dark));
                     for (l, row) in report.rows.iter().enumerate() {
                         let glyph = if row.auto_real { icon::LIGHTNING } else { icon::PENCIL_SIMPLE };
                         let response = fixed(
@@ -1459,7 +1459,7 @@ fn monthly_rows(report: &BudgetReport) -> Vec<Vec<Cell>> {
 }
 
 fn annual_rows(report: &bp_core::budget::AnnualReport) -> Vec<Vec<Cell>> {
-    let mut header = vec![Cell::Bold(tr!("Ligne").into())];
+    let mut header = vec![Cell::Bold(trc!("budget", "Ligne").into())];
     let months = (0..12).map(i18n::month_abbr);
     for m in months.chain(std::iter::once(tr!("Total"))) {
         header.extend([

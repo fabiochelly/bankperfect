@@ -3,6 +3,8 @@
 //! restant dû et tableau d'amortissement ; profils nommés.
 
 use bp_core::calc::{AmortizationRow, Loan, LoanUnknown};
+use bp_core::i18n;
+use bp_core::{tr, trc, trn};
 use chrono::Datelike;
 use egui::{Color32, Key, RichText, Stroke, pos2, vec2};
 use egui_phosphor::regular as icon;
@@ -14,20 +16,11 @@ use crate::tools::Outcome;
 use crate::ui_kit;
 
 const PROFILES_FILE: &str = "credits.json";
-const MONTHS: [&str; 12] = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-];
+
+/// Nom du mois `month` (de 1 à 12) dans la langue de l'interface.
+fn month_name(month: u32) -> &'static str {
+    i18n::month_name((month as usize).saturating_sub(1) % 12)
+}
 
 /// Profil enregistré.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -86,7 +79,12 @@ impl LoanForm {
             (today.year(), today.month() + 1)
         };
         let mut form = Self {
-            texts: ["150 000".into(), "3,5".into(), "240".into(), String::new()],
+            texts: [
+                crate::format::count(150_000),
+                format!("3{}5", i18n::decimal_separator()),
+                "240".into(),
+                String::new(),
+            ],
             residual: String::new(),
             start_of_period: false,
             start_year: year,
@@ -127,7 +125,7 @@ impl LoanForm {
             .map(|&f| label(f))
             .collect();
         if !missing.is_empty() {
-            self.error = Some(format!("Valeur à saisir : {}", missing.join(", ")));
+            self.error = Some(tr!("Valeur à saisir : {}", missing.join(", ")));
             self.loan = None;
             return;
         }
@@ -197,7 +195,7 @@ impl LoanForm {
         {
             Ok(()) => true,
             Err(e) => {
-                self.error = Some(format!("Enregistrement impossible : {e}"));
+                self.error = Some(tr!("Enregistrement impossible : {}", e));
                 false
             }
         }
@@ -211,8 +209,8 @@ impl LoanForm {
             ui.set_width(width);
             ui.set_height(height);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::HOUSE_LINE, pal.accent, "Simulateur de crédit");
-            ui_kit::subtitle(ui, "Saisissez trois valeurs : la quatrième se calcule. Les boutons + et − font varier une valeur et relancent le dernier calcul.");
+            crate::dialogs::header(ui, icon::HOUSE_LINE, pal.accent, tr!("Simulateur de crédit"));
+            ui_kit::subtitle(ui, tr!("Saisissez trois valeurs : la quatrième se calcule. Les boutons + et − font varier une valeur et relancent le dernier calcul."));
             let body = height - 36.0 - 40.0 - 100.0;
             let gap = 22.0;
             let left_w = (width * 0.4).clamp(440.0, 540.0);
@@ -246,7 +244,7 @@ impl LoanForm {
                 self.start_year = y;
                 self.start_month = m;
                 self.loan = Some(next);
-                self.message = Some(format!("Reprise après l'échéance n° {} : {} restant dû", row.period, money(row.remaining)));
+                self.message = Some(tr!("Reprise après l'échéance n° {} : {} restant dû", row.period, money(row.remaining)));
             }
             if let Some(error) = &self.error {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
@@ -254,15 +252,15 @@ impl LoanForm {
                 ui.label(RichText::new(format!("{}  {message}", icon::INFO)).color(pal.accent));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
                 if let Some(loan) = self.loan
-                    && crate::dialogs::button(ui, format!("{}  Exporter vers un tableur…", icon::MICROSOFT_EXCEL_LOGO)).clicked()
+                    && crate::dialogs::button(ui, tr!("{}  Exporter vers un tableur…", icon::MICROSOFT_EXCEL_LOGO)).clicked()
                 {
                     let rows = export_rows(&loan, self.start_year, self.start_month);
                     let dir = crate::settings::shared::export_dir(&dirs_home());
-                    crate::spreadsheet::export(ui.ctx(), &dir, "Simulation de crédit", "Amortissement", rows);
+                    crate::spreadsheet::export(ui.ctx(), &dir, tr!("Simulation de crédit"), tr!("Amortissement"), rows);
                 }
             });
         });
@@ -272,7 +270,7 @@ impl LoanForm {
     fn inputs_card(&mut self, ui: &mut egui::Ui, width: f32, pal: &Palette) {
         let mut solve = None;
         let mut step = None;
-        ui_kit::section(ui, width, icon::CALCULATOR, "Crédit", |ui| {
+        ui_kit::section(ui, width, icon::CALCULATOR, tr!("Crédit"), |ui| {
             let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
             const LABEL: f32 = 118.0;
             let field_w = inner - LABEL - 32.0 - 32.0 - 40.0 - 4.0 * 6.0;
@@ -298,14 +296,14 @@ impl LoanForm {
                     }
                     if ui
                         .add_sized(vec2(32.0, 32.0), egui::Button::new(icon::MINUS))
-                        .on_hover_text("Diminuer")
+                        .on_hover_text(tr!("Diminuer"))
                         .clicked()
                     {
                         step = Some((field, false));
                     }
                     if ui
                         .add_sized(vec2(32.0, 32.0), egui::Button::new(icon::PLUS))
-                        .on_hover_text("Augmenter")
+                        .on_hover_text(tr!("Augmenter"))
                         .clicked()
                     {
                         step = Some((field, true));
@@ -322,7 +320,7 @@ impl LoanForm {
                     });
                     if ui
                         .add_sized(vec2(40.0, 32.0), calc)
-                        .on_hover_text(format!("Calculer : {}", label(field).to_lowercase()))
+                        .on_hover_text(tr!("Calculer : {}", label(field).to_lowercase()))
                         .clicked()
                     {
                         solve = Some(field);
@@ -332,10 +330,10 @@ impl LoanForm {
             }
             ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
-                ui_kit::cell(ui, LABEL, egui::Align::Min, RichText::new("Résiduel").color(pal.fg_dark));
+                ui_kit::cell(ui, LABEL, egui::Align::Min, RichText::new(tr!("Résiduel")).color(pal.fg_dark));
                 let r = ui
                     .add(crate::theme::field(&mut self.residual).hint_text("0").desired_width(field_w))
-                    .on_hover_text("Valeur restant due après la dernière mensualité (location avec option d'achat, crédit ballon)");
+                    .on_hover_text(tr!("Valeur restant due après la dernière mensualité (location avec option d'achat, crédit ballon)"));
                 if r.lost_focus() {
                     solve = Some(self.unknown);
                 }
@@ -344,7 +342,7 @@ impl LoanForm {
             if crate::theme::checkbox(
                 ui,
                 &mut self.start_of_period,
-                "Mensualités versées en début de période",
+                tr!("Mensualités versées en début de période"),
             )
             .changed()
             {
@@ -352,13 +350,13 @@ impl LoanForm {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Première échéance").color(pal.fg_dark));
+                ui.label(RichText::new(tr!("Première échéance")).color(pal.fg_dark));
                 egui::ComboBox::from_id_salt("loan_start_month")
-                    .selected_text(MONTHS[(self.start_month as usize - 1) % 12])
+                    .selected_text(month_name(self.start_month))
                     .width(120.0)
                     .show_ui(ui, |ui| {
-                        for (k, m) in MONTHS.iter().enumerate() {
-                            ui.selectable_value(&mut self.start_month, k as u32 + 1, *m);
+                        for m in 1..=12 {
+                            ui.selectable_value(&mut self.start_month, m, month_name(m));
                         }
                     });
                 ui.add(egui::DragValue::new(&mut self.start_year).range(1950..=2200));
@@ -377,12 +375,14 @@ impl LoanForm {
         let mut load = None;
         let mut save = false;
         let mut delete = None;
-        ui_kit::section(ui, width, icon::BOOKMARK_SIMPLE, "Profils", |ui| {
+        ui_kit::section(ui, width, icon::BOOKMARK_SIMPLE, tr!("Profils"), |ui| {
             let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
             if self.profiles.is_empty() {
                 ui.label(
-                    RichText::new("Enregistrez une simulation pour la retrouver plus tard.")
-                        .color(pal.muted),
+                    RichText::new(tr!(
+                        "Enregistrez une simulation pour la retrouver plus tard."
+                    ))
+                    .color(pal.muted),
                 );
             }
             for (k, p) in self.profiles.iter().enumerate() {
@@ -401,7 +401,7 @@ impl LoanForm {
                         .add(egui::Button::new(
                             RichText::new(icon::TRASH).color(pal.negative),
                         ))
-                        .on_hover_text("Supprimer le profil")
+                        .on_hover_text(tr!("Supprimer le profil"))
                         .clicked()
                     {
                         delete = Some(k);
@@ -412,13 +412,13 @@ impl LoanForm {
             ui.horizontal(|ui| {
                 ui.add(
                     crate::theme::field(&mut self.profile_name)
-                        .hint_text("Nom du profil")
+                        .hint_text(tr!("Nom du profil"))
                         .desired_width(inner - 140.0),
                 );
                 save = ui
                     .add_enabled(
                         self.loan.is_some() && !self.profile_name.trim().is_empty(),
-                        egui::Button::new(format!("{}  Enregistrer", icon::FLOPPY_DISK)),
+                        egui::Button::new(tr!("{}  Enregistrer", icon::FLOPPY_DISK)),
                     )
                     .clicked();
             });
@@ -427,7 +427,7 @@ impl LoanForm {
             self.selected = Some(k);
             let p = self.profiles[k].clone();
             self.apply_profile(&p);
-            self.message = Some(format!("Profil « {} » chargé", p.name));
+            self.message = Some(tr!("Profil « {} » chargé", p.name));
         }
         if save && let Some(loan) = self.loan {
             let name = self.profile_name.trim().to_string();
@@ -449,14 +449,14 @@ impl LoanForm {
             self.profiles.sort_by_key(|p| p.name.to_lowercase());
             self.selected = self.profiles.iter().position(|p| p.name == name);
             if self.save_profiles() {
-                self.message = Some(format!("Profil « {name} » enregistré"));
+                self.message = Some(tr!("Profil « {} » enregistré", name));
             }
         }
         if let Some(k) = delete {
             let removed = self.profiles.remove(k);
             self.selected = None;
             if self.save_profiles() {
-                self.message = Some(format!("Profil « {} » supprimé", removed.name));
+                self.message = Some(tr!("Profil « {} » supprimé", removed.name));
             }
         }
     }
@@ -474,9 +474,9 @@ impl LoanForm {
             ui.vertical_centered(|ui| {
                 ui.label(RichText::new(icon::HOUSE_LINE).size(44.0).color(pal.muted));
                 ui.label(
-                    RichText::new(
-                        "Complétez trois valeurs puis cliquez sur = en face de celle à calculer.",
-                    )
+                    RichText::new(tr!(
+                        "Complétez trois valeurs puis cliquez sur = en face de celle à calculer."
+                    ))
                     .color(pal.muted),
                 );
             });
@@ -492,16 +492,16 @@ impl LoanForm {
             stat(
                 ui,
                 tile,
-                "Mensualité",
+                tr!("Mensualité"),
                 &money(loan.payment),
                 pal.accent,
                 pal,
             );
-            stat(ui, tile, "Durée", &duration(loan.months), pal.fg, pal);
+            stat(ui, tile, tr!("Durée"), &duration(loan.months), pal.fg, pal);
             stat(
                 ui,
                 tile,
-                "Coût total",
+                tr!("Coût total"),
                 &cost.map(|c| money(c.total_paid)).unwrap_or_default(),
                 pal.fg,
                 pal,
@@ -509,7 +509,7 @@ impl LoanForm {
             stat(
                 ui,
                 tile,
-                "Intérêts",
+                tr!("Intérêts"),
                 &cost.map(|c| money(c.interest)).unwrap_or_default(),
                 pal.warning,
                 pal,
@@ -530,24 +530,20 @@ impl LoanForm {
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(
-                        format!("●  Capital {:.1} %", c.capital_percent).replace('.', ","),
-                    )
-                    .color(pal.accent),
+                    RichText::new(tr!("●  Capital {} %", percent(c.capital_percent)))
+                        .color(pal.accent),
                 );
                 ui.add_space(16.0);
                 ui.label(
-                    RichText::new(
-                        format!("●  Intérêts {:.1} %", c.interest_percent).replace('.', ","),
-                    )
-                    .color(pal.warning),
+                    RichText::new(tr!("●  Intérêts {} %", percent(c.interest_percent)))
+                        .color(pal.warning),
                 );
                 if let Some(last) = rows.last() {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            RichText::new(format!(
+                            RichText::new(tr!(
                                 "dernière échéance : {} {}",
-                                MONTHS[(last.month as usize - 1) % 12],
+                                month_name(last.month),
                                 last.year
                             ))
                             .color(pal.muted),
@@ -671,15 +667,20 @@ fn remaining_chart(
             Stroke::new(1.0, pal.muted.gamma_multiply(0.6)),
         );
         let (c, i) = points[k];
-        let when = if k == 0 {
-            "Au départ".to_string()
+        let text = if k == 0 {
+            tr!("Au départ : capital {} · intérêts {}", money(c), money(i))
         } else {
-            format!("Après l'échéance {}", k)
+            tr!(
+                "Après l'échéance {} : capital {} · intérêts {}",
+                k,
+                money(c),
+                money(i)
+            )
         };
         painter.text(
             pos2(plot.left() + 8.0, plot.top() + 4.0),
             egui::Align2::LEFT_TOP,
-            format!("{when} : capital {} · intérêts {}", money(c), money(i)),
+            text,
             egui::FontId::proportional(12.5),
             pal.fg,
         );
@@ -707,10 +708,20 @@ fn amortization_table(
     };
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 0.0;
-        header(ui, cols[0], egui::Align::Max, "N°");
+        header(ui, cols[0], egui::Align::Max, tr!("N°"));
         ui.add_space(16.0);
-        header(ui, cols[1] - 16.0, egui::Align::Min, "Échéance");
-        for t in ["Mensualité", "Capital", "Intérêts", "Restant dû"] {
+        header(
+            ui,
+            cols[1] - 16.0,
+            egui::Align::Min,
+            trc!("crédit", "Échéance"),
+        );
+        for t in [
+            tr!("Mensualité"),
+            tr!("Capital"),
+            tr!("Intérêts"),
+            tr!("Restant dû"),
+        ] {
             header(ui, amount_w, egui::Align::Max, t);
         }
     });
@@ -725,9 +736,9 @@ fn amortization_table(
                 let r = &rows[k];
                 let (rect, response) =
                     ui.allocate_exact_size(vec2(width - 16.0, ROW), egui::Sense::click());
-                let response = response.on_hover_text(
-                    "Double-clic : repartir de cette échéance (capital restant, durée restante)",
-                );
+                let response = response.on_hover_text(tr!(
+                    "Double-clic : repartir de cette échéance (capital restant, durée restante)"
+                ));
                 if response.hovered() {
                     ui.painter()
                         .rect_filled(rect, 6.0, pal.bg_highlight.gamma_multiply(0.5));
@@ -763,11 +774,7 @@ fn amortization_table(
                     ui,
                     cols[1] - 16.0,
                     egui::Align::Min,
-                    RichText::new(format!(
-                        "{} {}",
-                        MONTHS[(r.month as usize - 1) % 12],
-                        r.year
-                    )),
+                    RichText::new(format!("{} {}", month_name(r.month), r.year)),
                 );
                 ui_kit::cell(
                     ui,
@@ -817,34 +824,46 @@ fn stat(ui: &mut egui::Ui, width: f32, title: &str, value: &str, color: Color32,
 
 fn export_rows(loan: &Loan, year: i32, month: u32) -> Vec<Vec<Cell>> {
     let mut rows = vec![
-        vec![Cell::Bold("Capital".into()), Cell::Money(loan.capital)],
         vec![
-            Cell::Bold("Taux annuel (%)".into()),
+            Cell::Bold(trc!("montant emprunté", "Capital").into()),
+            Cell::Money(loan.capital),
+        ],
+        vec![
+            Cell::Bold(tr!("Taux annuel (%)").into()),
             Cell::Number(loan.annual_rate),
         ],
-        vec![Cell::Bold("Mensualités".into()), Cell::Number(loan.months)],
-        vec![Cell::Bold("Mensualité".into()), Cell::Money(loan.payment)],
         vec![
-            Cell::Bold("Valeur résiduelle".into()),
+            Cell::Bold(tr!("Mensualités").into()),
+            Cell::Number(loan.months),
+        ],
+        vec![
+            Cell::Bold(tr!("Mensualité").into()),
+            Cell::Money(loan.payment),
+        ],
+        vec![
+            Cell::Bold(tr!("Valeur résiduelle").into()),
             Cell::Money(loan.residual),
         ],
     ];
     if let Some(c) = loan.cost() {
         rows.push(vec![
-            Cell::Bold("Coût total".into()),
+            Cell::Bold(tr!("Coût total").into()),
             Cell::Money(c.total_paid),
         ]);
-        rows.push(vec![Cell::Bold("Intérêts".into()), Cell::Money(c.interest)]);
+        rows.push(vec![
+            Cell::Bold(tr!("Intérêts").into()),
+            Cell::Money(c.interest),
+        ]);
     }
     rows.push(vec![Cell::Empty]);
     rows.push(
         [
-            "N°",
-            "Échéance",
-            "Mensualité",
-            "Capital",
-            "Intérêts",
-            "Restant dû",
+            tr!("N°"),
+            trc!("crédit", "Échéance"),
+            tr!("Mensualité"),
+            tr!("Capital"),
+            tr!("Intérêts"),
+            tr!("Restant dû"),
         ]
         .map(|t| Cell::Bold(t.into()))
         .into_iter()
@@ -876,24 +895,24 @@ fn index(field: LoanUnknown) -> usize {
 
 fn label(field: LoanUnknown) -> &'static str {
     match field {
-        LoanUnknown::Capital => "Capital",
-        LoanUnknown::Rate => "Taux annuel %",
-        LoanUnknown::Months => "Mensualités",
-        LoanUnknown::Payment => "Mensualité",
+        LoanUnknown::Capital => trc!("montant emprunté", "Capital"),
+        LoanUnknown::Rate => tr!("Taux annuel %"),
+        LoanUnknown::Months => tr!("Mensualités"),
+        LoanUnknown::Payment => tr!("Mensualité"),
     }
 }
 
-fn hint(field: LoanUnknown) -> &'static str {
+fn hint(field: LoanUnknown) -> String {
     match field {
-        LoanUnknown::Capital => "150 000",
-        LoanUnknown::Rate => "3,5",
-        LoanUnknown::Months => "nombre : 240 = 20 ans",
-        LoanUnknown::Payment => "870",
+        LoanUnknown::Capital => crate::format::count(150_000),
+        LoanUnknown::Rate => format!("3{}5", i18n::decimal_separator()),
+        LoanUnknown::Months => tr!("nombre : 240 = 20 ans").to_string(),
+        LoanUnknown::Payment => "870".to_string(),
     }
 }
 
-/// Nombre saisi : espaces, `€` et `%` ignorés, virgule décimale, petits
-/// calculs (`20*12`).
+/// Nombre saisi : espaces, `€` et `%` ignorés, virgule décimale (point en
+/// anglais, virgule des milliers acceptée), petits calculs (`20*12`).
 fn parse(text: &str) -> Option<f64> {
     let cleaned: String = text
         .chars()
@@ -902,15 +921,11 @@ fn parse(text: &str) -> Option<f64> {
     if cleaned.is_empty() {
         return None;
     }
-    let normalized = cleaned.replace(',', ".");
-    normalized
+    // La calculatrice lit la virgule et le point selon la langue.
+    cleaned
         .parse::<f64>()
         .ok()
-        .or_else(|| {
-            crate::calculator::evaluate(&normalized)
-                .ok()
-                .map(|(v, _)| v)
-        })
+        .or_else(|| crate::calculator::evaluate(&cleaned).ok().map(|(v, _)| v))
         .filter(|v| v.is_finite())
 }
 
@@ -925,14 +940,19 @@ fn format_value(field: LoanUnknown, v: f64) -> String {
     }
 }
 
-/// `3.5000` → `3,5` ; `240.00` → `240`.
+/// `3.5000` → `3,5` (`3.5` en anglais) ; `240.00` → `240`.
 fn trim_decimals(text: &str) -> String {
     let t = if text.contains('.') {
         text.trim_end_matches('0').trim_end_matches('.')
     } else {
         text
     };
-    t.replace('.', ",")
+    t.replace('.', &i18n::decimal_separator().to_string())
+}
+
+/// Pourcentage à une décimale, sans le signe : `72,4`.
+fn percent(v: f64) -> String {
+    format!("{v:.1}").replace('.', &i18n::decimal_separator().to_string())
 }
 
 fn money(v: f64) -> String {
@@ -944,7 +964,7 @@ fn money(v: f64) -> String {
 
 fn short(v: f64) -> String {
     if v >= 1_000_000.0 {
-        format!("{:.1} M", v / 1_000_000.0).replace('.', ",")
+        format!("{:.1} M", v / 1_000_000.0).replace('.', &i18n::decimal_separator().to_string())
     } else if v >= 1_000.0 {
         format!("{:.0} k", v / 1_000.0)
     } else {
@@ -957,13 +977,18 @@ fn duration(months: f64) -> String {
     let (y, m) = (whole / 12, whole % 12);
     let years = match y {
         0 => String::new(),
-        1 => "1 an".into(),
-        _ => format!("{y} ans"),
+        _ => trn!(y, "{} an", "{} ans"),
+    };
+    // « mois » est invariable en français : le singulier anglais a sa clé.
+    let months = if m == 1 {
+        trc!("singulier", "{} mois", m)
+    } else {
+        tr!("{} mois", m)
     };
     match (years.is_empty(), m) {
-        (true, _) => format!("{m} mois"),
+        (true, _) => months,
         (false, 0) => years,
-        (false, _) => format!("{years} {m} mois"),
+        (false, _) => format!("{years} {months}"),
     }
 }
 
@@ -994,6 +1019,26 @@ mod tests {
         assert_eq!(trim_decimals("240.00"), "240");
         assert_eq!(duration(240.0), "20 ans");
         assert_eq!(duration(13.0), "1 an 1 mois");
+    }
+
+    #[test]
+    fn parses_english_numbers() {
+        i18n::with_lang(i18n::Lang::En, || {
+            assert_eq!(parse("150,000"), Some(150000.0));
+            assert_eq!(parse("1,234.56"), Some(1234.56));
+            assert_eq!(parse("3.5 %"), Some(3.5));
+            assert_eq!(parse("3,5"), Some(3.5));
+            assert_eq!(trim_decimals("3.5000"), "3.5");
+            assert_eq!(duration(240.0), "20 years");
+            assert_eq!(duration(13.0), "1 year 1 month");
+            assert_eq!(duration(26.0), "2 years 2 months");
+            let form = LoanForm::new();
+            assert_eq!(form.value(LoanUnknown::Capital), Some(150000.0));
+            assert_eq!(form.value(LoanUnknown::Rate), Some(3.5));
+            let loan = form.loan.expect("mensualité calculée");
+            assert!((loan.payment - 869.94).abs() < 0.01, "{}", loan.payment);
+            assert_eq!(form.value(LoanUnknown::Payment), Some(869.94));
+        });
     }
 
     #[test]

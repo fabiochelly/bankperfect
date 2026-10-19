@@ -14,7 +14,9 @@
 use std::sync::Arc;
 
 use bp_core::filter::TackFilter;
+use bp_core::i18n;
 use bp_core::model::{Amount, Date};
+use bp_core::{tr, tr_mark, trn};
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 use egui::{
     Align2, Color32, FontId, Galley, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
@@ -133,7 +135,7 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
         ui,
         inner.min,
         icon::CHECKS,
-        "En banque",
+        tr!("En banque"),
         pal.accent,
         inner.width(),
     );
@@ -176,7 +178,7 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
         ui,
         inner.min,
         icon::CLOCK,
-        "À venir",
+        tr!("À venir"),
         pal.future,
         inner.width(),
     );
@@ -248,7 +250,7 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
         ui,
         inner.min,
         icon::WALLET,
-        "Solde final",
+        tr!("Solde final"),
         hero_color,
         chips_left - inner.left() - 8.0,
     );
@@ -409,19 +411,19 @@ fn pointed_ring(ui: &Ui, rect: Rect, doc: &OpenDoc, pal: &Palette) {
     ui.painter().text(
         center - vec2(0.0, 3.0),
         Align2::CENTER_CENTER,
-        format!("{percent} %"),
+        tr!("{} %", percent),
         FontId::new(11.0, semibold()),
         pal.fg,
     );
     ui.painter().text(
         center + vec2(0.0, 8.0),
         Align2::CENTER_CENTER,
-        "pointé",
+        tr!("pointé"),
         FontId::proportional(8.0),
         pal.muted,
     );
     ui.interact(rect, ui.id().with("pointed_ring"), Sense::hover())
-        .on_hover_text(format!(
+        .on_hover_text(tr!(
             "{} opérations pointées sur {} (dont {} rapprochées)",
             crate::format::count(done),
             crate::format::count(total),
@@ -438,8 +440,16 @@ fn pending_count(ui: &Ui, f: &Figures, pal: &Palette, max_width: f32) -> Arc<Gal
         ..Default::default()
     };
     match f.totals.pending_count {
-        0 => job.append("rien à pointer", 0.0, small.clone()),
+        0 => job.append(tr!("rien à pointer"), 0.0, small.clone()),
         n => {
+            // Le nombre en grand, à sa place dans la phrase traduite.
+            let template = i18n::tr(if i18n::singular(n as i64) {
+                tr_mark!("{} non pointée")
+            } else {
+                tr_mark!("{} non pointées")
+            });
+            let (before, after) = template.split_once("{}").unwrap_or(("", template));
+            job.append(before, 0.0, small.clone());
             job.append(
                 &crate::format::count(n),
                 0.0,
@@ -449,18 +459,16 @@ fn pending_count(ui: &Ui, f: &Figures, pal: &Palette, max_width: f32) -> Arc<Gal
                     ..Default::default()
                 },
             );
-            let label = if n == 1 {
-                " non pointée"
-            } else {
-                " non pointées"
-            };
-            job.append(label, 0.0, small.clone());
+            job.append(after, 0.0, small.clone());
         }
     }
     let (future_sum, future_count) = f.future_pending;
     if future_count > 0 {
         job.append(
-            &format!(" · {} à venir", money_compact(future_sum, &f.currency)),
+            &format!(
+                " · {}",
+                tr!("{} à venir", money_compact(future_sum, &f.currency))
+            ),
             0.0,
             TextFormat {
                 color: pal.muted,
@@ -697,9 +705,6 @@ fn lush_chart(
 /// ans, années au-delà. Le repère qui contient aujourd'hui est marqué.
 fn axis_labels(start: Date, end: Date) -> Vec<(Date, String, bool)> {
     use chrono::Datelike;
-    const MONTHS: [&str; 12] = [
-        "Jan", "Fév", "Mar", "Avr", "Mai", "Juin", "Juil", "Août", "Sep", "Oct", "Nov", "Déc",
-    ];
     let today = Date::today();
     let span = end.0 - start.0;
     let mut out = Vec::new();
@@ -729,7 +734,7 @@ fn axis_labels(start: Date, end: Date) -> Vec<(Date, String, bool)> {
                 .unwrap_or(first.0 + 30);
             let mid = Date((first.0.max(start.0) + next.min(end.0 + 1)) / 2);
             let current = today.0 >= first.0 && today.0 < next;
-            out.push((mid, MONTHS[(m - 1) as usize].to_string(), current));
+            out.push((mid, i18n::month_abbr((m - 1) as usize).to_string(), current));
             (y, m) = (ny, nm);
         }
     } else {
@@ -802,7 +807,7 @@ fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     let used = card_text(
         ui,
         r,
-        (icon::CHECKS, "En banque", pal.accent),
+        (icon::CHECKS, tr!("En banque"), pal.accent),
         f.totals.pointed,
         pal.fg,
         "pointed_value",
@@ -834,15 +839,19 @@ fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     // À venir.
     let (block, r) = (blocks[1], inner(blocks[1]));
     let count = match f.totals.pending_count {
-        0 => "aucune opération à pointer".to_string(),
-        1 => "1 opération non pointée".to_string(),
-        n => format!("{} opérations non pointées", crate::format::count(n)),
+        0 => tr!("aucune opération à pointer").to_string(),
+        n => trn!(
+            n,
+            "{1} opération non pointée",
+            "{1} opérations non pointées",
+            crate::format::count(n)
+        ),
     };
     let (future_sum, future_count) = f.future_pending;
     let future = if future_count == 0 {
-        "aucune opération future".to_string()
+        tr!("aucune opération future").to_string()
     } else {
-        format!(
+        tr!(
             "dont {} à venir ({})",
             money_compact(future_sum, &f.currency),
             crate::format::count(future_count)
@@ -851,7 +860,7 @@ fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     let used = card_text(
         ui,
         r,
-        (icon::CLOCK, "À venir", pal.future),
+        (icon::CLOCK, tr!("À venir"), pal.future),
         f.totals.pending,
         pal.future,
         "pending_value",
@@ -888,7 +897,7 @@ fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
     let used = card_text(
         ui,
         r,
-        (icon::WALLET, "Solde final", balance_color),
+        (icon::WALLET, tr!("Solde final"), balance_color),
         f.totals.balance,
         if f.totals.balance.is_negative() {
             pal.negative
@@ -1009,10 +1018,10 @@ fn card(ui: &Ui, rect: Rect, lift: f32) {
 /// Infobulle du libellé « En banque » : c'est le solde pointé.
 fn bank_tooltip(ui: &Ui, rect: Rect) {
     ui.interact(rect, ui.id().with("bank_caption"), Sense::hover())
-        .on_hover_text(
+        .on_hover_text(tr!(
             "Solde pointé : les opérations déjà passées sur le compte bancaire,\n\
-             c'est-à-dire ce que la banque affiche aujourd'hui.",
-        );
+             c'est-à-dire ce que la banque affiche aujourd'hui."
+        ));
 }
 
 /// Emplacement du bouton de bascule : en haut à droite de `area`.
@@ -1041,9 +1050,9 @@ fn layout_toggle(ui: &Ui, rect: Rect, split: bool, pal: &Palette) -> bool {
     );
     response
         .on_hover_text(if split {
-            "Regrouper en équation"
+            tr!("Regrouper en équation")
         } else {
-            "Séparer en trois cartes"
+            tr!("Séparer en trois cartes")
         })
         .clicked()
 }
@@ -1140,7 +1149,7 @@ fn amount_galley(
 
 fn amount_job(text: &str, size: f32, color: Color32) -> LayoutJob {
     let (main, unit) = text.split_once('\u{a0}').unwrap_or((text, ""));
-    let (int, frac) = main.split_at(main.rfind(',').unwrap_or(main.len()));
+    let (int, frac) = main.split_at(main.rfind(i18n::decimal_separator()).unwrap_or(main.len()));
     let big = TextFormat {
         font_id: FontId::new(size, semibold()),
         color,
@@ -1234,11 +1243,12 @@ fn trend_line(
     };
     let sign = if delta.is_negative() { "" } else { "+" };
     let percent = if base.0 != 0 {
-        format!(
-            "  {sign}{:.1} %",
+        let value = format!(
+            "{sign}{:.1}",
             delta.0 as f64 / base.0.unsigned_abs() as f64 * 100.0
         )
-        .replace('.', ",")
+        .replace('.', &i18n::decimal_separator().to_string());
+        format!("  {}", tr!("{} %", value))
     } else {
         String::new()
     };
@@ -1288,7 +1298,7 @@ fn balance_trend(
     )
     .unwrap_or_else(|| {
         (
-            format!("{} stable {}", icon::ARROW_RIGHT, period_label(window)),
+            tr!("{} stable {}", icon::ARROW_RIGHT, period_label(window)),
             pal.muted,
         )
     })
@@ -1296,9 +1306,10 @@ fn balance_trend(
 
 fn forecast_line(f: &Figures, end: Date, pal: &Palette) -> (String, Color32) {
     (
-        format!(
-            "prévu {} au {end}",
-            money_compact(balance_at(&f.series, end), &f.currency)
+        tr!(
+            "prévu {} au {}",
+            money_compact(balance_at(&f.series, end), &f.currency),
+            end
         ),
         pal.muted,
     )
@@ -1307,24 +1318,25 @@ fn forecast_line(f: &Figures, end: Date, pal: &Palette) -> (String, Color32) {
 fn reconciled_line(f: &Figures, pal: &Palette) -> (String, Color32) {
     match f.totals.last_reconciled {
         Some(date) => (
-            format!(
-                "{} {} rapproché au {date}",
+            tr!(
+                "{} {} rapproché au {}",
                 icon::SEAL_CHECK,
-                money_compact(f.totals.reconciled, &f.currency)
+                money_compact(f.totals.reconciled, &f.currency),
+                date
             ),
             pal.muted,
         ),
-        None => ("aucun rapprochement".into(), pal.muted),
+        None => (tr!("aucun rapprochement").into(), pal.muted),
     }
 }
 
 fn period_label(window: ChartWindow) -> &'static str {
     match window {
-        ChartWindow::Month => "sur 1 mois",
-        ChartWindow::SixMonths => "sur 6 mois",
-        ChartWindow::Year => "sur 1 an",
-        ChartWindow::FiveYears => "sur 5 ans",
-        ChartWindow::All => "depuis l'origine",
+        ChartWindow::Month => tr!("sur 1 mois"),
+        ChartWindow::SixMonths => tr!("sur 6 mois"),
+        ChartWindow::Year => tr!("sur 1 an"),
+        ChartWindow::FiveYears => tr!("sur 5 ans"),
+        ChartWindow::All => tr!("depuis l'origine"),
     }
 }
 
@@ -1439,9 +1451,16 @@ fn pending_timeline(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, currency: &str, 
             }
         }
         response.on_hover_text(format!(
-            "Semaine du {monday} au {sunday}\n{} non pointée(s) : {}\nCliquer pour filtrer",
-            crate::format::count(*n),
-            money(*sum, currency)
+            "{}\n{}\n{}",
+            tr!("Semaine du {} au {}", monday, sunday),
+            trn!(
+                *n,
+                "{1} non pointée : {2}",
+                "{1} non pointées : {2}",
+                crate::format::count(*n),
+                money(*sum, currency)
+            ),
+            tr!("Cliquer pour filtrer")
         ));
     }
     let painter = ui.painter();
@@ -1565,7 +1584,7 @@ fn balance_chart(
         painter.text(
             pos2(rect.center().x, y - 7.0),
             Align2::CENTER_BOTTOM,
-            "aucun mouvement sur la période",
+            tr!("aucun mouvement sur la période"),
             FontId::proportional(10.5),
             pal.muted,
         );
@@ -1699,12 +1718,11 @@ fn chart_interaction(
             Stroke::new(1.0, pal.fg.gamma_multiply(0.3)),
         );
         painter.circle(pos2(x, y), 4.5, color, Stroke::new(2.0, card_fill(ui)));
-        let future = if date > today {
-            "  · prévisionnel"
+        let text = if date > today {
+            tr!("{}  ·  {}  · prévisionnel", date, money(value, currency))
         } else {
-            ""
+            format!("{date}  ·  {}", money(value, currency))
         };
-        let text = format!("{date}  ·  {}{future}", money(value, currency));
         let galley =
             ui.painter()
                 .layout_no_wrap(text, egui::TextStyle::Small.resolve(ui.style()), pal.fg);
@@ -1718,5 +1736,29 @@ fn chart_interaction(
         ui.painter()
             .galley(tip.min + vec2(7.0, 4.0), galley, pal.fg);
         response.on_hover_cursor(egui::CursorIcon::Crosshair);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn parts(text: &str) -> Vec<String> {
+        let job = amount_job(text, 20.0, Color32::WHITE);
+        job.sections
+            .iter()
+            .map(|s| job.text[s.byte_range.start.0..s.byte_range.end.0].to_string())
+            .collect()
+    }
+
+    #[test]
+    fn splits_cents_with_the_decimal_separator() {
+        assert_eq!(
+            parts("1\u{202f}234,56\u{a0}€"),
+            ["1\u{202f}234", ",56", "€"]
+        );
+        i18n::with_lang(i18n::Lang::En, || {
+            assert_eq!(parts("€1,234.56"), ["€1,234", ".56"]);
+        });
     }
 }

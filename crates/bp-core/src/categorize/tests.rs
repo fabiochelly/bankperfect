@@ -168,3 +168,210 @@ fn words_seen_on_income_say_little_about_an_expense() {
     let best = c.suggest(&Query::of(&o)).best().cloned().unwrap();
     assert_eq!(best.category, 6, "{best:?}");
 }
+
+mod english {
+    use super::*;
+    use crate::i18n::{Lang, with_lang};
+
+    /// Nouveau fichier créé en anglais : catégories standard anglaises.
+    fn english_doc() -> Document {
+        with_lang(Lang::En, || {
+            crate::manage::new_document("Test", Amount::ZERO)
+        })
+    }
+
+    fn suggest(c: &Categorizer, payee: &str, mode: StandardMode, cents: i64) -> Option<Candidate> {
+        let o = Operation {
+            mode: Mode::Standard(mode),
+            ..op(0, 0, payee, cents, None)
+        };
+        with_lang(Lang::En, || c.suggest(&Query::of(&o)).best().cloned())
+    }
+
+    #[test]
+    fn english_statements_on_the_english_standard_list() {
+        let d = english_doc();
+        let c = with_lang(Lang::En, || Categorizer::new(&d));
+        use StandardMode::*;
+        let cases = [
+            (
+                "CARD PAYMENT TO TESCO STORES 2345 ON 12 MAR",
+                Carte,
+                -4_520,
+                "Food > Groceries",
+            ),
+            (
+                "DIRECT DEBIT BRITISH GAS",
+                Prelevement,
+                -8_500,
+                "Housing > Electricity & gas",
+            ),
+            (
+                "POS DEBIT STARBUCKS #1234 SEATTLE WA",
+                Carte,
+                -575,
+                "Food > Restaurants",
+            ),
+            (
+                "NETFLIX.COM",
+                Carte,
+                -1_549,
+                "Subscriptions > Streaming & news",
+            ),
+            (
+                "SALARY ACME LTD",
+                VirementRecu,
+                300_000,
+                "Income > Salary & bonuses",
+            ),
+            (
+                "HMRC SELF ASSESSMENT",
+                VirementEmis,
+                -150_000,
+                "Taxes > Income tax",
+            ),
+            (
+                "AMAZON MKTPLACE PMTS",
+                Carte,
+                -2_999,
+                "Shopping > Other purchases",
+            ),
+            ("CHEVRON 0091234", Carte, -5_200, "Transportation > Fuel"),
+            (
+                "ROCKET MORTGAGE",
+                Prelevement,
+                -180_000,
+                "Housing > Mortgage",
+            ),
+            ("WALGREENS #4421", Carte, -1_299, "Health > Pharmacy"),
+            (
+                "ATM WITHDRAWAL",
+                RetraitDab,
+                -6_000,
+                "Banking & insurance > Cash withdrawals",
+            ),
+            (
+                "IRS TREAS 310 TAX REF",
+                VirementRecu,
+                85_000,
+                "Taxes > Income tax",
+            ),
+            (
+                "INTEREST PAID",
+                VirementRecu,
+                312,
+                "Income > Investment income",
+            ),
+        ];
+        for (payee, mode, cents, expected) in cases {
+            let best = suggest(&c, payee, mode, cents).unwrap_or_else(|| panic!("{payee}"));
+            assert_eq!(
+                d.category_label(best.category).as_deref(),
+                Some(expected),
+                "{payee}"
+            );
+            assert_eq!(best.source, Source::Merchant, "{payee}");
+            // Enseigne reconnue, catégorie au nom standard : même confiance
+            // qu'en français pour la même situation.
+            assert!(
+                (0.8..=0.9).contains(&best.confidence),
+                "{payee} {}",
+                best.confidence
+            );
+        }
+        let reason = suggest(&c, "NETFLIX.COM", Carte, -1_549).unwrap().reason;
+        assert_eq!(reason, "“netflix com” recognized");
+    }
+
+    #[test]
+    fn english_history_is_explained_in_english() {
+        let mut d = english_doc();
+        let groceries = d
+            .categories
+            .iter()
+            .find(|c| c.name == "Groceries")
+            .unwrap()
+            .id;
+        d.accounts[0].operations = (0..4)
+            .map(|i| {
+                op(
+                    i,
+                    i as i32,
+                    "CARD PAYMENT TO TESCO 12 MAR",
+                    -3_000,
+                    Some(groceries),
+                )
+            })
+            .collect();
+        let c = with_lang(Lang::En, || Categorizer::new(&d));
+        let best = suggest(
+            &c,
+            "CARD PAYMENT TO TESCO ON 3 APR",
+            StandardMode::Carte,
+            -2_800,
+        )
+        .unwrap();
+        assert_eq!((best.category, best.source), (groceries, Source::History));
+        assert!(best.confidence >= AUTO_THRESHOLD);
+        assert_eq!(best.reason, "4 transactions “tesco”");
+        assert_eq!(with_lang(Lang::En, || best.source.label()), "history");
+    }
+
+    #[test]
+    fn names_are_matched_in_the_language_of_the_file() {
+        // Liste standard anglaise : chaque générique retrouve sa catégorie.
+        let d = english_doc();
+        let c = Categorizer::without_history(&d);
+        for g in GENERICS {
+            let (id, confidence) = c
+                .category_for_generic(g.slug)
+                .unwrap_or_else(|| panic!("{}", g.slug));
+            let label = d.category_label(id).unwrap();
+            assert!(label.ends_with(g.name_en), "{} → {label}", g.slug);
+            assert!(confidence >= 0.95, "{} → {confidence}", g.slug);
+        }
+        // Catégories « maison » en anglais, à la Quicken.
+        let mut custom = english_doc();
+        let names = [
+            ("Auto & Transport", false),
+            ("Gas", true),
+            ("Parking", true),
+            ("Bills & Utilities", false),
+            ("Mobile Phone", true),
+            ("Food & Dining", false),
+            ("Groceries", true),
+            ("Coffee Shops", true),
+            ("Paycheck", false),
+        ];
+        custom.categories = names
+            .iter()
+            .enumerate()
+            .map(|(i, (name, child))| Category {
+                id: i as u32,
+                name: name.to_string(),
+                is_child: *child,
+            })
+            .collect();
+        let c = Categorizer::without_history(&custom);
+        let mapped = |slug: &str| c.category_for_generic(slug).map(|m| m.0);
+        assert_eq!(mapped("transports.carburant"), Some(1));
+        assert_eq!(mapped("transports.peages"), Some(2));
+        assert_eq!(mapped("abonnements.telecom"), Some(4));
+        assert_eq!(mapped("alimentation.courses"), Some(6));
+        assert_eq!(mapped("alimentation.restaurants"), Some(7));
+        assert_eq!(mapped("revenus.salaires"), Some(8));
+        // Un fichier français garde ses rapprochements, sans faux amis :
+        // « Fuel » (fioul) n'y est pas du carburant.
+        let mut french = doc(Vec::new());
+        french.categories.push(Category {
+            id: 12,
+            name: "Fuel".into(),
+            is_child: true,
+        });
+        let c = with_lang(Lang::En, || Categorizer::without_history(&french));
+        assert_eq!(
+            c.category_for_generic("transports.carburant").map(|m| m.0),
+            Some(11)
+        );
+    }
+}

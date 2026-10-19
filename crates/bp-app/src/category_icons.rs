@@ -16,7 +16,12 @@ use egui_phosphor::regular as icon;
 const RULES: &[(&[&str], &str)] = &[
     // Activités des enfants (avant « loisirs »).
     (
-        &["extrascolaire", "extrascolaires", "periscolaire"],
+        &[
+            "extrascolaire",
+            "extrascolaires",
+            "periscolaire",
+            "extracurricular",
+        ],
         icon::PUZZLE_PIECE,
     ),
     // Alimentation et restauration
@@ -38,7 +43,10 @@ const RULES: &[(&[&str], &str)] = &[
     ),
     (&["pizza"], icon::PIZZA),
     (&["cafe", "coffee", "the", "salon"], icon::COFFEE),
-    (&["boulang", "patiss", "pain", "viennois"], icon::BREAD),
+    (
+        &["boulang", "patiss", "pain", "viennois", "bake"],
+        icon::BREAD,
+    ),
     (&["vin", "cave", "alcool", "spiritueux", "wine"], icon::WINE),
     (&["biere", "bar", "pub", "beer"], icon::BEER_STEIN),
     (
@@ -48,6 +56,7 @@ const RULES: &[(&[&str], &str)] = &[
             "hypermarche",
             "course",
             "grocer",
+            "supermarket",
             "marche",
             "primeur",
         ],
@@ -68,13 +77,19 @@ const RULES: &[(&[&str], &str)] = &[
         icon::LIGHTNING,
     ),
     (
-        &["gaz", "gdf", "chauffage", "fioul", "fuel", "heating"],
+        &["gaz", "gdf", "chauffage", "fioul", "heating"],
         icon::FLAME,
     ),
     (&["eau", "water", "veolia", "suez"], icon::DROP),
-    (&["charge", "copro", "syndic", "foncier"], icon::BUILDINGS),
     (
         &[
+            "charge", "copro", "syndic", "foncier", "hoa", "condo", "strata",
+        ],
+        icon::BUILDINGS,
+    ),
+    (
+        &[
+            "home improvement",
             "travaux",
             "bricol",
             "renov",
@@ -107,7 +122,14 @@ const RULES: &[(&[&str], &str)] = &[
     (&["luminaire", "lampe"], icon::LAMP),
     (&["jardin", "plante", "fleur", "garden"], icon::PLANT),
     (
-        &["menage", "nettoyage", "pressing", "laverie", "cleaning"],
+        &[
+            "menage",
+            "nettoyage",
+            "pressing",
+            "laverie",
+            "cleaning",
+            "home services",
+        ],
         icon::SPARKLE,
     ),
     (&["demenage", "moving"], icon::TRUCK),
@@ -153,7 +175,15 @@ const RULES: &[(&[&str], &str)] = &[
         icon::LAPTOP,
     ),
     (
-        &["hifi", "video", "televi", "tv", "television", "audio"],
+        &[
+            "hifi",
+            "video",
+            "televi",
+            "tv",
+            "television",
+            "audio",
+            "electronic",
+        ],
         icon::TELEVISION,
     ),
     (&["photo", "camera"], icon::CAMERA),
@@ -191,7 +221,10 @@ const RULES: &[(&[&str], &str)] = &[
         ],
         icon::STETHOSCOPE,
     ),
-    (&["dentiste", "dentaire", "orthodont"], icon::TOOTH),
+    (
+        &["dentiste", "dentaire", "orthodont", "dental"],
+        icon::TOOTH,
+    ),
     (
         &["optique", "opticien", "lunette", "lentille"],
         icon::EYEGLASSES,
@@ -201,14 +234,24 @@ const RULES: &[(&[&str], &str)] = &[
         icon::HOSPITAL,
     ),
     (&["vaccin", "analyse", "laboratoire", "labo"], icon::SYRINGE),
-    (&["mutuelle", "secu", "cpam", "ameli"], icon::HEARTBEAT),
     (
-        &["sante", "health", "soin", "kine", "osteo", "psy"],
-        icon::FIRST_AID,
+        &["mutuelle", "secu", "cpam", "ameli", "health insurance"],
+        icon::HEARTBEAT,
     ),
-    // Assurances, impôts, banque
     (
         &[
+            "sante", "health", "soin", "kine", "osteo", "psy", "physio", "therap",
+        ],
+        icon::FIRST_AID,
+    ),
+    // Assurances, impôts, banque (le taxi d'abord : « tax » reconnaîtrait
+    // « taxi »).
+    (&["taxi", "uber", "vtc", "rideshare"], icon::TAXI),
+    (
+        &[
+            "home insurance",
+            "car insurance",
+            "auto insurance",
             "assurance",
             "insurance",
             "assur",
@@ -220,19 +263,44 @@ const RULES: &[(&[&str], &str)] = &[
         icon::SHIELD_CHECK,
     ),
     (
-        &["impot", "taxe", "tax", "tresor", "fisc", "urssaf", "amende"],
+        &[
+            "impot",
+            "taxe",
+            "tax",
+            "tresor",
+            "fisc",
+            "urssaf",
+            "amende",
+            "income tax",
+            "other taxes",
+        ],
         icon::RECEIPT,
     ),
     (
-        &["agios", "frais", "commission", "cotisation", "fee"],
+        &[
+            "agios",
+            "frais",
+            "commission",
+            "cotisation",
+            "fee",
+            "bank fees",
+        ],
         icon::PERCENT,
     ),
     (
-        &["credit", "pret", "emprunt", "loan", "mortgage", "echeance"],
+        &[
+            "credit", "pret", "emprunt", "loan", "mortgage", "echeance", "car loan",
+        ],
         icon::HAND_COINS,
     ),
     (
-        &["epargne", "livret", "saving", "placement"],
+        &[
+            "epargne",
+            "livret",
+            "saving",
+            "placement",
+            "retirement savings",
+        ],
         icon::PIGGY_BANK,
     ),
     (
@@ -296,7 +364,14 @@ const RULES: &[(&[&str], &str)] = &[
         icon::STAR,
     ),
     (
-        &["remboursement", "rbt", "refund", "avoir"],
+        &[
+            "remboursement",
+            "rbt",
+            "refund",
+            "avoir",
+            "reimburs",
+            "health reimburs",
+        ],
         icon::ARROW_U_UP_LEFT,
     ),
     (
@@ -308,6 +383,9 @@ const RULES: &[(&[&str], &str)] = &[
             "retraite",
             "chomage",
             "pole",
+            "benefit",
+            "allowance",
+            "retirement",
         ],
         icon::HAND_HEART,
     ),
@@ -315,7 +393,7 @@ const RULES: &[(&[&str], &str)] = &[
         &["vente", "facture", "client", "honoraire", "invoice"],
         icon::RECEIPT,
     ),
-    (&["loyer percu", "locatif"], icon::KEY),
+    (&["loyer percu", "locatif", "rental income"], icon::KEY),
     // Transport
     (
         &[
@@ -326,6 +404,8 @@ const RULES: &[(&[&str], &str)] = &[
             "diesel",
             "total",
             "fuel",
+            "petrol",
+            "gasoline",
         ],
         icon::GAS_PUMP,
     ),
@@ -338,7 +418,6 @@ const RULES: &[(&[&str], &str)] = &[
         &["parking", "stationnement", "horodateur", "garage"],
         icon::GARAGE,
     ),
-    (&["taxi", "uber", "vtc"], icon::TAXI),
     (&["train", "sncf", "tgv", "ter", "rail"], icon::TRAIN),
     (
         &["bus", "metro", "ratp", "tram", "navigo", "public", "commun"],
@@ -362,14 +441,24 @@ const RULES: &[(&[&str], &str)] = &[
         ],
         icon::CAR_PROFILE,
     ),
-    (&["transport", "deplacement", "trajet", "travel"], icon::CAR),
+    (&["transport", "deplacement", "trajet"], icon::CAR),
     // Loisirs, culture, sport
     (
-        &["vacance", "voyage", "sejour", "holiday", "trip", "tourisme"],
+        &[
+            "vacance", "voyage", "sejour", "holiday", "trip", "tourisme", "travel", "vacation",
+        ],
         icon::SUITCASE_ROLLING,
     ),
     (
-        &["hotel", "hebergement", "airbnb", "gite", "camping"],
+        &[
+            "hotel",
+            "hebergement",
+            "airbnb",
+            "gite",
+            "camping",
+            "lodging",
+            "accommodation",
+        ],
         icon::BED,
     ),
     (
@@ -380,7 +469,10 @@ const RULES: &[(&[&str], &str)] = &[
         &["musee", "exposition", "billet", "ticket", "parc"],
         icon::TICKET,
     ),
-    (&["jeu", "jouet", "game", "console"], icon::GAME_CONTROLLER),
+    (
+        &["jeu", "jouet", "game", "console", "toys"],
+        icon::GAME_CONTROLLER,
+    ),
     (&["sport", "gym", "fitness", "salle", "club"], icon::BARBELL),
     (
         &["foot", "tennis", "golf", "ski", "match"],
@@ -401,12 +493,21 @@ const RULES: &[(&[&str], &str)] = &[
         icon::PALETTE,
     ),
     (
-        &["sortie", "loisir", "leisure", "divertissement"],
+        &[
+            "sortie",
+            "loisir",
+            "leisure",
+            "divertissement",
+            "entertain",
+            "event",
+        ],
         icon::BALLOON,
     ),
     // Personnes et famille
     (
-        &["enfant", "bebe", "creche", "nounou", "garde", "baby", "kid"],
+        &[
+            "enfant", "bebe", "creche", "nounou", "garde", "baby", "kid", "child",
+        ],
         icon::BABY,
     ),
     (
@@ -419,6 +520,8 @@ const RULES: &[(&[&str], &str)] = &[
             "formation",
             "cours",
             "education",
+            "school",
+            "tuition",
         ],
         icon::GRADUATION_CAP,
     ),
@@ -436,7 +539,7 @@ const RULES: &[(&[&str], &str)] = &[
     ),
     (&["cadeau", "gift", "noel"], icon::GIFT),
     (
-        &["don", "association", "charite", "donation"],
+        &["don", "association", "charit", "donation"],
         icon::HAND_HEART,
     ),
     (&["coiffeur", "coiffure", "barbier", "hair"], icon::SCISSORS),
@@ -465,7 +568,15 @@ const RULES: &[(&[&str], &str)] = &[
     (&["famille", "family", "personnel"], icon::USERS),
     // Divers
     (
-        &["shopping", "achat", "magasin", "boutique", "fnac", "darty"],
+        &[
+            "shopping",
+            "achat",
+            "magasin",
+            "boutique",
+            "fnac",
+            "darty",
+            "other purchases",
+        ],
         icon::SHOPPING_BAG,
     ),
     (
@@ -573,13 +684,48 @@ mod tests {
 
 #[cfg(test)]
 mod standard_list {
+    use super::*;
+
     #[test]
     fn every_standard_category_has_an_icon() {
         let missing: Vec<&str> = bp_core::categorize::taxonomy::GENERICS
             .iter()
-            .map(|g| g.name)
-            .filter(|name| super::icon_for(name).is_none())
+            .flat_map(|g| [g.name, g.name_en])
+            .filter(|name| icon_for(name).is_none())
             .collect();
         assert!(missing.is_empty(), "sans icône : {missing:?}");
+    }
+
+    #[test]
+    fn english_names_get_fitting_icons() {
+        let cases = [
+            ("Groceries", icon::SHOPPING_CART),
+            ("Bakery & market", icon::BREAD),
+            ("Rent", icon::HOUSE_LINE),
+            ("Mortgage", icon::HAND_COINS),
+            ("Electricity & gas", icon::LIGHTNING),
+            ("Home improvement", icon::HAMMER),
+            ("Dental & vision", icon::TOOTH),
+            ("Health insurance", icon::HEARTBEAT),
+            ("Childcare", icon::BABY),
+            ("School & lunches", icon::GRADUATION_CAP),
+            ("Lodging", icon::BED),
+            ("Car loan & lease", icon::HAND_COINS),
+            ("Retirement savings", icon::PIGGY_BANK),
+            ("Health reimbursements", icon::ARROW_U_UP_LEFT),
+            ("Charity & donations", icon::HAND_HEART),
+        ];
+        for (name, glyph) in cases {
+            assert_eq!(icon_for(name), Some(glyph), "{name}");
+        }
+        assert_eq!(icon_for("Fuel"), Some(icon::GAS_PUMP));
+        assert_eq!(icon_for("Taxi & rideshare"), Some(icon::TAXI));
+        assert_eq!(icon_for("Taxi & VTC"), Some(icon::TAXI));
+        assert_eq!(icon_for("Home insurance"), Some(icon::SHIELD_CHECK));
+        assert_eq!(icon_for("Income tax"), Some(icon::RECEIPT));
+        assert_eq!(icon_for("Bank fees"), Some(icon::PERCENT));
+        assert_eq!(icon_for("Travel & vacations"), Some(icon::SUITCASE_ROLLING));
+        assert_eq!(icon_for("Gastronomie"), None);
+        assert_eq!(icon_for("Toyota"), None);
     }
 }

@@ -5,6 +5,7 @@
 use crate::model::{
     Account, Amount, Category, CustomMode, Date, Document, Mode, Operation, StandardMode, Tack,
 };
+use crate::tr;
 
 // ─────────────────────────────── Comptes ───────────────────────────────
 
@@ -43,7 +44,7 @@ pub fn add_account(document: &mut Document, name: &str, initial: Amount) -> usiz
             mark_date: today,
             tack: Tack::Reconciled,
             mode: Mode::Standard(mode),
-            payee: "Solde initial".into(),
+            payee: tr!("Solde initial").into(),
             details: String::new(),
             category: None,
             amount: initial,
@@ -93,7 +94,7 @@ pub fn move_account(document: &mut Document, index: usize, up: bool) -> bool {
 /// Nom de compte unique (« Compte 2 », « Compte 3 »…) à partir d'une base.
 pub fn unique_account_name(document: &Document, base: &str) -> String {
     let base = if base.trim().is_empty() {
-        "Compte"
+        tr!("Compte")
     } else {
         base.trim()
     };
@@ -337,7 +338,7 @@ pub fn import_categories(document: &mut Document, text: &str) -> usize {
 pub fn add_mode(document: &mut Document, name: &str, debit: bool) -> String {
     let base = clean(name).trim().to_string();
     let base = if base.is_empty() {
-        "Nouveau mode".to_string()
+        tr!("Nouveau mode").to_string()
     } else {
         base
     };
@@ -432,17 +433,10 @@ pub fn delete_mode(document: &mut Document, index: usize, replacement: Mode) -> 
 
 /// Nouveau fichier de comptes : un compte « Courant » avec son solde
 /// initial et les catégories standard (celles de la catégorisation
-/// automatique, voir [`crate::categorize::taxonomy`]).
+/// automatique, voir [`crate::categorize::taxonomy`]), dans la langue en
+/// cours.
 pub fn new_document(name: &str, initial: Amount) -> Document {
-    let categories = crate::categorize::taxonomy::GENERICS
-        .iter()
-        .enumerate()
-        .map(|(id, g)| Category {
-            id: id as u32,
-            name: g.name.to_string(),
-            is_child: g.slug.contains('.'),
-        })
-        .collect();
+    let categories = crate::categorize::taxonomy::standard_categories();
     let mut document = Document {
         group_name: clean(name),
         guid: crate::v5_text::new_file_guid(),
@@ -456,7 +450,7 @@ pub fn new_document(name: &str, initial: Amount) -> Document {
         feature_data: Vec::new(),
         unknown_header: Vec::new(),
     };
-    add_account(&mut document, "Courant", initial);
+    add_account(&mut document, tr!("Courant"), initial);
     document
 }
 
@@ -493,8 +487,12 @@ pub fn reverse_currencies(document: &mut Document, index: usize) -> Amount {
             mark_date: today,
             tack: Tack::Reconciled,
             mode: Mode::Standard(mode),
-            payee: "Ajustement des arrondis de conversion".into(),
-            details: format!("Solde: {} {}", old_balance.format(2, ','), account.currency),
+            payee: tr!("Ajustement des arrondis de conversion").into(),
+            details: tr!(
+                "Solde: {} {}",
+                old_balance.format(2, crate::i18n::decimal_separator()),
+                account.currency
+            ),
             category: None,
             amount: adjustment,
             extra: Vec::new(),
@@ -695,6 +693,31 @@ mod tests {
             doc.category_label(1).as_deref(),
             Some("Alimentation > Courses")
         );
+    }
+
+    #[test]
+    fn new_document_in_english() {
+        use crate::i18n::{Lang, with_lang};
+        let doc = with_lang(Lang::En, || new_document("Family", Amount::ZERO));
+        assert_eq!(doc.accounts[0].name, "Checking");
+        assert_eq!(doc.accounts[0].operations[0].payee, "Opening balance");
+        assert_eq!(doc.categories.len(), 77);
+        assert_eq!(doc.category_label(1).as_deref(), Some("Food > Groceries"));
+        let names: Vec<&str> = doc.categories.iter().map(|c| c.name.as_str()).collect();
+        for name in [
+            "Rent",
+            "Mortgage",
+            "Restaurants",
+            "Fuel",
+            "Salary & bonuses",
+        ] {
+            assert!(names.contains(&name), "{name}");
+        }
+        // Les noms en français ne suivent pas : le fichier garde sa langue.
+        assert!(!names.contains(&"Loyer"));
+        let fr = with_lang(Lang::Fr, || new_document("Famille", Amount::ZERO));
+        assert_eq!(fr.accounts[0].name, "Courant");
+        assert_eq!(fr.categories[5].name, "Loyer");
     }
 
     #[test]

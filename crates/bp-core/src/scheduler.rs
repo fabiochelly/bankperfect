@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use crate::edit::mode_is_debit;
 use crate::legacy_pickle::{self, LegacyScheduleEntry};
 use crate::model::{Amount, Date, Document, FeatureData, Mode, Operation, StandardMode, Tack};
-use crate::{Error, Result};
+use crate::{Error, Result, tr};
 
 /// Clé de stockage des échéances dans le nouveau format.
 pub const FEATURE_KEY: &str = "scheduler.v6";
@@ -272,14 +272,14 @@ impl Schedule {
     pub fn interval_label(&self) -> String {
         let every = self.period.every;
         match (self.period.unit, every) {
-            (PeriodUnit::Days, 1) => "Tous les jours".into(),
-            (PeriodUnit::Weeks, 1) => "Toutes les semaines".into(),
-            (PeriodUnit::Months, 1) => "Tous les mois".into(),
-            (PeriodUnit::Years, 1) => "Tous les ans".into(),
-            (PeriodUnit::Days, n) => format!("Tous les {n} jours"),
-            (PeriodUnit::Weeks, n) => format!("Toutes les {n} semaines"),
-            (PeriodUnit::Months, n) => format!("Tous les {n} mois"),
-            (PeriodUnit::Years, n) => format!("Tous les {n} ans"),
+            (PeriodUnit::Days, 1) => tr!("Tous les jours").into(),
+            (PeriodUnit::Weeks, 1) => tr!("Toutes les semaines").into(),
+            (PeriodUnit::Months, 1) => tr!("Tous les mois").into(),
+            (PeriodUnit::Years, 1) => tr!("Tous les ans").into(),
+            (PeriodUnit::Days, n) => tr!("Tous les {n} jours", n = n),
+            (PeriodUnit::Weeks, n) => tr!("Toutes les {n} semaines", n = n),
+            (PeriodUnit::Months, n) => tr!("Tous les {n} mois", n = n),
+            (PeriodUnit::Years, n) => tr!("Tous les {n} ans", n = n),
         }
     }
 }
@@ -497,10 +497,10 @@ pub enum RefusalReason {
 impl RefusalReason {
     pub fn label(self) -> &'static str {
         match self {
-            Self::UnknownAccount => "compte inexistant",
-            Self::UnknownTransferAccount => "compte du transfert inexistant",
-            Self::SameAccount => "transfert vers le même compte",
-            Self::NullPeriod => "intervalle nul",
+            Self::UnknownAccount => tr!("compte inexistant"),
+            Self::UnknownTransferAccount => tr!("compte du transfert inexistant"),
+            Self::SameAccount => tr!("transfert vers le même compte"),
+            Self::NullPeriod => tr!("intervalle nul"),
         }
     }
 }
@@ -622,33 +622,40 @@ impl InsertionReport {
     /// Message récapitulatif, au format de `scheduler_auto.py`.
     pub fn summary(&self, document: &Document, schedules: &[Schedule]) -> String {
         let account_name = |i: usize| document.accounts.get(i).map_or("---", |a| a.name.as_str());
-        let mut text = String::from("Echéancier :\n\n");
+        let decimal = crate::i18n::decimal_separator();
+        let mut text = String::from(tr!("Echéancier :"));
+        text.push_str("\n\n");
         if !self.inserted.is_empty() {
-            text.push_str("Lignes insérées :\n");
+            text.push_str(tr!("Lignes insérées :"));
+            text.push('\n');
             for line in &self.inserted {
-                text.push_str(&format!(
-                    "Compte {} : échéance \"{}\" du {} (montant : {})\n",
+                text.push_str(&tr!(
+                    "Compte {} : échéance \"{}\" du {} (montant : {})",
                     account_name(line.account),
                     line.payee,
                     format_date(line.date),
-                    line.amount.format(2, ',')
+                    line.amount.format(2, decimal)
                 ));
+                text.push('\n');
             }
         }
         if !self.refused.is_empty() {
-            text.push_str("Lignes refusées :\n");
+            text.push_str(tr!("Lignes refusées :"));
+            text.push('\n');
             for refusal in &self.refused {
                 let Some(s) = schedules.get(refusal.schedule) else {
                     continue;
                 };
                 let account = account_index(document, &s.account).map_or("---", account_name);
-                text.push_str(&format!(
-                    "Compte {account} : échéance \"{}\" du {} (montant : {})... {}\n",
+                text.push_str(&tr!(
+                    "Compte {} : échéance \"{}\" du {} (montant : {})... {}",
+                    account,
                     s.payee,
                     format_date(s.next_date),
-                    s.amount.format(2, ','),
+                    s.amount.format(2, decimal),
                     refusal.reason.label()
                 ));
+                text.push('\n');
             }
         }
         text
@@ -834,7 +841,7 @@ pub fn forecast(
 
     let mut lines = vec![ForecastLine {
         date: last_date.unwrap_or(today),
-        payee: "Solde actuel".into(),
+        payee: tr!("Solde actuel").into(),
         amount: total,
         balance: total,
         kind: ForecastKind::CurrentBalance,
@@ -976,9 +983,10 @@ pub fn schedule_from_legacy(
     entry: &LegacyScheduleEntry,
 ) -> std::result::Result<Schedule, String> {
     let next_date = legacy_date(entry.nextdate).ok_or_else(|| {
-        format!(
-            "échéance « {} » : prochaine échéance invalide {:?}",
-            entry.tiers, entry.nextdate
+        tr!(
+            "échéance « {} » : prochaine échéance invalide {}",
+            entry.tiers,
+            format!("{:?}", entry.nextdate)
         )
     })?;
     let account_uid = |index: i64| {
@@ -1063,7 +1071,7 @@ pub fn oldest_schedules(document: &Document) -> Option<(Vec<Schedule>, Vec<Strin
         }
         Err(e) => Some((
             Vec::new(),
-            vec![format!("ancien échéancier illisible : {e}")],
+            vec![tr!("ancien échéancier illisible : {e}", e = e)],
         )),
     }
 }
@@ -1115,7 +1123,7 @@ pub fn from_json(data: &[u8]) -> Result<Vec<Schedule>> {
     if stored.version > STORAGE_VERSION {
         return Err(invalid(
             FEATURE_KEY,
-            format!("version {} non prise en charge", stored.version),
+            tr!("version {} non prise en charge", stored.version),
         ));
     }
     Ok(stored.schedules)
@@ -1149,7 +1157,10 @@ pub fn load(document: &Document) -> Result<Loaded> {
         Some(Err(e)) => Ok(Loaded {
             schedules: Vec::new(),
             source: Source::Legacy,
-            warnings: vec![format!("échéancier de l'ancienne version illisible : {e}")],
+            warnings: vec![tr!(
+                "échéancier de l'ancienne version illisible : {e}",
+                e = e
+            )],
         }),
         Some(Ok(value)) => {
             let entries = legacy_pickle::schedule_entries(&value);

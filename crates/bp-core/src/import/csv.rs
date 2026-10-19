@@ -15,6 +15,7 @@ use super::{
     build_operation, clean_text, decode_text, parse_amount, parse_date, pattern,
 };
 use crate::model::{Amount, Date, Tack};
+use crate::tr;
 
 /// Colonne (à partir de 0) de chaque champ ; `None` = champ absent.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -33,7 +34,8 @@ pub struct CsvColumns {
     /// Recettes (montants rendus positifs quel que soit leur signe).
     pub credit: Option<usize>,
     /// Pointage : `P` ou `O` = pointé, `R` ou `N` = rapproché (conventions de
-    /// l'original), autre valeur = non pointé.
+    /// l'original, plus `C`, `Y` ou `Yes` = pointé en anglais), autre
+    /// valeur = non pointé.
     pub tack: Option<usize>,
 }
 
@@ -53,9 +55,30 @@ impl CsvColumns {
                 "dateop",
                 "datecomptable",
                 "datecompta",
+                // En-têtes anglais.
+                "transactiondate",
+                "postingdate",
+                "posteddate",
+                "postdate",
+                "bookingdate",
+                "transdate",
             ]),
-            value_date: find(&["datevaleur", "datedevaleur", "valeur"]),
-            mode: find(&["mode", "type", "typeoperation", "modedepaiement"]),
+            value_date: find(&[
+                "datevaleur",
+                "datedevaleur",
+                "valeur",
+                "valuedate",
+                "effectivedate",
+            ]),
+            mode: find(&[
+                "mode",
+                "type",
+                "typeoperation",
+                "modedepaiement",
+                "method",
+                "paymentmethod",
+                "transactiontype",
+            ]),
             payee: find(&[
                 "tiers",
                 "libelle",
@@ -63,6 +86,12 @@ impl CsvColumns {
                 "libellesimplifie",
                 "beneficiaire",
                 "description",
+                "payee",
+                "payeename",
+                "merchant",
+                "counterparty",
+                "beneficiary",
+                "name",
             ]),
             details: find(&[
                 "details",
@@ -71,8 +100,12 @@ impl CsvColumns {
                 "notes",
                 "memo",
                 "informationscomplementaires",
+                "reference",
+                "comment",
+                "comments",
+                "narrative",
             ]),
-            category: find(&["categorie", "categ"]),
+            category: find(&["categorie", "categ", "category"]),
             subcategory: find(&[
                 "souscategorie",
                 "sscategorie",
@@ -80,6 +113,7 @@ impl CsvColumns {
                 "souscateg",
                 "scateg",
                 "scategorie",
+                "subcategory",
             ]),
             amount: find(&[
                 "montant",
@@ -87,10 +121,31 @@ impl CsvColumns {
                 "montanteuros",
                 "montanteur",
                 "amount",
+                "transactionamount",
             ]),
-            debit: find(&["debit", "debiteuros", "debiteuro", "debiteur"]),
-            credit: find(&["credit", "crediteuro", "crediteuros", "crediteur"]),
-            tack: find(&["pointage", "attente"]),
+            debit: find(&[
+                "debit",
+                "debiteuros",
+                "debiteuro",
+                "debiteur",
+                "debitamount",
+                "withdrawal",
+                "withdrawals",
+                "moneyout",
+                "paidout",
+            ]),
+            credit: find(&[
+                "credit",
+                "crediteuro",
+                "crediteuros",
+                "crediteur",
+                "creditamount",
+                "deposit",
+                "deposits",
+                "moneyin",
+                "paidin",
+            ]),
+            tack: find(&["pointage", "attente", "cleared"]),
         }
     }
 
@@ -99,11 +154,13 @@ impl CsvColumns {
     pub fn validate(&self) -> Result<(), ImportError> {
         let error = |message: &str| Err(ImportError::InvalidConfig(message.to_string()));
         if self.date.is_none() {
-            error("la colonne de la date n'est pas indiquée")
+            error(tr!("la colonne de la date n'est pas indiquée"))
         } else if self.amount.is_some() && (self.debit.is_some() || self.credit.is_some()) {
-            error("indiquez soit la colonne Montant, soit les colonnes Débit et Crédit")
+            error(tr!(
+                "indiquez soit la colonne Montant, soit les colonnes Débit et Crédit"
+            ))
         } else if self.amount.is_none() && self.debit.is_none() && self.credit.is_none() {
-            error("la colonne du montant n'est pas indiquée")
+            error(tr!("la colonne du montant n'est pas indiquée"))
         } else {
             Ok(())
         }
@@ -262,6 +319,8 @@ pub fn detect_separator(text: &str) -> char {
 pub fn parse_tack(value: &str) -> Tack {
     match value.trim().to_uppercase().as_str() {
         "P" | "O" => Tack::Pointed,
+        // Conventions anglaises : C (cleared), Y ou Yes.
+        "C" | "Y" | "YES" => Tack::Pointed,
         "R" | "N" => Tack::Reconciled,
         _ => Tack::None,
     }
@@ -451,6 +510,41 @@ SALAIRE MARS\";;1 500,00\r\n\
         assert_eq!(columns.subcategory, Some(5));
         assert_eq!(columns.tack, Some(7));
         assert_eq!(columns.debit, None);
+    }
+
+    #[test]
+    fn guess_english_columns() {
+        let header: Vec<String> =
+            "Transaction Date,Value Date,Payee,Memo,Category,Subcategory,Debit,Credit,Balance,Cleared"
+                .split(',')
+                .map(String::from)
+                .collect();
+        assert_eq!(
+            CsvColumns::guess(&header),
+            CsvColumns {
+                date: Some(0),
+                value_date: Some(1),
+                payee: Some(2),
+                details: Some(3),
+                category: Some(4),
+                subcategory: Some(5),
+                debit: Some(6),
+                credit: Some(7),
+                tack: Some(9),
+                ..Default::default()
+            }
+        );
+        let header: Vec<String> = "Date,Description,Reference,Amount,Payment Method"
+            .split(',')
+            .map(String::from)
+            .collect();
+        let columns = CsvColumns::guess(&header);
+        assert_eq!(columns.payee, Some(1));
+        assert_eq!(columns.details, Some(2));
+        assert_eq!(columns.amount, Some(3));
+        assert_eq!(columns.mode, Some(4));
+        assert_eq!(parse_tack("c"), Tack::Pointed);
+        assert_eq!(parse_tack("yes"), Tack::Pointed);
     }
 
     #[test]

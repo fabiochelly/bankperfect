@@ -31,6 +31,7 @@ use crate::filter::normalize;
 use crate::model::{
     Account, Amount, Category, Date, Document, Mode, Operation, StandardMode, Tack,
 };
+use crate::tr;
 
 /// Clé des champs supplémentaires où l'on peut conserver l'identifiant OFX
 /// d'une opération importée (voir [`ConvertOptions::store_fitid`]).
@@ -44,14 +45,23 @@ pub const FITID_KEY: &str = "FITID";
 /// sont pas des erreurs : elles sont signalées dans [`ParsedImport::rejected`].
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ImportError {
-    #[error("le fichier n'est pas un fichier QIF correct")]
     NotQif,
 
-    #[error("le fichier n'est pas un fichier OFX correct")]
     NotOfx,
 
-    #[error("paramètres d'import incorrects : {0}")]
     InvalidConfig(String),
+}
+
+impl fmt::Display for ImportError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::NotQif => f.write_str(tr!("le fichier n'est pas un fichier QIF correct")),
+            Self::NotOfx => f.write_str(tr!("le fichier n'est pas un fichier OFX correct")),
+            Self::InvalidConfig(message) => {
+                f.write_str(&tr!("paramètres d'import incorrects : {}", message))
+            }
+        }
+    }
 }
 
 /// Format d'un fichier à importer.
@@ -169,7 +179,7 @@ impl ImportedAccount {
             .map(String::as_str)
             .collect();
         if !parts.is_empty() {
-            format!("n° {}", parts.join("-"))
+            tr!("n° {}", parts.join("-"))
         } else if let Some(name) = &self.name {
             name.clone()
         } else if let Some(uid) = &self.transaction_uid {
@@ -204,11 +214,13 @@ pub enum RejectReason {
 impl fmt::Display for RejectReason {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::MissingDate => write!(f, "date absente"),
-            Self::InvalidDate(text) => write!(f, "date incorrecte « {text} »"),
-            Self::MissingAmount => write!(f, "montant absent"),
-            Self::InvalidAmount(text) => write!(f, "montant incorrect « {text} »"),
-            Self::ZeroAmount => write!(f, "montant nul"),
+            Self::MissingDate => f.write_str(tr!("date absente")),
+            Self::InvalidDate(text) => f.write_str(&tr!("date incorrecte « {text} »", text = text)),
+            Self::MissingAmount => f.write_str(tr!("montant absent")),
+            Self::InvalidAmount(text) => {
+                f.write_str(&tr!("montant incorrect « {text} »", text = text))
+            }
+            Self::ZeroAmount => f.write_str(tr!("montant nul")),
         }
     }
 }
@@ -244,9 +256,9 @@ impl ParsedImport {
 /// n'était jamais affiché par l'import OFX).
 pub fn operation_count_label(count: usize) -> String {
     match count {
-        0 => "aucune opération".to_string(),
-        1 => "une opération".to_string(),
-        n => format!("{n} opérations"),
+        0 => tr!("aucune opération").to_string(),
+        1 => tr!("une opération").to_string(),
+        n => tr!("{n} opérations", n = n),
     }
 }
 
@@ -309,9 +321,9 @@ impl DateOrder {
     /// Libellé court de l'original : JMA, MJA ou AMJ.
     pub fn label(self) -> &'static str {
         match self {
-            Self::DayMonthYear => "JMA",
-            Self::MonthDayYear => "MJA",
-            Self::YearMonthDay => "AMJ",
+            Self::DayMonthYear => tr!("JMA"),
+            Self::MonthDayYear => tr!("MJA"),
+            Self::YearMonthDay => tr!("AMJ"),
         }
     }
 
@@ -551,14 +563,14 @@ pub fn guess_mode_from_field(text: &str, negative: bool) -> Option<(StandardMode
         &[
             (
                 StandardMode::Carte,
-                &["fac", "cb", "car", "achatcarte", "achatcb"],
+                &["fac", "cb", "car", "achatcarte", "achatcb", "pos"],
             ),
             (
                 StandardMode::RetraitDab,
-                &["ret", "dab", "distrib", "automat", "atm"],
+                &["ret", "dab", "distrib", "automat", "atm", "withdr"],
             ),
             (StandardMode::ChequeEmis, &["ch"]),
-            (StandardMode::Prelevement, &["pr"]),
+            (StandardMode::Prelevement, &["pr", "dd", "directdebit"]),
             (
                 StandardMode::VirementEmis,
                 &["vir", "vrm", "vrt", "xfer", "transf"],
@@ -567,7 +579,7 @@ pub fn guess_mode_from_field(text: &str, negative: bool) -> Option<(StandardMode
         ]
     } else {
         &[
-            (StandardMode::Versement, &["vers", "esp"]),
+            (StandardMode::Versement, &["vers", "esp", "deposit", "cash"]),
             (StandardMode::DepotCheque, &["rem", "dep", "ch"]),
             (
                 StandardMode::VirementRecu,
@@ -600,15 +612,15 @@ pub fn guess_mode_from_label(label: &str, negative: bool) -> Option<StandardMode
     let words: Vec<&str> = normalized.split_whitespace().collect();
     let has = |list: &[&str]| words.iter().any(|w| list.contains(w));
     let cheque = ["cheque", "cheques", "chq", "cheq", "check"];
-    let transfer = ["vir", "virt", "virement", "vrt"];
+    let transfer = ["vir", "virt", "virement", "vrt", "transfer", "xfer"];
     if negative {
         if has(&cheque) {
             Some(StandardMode::ChequeEmis)
-        } else if has(&["retrait", "ret", "retr", "dab", "atm"]) {
+        } else if has(&["retrait", "ret", "retr", "dab", "atm", "withdrawal"]) {
             Some(StandardMode::RetraitDab)
-        } else if has(&["carte", "achat", "cb", "mastercard", "visa"]) {
+        } else if has(&["carte", "achat", "cb", "mastercard", "visa", "card", "pos"]) {
             Some(StandardMode::Carte)
-        } else if has(&["prelevement", "prel", "prlv", "prelev"]) {
+        } else if has(&["prelevement", "prel", "prlv", "prelev", "dd"]) {
             Some(StandardMode::Prelevement)
         } else if has(&["tip"]) {
             Some(StandardMode::Tip)
@@ -621,7 +633,7 @@ pub fn guess_mode_from_label(label: &str, negative: bool) -> Option<StandardMode
         Some(StandardMode::VirementRecu)
     } else if has(&cheque) || has(&["remchq"]) {
         Some(StandardMode::DepotCheque)
-    } else if has(&["versement", "especes", "vrst"]) {
+    } else if has(&["versement", "especes", "vrst", "deposit"]) {
         Some(StandardMode::Versement)
     } else {
         None
@@ -1468,6 +1480,13 @@ pub(crate) mod tests {
         // Pas de faux positifs sur des débuts de mots (« CARREFOUR » ≠ carte).
         assert_eq!(g("CARREFOUR", true), None);
         assert_eq!(g("CHAUSSURES", true), None);
+        // Libellés anglais.
+        assert_eq!(g("ATM WITHDRAWAL 12/03", true), Some(RetraitDab));
+        assert_eq!(g("DEBIT CARD PURCHASE TESCO", true), Some(Carte));
+        assert_eq!(g("TRANSFER TO SAVINGS", true), Some(VirementEmis));
+        assert_eq!(g("DD BRITISH GAS", true), Some(Prelevement));
+        assert_eq!(g("CASH DEPOSIT", false), Some(Versement));
+        assert_eq!(g("TRANSFER FROM JOHN", false), Some(VirementRecu));
     }
 
     #[test]

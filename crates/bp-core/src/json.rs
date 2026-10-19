@@ -44,6 +44,7 @@ use crate::model::{
     Account, Amount, Category, CustomMode, Date, Document, FeatureData, Mode, Operation, Payee,
     StandardMode, Tack,
 };
+use crate::tr;
 
 pub const FORMAT: &str = "bankperfect";
 /// Version du format JSON (indépendante de celle du format v6).
@@ -83,20 +84,23 @@ pub fn to_json(document: &Document) -> Result<Vec<u8>> {
 pub fn from_json(data: &[u8]) -> Result<Document> {
     let probe: Probe = serde_json::from_slice(data).map_err(|e| {
         Error::Json(if e.is_syntax() || e.is_eof() {
-            format!("JSON invalide : {e}")
+            tr!("JSON invalide : {e}", e = e)
         } else {
-            "ce fichier n'est pas un export JSON de BankPerfect".into()
+            tr!("ce fichier n'est pas un export JSON de BankPerfect").into()
         })
     })?;
     if probe.format.as_deref() != Some(FORMAT) {
         return Err(Error::Json(
-            "ce fichier n'est pas un export JSON de BankPerfect".into(),
+            tr!("ce fichier n'est pas un export JSON de BankPerfect").into(),
         ));
     }
     if probe.version.is_none_or(|v| v > VERSION) {
-        return Err(Error::Json(format!(
-            "version {} du format JSON non prise en charge (version {VERSION} au plus)",
-            probe.version.map_or("inconnue".into(), |v| v.to_string())
+        return Err(Error::Json(tr!(
+            "version {version} du format JSON non prise en charge (version {max} au plus)",
+            version = probe
+                .version
+                .map_or(tr!("inconnue").to_string(), |v| v.to_string()),
+            max = VERSION
         )));
     }
     let file: JsonFile = serde_json::from_slice(data).map_err(|e| Error::Json(e.to_string()))?;
@@ -112,13 +116,13 @@ fn validate(document: &Document) -> Result<()> {
     let mut order = document.account_order.clone();
     order.sort_unstable();
     if order != (0..count).collect::<Vec<_>>() {
-        return Err(Error::Json(format!(
+        return Err(Error::Json(tr!(
             "« account_order » doit contenir chaque compte une fois (0 à {})",
             count.saturating_sub(1)
         )));
     }
     if count > 0 && document.default_account >= count {
-        return Err(Error::Json(format!(
+        return Err(Error::Json(tr!(
             "« default_account » : compte {} inexistant",
             document.default_account
         )));
@@ -126,7 +130,7 @@ fn validate(document: &Document) -> Result<()> {
     let mut ids = std::collections::HashSet::new();
     for category in &document.categories {
         if !ids.insert(category.id) {
-            return Err(Error::Json(format!(
+            return Err(Error::Json(tr!(
                 "catégorie {} définie deux fois",
                 category.id
             )));
@@ -139,18 +143,25 @@ fn validate(document: &Document) -> Result<()> {
         .flat_map(|a| a.operations.iter().map(move |op| (a, op)))
     {
         if op.uid == 0 || !uids.insert(op.uid) {
-            return Err(Error::Json(format!(
-                "compte « {} » : identifiant d'opération {} {}",
-                account.name,
-                op.uid,
-                if op.uid == 0 { "invalide" } else { "en double" }
-            )));
+            return Err(Error::Json(if op.uid == 0 {
+                tr!(
+                    "compte « {} » : identifiant d'opération {} invalide",
+                    account.name,
+                    op.uid
+                )
+            } else {
+                tr!(
+                    "compte « {} » : identifiant d'opération {} en double",
+                    account.name,
+                    op.uid
+                )
+            }));
         }
     }
     let mut keys = std::collections::HashSet::new();
     for feature in &document.feature_data {
         if !keys.insert(feature.key.as_str()) {
-            return Err(Error::Json(format!(
+            return Err(Error::Json(tr!(
                 "donnée « {} » présente deux fois",
                 feature.key
             )));
@@ -415,9 +426,12 @@ impl JsonAccount {
             .map(|op| {
                 let uid = op.uid;
                 op.into_operation().map_err(|e| match e {
-                    Error::Json(message) => {
-                        Error::Json(format!("compte « {name} », opération {uid} : {message}"))
-                    }
+                    Error::Json(message) => Error::Json(tr!(
+                        "compte « {name} », opération {uid} : {message}",
+                        name = name,
+                        uid = uid,
+                        message = message
+                    )),
                     e => e,
                 })
             })
@@ -583,8 +597,9 @@ impl JsonMode {
                 .find(|(_, s)| *s == id)
                 .map(|(m, _)| Mode::Standard(*m))
                 .ok_or_else(|| {
-                    Error::Json(format!(
-                        "mode « {id} » inconnu (modes personnalisés : {{\"custom\": \"{id}\"}})"
+                    Error::Json(tr!(
+                        "mode « {id} » inconnu (modes personnalisés : {{\"custom\": \"{id}\"}})",
+                        id = id
                     ))
                 }),
             JsonMode::Custom { custom } => Ok(Mode::Custom(custom)),
@@ -626,7 +641,10 @@ impl<'de> Deserialize<'de> for JsonDate {
             Raw::Text(text) => NaiveDate::parse_from_str(&text, "%Y-%m-%d")
                 .map(|d| JsonDate(Date::from_naive(d)))
                 .map_err(|_| {
-                    D::Error::custom(format!("date « {text} » invalide (AAAA-MM-JJ attendu)"))
+                    D::Error::custom(tr!(
+                        "date « {text} » invalide (AAAA-MM-JJ attendu)",
+                        text = text
+                    ))
                 }),
         }
     }
@@ -651,14 +669,17 @@ impl<'de> Deserialize<'de> for JsonAmount {
         }
         match Raw::deserialize(deserializer)? {
             Raw::Text(text) => parse_amount(&text).map(JsonAmount).ok_or_else(|| {
-                D::Error::custom(format!("montant « {text} » invalide (ex. \"-12.50\")"))
+                D::Error::custom(tr!(
+                    "montant « {text} » invalide (ex. \"-12.50\")",
+                    text = text
+                ))
             }),
             Raw::Number(n) => {
                 let scaled = (n * Amount::SCALE as f64).round();
                 if scaled.is_finite() && scaled.abs() < i64::MAX as f64 {
                     Ok(JsonAmount(Amount(scaled as i64)))
                 } else {
-                    Err(D::Error::custom(format!("montant {n} invalide")))
+                    Err(D::Error::custom(tr!("montant {n} invalide", n = n)))
                 }
             }
         }
@@ -732,7 +753,7 @@ impl JsonFeature {
         let value = match (self.data, self.base64) {
             (Some(value), None) | (None, Some(value)) => value,
             _ => {
-                return Err(Error::Json(format!(
+                return Err(Error::Json(tr!(
                     "donnée « {} » : il faut soit « data », soit « base64 »",
                     self.key
                 )));
@@ -798,7 +819,7 @@ fn base64_to_bytes<'de, D: Deserializer<'de>>(
     BASE64
         .decode(text.trim())
         .map(Some)
-        .map_err(|_| D::Error::custom("base64 invalide"))
+        .map_err(|_| D::Error::custom(tr!("base64 invalide")))
 }
 
 #[cfg(test)]

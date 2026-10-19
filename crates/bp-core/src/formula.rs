@@ -26,6 +26,8 @@
 use std::cmp::Ordering;
 use std::fmt;
 
+use crate::tr;
+
 /// Longueur maximale d'une formule, en caractères.
 pub const MAX_SOURCE_LEN: usize = 4_000;
 /// Profondeur maximale d'imbrication (parenthèses, opérateurs unaires…).
@@ -79,11 +81,11 @@ impl Value {
     fn type_name(&self) -> &'static str {
         match self {
             Value::None => "None",
-            Value::Bool(_) => "booléen",
-            Value::Int(_) => "entier",
-            Value::Float(_) => "nombre décimal",
-            Value::Str(_) => "chaîne",
-            Value::List(_) => "liste",
+            Value::Bool(_) => tr!("booléen"),
+            Value::Int(_) => tr!("entier"),
+            Value::Float(_) => tr!("nombre décimal"),
+            Value::Str(_) => tr!("chaîne"),
+            Value::List(_) => tr!("liste"),
         }
     }
 
@@ -173,10 +175,21 @@ impl Number {
 /// Erreur d'analyse ou d'évaluation d'une formule.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FormulaError {
-    #[error("erreur de syntaxe (caractère {position}) : {message}")]
     Syntax { position: usize, message: String },
-    #[error("{0}")]
     Eval(String),
+}
+
+impl fmt::Display for FormulaError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Syntax { position, message } => f.write_str(&tr!(
+                "erreur de syntaxe (caractère {position}) : {message}",
+                position = position,
+                message = message
+            )),
+            Self::Eval(message) => f.write_str(message),
+        }
+    }
 }
 
 fn syntax<T>(position: usize, message: impl Into<String>) -> Result<T, FormulaError> {
@@ -201,7 +214,7 @@ impl Formula {
     /// Analyse une formule (sans le `=` initial des règles).
     pub fn parse(source: &str) -> Result<Self, FormulaError> {
         if source.chars().count() > MAX_SOURCE_LEN {
-            return syntax(MAX_SOURCE_LEN, "formule trop longue");
+            return syntax(MAX_SOURCE_LEN, tr!("formule trop longue"));
         }
         let tokens = tokenize(source)?;
         let mut parser = Parser {
@@ -213,7 +226,7 @@ impl Formula {
         if let Some(token) = parser.peek() {
             return syntax(
                 token.position,
-                "élément inattendu après la fin de l'expression",
+                tr!("élément inattendu après la fin de l'expression"),
             );
         }
         Ok(Self {
@@ -318,7 +331,7 @@ fn tokenize(source: &str) -> Result<Vec<Token>, FormulaError> {
         let rest: String = chars[i..chars.len().min(i + 2)].iter().collect();
         match OPERATORS.iter().find(|op| rest.starts_with(**op)) {
             Some(op) if *op == "{" || *op == "}" || *op == "=" => {
-                return syntax(start, format!("caractère « {op} » non autorisé"));
+                return syntax(start, tr!("caractère « {op} » non autorisé", op = op));
             }
             Some(op) => {
                 i += op.chars().count();
@@ -327,7 +340,7 @@ fn tokenize(source: &str) -> Result<Vec<Token>, FormulaError> {
                     position: start,
                 });
             }
-            None => return syntax(start, format!("caractère « {c} » non autorisé")),
+            None => return syntax(start, tr!("caractère « {c} » non autorisé", c = c)),
         }
     }
     Ok(tokens)
@@ -359,21 +372,21 @@ fn lex_string(
     if chars.get(start + 1) == Some(&quote) && chars.get(start + 2) == Some(&quote) {
         return syntax(
             start,
-            "les chaînes entre triples guillemets ne sont pas acceptées",
+            tr!("les chaînes entre triples guillemets ne sont pas acceptées"),
         );
     }
     let mut out = String::new();
     let mut i = start + 1;
     loop {
         let Some(&c) = chars.get(i) else {
-            return syntax(start, "chaîne non terminée");
+            return syntax(start, tr!("chaîne non terminée"));
         };
         if c == quote {
             return Ok((out, i + 1));
         }
         if c == '\\' {
             let Some(&next) = chars.get(i + 1) else {
-                return syntax(start, "chaîne non terminée");
+                return syntax(start, tr!("chaîne non terminée"));
             };
             if raw {
                 out.push('\\');
@@ -396,7 +409,7 @@ fn lex_string(
                 'v' => out.push('\x0b'),
                 'x' => {
                     let code = hex_value(chars, i, 2)
-                        .ok_or_else(|| syntax_error(i, "échappement \\x invalide"))?;
+                        .ok_or_else(|| syntax_error(i, tr!("échappement \\x invalide")))?;
                     i += 2;
                     // Chaîne Python 2 : octet CP1252 ; chaîne unicode : point de code.
                     out.push(if unicode {
@@ -407,7 +420,7 @@ fn lex_string(
                 }
                 'u' if unicode => {
                     let code = hex_value(chars, i, 4)
-                        .ok_or_else(|| syntax_error(i, "échappement \\u invalide"))?;
+                        .ok_or_else(|| syntax_error(i, tr!("échappement \\u invalide")))?;
                     i += 4;
                     out.push(char::from_u32(code).unwrap_or('\u{fffd}'));
                 }
@@ -438,7 +451,7 @@ fn lex_string(
             continue;
         }
         if c == '\n' {
-            return syntax(start, "chaîne non terminée");
+            return syntax(start, tr!("chaîne non terminée"));
         }
         out.push(c);
         i += 1;
@@ -501,17 +514,17 @@ fn lex_number(chars: &[char], start: usize) -> Result<(TokenKind, usize), Formul
         .get(i)
         .is_some_and(|c| c.is_alphanumeric() || *c == '_')
     {
-        return syntax(i, "nombre mal formé");
+        return syntax(i, tr!("nombre mal formé"));
     }
     let kind = if is_float {
         TokenKind::Float(
             text.parse()
-                .map_err(|_| syntax_error(start, "nombre mal formé"))?,
+                .map_err(|_| syntax_error(start, tr!("nombre mal formé")))?,
         )
     } else {
         TokenKind::Int(
             text.parse()
-                .map_err(|_| syntax_error(start, "nombre trop grand"))?,
+                .map_err(|_| syntax_error(start, tr!("nombre trop grand")))?,
         )
     };
     Ok((kind, i))
@@ -639,14 +652,14 @@ impl Parser {
         if self.eat_op(op) {
             Ok(())
         } else {
-            syntax(self.position(), format!("« {op} » attendu"))
+            syntax(self.position(), tr!("« {op} » attendu", op = op))
         }
     }
 
     fn enter(&mut self) -> Result<(), FormulaError> {
         self.depth += 1;
         if self.depth > MAX_DEPTH {
-            syntax(self.position(), "expression trop imbriquée")
+            syntax(self.position(), tr!("expression trop imbriquée"))
         } else {
             Ok(())
         }
@@ -819,14 +832,17 @@ impl Parser {
                 let position = self.position();
                 let name = match self.peek().map(|t| t.kind.clone()) {
                     Some(TokenKind::Ident(name)) => name,
-                    _ => return syntax(position, "nom de méthode attendu"),
+                    _ => return syntax(position, tr!("nom de méthode attendu")),
                 };
                 if !METHODS.contains(&name.as_str()) {
-                    return syntax(position, format!("méthode inconnue : « {name} »"));
+                    return syntax(position, tr!("méthode inconnue : « {name} »", name = name));
                 }
                 self.pos += 1;
                 if !self.eat_op("(") {
-                    return syntax(self.position(), "« ( » attendu après le nom de méthode");
+                    return syntax(
+                        self.position(),
+                        tr!("« ( » attendu après le nom de méthode"),
+                    );
                 }
                 let args = self.arguments()?;
                 expr = Expr::Method(Box::new(expr), name, args);
@@ -835,11 +851,11 @@ impl Parser {
                 let Expr::Var(name) = expr else {
                     return syntax(
                         position,
-                        "seules les fonctions connues peuvent être appelées",
+                        tr!("seules les fonctions connues peuvent être appelées"),
                     );
                 };
                 if !FUNCTIONS.contains(&name.as_str()) {
-                    return syntax(position, format!("fonction inconnue : « {name} »"));
+                    return syntax(position, tr!("fonction inconnue : « {name} »", name = name));
                 }
                 self.pos += 1;
                 let args = self.arguments()?;
@@ -870,7 +886,7 @@ impl Parser {
         self.expect_op("]")?;
         match start {
             Some(index) => Ok(Expr::Index(Box::new(target), index)),
-            None => syntax(self.position(), "index attendu"),
+            None => syntax(self.position(), tr!("index attendu")),
         }
     }
 
@@ -895,7 +911,7 @@ impl Parser {
     fn atom(&mut self) -> Result<Expr, FormulaError> {
         let position = self.position();
         let Some(token) = self.peek().cloned() else {
-            return syntax(position, "expression incomplète");
+            return syntax(position, tr!("expression incomplète"));
         };
         self.pos += 1;
         match token.kind {
@@ -917,7 +933,7 @@ impl Parser {
                 "True" => Ok(Expr::Const(Value::Bool(true))),
                 "False" => Ok(Expr::Const(Value::Bool(false))),
                 "None" => Ok(Expr::Const(Value::None)),
-                w if KEYWORDS.contains(&w) => syntax(position, format!("« {w} » inattendu")),
+                w if KEYWORDS.contains(&w) => syntax(position, tr!("« {w} » inattendu", w = w)),
                 _ => Ok(Expr::Var(name)),
             },
             TokenKind::Op("(") => {
@@ -955,7 +971,7 @@ impl Parser {
                     }
                 }
             }
-            TokenKind::Op(op) => syntax(position, format!("« {op} » inattendu")),
+            TokenKind::Op(op) => syntax(position, tr!("« {op} » inattendu", op = op)),
         }
     }
 }
@@ -1027,7 +1043,7 @@ impl Expr {
             Expr::Const(v) => Ok(v.clone()),
             Expr::Var(name) => match vars(name) {
                 Some(v) => Ok(v),
-                None => eval_err(format!("nom inconnu : « {name} »")),
+                None => eval_err(tr!("nom inconnu : « {name} »", name = name)),
             },
             Expr::List(items) => Ok(Value::List(
                 items
@@ -1042,15 +1058,14 @@ impl Expr {
                     UnaryOp::Pos => match value.as_number() {
                         Some(Number::Int(i)) => Ok(Value::Int(i)),
                         Some(Number::Float(f)) => Ok(Value::Float(f)),
-                        None => eval_err(format!("« + » impossible sur une {}", value.type_name())),
+                        None => eval_err(tr!("« + » impossible sur une {}", value.type_name())),
                     },
                     UnaryOp::Neg => match value.as_number() {
-                        Some(Number::Int(i)) => i
-                            .checked_neg()
-                            .map(Value::Int)
-                            .ok_or_else(|| FormulaError::Eval("dépassement de capacité".into())),
+                        Some(Number::Int(i)) => i.checked_neg().map(Value::Int).ok_or_else(|| {
+                            FormulaError::Eval(tr!("dépassement de capacité").into())
+                        }),
                         Some(Number::Float(f)) => Ok(Value::Float(-f)),
-                        None => eval_err(format!("« - » impossible sur une {}", value.type_name())),
+                        None => eval_err(tr!("« - » impossible sur une {}", value.type_name())),
                     },
                 }
             }
@@ -1109,12 +1124,12 @@ impl Expr {
 }
 
 fn overflow() -> FormulaError {
-    FormulaError::Eval("dépassement de capacité".into())
+    FormulaError::Eval(tr!("dépassement de capacité").into())
 }
 
 fn check_string(s: String) -> Result<Value, FormulaError> {
     if s.len() > MAX_STRING_LEN {
-        eval_err("chaîne trop longue")
+        eval_err(tr!("chaîne trop longue"))
     } else {
         Ok(Value::Str(s))
     }
@@ -1123,7 +1138,7 @@ fn check_string(s: String) -> Result<Value, FormulaError> {
 /// Division entière de Python (arrondi vers −∞).
 fn floor_div(a: i64, b: i64) -> Result<i64, FormulaError> {
     if b == 0 {
-        return eval_err("division par zéro");
+        return eval_err(tr!("division par zéro"));
     }
     let q = a.checked_div(b).ok_or_else(overflow)?;
     Ok(if a % b != 0 && ((a < 0) != (b < 0)) {
@@ -1136,7 +1151,7 @@ fn floor_div(a: i64, b: i64) -> Result<i64, FormulaError> {
 /// Modulo de Python (du signe du diviseur).
 fn py_mod(a: i64, b: i64) -> Result<i64, FormulaError> {
     if b == 0 {
-        return eval_err("division par zéro");
+        return eval_err(tr!("division par zéro"));
     }
     let r = a.checked_rem(b).ok_or_else(overflow)?;
     Ok(if r != 0 && ((r < 0) != (b < 0)) {
@@ -1149,7 +1164,7 @@ fn py_mod(a: i64, b: i64) -> Result<i64, FormulaError> {
 fn repeat(s: &str, n: i64) -> Result<Value, FormulaError> {
     let n = n.max(0) as usize;
     if s.len().saturating_mul(n) > MAX_STRING_LEN {
-        return eval_err("chaîne trop longue");
+        return eval_err(tr!("chaîne trop longue"));
     }
     Ok(Value::Str(s.repeat(n)))
 }
@@ -1168,7 +1183,7 @@ fn binary(op: BinaryOp, a: Value, b: Value) -> Result<Value, FormulaError> {
         _ => {}
     }
     let (Some(x), Some(y)) = (a.as_number(), b.as_number()) else {
-        return eval_err(format!(
+        return eval_err(tr!(
             "opération impossible entre une {} et une {}",
             a.type_name(),
             b.type_name()
@@ -1198,7 +1213,7 @@ fn binary(op: BinaryOp, a: Value, b: Value) -> Result<Value, FormulaError> {
         BinaryOp::Sub => x - y,
         BinaryOp::Mul => x * y,
         BinaryOp::Div | BinaryOp::FloorDiv | BinaryOp::Mod if y == 0.0 => {
-            return eval_err("division par zéro");
+            return eval_err(tr!("division par zéro"));
         }
         BinaryOp::Div => x / y,
         BinaryOp::FloorDiv => (x / y).floor(),
@@ -1234,7 +1249,7 @@ fn order(a: &Value, b: &Value) -> Result<Ordering, FormulaError> {
             return x
                 .as_f64()
                 .partial_cmp(&y.as_f64())
-                .ok_or_else(|| FormulaError::Eval("comparaison impossible".into()));
+                .ok_or_else(|| FormulaError::Eval(tr!("comparaison impossible").into()));
         }
         _ => {}
     }
@@ -1249,7 +1264,7 @@ fn order(a: &Value, b: &Value) -> Result<Ordering, FormulaError> {
             }
             Ok(x.len().cmp(&y.len()))
         }
-        _ => eval_err(format!(
+        _ => eval_err(tr!(
             "comparaison impossible entre une {} et une {}",
             a.type_name(),
             b.type_name()
@@ -1270,7 +1285,7 @@ fn compare(op: CompareOp, a: &Value, b: &Value) -> Result<bool, FormulaError> {
                 (Value::Str(needle), Value::Str(haystack)) => haystack.contains(needle.as_str()),
                 (_, Value::List(items)) => items.iter().any(|item| values_equal(a, item)),
                 _ => {
-                    return eval_err(format!(
+                    return eval_err(tr!(
                         "« in » impossible entre une {} et une {}",
                         a.type_name(),
                         b.type_name()
@@ -1285,7 +1300,7 @@ fn compare(op: CompareOp, a: &Value, b: &Value) -> Result<bool, FormulaError> {
 fn int_arg(value: &Value, what: &str) -> Result<i64, FormulaError> {
     value
         .as_int()
-        .ok_or_else(|| FormulaError::Eval(format!("{what} : entier attendu")))
+        .ok_or_else(|| FormulaError::Eval(tr!("{what} : entier attendu", what = what)))
 }
 
 /// Index Python (négatif = depuis la fin) ramené dans `0..len`.
@@ -1302,15 +1317,12 @@ fn index_value(target: Value, index: Value) -> Result<Value, FormulaError> {
             let chars: Vec<char> = s.chars().collect();
             resolve_index(i, chars.len())
                 .map(|i| Value::Str(chars[i].to_string()))
-                .ok_or_else(|| FormulaError::Eval("index hors limites".into()))
+                .ok_or_else(|| FormulaError::Eval(tr!("index hors limites").into()))
         }
         Value::List(items) => resolve_index(i, items.len())
             .map(|i| items[i].clone())
-            .ok_or_else(|| FormulaError::Eval("index hors limites".into())),
-        other => eval_err(format!(
-            "une {} ne peut pas être indexée",
-            other.type_name()
-        )),
+            .ok_or_else(|| FormulaError::Eval(tr!("index hors limites").into())),
+        other => eval_err(tr!("une {} ne peut pas être indexée", other.type_name())),
     }
 }
 
@@ -1324,7 +1336,7 @@ fn slice_bounds(
         match v {
             None | Some(Value::None) => Ok(default),
             Some(v) => {
-                let i = int_arg(&v, "tranche")?;
+                let i = int_arg(&v, tr!("tranche"))?;
                 let len = len as i64;
                 let i = if i < 0 { i + len } else { i };
                 Ok(i.clamp(0, len) as usize)
@@ -1351,16 +1363,13 @@ fn slice_value(
             let (a, b) = slice_bounds(start, end, items.len())?;
             Ok(Value::List(items[a..b].to_vec()))
         }
-        other => eval_err(format!(
-            "une {} ne peut pas être découpée",
-            other.type_name()
-        )),
+        other => eval_err(tr!("une {} ne peut pas être découpée", other.type_name())),
     }
 }
 
 fn arity(name: &str, args: &[Value], min: usize, max: usize) -> Result<(), FormulaError> {
     if args.len() < min || args.len() > max {
-        eval_err(format!("{name}() : nombre d'arguments incorrect"))
+        eval_err(tr!("{name}() : nombre d'arguments incorrect", name = name))
     } else {
         Ok(())
     }
@@ -1373,7 +1382,7 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
             match &args[0] {
                 Value::Str(s) => Ok(Value::Int(s.chars().count() as i64)),
                 Value::List(l) => Ok(Value::Int(l.len() as i64)),
-                other => eval_err(format!("len() impossible sur une {}", other.type_name())),
+                other => eval_err(tr!("len() impossible sur une {}", other.type_name())),
             }
         }
         "str" => {
@@ -1386,13 +1395,13 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
             arity(name, &args, 1, 1)?;
             match &args[0] {
                 Value::Str(s) => s.trim().parse().map(Value::Int).map_err(|_| {
-                    FormulaError::Eval(format!("int() : « {s} » n'est pas un entier"))
+                    FormulaError::Eval(tr!("int() : « {s} » n'est pas un entier", s = s))
                 }),
                 Value::Float(f) if f.is_finite() && f.abs() < 9.0e18 => {
                     Ok(Value::Int(f.trunc() as i64))
                 }
                 v => v.as_int().map(Value::Int).ok_or_else(|| {
-                    FormulaError::Eval(format!("int() impossible sur une {}", v.type_name()))
+                    FormulaError::Eval(tr!("int() impossible sur une {}", v.type_name()))
                 }),
             }
         }
@@ -1400,13 +1409,13 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
             arity(name, &args, 1, 1)?;
             match &args[0] {
                 Value::Str(s) => s.trim().parse().map(Value::Float).map_err(|_| {
-                    FormulaError::Eval(format!("float() : « {s} » n'est pas un nombre"))
+                    FormulaError::Eval(tr!("float() : « {s} » n'est pas un nombre", s = s))
                 }),
                 v => v
                     .as_number()
                     .map(|n| Value::Float(n.as_f64()))
                     .ok_or_else(|| {
-                        FormulaError::Eval(format!("float() impossible sur une {}", v.type_name()))
+                        FormulaError::Eval(tr!("float() impossible sur une {}", v.type_name()))
                     }),
             }
         }
@@ -1415,16 +1424,13 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
             match args[0].as_number() {
                 Some(Number::Int(i)) => i.checked_abs().map(Value::Int).ok_or_else(overflow),
                 Some(Number::Float(f)) => Ok(Value::Float(f.abs())),
-                None => eval_err(format!("abs() impossible sur une {}", args[0].type_name())),
+                None => eval_err(tr!("abs() impossible sur une {}", args[0].type_name())),
             }
         }
         "round" => {
             arity(name, &args, 1, 2)?;
             let Some(x) = args[0].as_number() else {
-                return eval_err(format!(
-                    "round() impossible sur une {}",
-                    args[0].type_name()
-                ));
+                return eval_err(tr!("round() impossible sur une {}", args[0].type_name()));
             };
             let digits = match args.get(1) {
                 Some(d) => int_arg(d, "round")?.clamp(-15, 15) as i32,
@@ -1441,7 +1447,7 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
             };
             let mut iter = items.into_iter();
             let Some(mut best) = iter.next() else {
-                return eval_err(format!("{name}() : aucun argument"));
+                return eval_err(tr!("{name}() : aucun argument", name = name));
             };
             for item in iter {
                 let ord = order(&item, &best)?;
@@ -1453,14 +1459,14 @@ fn call_function(name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
             }
             Ok(best)
         }
-        _ => eval_err(format!("fonction inconnue : « {name} »")),
+        _ => eval_err(tr!("fonction inconnue : « {name} »", name = name)),
     }
 }
 
 fn str_arg<'a>(args: &'a [Value], i: usize, method: &str) -> Result<&'a str, FormulaError> {
     match args.get(i) {
         Some(Value::Str(s)) => Ok(s),
-        _ => eval_err(format!("{method}() : chaîne attendue")),
+        _ => eval_err(tr!("{method}() : chaîne attendue", method = method)),
     }
 }
 
@@ -1496,7 +1502,7 @@ fn strip_chars<'a>(
     let chars: Option<Vec<char>> = match args.first() {
         None | Some(Value::None) => None,
         Some(Value::Str(set)) => Some(set.chars().collect()),
-        _ => return eval_err(format!("{method}() : chaîne attendue")),
+        _ => return eval_err(tr!("{method}() : chaîne attendue", method = method)),
     };
     let pred = |c: char| match &chars {
         Some(set) => set.contains(&c),
@@ -1511,9 +1517,10 @@ fn strip_chars<'a>(
 
 fn call_method(target: Value, name: &str, args: Vec<Value>) -> Result<Value, FormulaError> {
     let Value::Str(s) = target else {
-        return eval_err(format!(
-            "méthode « {name} » inconnue pour une {}",
-            target.type_name()
+        return eval_err(tr!(
+            "méthode « {name} » inconnue pour une {kind}",
+            name = name,
+            kind = target.type_name()
         ));
     };
     match name {
@@ -1569,7 +1576,7 @@ fn call_method(target: Value, name: &str, args: Vec<Value>) -> Result<Value, For
                         .saturating_add(1)
                         .saturating_mul(new.len());
                     if estimate > MAX_STRING_LEN * 2 {
-                        return eval_err("chaîne trop longue");
+                        return eval_err(tr!("chaîne trop longue"));
                     }
                     s.replace(old, new)
                 }
@@ -1620,25 +1627,25 @@ fn call_method(target: Value, name: &str, args: Vec<Value>) -> Result<Value, For
                     .split(sep.as_str())
                     .map(|p| Value::Str(p.into()))
                     .collect(),
-                _ => return eval_err("split() : séparateur invalide"),
+                _ => return eval_err(tr!("split() : séparateur invalide")),
             };
             Ok(Value::List(parts))
         }
         "join" => {
             arity(name, &args, 1, 1)?;
             let Value::List(items) = &args[0] else {
-                return eval_err("join() : liste attendue");
+                return eval_err(tr!("join() : liste attendue"));
             };
             let parts: Vec<&str> = items
                 .iter()
                 .map(|v| match v {
                     Value::Str(p) => Ok(p.as_str()),
-                    _ => eval_err("join() : liste de chaînes attendue"),
+                    _ => eval_err(tr!("join() : liste de chaînes attendue")),
                 })
                 .collect::<Result<_, _>>()?;
             check_string(parts.join(&s))
         }
-        _ => eval_err(format!("méthode inconnue : « {name} »")),
+        _ => eval_err(tr!("méthode inconnue : « {name} »", name = name)),
     }
 }
 

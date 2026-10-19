@@ -7,6 +7,7 @@ use std::collections::HashSet;
 
 use crate::error::{Error, Result};
 use crate::model::*;
+use crate::{tr, trn};
 
 const FILE_SEPARATOR: &str = "TNSLPPBNTSOGPTQBC280673";
 const SCRIPT_DATA_PREFIX: &str = "bp_script_data_";
@@ -42,9 +43,10 @@ pub fn parse(text: &str) -> Result<ParsedV5> {
     };
 
     if blocks.len() > accounts.len() {
-        parser.warnings.push(format!(
-            "{} bloc(s) d'opérations sans compte correspondant ont été ignorés",
-            blocks.len() - accounts.len()
+        parser.warnings.push(trn!(
+            blocks.len() - accounts.len(),
+            "{} bloc d'opérations sans compte correspondant a été ignoré",
+            "{} blocs d'opérations sans compte correspondant ont été ignorés"
         ));
     }
     // Un compte sans bloc (dernier compte vide) garde une liste vide : l'ancienne
@@ -359,7 +361,7 @@ impl OperationParser<'_> {
     fn parse_line(&mut self, line: &str) -> Option<Operation> {
         let fields: Vec<&str> = line.split(';').collect();
         if !(7..=9).contains(&fields.len()) {
-            self.warnings.push(format!(
+            self.warnings.push(tr!(
                 "ligne d'opération illisible ignorée : {} champs",
                 fields.len()
             ));
@@ -369,7 +371,7 @@ impl OperationParser<'_> {
         let date = match fields[0].trim().parse::<i32>() {
             Ok(n) => Date(n),
             Err(_) => {
-                self.warnings.push(format!(
+                self.warnings.push(tr!(
                     "date invalide « {} » remplacée par la date du jour",
                     fields[0]
                 ));
@@ -389,8 +391,10 @@ impl OperationParser<'_> {
         let amount = match fields[6] {
             "" => Amount::ZERO,
             text => Amount::parse(text).unwrap_or_else(|| {
-                self.warnings
-                    .push(format!("montant invalide « {text} » remplacé par 0"));
+                self.warnings.push(tr!(
+                    "montant invalide « {text} » remplacé par 0",
+                    text = text
+                ));
                 Amount::ZERO
             }),
         };
@@ -438,7 +442,7 @@ impl OperationParser<'_> {
             if field.starts_with("Chq") {
                 return Mode::Standard(StandardMode::ChequeEmis);
             }
-            if let Some(standard) = StandardMode::from_label(field) {
+            if let Some(standard) = StandardMode::from_name(field) {
                 return Mode::Standard(standard);
             }
             // Mode personnalisé supprimé depuis : l'ancienne version le
@@ -448,8 +452,9 @@ impl OperationParser<'_> {
                 .iter()
                 .any(|m| m.name.to_lowercase() == field.to_lowercase())
             {
-                self.warnings.push(format!(
-                    "mode de paiement « {field} » absent de la liste : recréé"
+                self.warnings.push(tr!(
+                    "mode de paiement « {field} » absent de la liste : recréé",
+                    field = field
                 ));
                 self.custom_modes.push(CustomMode {
                     name: field.to_string(),
@@ -506,8 +511,10 @@ fn assign_missing_uids(accounts: &mut [Account], warnings: &mut Vec<String>) {
         }
     }
     if assigned > 0 {
-        warnings.push(format!(
-            "{assigned} opération(s) sans identifiant ont reçu un nouvel identifiant"
+        warnings.push(trn!(
+            assigned,
+            "{} opération sans identifiant a reçu un nouvel identifiant",
+            "{} opérations sans identifiant ont reçu un nouvel identifiant"
         ));
     }
 }

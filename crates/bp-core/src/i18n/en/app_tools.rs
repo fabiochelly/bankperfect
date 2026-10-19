@@ -347,7 +347,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("MODES PERSONNALISÉS", "CUSTOM METHODS"),
     ("Aucun pour l'instant.", "None yet."),
-    ("Nouveau mode", "New method"),
+    ("Nouveau mode", "New payment method"),
     (
         "Sélectionnez un mode personnalisé, ou créez-en un (carte d'une autre banque, chèque-restaurant…).",
         "Select a custom method, or create one (card from another bank, meal voucher…).",

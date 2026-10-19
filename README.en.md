@@ -53,9 +53,10 @@ cargo run --release -p bankperfect
 cargo test --workspace
 ```
 
-The repository contains two crates:
+The repository contains three crates:
 
-- `crates/bp-core`: file formats (reading legacy `.bp` files, new encrypted format), data model and calculations;
+- `crates/bp-core`: file formats (reading legacy `.bp` files, new encrypted format), data model, calculations and translations;
+- `crates/bp-ext`: Luau extensions (engine, API, declarative windows);
 - `crates/bp-app`: the application (egui, wgpu rendering).
 
 `docs/inventaire/` describes the previous version feature by feature, and `docs/corrections.md` lists the bugs of the previous version fixed in the rewrite (both in French).

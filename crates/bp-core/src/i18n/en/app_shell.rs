@@ -4,6 +4,9 @@
 //! fenêtres communes, nouveau fichier, licence, protection.
 
 pub const ENTRIES: &[(&str, &str)] = &[
+    ("Gruvbox clair", "Gruvbox Light"),
+    ("Everforest clair", "Everforest Light"),
+    ("Solarized clair", "Solarized Light"),
     // Palette de commandes.
     ("Rechercher une commande…", "Search for a command…"),
     ("Aucune commande ne correspond", "No matching command"),

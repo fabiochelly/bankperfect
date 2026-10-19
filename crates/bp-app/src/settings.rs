@@ -142,7 +142,7 @@ pub fn config_file(name: &str) -> Option<PathBuf> {
 
 /// Écrit `json` dans le fichier de configuration `name`.
 pub fn write_config_file(name: &str, json: &[u8]) -> Result<(), String> {
-    let path = config_file(name).ok_or("dossier de configuration introuvable")?;
+    let path = config_file(name).ok_or(bp_core::tr!("dossier de configuration introuvable"))?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }

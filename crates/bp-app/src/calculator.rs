@@ -6,6 +6,9 @@
 //! acos atan sinh cosh tanh ln log deg rad` (angles en radians), et la saisie
 //! en degrés-minutes-secondes `12° 30' 15"`.
 
+use bp_core::i18n::{self, Lang};
+use bp_core::tr;
+
 /// Résultat d'un calcul : nombre, et format DMS si l'expression en contenait.
 pub fn evaluate(expression: &str) -> Result<(f64, bool), String> {
     let dms = expression.contains(['°', '\'', '"']);
@@ -13,15 +16,16 @@ pub fn evaluate(expression: &str) -> Result<(f64, bool), String> {
     let mut parser = Parser { tokens, pos: 0 };
     let value = parser.expression()?;
     if parser.pos != parser.tokens.len() {
-        return Err("expression incomplète".into());
+        return Err(tr!("expression incomplète").into());
     }
     if !value.is_finite() {
-        return Err("résultat indéfini".into());
+        return Err(tr!("résultat indéfini").into());
     }
     Ok((value, dms))
 }
 
-/// Affichage : DMS `12° 30' 15"` si demandé, sinon nombre décimal à virgule.
+/// Affichage : DMS `12° 30' 15"` si demandé, sinon nombre décimal (virgule
+/// en français, point en anglais).
 pub fn format(value: f64, dms: bool) -> String {
     if dms {
         let sign = if value < 0.0 { "-" } else { "" };
@@ -37,7 +41,29 @@ pub fn format(value: f64, dms: bool) -> String {
         let t = format!("{value:.12}");
         t.trim_end_matches('0').trim_end_matches('.').to_string()
     };
-    text.replace('.', ",")
+    text.replace('.', &i18n::decimal_separator().to_string())
+}
+
+/// Nombre tapé, au format de Rust (point décimal, sans séparateur des
+/// milliers). En français, la virgule est décimale. En anglais, le point
+/// est décimal et la virgule sépare les milliers (« 1,234.5 ») ; une
+/// virgule seule reste décimale (« 2,5 ») sauf suivie de trois chiffres
+/// après un entier non nul (« 1,234 »).
+fn number_literal(raw: &str) -> String {
+    if i18n::lang() == Lang::En {
+        let thousands = raw.contains('.')
+            || raw.matches(',').count() > 1
+            || raw.split_once(',').is_some_and(|(int, frac)| {
+                frac.len() == 3
+                    && frac.chars().all(|c| c.is_ascii_digit())
+                    && (1..=3).contains(&int.len())
+                    && !int.starts_with('0')
+            });
+        if thousands {
+            return raw.replace(',', "");
+        }
+    }
+    raw.replace(',', ".")
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -74,10 +100,10 @@ fn tokenize(text: &str) -> Result<Vec<Token>, String> {
                         i += 1;
                     }
                 }
-                let literal: String = chars[start..i].iter().collect::<String>().replace(',', ".");
-                let value = literal
+                let raw: String = chars[start..i].iter().collect();
+                let value = number_literal(&raw)
                     .parse::<f64>()
-                    .map_err(|_| format!("nombre invalide « {literal} »"))?;
+                    .map_err(|_| tr!("nombre invalide « {} »", raw))?;
                 tokens.push(Token::Number(value));
             }
             'a'..='z' | 'A'..='Z' | 'π' => {
@@ -111,7 +137,7 @@ fn tokenize(text: &str) -> Result<Vec<Token>, String> {
                 tokens.push(Token::Ident("sqrt".into()));
                 i += 1;
             }
-            other => return Err(format!("caractère inattendu « {other} »")),
+            other => return Err(tr!("caractère inattendu « {} »", other)),
         }
     }
     Ok(tokens)
@@ -172,7 +198,7 @@ impl Parser {
                 value *= rhs;
             } else {
                 if rhs == 0.0 {
-                    return Err("division par zéro".into());
+                    return Err(tr!("division par zéro").into());
                 }
                 value /= rhs;
             }
@@ -225,7 +251,7 @@ impl Parser {
                         self.pos += 1;
                         Ok(v)
                     }
-                    _ => Err("parenthèse fermante manquante".into()),
+                    _ => Err(tr!("parenthèse fermante manquante").into()),
                 }
             }
             Some(Token::Ident(name)) => {
@@ -239,7 +265,9 @@ impl Parser {
                 }
                 let arg = self.atom()?;
                 let v = match name.as_str() {
-                    "sqrt" if arg < 0.0 => return Err("racine d'un nombre négatif".into()),
+                    "sqrt" if arg < 0.0 => {
+                        return Err(tr!("racine d'un nombre négatif").into());
+                    }
                     "sqrt" => arg.sqrt(),
                     "sin" => arg.sin(),
                     "cos" => arg.cos(),
@@ -254,11 +282,11 @@ impl Parser {
                     "log" => arg.log10(),
                     "deg" => arg.to_degrees(),
                     "rad" => arg.to_radians(),
-                    other => return Err(format!("fonction inconnue « {other} »")),
+                    other => return Err(tr!("fonction inconnue « {} »", other)),
                 };
                 Ok(v)
             }
-            _ => Err("expression incomplète".into()),
+            _ => Err(tr!("expression incomplète").into()),
         }
     }
 }
@@ -302,5 +330,19 @@ mod tests {
         assert_eq!(format(v, true), "14° 15' 0\"");
         assert_eq!(format(2.5, false), "2,5");
         assert_eq!(format(3.0, false), "3");
+    }
+
+    #[test]
+    fn english_numbers() {
+        i18n::with_lang(Lang::En, || {
+            assert_eq!(eval("1,234.5+0.5"), 1235.0);
+            assert_eq!(eval("1,234*2"), 2468.0);
+            assert_eq!(eval("1,000,000/4"), 250_000.0);
+            assert_eq!(eval("2,5*2"), 5.0);
+            assert_eq!(eval("0,125*8"), 1.0);
+            assert_eq!(format(2.5, false), "2.5");
+            assert!(evaluate("1/0").unwrap_err().contains("zero"));
+        });
+        assert_eq!(eval("1,234*1000"), 1234.0);
     }
 }

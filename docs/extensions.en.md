@@ -769,12 +769,18 @@ Without `permissions = { "network" }`, `bp.http` refuses. `bp.open_url(url)` ope
 - **Errors.** A loading error (syntax, refused call) is shown in the management window with the offending line, and the extension adds nothing. An error during a command or a reaction is shown in an error window, with the file and line.
 - **Reload.** The **Reload** button reloads every extension: their open windows close and their variables start again from scratch. Whatever must survive goes in `bp.store` or `bp.prefs`. Disabling and re-enabling an extension also reloads it.
 - **Versions.** `bp.version` gives the BankPerfect version (`"9.8.2"`); `requires` in `bp.extension` cleanly refuses a version that is too old. `bp.id` is the extension's identifier (the name of its file or folder).
-- **Language.** `bp.language` is `"fr"` or `"en"`, the interface language. Extensions are reloaded when the user switches language, so command names and texts can be chosen at load time.
+- **Language.** `bp.language` is `"fr"` or `"en"`, the interface language. Extensions are reloaded when the user switches language, so the extension name, command names and texts can be chosen at load time. The bundled examples do it with a small function:
 
   ```lua
-  local en = bp.language == "en"
-  bp.command{ title = en and "Monthly summary" or "Synthèse du mois", run = function() … end }
+  local function tr(fr, en)
+  	return if bp.language == "en" then en else fr
+  end
+
+  bp.extension{ name = tr("Synthèse du mois", "Monthly summary") }
+  bp.command{ id = "synthese", title = tr("Synthèse du mois…", "Monthly summary…"), run = function() … end }
   ```
+
+  Give the command an `id` (otherwise it is the title, which changes with the language), and keep whatever is saved in a single language: `bp.store` and `bp.prefs` keys, names of the standard payment methods (always French in the API).
 - **Editor.** The definitions file [`bankperfect.en.d.luau`](bankperfect.en.d.luau) (comments in English; [`bankperfect.d.luau`](bankperfect.d.luau) is the same with French comments) provides autocompletion and type checking (see [Quick reference](#quick-reference)).
 
 ## Recipes

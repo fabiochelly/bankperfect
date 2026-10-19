@@ -1085,6 +1085,69 @@ fn bundled_examples_load_and_open() {
     );
 }
 
+/// Les exemples fournis suivent la langue de l'interface (`bp.language`) ;
+/// les identifiants de leurs commandes, eux, n'en dépendent pas.
+#[test]
+fn bundled_examples_follow_language() {
+    use bp_core::i18n::{Lang, with_lang};
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../extensions");
+    let data = tempfile::tempdir().unwrap();
+    let expected = [
+        (
+            "arrondis",
+            "Round-up savings",
+            Some(("reglages", "Round-up savings…")),
+        ),
+        (
+            "doublons",
+            "Find duplicates",
+            Some(("rechercher", "Find duplicates…")),
+        ),
+        (
+            "export-json",
+            "JSON export",
+            Some(("exporter", "Export transactions as JSON…")),
+        ),
+        ("import-debit-credit", "Debit/Credit import", None),
+        (
+            "selection",
+            "Selection total",
+            Some(("total", "Selection total…")),
+        ),
+        (
+            "synthese-du-mois",
+            "Monthly summary",
+            Some(("synthese", "Monthly summary…")),
+        ),
+    ];
+    let mut engine = Engine::new(dir.clone(), data.path().to_path_buf(), Rc::new(NoServices));
+    with_lang(Lang::En, || engine.load_all(&[]));
+    for (id, name, command) in expected {
+        let e = engine.extensions.iter().find(|e| e.id == id).unwrap();
+        assert_eq!(e.error, None, "{id}");
+        assert_eq!(e.name(), name);
+        let commands: Vec<(String, String)> =
+            e.commands().into_iter().map(|c| (c.id, c.title)).collect();
+        let command = command.map(|(i, t)| (i.to_string(), t.to_string()));
+        assert_eq!(commands.first(), command.as_ref(), "{id}");
+    }
+    let importers = engine.extensions.iter().flat_map(|e| e.importers());
+    assert!(importers.map(|(n, _)| n).any(|n| n == "Debit/Credit"));
+    let mut engine = Engine::new(dir, data.path().to_path_buf(), Rc::new(NoServices));
+    with_lang(Lang::Fr, || engine.load_all(&[]));
+    let e = engine
+        .extensions
+        .iter()
+        .find(|e| e.id == "synthese-du-mois")
+        .unwrap();
+    assert_eq!(e.name(), "Synthèse du mois");
+    let c = &e.commands()[0];
+    assert_eq!(
+        (c.id.as_str(), c.title.as_str()),
+        ("synthese", "Synthèse du mois…")
+    );
+}
+
 /// Texte d'un fichier de la documentation (`docs/`).
 fn doc_text(name: &str) -> String {
     let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))

@@ -353,8 +353,10 @@ impl AutoFilters {
         };
         Self {
             filters: vec![
-                month("Mois actuel", "1/m/a", "dj/m/a"),
-                month("Mois précédent", "1/m-1/a", "dj/m-1/a"),
+                // Noms dans la langue de l'interface (les dates gardent la
+                // syntaxe j/m/a des filtres).
+                month(crate::tr!("Mois actuel"), "1/m/a", "dj/m/a"),
+                month(crate::tr!("Mois précédent"), "1/m-1/a", "dj/m-1/a"),
             ],
         }
     }

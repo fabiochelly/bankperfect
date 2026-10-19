@@ -1387,9 +1387,6 @@ fn english_screenshots() {
         h.run_steps(2);
         h.key_press(Key::F3);
     });
-    render_en("en-22-clear-dates", dark, FULL, |h| {
-        h.key_press(Key::F11);
-    });
     render_en("en-22-print", dark, FULL, |h| {
         run_command(h, "print statement");
     });
@@ -1401,4 +1398,186 @@ fn english_screenshots() {
             |_| {},
         );
     }
+}
+
+/// Relevé CSV « Date;Description;Debit;Credit » pour l'import par extension.
+const SAMPLE_CSV_EN: &str = "Date;Description;Debit;Credit
+05/01/2026;WHOLE FOODS MARKET #10233;42.15;
+06/01/2026;PAYROLL EXAMPLE CORP;;5233.69
+08/01/2026;COMED ELECTRIC BILL;99.00;
+09/01/2026;CHECK 1052;120.00;
+";
+
+/// Captures anglaises de la documentation et du site, sur la démo anglaise
+/// (`gen_demo --lang en`), dans target/screenshots/captures-en/ : mêmes
+/// scénarios que les captures françaises de docs/captures et du site.
+#[test]
+#[ignore]
+fn english_captures() {
+    use egui::{Key, Modifiers, Theme};
+    let dark = Theme::Dark;
+    let light = Theme::Light;
+    let out =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots/captures-en");
+    std::fs::create_dir_all(&out).unwrap();
+    let name = |n: &str| format!("captures-en/{n}");
+    let entry = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.get_by_label_contains("New transaction").click()
+    };
+    let charts = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::G);
+        h.run_steps(3);
+    };
+    render_en(&name("tableau-de-bord"), dark, FULL, |_| {});
+    render_en(&name("tableau-de-bord-clair"), light, FULL, |_| {});
+    render_en(&name("saisie"), dark, FULL, entry);
+    render_en(&name("graphiques"), dark, FULL, charts);
+    render_en(&name("graphique-solde"), light, FULL, |h| {
+        charts(h);
+        h.get_by_label_contains("Balance over time").click();
+    });
+    render_en(&name("budget"), dark, FULL, |h| {
+        h.key_press_modifiers(Modifiers::COMMAND, Key::B);
+        h.run_steps(3);
+        h.get_by_label("All").click();
+    });
+    render_en(&name("simulateur-credit"), dark, FULL, |h| {
+        h.key_press_modifiers(Modifiers::COMMAND, Key::L);
+    });
+    render_en(&name("rapport-categories"), dark, FULL, |h| {
+        h.key_press_modifiers(Modifiers::COMMAND, Key::T);
+    });
+    render_en(&name("releve-multicompte"), dark, FULL, |h| {
+        h.key_press_modifiers(Modifiers::COMMAND, Key::T);
+        h.run_steps(3);
+        h.get_by_label("Multi-account statement").click();
+    });
+    render_en(&name("transfert"), dark, FULL, |h| {
+        h.key_press_modifiers(Modifiers::COMMAND | Modifiers::SHIFT, Key::T);
+    });
+    render_en(&name("ventilation"), light, FULL, |h| {
+        h.key_press(Key::ArrowDown);
+        h.key_press(Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press(Key::F6);
+    });
+    render_en(&name("themes"), dark, egui::vec2(1440.0, 1000.0), |h| {
+        h.key_press_modifiers(Modifiers::COMMAND, Key::Comma);
+        h.run_steps(2);
+        h.query_all_by_label("View").last().unwrap().click();
+        h.run_steps(3);
+        // Défile jusqu'aux thèmes (la langue est en tête de l'onglet).
+        h.event(egui::Event::PointerMoved(egui::pos2(660.0, 600.0)));
+        for _ in 0..4 {
+            h.event(egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -40.0),
+                phase: egui::TouchPhase::Move,
+                modifiers: Modifiers::NONE,
+            });
+            h.step();
+        }
+    });
+    // Catégorisation : relevé OFX américain, saisie devinée.
+    let file = std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE");
+    let document = bp_core::file::open(file.as_ref(), None).unwrap().document;
+    let account = &document.accounts[document.account_order[0]];
+    let today = bp_core::model::Date::today();
+    let in_bank = bp_core::smart_tack::pointed_balance(account, Some(today));
+    let dir = tempfile_dir();
+    let ofx = dir.join("statement.ofx");
+    std::fs::write(&ofx, sample_ofx_en(today, in_bank)).unwrap();
+    render_en(&name("categorisation-import"), dark, FULL, |h| {
+        h.input_mut()
+            .dropped_files
+            .push(std::sync::Arc::new(DroppedPath(ofx.clone())));
+        h.run_steps(4);
+    });
+    render_en(&name("categorisation-saisie"), dark, FULL, |h| {
+        entry(h);
+        h.run_steps(10);
+        click_at(h, egui::pos2(1210.0, 433.0));
+        h.event(egui::Event::Text("COMED ELECTRIC BILL PAYMENT".into()));
+        h.run_steps(4);
+    });
+    // Extensions.
+    render_en(&name("extensions-clic-droit"), dark, FULL, |h| {
+        right_click(h, egui::pos2(760.0, 330.0));
+    });
+    render_en(&name("extensions-doublons"), dark, FULL, |h| {
+        h.get_by_label("Transactions").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Find duplicates").click();
+    });
+    render_en(&name("extensions-formulaire"), light, FULL, |h| {
+        h.get_by_label("File").click();
+        h.run_steps(3);
+        h.get_by_label("Export").hover();
+        h.run_steps(3);
+        h.get_by_label_contains("Export transactions as JSON")
+            .click();
+        h.run_steps(3);
+    });
+    render_en(&name("extensions-gestion"), dark, FULL, |h| {
+        h.get_by_label("Extensions").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Manage extensions").click();
+        h.run_steps(3);
+        // Dernière de la liste : « Monthly summary » (placée dans des menus).
+        click_at(h, egui::pos2(346.0, 659.0));
+    });
+    render_en(&name("extensions-synthese"), dark, FULL, |h| {
+        h.get_by_label("Reports").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Monthly summary").click();
+    });
+    render_en(&name("ext-arrondis"), dark, FULL, |h| {
+        h.get_by_label("Extensions").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Round-up savings").click();
+    });
+    render_en(&name("ext-selection"), dark, FULL, |h| {
+        click_at(h, egui::pos2(760.0, 790.0));
+        right_click(h, egui::pos2(760.0, 790.0));
+        h.run_steps(3);
+        h.get_by_label_contains("Selection total").click();
+    });
+    let csv = dir.join("statement.csv");
+    std::fs::write(&csv, SAMPLE_CSV_EN).unwrap();
+    render_en(&name("extensions-import"), dark, FULL, |h| {
+        h.input_mut()
+            .dropped_files
+            .push(std::sync::Arc::new(DroppedPath(csv.clone())));
+        h.run_steps(4);
+    });
+    // Fichier protégé : sur une copie de la démo (la protection l'enregistre).
+    let copy = dir.join("protected-demo.bp");
+    std::fs::copy(&file, &copy).unwrap();
+    unsafe { std::env::set_var("BP_SCREENSHOT_OVERRIDE", &copy) };
+    render_en(&name("protection"), dark, FULL, |h| {
+        let open = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+            h.get_by_label("File").click();
+            h.run_steps(3);
+            h.get_by_label("File protection…").click();
+            h.run_steps(2);
+        };
+        open(h);
+        for i in 0..2 {
+            h.query_all_by_role(egui::accesskit::Role::PasswordInput)
+                .chain(h.query_all_by_role(egui::accesskit::Role::TextInput))
+                .nth(i)
+                .unwrap()
+                .click();
+            h.run_steps(2);
+            h.event(egui::Event::Text("password1".into()));
+            h.run_steps(2);
+        }
+        h.run_steps(2);
+        h.get_by_label("Protect").click();
+        h.run_steps(2);
+        h.get_by_label("I have written it down").click();
+        h.run_steps(2);
+        open(h);
+    });
+    unsafe { std::env::remove_var("BP_SCREENSHOT_OVERRIDE") };
 }

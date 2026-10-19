@@ -40,6 +40,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     // model.rs
     ("Transfert vers le compte {}", "Transfer to {}"),
     ("Transfert depuis le compte {}", "Transfer from {}"),
+    ("Mois actuel", "Current month"),
+    ("Mois précédent", "Previous month"),
     ("Carte", "Card"),
     ("Retrait DAB", "ATM withdrawal"),
     ("Chèque émis", "Check"),

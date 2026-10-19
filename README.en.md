@@ -6,7 +6,7 @@ Fast, modern personal finance software for Linux, Windows and macOS.
 
 BankPerfect 9 is a complete Rust rewrite of BankPerfect (originally written in Delphi), with the same breadth of features, a redesigned interface and encrypted files. It opens `.bp` files from earlier versions directly.
 
-![Dashboard](docs/captures/tableau-de-bord.png)
+![Dashboard](docs/captures/en/tableau-de-bord.png)
 
 ## Features
 
@@ -24,11 +24,11 @@ BankPerfect 9 is a complete Rust rewrite of BankPerfect (originally written in D
 
 | Entry | Charts |
 | --- | --- |
-| ![Entry](docs/captures/saisie.png) | ![Charts](docs/captures/graphiques.png) |
+| ![Entry](docs/captures/en/saisie.png) | ![Charts](docs/captures/en/graphiques.png) |
 | **Budget** | **Loan calculator** |
-| ![Budget](docs/captures/budget.png) | ![Loan calculator](docs/captures/simulateur-credit.png) |
+| ![Budget](docs/captures/en/budget.png) | ![Loan calculator](docs/captures/en/simulateur-credit.png) |
 | **Categories guessed on import** | **Magic wand while typing** |
-| ![Auto-categorization on import](docs/captures/categorisation-import.png) | ![Category guessed while typing](docs/captures/categorisation-saisie.png) |
+| ![Auto-categorization on import](docs/captures/en/categorisation-import.png) | ![Category guessed while typing](docs/captures/en/categorisation-saisie.png) |
 
 ## Installation
 

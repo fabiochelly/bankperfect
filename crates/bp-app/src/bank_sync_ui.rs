@@ -13,6 +13,7 @@ use std::time::Duration;
 use bp_core::bank_sync::{self, Bank, BankAccountLink, BankConnection, BankSync};
 use bp_core::import::{ImportedOperation, ParsedImport, StatementBalance};
 use bp_core::model::Date;
+use bp_core::{tr, tr_mark};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
@@ -32,22 +33,22 @@ const DEFAULT_REDIRECT: &str = "https://github.com/fabiochelly/bankperfect";
 const PRIVACY_URL: &str = "https://github.com/fabiochelly/bankperfect/blob/main/PRIVACY.md";
 const TERMS_URL: &str = "https://github.com/fabiochelly/bankperfect/blob/main/LICENSE";
 const COUNTRIES: [(&str, &str); 16] = [
-    ("FR", "France"),
-    ("BE", "Belgique"),
-    ("LU", "Luxembourg"),
-    ("DE", "Allemagne"),
-    ("ES", "Espagne"),
-    ("IT", "Italie"),
-    ("NL", "Pays-Bas"),
-    ("PT", "Portugal"),
-    ("AT", "Autriche"),
-    ("IE", "Irlande"),
-    ("FI", "Finlande"),
-    ("SE", "Suède"),
-    ("DK", "Danemark"),
-    ("NO", "Norvège"),
-    ("PL", "Pologne"),
-    ("EE", "Estonie"),
+    ("FR", tr_mark!("France")),
+    ("BE", tr_mark!("Belgique")),
+    ("LU", tr_mark!("Luxembourg")),
+    ("DE", tr_mark!("Allemagne")),
+    ("ES", tr_mark!("Espagne")),
+    ("IT", tr_mark!("Italie")),
+    ("NL", tr_mark!("Pays-Bas")),
+    ("PT", tr_mark!("Portugal")),
+    ("AT", tr_mark!("Autriche")),
+    ("IE", tr_mark!("Irlande")),
+    ("FI", tr_mark!("Finlande")),
+    ("SE", tr_mark!("Suède")),
+    ("DK", tr_mark!("Danemark")),
+    ("NO", tr_mark!("Norvège")),
+    ("PL", tr_mark!("Pologne")),
+    ("EE", tr_mark!("Estonie")),
 ];
 
 /// Application Enable Banking de l'utilisateur.
@@ -99,9 +100,9 @@ impl Client {
             "exp": now + 3600,
         });
         let key = EncodingKey::from_rsa_pem(&self.key)
-            .map_err(|e| format!("clé privée illisible : {e}"))?;
+            .map_err(|e| tr!("clé privée illisible : {}", e))?;
         jsonwebtoken::encode(&header, &claims, &key)
-            .map_err(|e| format!("signature impossible : {e}"))
+            .map_err(|e| tr!("signature impossible : {}", e))
     }
 
     fn call(&self, method: &str, path: &str, body: Option<&Value>) -> Result<Value, String> {
@@ -121,7 +122,7 @@ impl Client {
             ("DELETE", _) => agent.delete(&url).header("Authorization", &auth).call(),
             _ => agent.get(&url).header("Authorization", &auth).call(),
         };
-        let mut response = response.map_err(|e| format!("connexion impossible : {e}"))?;
+        let mut response = response.map_err(|e| tr!("connexion impossible : {}", e))?;
         let status = response.status().as_u16();
         let text = response
             .body_mut()
@@ -136,8 +137,16 @@ impl Client {
                 .map(str::to_string)
                 .unwrap_or_else(|| text.chars().take(200).collect());
             return Err(match status {
-                401 | 403 => format!("accès refusé par Enable Banking ({status}) : {detail}"),
-                _ => format!("erreur {status} : {detail}"),
+                401 | 403 => tr!(
+                    "accès refusé par Enable Banking ({status}) : {detail}",
+                    status = status,
+                    detail = detail
+                ),
+                _ => tr!(
+                    "erreur {status} : {detail}",
+                    status = status,
+                    detail = detail
+                ),
             });
         }
         Ok(value)
@@ -263,7 +272,7 @@ impl BankSyncForm {
                 config.redirect_url
             },
             key_name: if key.is_some() {
-                "clé enregistrée".into()
+                tr!("clé enregistrée").into()
             } else {
                 String::new()
             },
@@ -316,10 +325,10 @@ impl BankSyncForm {
         crate::dialogs::modal(ctx, "bank_sync").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::BANK, pal.accent, "Synchronisation bancaire");
+            crate::dialogs::header(ui, icon::BANK, pal.accent, tr!("Synchronisation bancaire"));
             ui_kit::subtitle(
                 ui,
-                "Importe les opérations de vos comptes par Enable Banking, prestataire agréé de la directive européenne DSP2. Vous vous authentifiez sur le site de votre banque : vos identifiants ne passent jamais par BankPerfect.",
+                tr!("Importe les opérations de vos comptes par Enable Banking, prestataire agréé de la directive européenne DSP2. Vous vous authentifiez sur le site de votre banque : vos identifiants ne passent jamais par BankPerfect."),
             );
             match self.page {
                 Page::Setup => self.setup(ui, ctx, width, &pal),
@@ -341,16 +350,16 @@ impl BankSyncForm {
                 match self.page {
                     Page::Connections => {
                         let ready = self.importable(doc);
-                        if crate::dialogs::primary(ui, &format!("{}  Importer les opérations", icon::DOWNLOAD_SIMPLE), ready && !busy).clicked() {
+                        if crate::dialogs::primary(ui, &format!("{}  {}", icon::DOWNLOAD_SIMPLE, tr!("Importer les opérations")), ready && !busy).clicked() {
                             self.import(ctx, doc);
                         }
-                        if crate::dialogs::button(ui, format!("{}  Ajouter une banque", icon::PLUS)).clicked() && !busy {
+                        if crate::dialogs::button(ui, format!("{}  {}", icon::PLUS, tr!("Ajouter une banque"))).clicked() && !busy {
                             self.page = Page::AddBank;
                             self.pending = None;
                         }
                     }
                     Page::AddBank if !self.sync.connections.is_empty() => {
-                        let back = crate::dialogs::button(ui, format!("{}  Connexions", icon::ARROW_LEFT)).clicked();
+                        let back = crate::dialogs::button(ui, format!("{}  {}", icon::ARROW_LEFT, tr!("Connexions"))).clicked();
                         if back && !busy {
                             self.page = Page::Connections;
                             self.pending = None;
@@ -358,7 +367,7 @@ impl BankSyncForm {
                     }
                     _ => {}
                 }
-                if crate::dialogs::button(ui, "Fermer").clicked() || (ui.input(|i| i.key_pressed(Key::Escape)) && !busy) {
+                if crate::dialogs::button(ui, tr!("Fermer")).clicked() || (ui.input(|i| i.key_pressed(Key::Escape)) && !busy) {
                     outcome = Outcome::Close;
                 }
             });
@@ -385,12 +394,12 @@ impl BankSyncForm {
                 match self
                     .key
                     .as_deref()
-                    .ok_or("clé manquante".to_string())
+                    .ok_or(tr!("clé manquante").to_string())
                     .and_then(|k| save_config(&config, k))
                 {
                     Ok(()) => {
                         self.message =
-                            Some("Configuration enregistrée : Enable Banking répond.".into());
+                            Some(tr!("Configuration enregistrée : Enable Banking répond.").into());
                         self.page = if self.sync.connections.is_empty() {
                             Page::AddBank
                         } else {
@@ -404,7 +413,7 @@ impl BankSyncForm {
                 self.banks = banks;
                 self.selected = None;
                 if self.banks.is_empty() {
-                    self.error = Some("aucune banque disponible pour ce pays".into());
+                    self.error = Some(tr!("aucune banque disponible pour ce pays").into());
                 }
             }
             Ok(JobResult::AuthUrl(url)) => {
@@ -413,7 +422,7 @@ impl BankSyncForm {
                 }
                 if open::that_detached(&url).is_err() {
                     self.message =
-                        Some("Ouvrez l'adresse ci-dessous dans votre navigateur.".into());
+                        Some(tr!("Ouvrez l'adresse ci-dessous dans votre navigateur.").into());
                 }
             }
             Ok(JobResult::Session(value)) => {
@@ -433,7 +442,7 @@ impl BankSyncForm {
                     .to_string();
                 let accounts = bank_sync::parse_session_accounts(&value, &doc.document);
                 if accounts.is_empty() {
-                    self.error = Some("la banque n'a donné accès à aucun compte (avez-vous relié vos comptes dans le panneau d'Enable Banking ?)".into());
+                    self.error = Some(tr!("la banque n'a donné accès à aucun compte (avez-vous relié vos comptes dans le panneau d'Enable Banking ?)").into());
                     return Outcome::Keep;
                 }
                 // Reconnexion : les comptes déjà associés le restent.
@@ -463,7 +472,7 @@ impl BankSyncForm {
                 self.save_sync(doc);
                 self.pasted.clear();
                 self.page = Page::Connections;
-                self.message = Some(format!(
+                self.message = Some(tr!(
                     "Banque « {} » connectée. Choisissez le compte BankPerfect de chaque compte.",
                     pending.bank.name
                 ));
@@ -471,7 +480,7 @@ impl BankSyncForm {
             Ok(JobResult::Transactions(results)) => {
                 let total: usize = results.iter().map(|(_, _, ops, _)| ops.len()).sum();
                 if total == 0 {
-                    self.message = Some("Aucune nouvelle opération.".into());
+                    self.message = Some(tr!("Aucune nouvelle opération.").into());
                     return Outcome::Keep;
                 }
                 let targets = results.iter().map(|(_, t, _, _)| Some(*t)).collect();
@@ -484,7 +493,7 @@ impl BankSyncForm {
                     ..Default::default()
                 };
                 let form = crate::import_ui::ImportForm::from_parsed(
-                    "Synchronisation bancaire".into(),
+                    tr!("Synchronisation bancaire").into(),
                     parsed,
                     targets,
                 );
@@ -503,7 +512,7 @@ impl BankSyncForm {
             ui,
             width,
             icon::LIST_NUMBERS,
-            "Une seule fois : votre application Enable Banking",
+            tr!("Une seule fois : votre application Enable Banking"),
             |ui| {
                 let number = |ui: &mut egui::Ui, n: &str| {
                     ui.label(
@@ -521,25 +530,27 @@ impl BankSyncForm {
                 };
                 ui.horizontal_wrapped(|ui| {
                     number(ui, "1.");
-                    ui.label("Créez un compte sur");
+                    ui.label(tr!("Créez un compte sur"));
                     ui.hyperlink_to("enablebanking.com", "https://enablebanking.com/sign-in/");
-                    ui.label(
-                        "(gratuit pour un usage personnel) : il suffit de votre adresse e-mail, un lien de connexion vous est envoyé.",
-                    );
+                    ui.label(tr!(
+                        "(gratuit pour un usage personnel) : il suffit de votre adresse e-mail, un lien de connexion vous est envoyé."
+                    ));
                 });
                 ui.add_space(4.0);
                 step(
                     ui,
                     "2.",
-                    "Dans « API applications », remplissez le formulaire « Add a new application » ainsi, en gardant l'option proposée pour la clé privée :",
+                    tr!(
+                        "Dans « API applications », remplissez le formulaire « Add a new application » ainsi, en gardant l'option proposée pour la clé privée :"
+                    ),
                 );
                 // Champs du formulaire : libellé, valeur, à copier.
                 let fields: [(&str, &str, bool); 7] = [
                     ("Environment", "Production", false),
                     ("Application name", "BankPerfect", false),
                     ("Redirect URLs", &redirect, true),
-                    ("Description", "Usage personnel", false),
-                    ("Data protection email", "votre adresse e-mail", false),
+                    ("Description", tr!("Usage personnel"), false),
+                    ("Data protection email", tr!("votre adresse e-mail"), false),
                     ("Privacy policy URL", PRIVACY_URL, true),
                     ("Terms of service URL", TERMS_URL, true),
                 ];
@@ -556,7 +567,7 @@ impl BankSyncForm {
                                         ui.label(RichText::new(value).monospace());
                                         if ui
                                             .small_button(icon::COPY)
-                                            .on_hover_text("Copier")
+                                            .on_hover_text(tr!("Copier"))
                                             .clicked()
                                         {
                                             ui.ctx().copy_text(value.to_string());
@@ -573,34 +584,43 @@ impl BankSyncForm {
                 step(
                     ui,
                     "3.",
-                    "Cliquez sur « Register » : le navigateur génère la clé privée et la télécharge dans un fichier .pem nommé d'après l'identifiant de l'application. Gardez ce fichier, c'est la seule copie de la clé.",
+                    tr!(
+                        "Cliquez sur « Register » : le navigateur génère la clé privée et la télécharge dans un fichier .pem nommé d'après l'identifiant de l'application. Gardez ce fichier, c'est la seule copie de la clé."
+                    ),
                 );
                 step(
                     ui,
                     "4.",
-                    "Sur la fiche de l'application, cliquez sur « Link accounts » et autorisez, sur le site de votre banque, l'accès à vos comptes. Seuls les comptes reliés seront accessibles.",
+                    tr!(
+                        "Sur la fiche de l'application, cliquez sur « Link accounts » et autorisez, sur le site de votre banque, l'accès à vos comptes. Seuls les comptes reliés seront accessibles."
+                    ),
                 );
                 step(
                     ui,
                     "5.",
-                    "Ici, choisissez le fichier .pem (l'identifiant de l'application est rempli d'après son nom), puis « Enregistrer et tester ».",
+                    tr!(
+                        "Ici, choisissez le fichier .pem (l'identifiant de l'application est rempli d'après son nom), puis « Enregistrer et tester »."
+                    ),
                 );
             },
         );
-        ui_kit::section(ui, width, icon::KEY, "Application", |ui| {
+        ui_kit::section(ui, width, icon::KEY, tr!("Application"), |ui| {
             ui.add(
                 crate::theme::field(&mut self.app_id)
-                    .hint_text("Identifiant de l'application (aaaaaaaa-bbbb-…)")
+                    .hint_text(tr!("Identifiant de l'application (aaaaaaaa-bbbb-…)"))
                     .desired_width(inner - 20.0),
             );
             ui.add_space(8.0);
             ui.horizontal(|ui| {
                 ui.add(
                     crate::theme::field(&mut self.redirect)
-                        .hint_text("Adresse de redirection HTTPS")
+                        .hint_text(tr!("Adresse de redirection HTTPS"))
                         .desired_width(inner - 150.0),
                 );
-                if ui.button(format!("{}  Copier", icon::COPY)).clicked() {
+                if ui
+                    .button(format!("{}  {}", icon::COPY, tr!("Copier")))
+                    .clicked()
+                {
                     ui.ctx().copy_text(self.redirect.trim().to_string());
                 }
             });
@@ -608,10 +628,15 @@ impl BankSyncForm {
             ui.horizontal(|ui| {
                 let pick = egui::Id::new("bank_sync_key");
                 if ui
-                    .button(format!("{}  Choisir le fichier de clé (.pem)", icon::FILE))
+                    .button(format!(
+                        "{}  {}",
+                        icon::FILE,
+                        tr!("Choisir le fichier de clé (.pem)")
+                    ))
                     .clicked()
                 {
-                    let dialog = rfd::FileDialog::new().add_filter("Clé privée", &["pem", "key"]);
+                    let dialog =
+                        rfd::FileDialog::new().add_filter(tr!("Clé privée"), &["pem", "key"]);
                     crate::file_picker::open(
                         ui.ctx(),
                         pick,
@@ -637,7 +662,8 @@ impl BankSyncForm {
                             }
                         }
                         Ok(_) => {
-                            self.error = Some("ce fichier ne contient pas de clé privée".into())
+                            self.error =
+                                Some(tr!("ce fichier ne contient pas de clé privée").into())
                         }
                         Err(e) => self.error = Some(e.to_string()),
                     }
@@ -659,7 +685,11 @@ impl BankSyncForm {
                     ready && self.job.is_none(),
                     crate::theme::primary_button(
                         ui,
-                        format!("{}  Enregistrer et tester", icon::PLUGS_CONNECTED),
+                        format!(
+                            "{}  {}",
+                            icon::PLUGS_CONNECTED,
+                            tr!("Enregistrer et tester")
+                        ),
                     ),
                 )
                 .clicked()
@@ -671,7 +701,7 @@ impl BankSyncForm {
                 self.client = Some(client.clone());
                 self.start(
                     ctx,
-                    "Test de la connexion à Enable Banking…",
+                    tr!("Test de la connexion à Enable Banking…"),
                     move || {
                         client
                             .call("GET", "/aspsps?country=FR", None)
@@ -679,13 +709,13 @@ impl BankSyncForm {
                     },
                 );
             }
-            if self.client.is_some() && ui.button("Annuler").clicked() {
+            if self.client.is_some() && ui.button(tr!("Annuler")).clicked() {
                 self.page = Page::Connections;
             }
         });
         ui.add_space(6.0);
         ui.label(
-            RichText::new("La clé reste dans votre dossier de configuration, lisible par vous seul. Les connexions aux banques (sans identifiants) sont gardées dans le fichier de comptes.")
+            RichText::new(tr!("La clé reste dans votre dossier de configuration, lisible par vous seul. Les connexions aux banques (sans identifiants) sont gardées dans le fichier de comptes."))
                 .size(12.5)
                 .color(pal.muted),
         );
@@ -720,7 +750,7 @@ impl BankSyncForm {
                 }
             }
         }
-        self.start(ctx, "Téléchargement des opérations…", move || {
+        self.start(ctx, tr!("Téléchargement des opérations…"), move || {
             let mut results = Vec::new();
             for (link, target, from) in work {
                 let mut operations = Vec::new();
@@ -736,7 +766,7 @@ impl BankSyncForm {
                     }
                     let page = client
                         .call("GET", &path, None)
-                        .map_err(|e| format!("{} : {e}", link.name))?;
+                        .map_err(|e| tr!("{} : {}", link.name, e))?;
                     let (ops, next) = bank_sync::parse_transactions(&page);
                     operations.extend(ops);
                     match next {
@@ -798,13 +828,13 @@ impl BankSyncForm {
                             if expired {
                                 ui_kit::pill(
                                     ui,
-                                    &format!("consentement expiré le {until}"),
+                                    &tr!("consentement expiré le {}", until),
                                     pal.negative,
                                 );
                             } else if !until.is_empty() {
                                 ui_kit::pill(
                                     ui,
-                                    &format!("autorisée jusqu'au {until}"),
+                                    &tr!("autorisée jusqu'au {}", until),
                                     pal.positive,
                                 );
                             }
@@ -818,16 +848,20 @@ impl BankSyncForm {
                                             )
                                             .frame(false),
                                         )
-                                        .on_hover_text("Oublier cette connexion")
+                                        .on_hover_text(tr!("Oublier cette connexion"))
                                         .clicked()
                                     {
                                         remove = Some(k);
                                     }
                                     if ui
-                                        .button(format!("{}  Reconnecter", icon::ARROWS_CLOCKWISE))
-                                        .on_hover_text(
-                                            "Renouveler le consentement sur le site de la banque",
-                                        )
+                                        .button(format!(
+                                            "{}  {}",
+                                            icon::ARROWS_CLOCKWISE,
+                                            tr!("Reconnecter")
+                                        ))
+                                        .on_hover_text(tr!(
+                                            "Renouveler le consentement sur le site de la banque"
+                                        ))
                                         .clicked()
                                     {
                                         reconnect = Some(k);
@@ -857,14 +891,14 @@ impl BankSyncForm {
                                     .map(|(_, n)| n.clone());
                                 egui::ComboBox::from_id_salt(("bank_target", &link.uid))
                                     .selected_text(
-                                        current.unwrap_or_else(|| "Ne pas importer".into()),
+                                        current.unwrap_or_else(|| tr!("Ne pas importer").into()),
                                     )
                                     .width(inner * 0.4)
                                     .show_ui(ui, |ui| {
                                         if ui
                                             .selectable_label(
                                                 link.target.is_none(),
-                                                "Ne pas importer",
+                                                tr!("Ne pas importer"),
                                             )
                                             .clicked()
                                         {
@@ -891,7 +925,7 @@ impl BankSyncForm {
                 }
             });
         ui.label(
-            RichText::new("L'import reprend quelques jours avant la dernière opération de chaque compte (90 jours pour un compte vide) ; l'aperçu écarte les doublons avant tout ajout.")
+            RichText::new(tr!("L'import reprend quelques jours avant la dernière opération de chaque compte (90 jours pour un compte vide) ; l'aperçu écarte les doublons avant tout ajout."))
                 .size(12.5)
                 .color(pal.muted),
         );
@@ -934,7 +968,7 @@ impl BankSyncForm {
         self.banks_country = self.country.clone();
         self.banks.clear();
         let country = self.country.clone();
-        self.start(ctx, "Liste des banques…", move || {
+        self.start(ctx, tr!("Liste des banques…"), move || {
             client
                 .call(
                     "GET",
@@ -976,14 +1010,14 @@ impl BankSyncForm {
         self.pasted.clear();
         self.start(
             ctx,
-            "Préparation de la connexion à la banque…",
+            tr!("Préparation de la connexion à la banque…"),
             move || {
                 let value = client.call("POST", "/auth", Some(&body))?;
                 value
                     .get("url")
                     .and_then(Value::as_str)
                     .map(|u| JobResult::AuthUrl(u.to_string()))
-                    .ok_or_else(|| "réponse inattendue d'Enable Banking".into())
+                    .ok_or_else(|| tr!("réponse inattendue d'Enable Banking").into())
             },
         );
     }
@@ -999,22 +1033,27 @@ impl BankSyncForm {
                 ui,
                 width,
                 icon::GLOBE,
-                &format!("Connexion à « {bank} »"),
+                &tr!("Connexion à « {} »", bank),
                 |ui| {
-                    ui.label("1. Authentifiez-vous sur le site de votre banque, ouvert dans votre navigateur, et autorisez l'accès à vos comptes.");
+                    ui.label(tr!("1. Authentifiez-vous sur le site de votre banque, ouvert dans votre navigateur, et autorisez l'accès à vos comptes."));
                     if !url.is_empty() {
                         ui.horizontal(|ui| {
                             if ui
                                 .link(format!(
-                                    "{}  Rouvrir la page de la banque",
-                                    icon::ARROW_SQUARE_OUT
+                                    "{}  {}",
+                                    icon::ARROW_SQUARE_OUT,
+                                    tr!("Rouvrir la page de la banque")
                                 ))
                                 .clicked()
                             {
                                 let _ = open::that_detached(&url);
                             }
                             if ui
-                                .small_button(format!("{}  Copier l'adresse", icon::COPY))
+                                .small_button(format!(
+                                    "{}  {}",
+                                    icon::COPY,
+                                    tr!("Copier l'adresse")
+                                ))
                                 .clicked()
                             {
                                 ui.ctx().copy_text(url.clone());
@@ -1022,7 +1061,7 @@ impl BankSyncForm {
                         });
                     }
                     ui.add_space(8.0);
-                    ui.label("2. La banque vous renvoie ensuite vers la page de redirection : copiez toute l'adresse affichée par le navigateur (elle contient « code= ») et collez-la ici.");
+                    ui.label(tr!("2. La banque vous renvoie ensuite vers la page de redirection : copiez toute l'adresse affichée par le navigateur (elle contient « code= ») et collez-la ici."));
                     ui.add_space(4.0);
                     let field = ui.add(
                         crate::theme::field(&mut self.pasted)
@@ -1039,14 +1078,14 @@ impl BankSyncForm {
                                 !self.pasted.trim().is_empty() && self.job.is_none(),
                                 crate::theme::primary_button(
                                     ui,
-                                    format!("{}  Valider", icon::CHECK),
+                                    format!("{}  {}", icon::CHECK, tr!("Valider")),
                                 ),
                             )
                             .clicked()
                         {
                             submit = true;
                         }
-                        if ui.button("Annuler").clicked() {
+                        if ui.button(tr!("Annuler")).clicked() {
                             self.pending = None;
                         }
                     });
@@ -1056,7 +1095,7 @@ impl BankSyncForm {
                 match bank_sync::authorization_code(&self.pasted, &state) {
                     Ok(code) => {
                         if let Some(client) = self.client.clone() {
-                            self.start(ctx, "Ouverture de la session…", move || {
+                            self.start(ctx, tr!("Ouverture de la session…"), move || {
                                 client
                                     .call("POST", "/sessions", Some(&json!({ "code": code })))
                                     .map(JobResult::Session)
@@ -1072,24 +1111,34 @@ impl BankSyncForm {
             ui,
             width,
             icon::MAGNIFYING_GLASS,
-            "Choisir la banque",
+            tr!("Choisir la banque"),
             |ui| {
                 ui.horizontal(|ui| {
                     let label = COUNTRIES
                         .iter()
                         .find(|(c, _)| *c == self.country)
-                        .map_or(self.country.clone(), |(_, n)| n.to_string());
+                        .map_or(self.country.clone(), |(_, n)| {
+                            bp_core::i18n::tr(n).to_string()
+                        });
                     egui::ComboBox::from_id_salt("bank_country")
                         .selected_text(label)
                         .width(170.0)
                         .show_ui(ui, |ui| {
                             for (code, name) in COUNTRIES {
-                                ui.selectable_value(&mut self.country, code.to_string(), name);
+                                ui.selectable_value(
+                                    &mut self.country,
+                                    code.to_string(),
+                                    bp_core::i18n::tr(name),
+                                );
                             }
                         });
                     ui.add(
                         crate::theme::field(&mut self.search)
-                            .hint_text(format!("{}  Rechercher une banque", icon::MAGNIFYING_GLASS))
+                            .hint_text(format!(
+                                "{}  {}",
+                                icon::MAGNIFYING_GLASS,
+                                tr!("Rechercher une banque")
+                            ))
                             .desired_width(inner - 200.0),
                     );
                 });
@@ -1126,7 +1175,11 @@ impl BankSyncForm {
                         chosen.is_some() && self.job.is_none(),
                         crate::theme::primary_button(
                             ui,
-                            format!("{}  Se connecter à cette banque", icon::ARROW_SQUARE_OUT),
+                            format!(
+                                "{}  {}",
+                                icon::ARROW_SQUARE_OUT,
+                                tr!("Se connecter à cette banque")
+                            ),
                         ),
                     )
                     .clicked()
@@ -1137,7 +1190,11 @@ impl BankSyncForm {
             },
         );
         if ui
-            .link(format!("{}  Configuration Enable Banking", icon::GEAR))
+            .link(format!(
+                "{}  {}",
+                icon::GEAR,
+                tr!("Configuration Enable Banking")
+            ))
             .clicked()
         {
             self.page = Page::Setup;

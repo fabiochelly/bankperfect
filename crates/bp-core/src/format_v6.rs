@@ -25,7 +25,7 @@
 //! chiffrer (plusieurs Go/s) et écrire.
 
 use std::fs;
-use std::io::Write;
+use std::io::{Read, Write};
 use std::path::Path;
 
 use argon2::{Algorithm, Argon2, Params, Version};
@@ -56,8 +56,14 @@ const SLOT_LEN: usize = NONCE_LEN + KEY_LEN + TAG_LEN;
 const ARGON2_M_KIB: u32 = 64 * 1024;
 const ARGON2_T: u32 = 3;
 const ARGON2_P: u32 = 1;
-/// Garde-fou contre un fichier forgé qui demanderait une mémoire démesurée.
-const ARGON2_MAX_M_KIB: u32 = 1024 * 1024;
+/// Garde-fous contre un fichier forgé qui demanderait une mémoire démesurée
+/// (une allocation refusée arrête le programme) ou un calcul sans fin.
+const ARGON2_MAX_M_KIB: u32 = 256 * 1024;
+const ARGON2_MAX_T: u32 = 10;
+const ARGON2_MAX_P: u32 = 8;
+/// Taille maximale du contenu décompressé : sans protection, n'importe qui
+/// peut forger un fichier valide, y compris une bombe de décompression.
+const MAX_CONTENT_LEN: u64 = 1024 * 1024 * 1024;
 
 const AAD_PASSWORD_SLOT: &[u8] = b"bp6-slot-password";
 const AAD_RECOVERY_SLOT: &[u8] = b"bp6-slot-recovery";
@@ -191,14 +197,14 @@ impl Protection {
                 let m_kib = reader.u32()?;
                 let t = reader.u32()?;
                 let p = reader.u32()?;
+                if !argon2_params_acceptable(m_kib, t, p) {
+                    return Err(Error::Corrupted);
+                }
                 let password_slot = reader.take(SLOT_LEN)?;
                 let recovery_slot = reader.take(SLOT_LEN)?;
                 match unlock {
                     Unlock::None => return Err(Error::PasswordRequired),
                     Unlock::Password(password) => {
-                        if m_kib > ARGON2_MAX_M_KIB {
-                            return Err(Error::Corrupted);
-                        }
                         let kek = derive_password_key(password, &salt, m_kib, t, p)?;
                         unwrap_key(&kek, password_slot, AAD_PASSWORD_SLOT, &salt)?
                     }
@@ -231,7 +237,7 @@ impl Protection {
                 },
             )
             .map_err(|_| Error::Corrupted)?;
-        let plaintext = zstd::stream::decode_all(compressed.as_slice())?;
+        let plaintext = decompress_limited(&compressed, MAX_CONTENT_LEN)?;
 
         let header = data[..header_len].to_vec();
         Ok((plaintext, Self { dek, header }))
@@ -310,6 +316,26 @@ fn tempfile_in(dir: &Path, target: &Path) -> Result<(std::path::PathBuf, fs::Fil
     Err(Error::Io(std::io::Error::other(tr!(
         "impossible de créer un fichier temporaire"
     ))))
+}
+
+/// Bornes acceptées à la lecture, larges par rapport aux valeurs par défaut
+/// pour laisser de la marge à un futur durcissement.
+fn argon2_params_acceptable(m_kib: u32, t: u32, p: u32) -> bool {
+    (1..=ARGON2_MAX_T).contains(&t)
+        && (1..=ARGON2_MAX_P).contains(&p)
+        && (8 * p..=ARGON2_MAX_M_KIB).contains(&m_kib)
+}
+
+/// Décompresse au fil de l'eau en refusant de dépasser `max` octets, au lieu
+/// de laisser une bombe de décompression épuiser la mémoire.
+fn decompress_limited(compressed: &[u8], max: u64) -> Result<Vec<u8>> {
+    let decoder = zstd::stream::read::Decoder::with_buffer(compressed)?;
+    let mut plaintext = Vec::new();
+    decoder.take(max + 1).read_to_end(&mut plaintext)?;
+    if plaintext.len() as u64 > max {
+        return Err(Error::Corrupted);
+    }
+    Ok(plaintext)
 }
 
 fn cipher(key: &[u8; KEY_LEN]) -> XChaCha20Poly1305 {
@@ -498,9 +524,57 @@ mod tests {
     fn header_is_authenticated() {
         let (protection, _) = fast_password("secret");
         let mut file = protection.seal(CONTENT).unwrap();
-        // Altérer les paramètres Argon2 (t) doit faire échouer l'ouverture.
-        file[MAGIC.len() + 2 + SALT_LEN + 4] ^= 1;
+        // Altérer les paramètres Argon2 (t : 1 → 3, valeur acceptable) doit
+        // faire échouer l'ouverture.
+        file[MAGIC.len() + 2 + SALT_LEN + 4] ^= 2;
         assert!(Protection::open(&file, Unlock::Password("secret")).is_err());
+    }
+
+    /// Fichier protégé par mot de passe aux paramètres Argon2 forgés, mais
+    /// correctement scellé (l'attaquant qui forge le fichier connaît sa DEK).
+    fn forged_params(m_kib: u32, t: u32, p: u32) -> Vec<u8> {
+        let (mut protection, _) = fast_password("secret");
+        let at = MAGIC.len() + 2 + SALT_LEN;
+        protection.header[at..at + 4].copy_from_slice(&m_kib.to_le_bytes());
+        protection.header[at + 4..at + 8].copy_from_slice(&t.to_le_bytes());
+        protection.header[at + 8..at + 12].copy_from_slice(&p.to_le_bytes());
+        protection.seal(CONTENT).unwrap()
+    }
+
+    #[test]
+    fn rejects_excessive_argon2_params() {
+        for (m_kib, t, p) in [
+            (64 * 1024, u32::MAX, 1),
+            (64 * 1024, 0, 1),
+            (64 * 1024, 3, 1 << 16),
+            (u32::MAX, 3, 1),
+            (8, 3, 2),
+        ] {
+            let file = forged_params(m_kib, t, p);
+            assert!(
+                matches!(
+                    Protection::open(&file, Unlock::Password("secret")),
+                    Err(Error::Corrupted)
+                ),
+                "m={m_kib} t={t} p={p}"
+            );
+        }
+    }
+
+    #[test]
+    fn default_argon2_params_are_acceptable() {
+        assert!(argon2_params_acceptable(ARGON2_M_KIB, ARGON2_T, ARGON2_P));
+    }
+
+    #[test]
+    fn rejects_decompression_bomb() {
+        let bomb = zstd::bulk::compress(&vec![0u8; 1 << 20], ZSTD_LEVEL).unwrap();
+        assert!(bomb.len() < 1024);
+        assert!(matches!(
+            decompress_limited(&bomb, (1 << 20) - 1),
+            Err(Error::Corrupted)
+        ));
+        assert_eq!(decompress_limited(&bomb, 1 << 20).unwrap().len(), 1 << 20);
     }
 
     #[test]

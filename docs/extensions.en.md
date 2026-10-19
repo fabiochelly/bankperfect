@@ -768,7 +768,7 @@ Without `permissions = { "network" }`, `bp.http` refuses. `bp.open_url(url)` ope
 - **Log.** `print(…)` (or `bp.log(…)`) writes to the extension's log, shown in the management window (last 200 lines).
 - **Errors.** A loading error (syntax, refused call) is shown in the management window with the offending line, and the extension adds nothing. An error during a command or a reaction is shown in an error window, with the file and line.
 - **Reload.** The **Reload** button reloads every extension: their open windows close and their variables start again from scratch. Whatever must survive goes in `bp.store` or `bp.prefs`. Disabling and re-enabling an extension also reloads it.
-- **Versions.** `bp.version` gives the BankPerfect version (`"9.8.2"`); `requires` in `bp.extension` cleanly refuses a version that is too old. `bp.id` is the extension's identifier (the name of its file or folder).
+- **Versions.** `bp.version` gives the BankPerfect version (`"9.9.0"`); `requires` in `bp.extension` cleanly refuses a version that is too old. `bp.id` is the extension's identifier (the name of its file or folder).
 - **Language.** `bp.language` is `"fr"` or `"en"`, the interface language. Extensions are reloaded when the user switches language, so the extension name, command names and texts can be chosen at load time. The bundled examples do it with a small function:
 
   ```lua

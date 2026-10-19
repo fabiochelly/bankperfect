@@ -106,7 +106,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "0.00 — sign depends on the method",
     ),
     ("Pointage", "Clearing"),
-    ("À pointer", "Uncleared"),
+    ("À pointer", "Not cleared"),
     ("Pointée", "Cleared"),
     ("Rapprochée", "Reconciled"),
     ("{} ligne modifiée", "{} row changed"),

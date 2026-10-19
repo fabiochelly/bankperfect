@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use bp_core::model::Amount;
+use bp_core::tr;
 use bp_ext::ui::{Align, ButtonStyle, Color, InputKind, TableView, TextStyle, WindowSize};
 use bp_ext::{Answer, Dialog, FrameMut, UiEvent, Widget, Window};
 use egui::{Color32, Key, RichText};
@@ -99,7 +100,7 @@ fn dialog_ui(ctx: &egui::Context, index: usize, dialog: &mut Dialog) -> Option<A
                 crate::dialogs::header(ui, icon::INFO, pal.accent, title);
                 ui.label(RichText::new(message.as_str()).color(pal.fg_dark));
                 crate::dialogs::footer(ui, |ui| {
-                    if crate::dialogs::primary(ui, "OK", true).clicked() {
+                    if crate::dialogs::primary(ui, tr!("OK"), true).clicked() {
                         answer = Some(Answer::Ok);
                     }
                 });
@@ -125,7 +126,7 @@ fn dialog_ui(ctx: &egui::Context, index: usize, dialog: &mut Dialog) -> Option<A
                     if clicked {
                         answer = Some(Answer::Ok);
                     }
-                    if crate::dialogs::button(ui, "Annuler").clicked() {
+                    if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                         answer = Some(Answer::Cancel);
                     }
                 });
@@ -159,7 +160,7 @@ fn dialog_ui(ctx: &egui::Context, index: usize, dialog: &mut Dialog) -> Option<A
                     if crate::dialogs::primary(ui, ok, true).clicked() {
                         answer = Some(Answer::Ok);
                     }
-                    if crate::dialogs::button(ui, "Annuler").clicked() {
+                    if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                         answer = Some(Answer::Cancel);
                     }
                 });
@@ -526,7 +527,7 @@ impl Painter<'_> {
                     ui.painter().text(
                         rect.center(),
                         egui::Align2::CENTER_CENTER,
-                        "Aucune donnée",
+                        tr!("Aucune donnée"),
                         egui::FontId::proportional(14.0),
                         pal.muted,
                     );
@@ -641,7 +642,7 @@ impl Painter<'_> {
                 painter.field(ui, input, field_width);
                 if input.invalid {
                     ui.label(
-                        RichText::new("Valeur non reconnue")
+                        RichText::new(tr!("Valeur non reconnue"))
                             .size(12.0)
                             .color(pal.negative),
                     );
@@ -814,7 +815,7 @@ impl Painter<'_> {
                             input
                                 .placeholder
                                 .clone()
-                                .unwrap_or_else(|| "Choisir un compte".into()),
+                                .unwrap_or_else(|| tr!("Choisir un compte").into()),
                         )
                         .color(pal.muted)
                     },

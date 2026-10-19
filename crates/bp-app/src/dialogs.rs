@@ -2,6 +2,7 @@
 
 use std::path::PathBuf;
 
+use bp_core::tr;
 use egui::{Id, Key, Modal, RichText};
 use egui_phosphor::regular as icon;
 
@@ -107,7 +108,7 @@ impl PasswordPrompt {
         modal(ctx, "password").show(ctx, |ui| {
             ui.set_width(440.0);
             let pal = palette(ui);
-            header(ui, icon::LOCK_SIMPLE, pal.accent, "Fichier protégé");
+            header(ui, icon::LOCK_SIMPLE, pal.accent, tr!("Fichier protégé"));
             ui.label(
                 RichText::new(
                     self.path
@@ -119,14 +120,14 @@ impl PasswordPrompt {
             );
             ui.add_space(10.0);
             let response = if self.use_recovery_key {
-                ui.label("Clé de secours (24 mots) :");
+                ui.label(tr!("Clé de secours (24 mots) :"));
                 ui.add(
                     egui::TextEdit::multiline(&mut self.input)
                         .desired_rows(3)
                         .desired_width(f32::INFINITY),
                 )
             } else {
-                ui.label("Mot de passe :");
+                ui.label(tr!("Mot de passe :"));
                 ui.add(
                     crate::theme::field(&mut self.input)
                         .password(true)
@@ -139,9 +140,9 @@ impl PasswordPrompt {
             }
             if self.can_use_recovery_key {
                 let label = if self.use_recovery_key {
-                    "Utiliser le mot de passe"
+                    tr!("Utiliser le mot de passe")
                 } else {
-                    "Mot de passe oublié ? Utiliser la clé de secours"
+                    tr!("Mot de passe oublié ? Utiliser la clé de secours")
                 };
                 if ui.link(label).clicked() {
                     self.use_recovery_key = !self.use_recovery_key;
@@ -150,12 +151,13 @@ impl PasswordPrompt {
                 }
             }
             footer(ui, |ui| {
-                if primary(ui, "Ouvrir", true).clicked()
+                if primary(ui, tr!("Ouvrir"), true).clicked()
                     || (!self.use_recovery_key && ui.input(|i| i.key_pressed(Key::Enter)))
                 {
                     result = PromptResult::Submit;
                 }
-                if button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if button(ui, tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape))
+                {
                     result = PromptResult::Cancel;
                 }
             });
@@ -169,8 +171,8 @@ pub fn recovery_key(ctx: &egui::Context, phrase: &str) -> bool {
     let mut close = false;
     modal(ctx, "recovery").show(ctx, |ui| {
         ui.set_width(540.0);
-        header(ui, icon::SHIELD_CHECK, palette(ui).positive, "Votre clé de secours");
-        ui.label("Votre fichier est maintenant chiffré. Si vous oubliez votre mot de passe, cette clé est le seul moyen de le rouvrir. Notez-la ou imprimez-la, et rangez-la en lieu sûr : elle ne sera plus jamais affichée.");
+        header(ui, icon::SHIELD_CHECK, palette(ui).positive, tr!("Votre clé de secours"));
+        ui.label(tr!("Votre fichier est maintenant chiffré. Si vous oubliez votre mot de passe, cette clé est le seul moyen de le rouvrir. Notez-la ou imprimez-la, et rangez-la en lieu sûr : elle ne sera plus jamais affichée."));
         ui.add_space(10.0);
         egui::Frame::group(ui.style()).show(ui, |ui| {
             egui::Grid::new("words").num_columns(4).spacing([18.0, 6.0]).show(ui, |ui| {
@@ -183,10 +185,10 @@ pub fn recovery_key(ctx: &egui::Context, phrase: &str) -> bool {
             });
         });
         footer(ui, |ui| {
-            if primary(ui, "J'ai noté ma clé", true).clicked() {
+            if primary(ui, tr!("J'ai noté ma clé"), true).clicked() {
                 close = true;
             }
-            if button(ui, format!("{}  Copier", icon::COPY)).clicked() {
+            if button(ui, format!("{}  {}", icon::COPY, tr!("Copier"))).clicked() {
                 ui.ctx().copy_text(phrase.to_string());
             }
         });
@@ -235,7 +237,7 @@ pub fn confirm(
             if yes_clicked || ui.input(|i| i.key_pressed(Key::Enter)) {
                 choice = Choice::Yes;
             }
-            if button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+            if button(ui, tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                 choice = Choice::Cancel;
             }
             if let Some(no) = no {
@@ -260,7 +262,7 @@ pub fn alert(ctx: &egui::Context, title: &str, message: &str) -> bool {
         header(ui, icon::WARNING, pal.negative, title);
         ui.label(RichText::new(message).color(pal.fg_dark));
         footer(ui, |ui| {
-            if primary(ui, "OK", true).clicked()
+            if primary(ui, tr!("OK"), true).clicked()
                 || ui.input(|i| i.key_pressed(Key::Escape) || i.key_pressed(Key::Enter))
             {
                 close = true;
@@ -279,7 +281,7 @@ pub fn warnings(ctx: &egui::Context, warnings: &[String]) -> bool {
             ui,
             icon::WARNING,
             palette(ui).warning,
-            "Anomalies corrigées à l'ouverture",
+            tr!("Anomalies corrigées à l'ouverture"),
         );
         egui::ScrollArea::vertical()
             .max_height(300.0)
@@ -289,7 +291,9 @@ pub fn warnings(ctx: &egui::Context, warnings: &[String]) -> bool {
                 }
             });
         footer(ui, |ui| {
-            if primary(ui, "Fermer", true).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+            if primary(ui, tr!("Fermer"), true).clicked()
+                || ui.input(|i| i.key_pressed(Key::Escape))
+            {
                 close = true;
             }
         });

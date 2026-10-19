@@ -33,6 +33,7 @@ use crate::feature_store::{self, FeatureError};
 use crate::formula::{Formula, FormulaError, Value};
 use crate::model::{Account, Category, Date, Document, Mode, Operation, StandardMode};
 use crate::pyvalue::{LegacyError, PyValue, parse_repr, to_repr};
+use crate::tr;
 
 /// Variables utilisables dans les formules.
 pub const VARIABLES: [&str; 16] = [
@@ -68,9 +69,9 @@ impl RuleField {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Payee => "Tiers",
-            Self::Details => "Détails",
-            Self::PayeeOrDetails => "Tiers ou Détails",
+            Self::Payee => tr!("Tiers"),
+            Self::Details => tr!("Détails"),
+            Self::PayeeOrDetails => tr!("Tiers ou Détails"),
         }
     }
 
@@ -138,10 +139,10 @@ pub enum RulePart {
 impl RulePart {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Condition => "condition",
-            Self::Payee => "tiers",
-            Self::Details => "détail",
-            Self::Date => "date",
+            Self::Condition => tr!("condition"),
+            Self::Payee => tr!("tiers"),
+            Self::Details => tr!("détail"),
+            Self::Date => tr!("date"),
         }
     }
 }
@@ -149,14 +150,29 @@ impl RulePart {
 /// Règle inutilisable.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RuleError {
-    #[error("la valeur cherchée est vide")]
     EmptyCondition,
-    #[error("formule de {} invalide : {error}", part.label())]
     Formula { part: RulePart, error: FormulaError },
-    #[error("formule de {} : variable inconnue « {name} »", part.label())]
     UnknownVariable { part: RulePart, name: String },
-    #[error("la catégorie à appliquer n'existe pas")]
     UnknownCategory(u32),
+}
+
+impl std::fmt::Display for RuleError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::EmptyCondition => f.write_str(tr!("la valeur cherchée est vide")),
+            Self::Formula { part, error } => f.write_str(&tr!(
+                "formule de {part} invalide : {error}",
+                part = part.label(),
+                error = error
+            )),
+            Self::UnknownVariable { part, name } => f.write_str(&tr!(
+                "formule de {part} : variable inconnue « {name} »",
+                part = part.label(),
+                name = name
+            )),
+            Self::UnknownCategory(_) => f.write_str(tr!("la catégorie à appliquer n'existe pas")),
+        }
+    }
 }
 
 /// Erreur d'évaluation sur une opération (la ligne n'est alors pas retenue,
@@ -256,13 +272,13 @@ fn variable(op: &Operation, categories: &[Category], name: &str, condition: bool
             let d = op.date.to_string();
             Value::Str(d.replace('/', "-"))
         }
-        "mode" => Value::Str(lower(&op.mode_label())),
+        "mode" => Value::Str(lower(&op.mode_name())),
         "tiers" => Value::Str(lower(&op.payee)),
         "details" => Value::Str(lower(&op.details)),
         "montant" | "amount" | "value" => Value::Float(op.amount.as_f64()),
         "categ" | "categorie" | "category" => Value::Str(category_name(categories, op.category)),
         "categ_id" => Value::Int(op.category.map_or(-1, i64::from)),
-        "paymode" => Value::Str(op.mode_label()),
+        "paymode" => Value::Str(op.mode_name()),
         "thirdparty" | "third" | "people" => Value::Str(op.payee.clone()),
         "detail" => Value::Str(op.details.clone()),
         _ => return None,
@@ -378,25 +394,25 @@ impl Rule {
         };
         let mut actions = Vec::new();
         if let Some(mode) = self.set_mode {
-            actions.push(format!("Mode: {}", mode.label()));
+            actions.push(tr!("Mode: {}", mode.label()));
         }
         if let Some(payee) = &self.set_payee {
-            actions.push(format!("Tiers: {payee}"));
+            actions.push(tr!("Tiers: {}", payee));
         }
         if let Some(details) = &self.set_details {
-            actions.push(format!("Détails: {details}"));
+            actions.push(tr!("Détails: {}", details));
         }
         if let Some(change) = self.set_category {
             let label = match change {
-                CategoryChange::Clear => "- Aucune -".to_string(),
+                CategoryChange::Clear => tr!("- Aucune -").to_string(),
                 CategoryChange::Set(id) => {
-                    category_label(categories, id).unwrap_or_else(|| "- Aucune -".into())
+                    category_label(categories, id).unwrap_or_else(|| tr!("- Aucune -").into())
                 }
             };
-            actions.push(format!("Categ: {label}"));
+            actions.push(tr!("Categ: {}", label));
         }
         if let Some(date) = &self.set_date {
-            actions.push(format!("Date: {date}"));
+            actions.push(tr!("Date: {}", date));
         }
         (condition, actions.join(", "))
     }
@@ -408,12 +424,12 @@ impl Rule {
     pub fn from_legacy(value: &PyValue) -> Result<Self, LegacyError> {
         if value.as_dict().is_none() {
             return Err(LegacyError::Structure(
-                "règle : dictionnaire attendu".into(),
+                tr!("règle : dictionnaire attendu").into(),
             ));
         }
         let Some(contains) = value.get("contains").and_then(PyValue::as_str) else {
             return Err(LegacyError::Structure(
-                "règle : valeur cherchée absente".into(),
+                tr!("règle : valeur cherchée absente").into(),
             ));
         };
         let field = match value.get("field").map_or(Some(0), PyValue::as_i64) {
@@ -422,7 +438,7 @@ impl Rule {
             Some(2) => RuleField::PayeeOrDetails,
             _ => {
                 return Err(LegacyError::Structure(
-                    "règle : champ testé invalide".into(),
+                    tr!("règle : champ testé invalide").into(),
                 ));
             }
         };
@@ -433,7 +449,7 @@ impl Rule {
                 .ok()
                 .and_then(|i| StandardMode::ALL.get(i).copied())
                 .map(Some)
-                .ok_or_else(|| LegacyError::Structure("règle : mode invalide".into()))?
+                .ok_or_else(|| LegacyError::Structure(tr!("règle : mode invalide").into()))?
         } else {
             None
         };
@@ -441,7 +457,7 @@ impl Rule {
             match value.get("categ").and_then(PyValue::as_i64) {
                 Some(-1) | None => Some(CategoryChange::Clear),
                 Some(id) => Some(CategoryChange::Set(u32::try_from(id).map_err(|_| {
-                    LegacyError::Structure(format!("règle : catégorie invalide ({id})"))
+                    LegacyError::Structure(tr!("règle : catégorie invalide ({id})", id = id))
                 })?)),
             }
         } else {
@@ -627,7 +643,7 @@ impl CompiledRule<'_> {
                         Some(date) => op.date = date,
                         None => fail(
                             RulePart::Date,
-                            format!("« {text} » n'est pas une date JJ/MM/AAAA"),
+                            tr!("« {text} » n'est pas une date JJ/MM/AAAA", text = text),
                         ),
                     },
                     Err(e) => fail(RulePart::Date, e.to_string()),
@@ -660,10 +676,21 @@ pub struct BatchOutcome {
 /// Erreur d'import d'un fichier de règles.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ImportError {
-    #[error("le fichier ne contient pas de règles à importer")]
     Empty,
-    #[error("ligne {line} : {message}")]
     Line { line: usize, message: String },
+}
+
+impl std::fmt::Display for ImportError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => f.write_str(tr!("le fichier ne contient pas de règles à importer")),
+            Self::Line { line, message } => f.write_str(&tr!(
+                "ligne {line} : {message}",
+                line = line,
+                message = message
+            )),
+        }
+    }
 }
 
 /// Liste ordonnée des règles du document.
@@ -752,7 +779,7 @@ impl AutoFieldRules {
     pub fn from_legacy(value: &PyValue) -> Result<Self, LegacyError> {
         let items = value
             .as_list()
-            .ok_or_else(|| LegacyError::Structure("règles : liste attendue".into()))?;
+            .ok_or_else(|| LegacyError::Structure(tr!("règles : liste attendue").into()))?;
         Ok(Self {
             rules: items
                 .iter()

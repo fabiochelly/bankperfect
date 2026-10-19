@@ -4,6 +4,8 @@
 use std::sync::{Arc, Mutex};
 
 use bp_core::currencies::{CURRENCIES, ECB_DAILY_URL, Rates, currency_name, search_key};
+use bp_core::i18n;
+use bp_core::tr;
 use egui::{Key, RichText, vec2};
 use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
@@ -73,7 +75,7 @@ impl CurrencyForm {
             .map_err(|e| e.to_string())
             .and_then(|json| crate::settings::write_config_file(FILE, &json));
         if let Err(e) = result {
-            self.error = Some(format!("Enregistrement impossible : {e}"));
+            self.error = Some(tr!("Enregistrement impossible : {}", e));
         }
     }
 
@@ -126,12 +128,13 @@ impl CurrencyForm {
                     self.saved.rates.merge(rates);
                     self.persist();
                     self.recompute();
-                    self.message = Some(format!(
-                        "{count} cours de la BCE mis à jour ({})",
-                        display_date(&self.saved.rates.date)
+                    self.message = Some(tr!(
+                        "{count} cours de la BCE mis à jour ({date})",
+                        count = count,
+                        date = display_date(&self.saved.rates.date)
                     ));
                 }
-                Err(e) => self.error = Some(format!("Téléchargement des cours impossible : {e}")),
+                Err(e) => self.error = Some(tr!("Téléchargement des cours impossible : {}", e)),
             }
         }
     }
@@ -147,11 +150,11 @@ impl CurrencyForm {
                 ui,
                 icon::CURRENCY_CIRCLE_DOLLAR,
                 pal.accent,
-                "Convertisseur de devises",
+                tr!("Convertisseur de devises"),
             );
             ui_kit::subtitle(
                 ui,
-                "Tapez un montant dans une devise : toutes les autres se recalculent.",
+                tr!("Tapez un montant dans une devise : toutes les autres se recalculent."),
             );
             self.rates_bar(ui, ctx, &pal);
             ui.add_space(12.0);
@@ -171,7 +174,7 @@ impl CurrencyForm {
                 let escape = ui.input(|i| i.key_pressed(Key::Escape))
                     && !self.adding
                     && self.rate_edit.is_none();
-                if crate::dialogs::primary(ui, "Fermer", true).clicked() || escape {
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked() || escape {
                     outcome = Outcome::Close;
                 }
             });
@@ -188,26 +191,28 @@ impl CurrencyForm {
                     ui.set_max_width(text_w);
                     if self.saved.rates.date.is_empty() {
                         ui.label(
-                            RichText::new("Aucun cours téléchargé")
+                            RichText::new(tr!("Aucun cours téléchargé"))
                                 .family(crate::theme::semibold()),
                         );
                         ui.label(
-                            RichText::new("Cours de référence de la Banque centrale européenne.")
-                                .size(12.5)
-                                .color(pal.muted),
+                            RichText::new(tr!(
+                                "Cours de référence de la Banque centrale européenne."
+                            ))
+                            .size(12.5)
+                            .color(pal.muted),
                         );
                     } else {
                         ui.label(
-                            RichText::new(format!(
+                            RichText::new(tr!(
                                 "Cours BCE du {}",
                                 display_date(&self.saved.rates.date)
                             ))
                             .family(crate::theme::semibold()),
                         );
                         ui.label(
-                            RichText::new(
-                                "Publiés chaque jour ouvré vers 16 h, à titre indicatif.",
-                            )
+                            RichText::new(tr!(
+                                "Publiés chaque jour ouvré vers 16 h, à titre indicatif."
+                            ))
                             .size(12.5)
                             .color(pal.muted),
                         );
@@ -216,11 +221,11 @@ impl CurrencyForm {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     if self.fetch.is_some() {
                         ui.add(egui::Spinner::new());
-                        ui.label(RichText::new("Téléchargement…").color(pal.muted));
+                        ui.label(RichText::new(tr!("Téléchargement…")).color(pal.muted));
                     } else if ui
                         .add(crate::theme::primary_button(
                             ui,
-                            format!("{}  Mettre à jour les cours", icon::ARROWS_CLOCKWISE),
+                            tr!("{}  Mettre à jour les cours", icon::ARROWS_CLOCKWISE),
                         ))
                         .clicked()
                     {
@@ -275,11 +280,13 @@ impl CurrencyForm {
                         match (&mut self.rate_edit, rate) {
                             (Some((row, text)), _) if *row == k => {
                                 ui.horizontal(|ui| {
-                                    ui.label(RichText::new("1 € =").size(12.5).color(pal.muted));
+                                    ui.label(
+                                        RichText::new(tr!("1 € =")).size(12.5).color(pal.muted),
+                                    );
                                     let r = ui.add(
                                         egui::TextEdit::singleline(text)
                                             .desired_width(90.0)
-                                            .hint_text("cours"),
+                                            .hint_text(tr!("cours")),
                                     );
                                     if !r.has_focus() && !r.lost_focus() {
                                         r.request_focus();
@@ -291,11 +298,11 @@ impl CurrencyForm {
                             }
                             (_, Some(r)) if code != "EUR" => {
                                 let manual = self.saved.rates.date.is_empty() || !is_ecb(code);
-                                let text = format!(
-                                    "1 € = {} {code}{}",
-                                    format_rate(r),
-                                    if manual { " · cours manuel" } else { "" }
-                                );
+                                let text = if manual {
+                                    tr!("1 € = {} {} · cours manuel", format_rate(r), code)
+                                } else {
+                                    tr!("1 € = {} {}", format_rate(r), code)
+                                };
                                 let response = ui.add(
                                     egui::Label::new(
                                         RichText::new(text).size(12.5).color(pal.muted),
@@ -303,7 +310,7 @@ impl CurrencyForm {
                                     .sense(egui::Sense::click()),
                                 );
                                 if response
-                                    .on_hover_text("Cliquer pour saisir un cours")
+                                    .on_hover_text(tr!("Cliquer pour saisir un cours"))
                                     .clicked()
                                 {
                                     start_rate_edit = Some((k, format_rate(r)));
@@ -312,7 +319,7 @@ impl CurrencyForm {
                             (_, None) => {
                                 if ui
                                     .link(
-                                        RichText::new(format!(
+                                        RichText::new(tr!(
                                             "{}  Saisir un cours",
                                             icon::PENCIL_SIMPLE
                                         ))
@@ -325,7 +332,7 @@ impl CurrencyForm {
                             }
                             _ => {
                                 ui.label(
-                                    RichText::new("Devise de référence")
+                                    RichText::new(tr!("Devise de référence"))
                                         .size(12.5)
                                         .color(pal.muted),
                                 );
@@ -339,7 +346,7 @@ impl CurrencyForm {
                                     egui::Button::new(RichText::new(icon::TRASH).color(pal.muted))
                                         .frame(false),
                                 )
-                                .on_hover_text("Retirer cette devise")
+                                .on_hover_text(tr!("Retirer cette devise"))
                                 .clicked()
                         {
                             remove = Some(k);
@@ -351,9 +358,9 @@ impl CurrencyForm {
                             .margin(egui::Margin::symmetric(10, 6))
                             .desired_width(220.0)
                             .hint_text(if rate.is_some() {
-                                "0,00"
+                                format!("0{}00", i18n::decimal_separator())
                             } else {
-                                "cours manquant"
+                                tr!("cours manquant").to_string()
                             });
                         if ui.add_enabled(rate.is_some(), edit).changed() {
                             edited = Some(k);
@@ -390,7 +397,7 @@ impl CurrencyForm {
                     self.error = None;
                 }
                 None if text.trim().is_empty() => {}
-                _ => self.error = Some(format!("Cours incorrect : « {} »", text.trim())),
+                _ => self.error = Some(tr!("Cours incorrect : « {} »", text.trim())),
             }
         }
         if let Some(k) = remove {
@@ -411,7 +418,7 @@ impl CurrencyForm {
     fn add_currency(&mut self, ui: &mut egui::Ui, width: f32, pal: &Palette) {
         if !self.adding {
             if ui
-                .button(format!("{}  Ajouter une devise", icon::PLUS))
+                .button(tr!("{}  Ajouter une devise", icon::PLUS))
                 .clicked()
             {
                 self.adding = true;
@@ -424,7 +431,7 @@ impl CurrencyForm {
             ui.horizontal(|ui| {
                 let r = ui.add(
                     crate::theme::field(&mut self.search)
-                        .hint_text(format!(
+                        .hint_text(tr!(
                             "{}  Chercher : dollar, yen, CHF…",
                             icon::MAGNIFYING_GLASS
                         ))
@@ -433,7 +440,7 @@ impl CurrencyForm {
                 if !r.has_focus() && !r.lost_focus() && self.search.is_empty() {
                     r.request_focus();
                 }
-                if ui.button("Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if ui.button(tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     self.adding = false;
                 }
             });
@@ -445,7 +452,7 @@ impl CurrencyForm {
                 .filter(|(code, name)| {
                     key.is_empty()
                         || search_key(code).contains(&key)
-                        || search_key(name).contains(&key)
+                        || search_key(bp_core::i18n::tr(name)).contains(&key)
                 })
                 .collect();
             egui::ScrollArea::vertical()
@@ -454,19 +461,17 @@ impl CurrencyForm {
                 .show(ui, |ui| {
                     ui.set_width(width - 2.0 * ui_kit::CARD_PADDING - 16.0);
                     if matches.is_empty() {
-                        ui.label(RichText::new("Aucune devise trouvée.").color(pal.muted));
+                        ui.label(RichText::new(tr!("Aucune devise trouvée.")).color(pal.muted));
                     }
                     for (code, name) in matches {
+                        let name = bp_core::i18n::tr(name);
                         let available = self.saved.rates.rate(code).is_some();
-                        let tail = if available {
-                            ""
+                        let text = if available {
+                            format!("{code}  {name}")
                         } else {
-                            "  · cours à saisir"
+                            tr!("{}  {}  · cours à saisir", code, name)
                         };
-                        if ui
-                            .selectable_label(false, format!("{code}  {name}{tail}"))
-                            .clicked()
-                        {
+                        if ui.selectable_label(false, text).clicked() {
                             chosen = Some(code.to_string());
                         }
                     }
@@ -477,7 +482,8 @@ impl CurrencyForm {
                     .filter(|(code, _)| !self.saved.currencies.iter().any(|c| c == code))
                     .find(|(code, name)| {
                         !key.is_empty()
-                            && (search_key(code).contains(&key) || search_key(name).contains(&key))
+                            && (search_key(code).contains(&key)
+                                || search_key(bp_core::i18n::tr(name)).contains(&key))
                     })
             {
                 chosen = Some(code.to_string());
@@ -531,15 +537,11 @@ fn parse(text: &str) -> Option<f64> {
     if cleaned.is_empty() {
         return None;
     }
-    let normalized = cleaned.replace(',', ".");
-    normalized
+    // La calculatrice lit la virgule et le point selon la langue.
+    cleaned
         .parse::<f64>()
         .ok()
-        .or_else(|| {
-            crate::calculator::evaluate(&normalized)
-                .ok()
-                .map(|(v, _)| v)
-        })
+        .or_else(|| crate::calculator::evaluate(&cleaned).ok().map(|(v, _)| v))
         .filter(|v| v.is_finite())
 }
 
@@ -552,7 +554,7 @@ fn format_amount(v: f64) -> String {
 
 fn format_rate(r: f64) -> String {
     let digits = if r >= 100.0 { 2 } else { 4 };
-    format!("{r:.digits$}").replace('.', ",")
+    format!("{r:.digits$}").replace('.', &i18n::decimal_separator().to_string())
 }
 
 /// `2026-10-09` → `09/10/2026`.
@@ -603,5 +605,19 @@ mod tests {
         assert_eq!(display_date("2026-10-09"), "09/10/2026");
         assert_eq!(format_rate(1.08764), "1,0876");
         assert_eq!(format_rate(162.351), "162,35");
+    }
+
+    #[test]
+    fn reads_and_writes_english_numbers() {
+        i18n::with_lang(i18n::Lang::En, || {
+            assert_eq!(parse("1,234.50"), Some(1234.5));
+            assert_eq!(parse("1,234"), Some(1234.0));
+            assert_eq!(parse("1.5"), Some(1.5));
+            assert_eq!(parse("3,5"), Some(3.5));
+            assert_eq!(parse("2*1,000"), Some(2000.0));
+            assert_eq!(format_rate(1.08764), "1.0876");
+            assert_eq!(format_amount(1234.5), "1,234.50");
+            assert_eq!(parse(&format_amount(1234.5)), Some(1234.5));
+        });
     }
 }

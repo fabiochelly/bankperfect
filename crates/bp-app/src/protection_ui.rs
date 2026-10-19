@@ -5,6 +5,7 @@
 //! session laissée ouverte ne suffise pas à changer la protection.
 
 use bp_core::format_v6::{Protection, Unlock};
+use bp_core::tr;
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -37,17 +38,24 @@ impl ProtectionForm {
             // Assez large pour les quatre boutons du pied quand le fichier est
             // protégé (sinon le groupe de gauche recouvre « Fermer »).
             ui.set_width(if protected { 660.0 } else { 500.0 });
-            crate::dialogs::header(ui, icon::SHIELD_CHECK, pal.accent, "Protection du fichier");
+            crate::dialogs::header(
+                ui,
+                icon::SHIELD_CHECK,
+                pal.accent,
+                tr!("Protection du fichier"),
+            );
             let (glyph, status, color) = if protected {
                 (
                     icon::LOCK_SIMPLE,
-                    "Protégé par mot de passe : contenu chiffré (XChaCha20-Poly1305, Argon2id).",
+                    tr!(
+                        "Protégé par mot de passe : contenu chiffré (XChaCha20-Poly1305, Argon2id)."
+                    ),
                     pal.positive,
                 )
             } else {
                 (
                     icon::LOCK_SIMPLE_OPEN,
-                    "Non protégé : n'importe qui peut ouvrir ce fichier avec BankPerfect.",
+                    tr!("Non protégé : n'importe qui peut ouvrir ce fichier avec BankPerfect."),
                     pal.warning,
                 )
             };
@@ -60,7 +68,7 @@ impl ProtectionForm {
                 .spacing([12.0, 8.0])
                 .show(ui, |ui| {
                     if protected {
-                        ui.label("Mot de passe actuel");
+                        ui.label(tr!("Mot de passe actuel"));
                         ui.add(
                             crate::theme::field(&mut self.current)
                                 .password(true)
@@ -69,9 +77,9 @@ impl ProtectionForm {
                         ui.end_row();
                     }
                     ui.label(if protected {
-                        "Nouveau mot de passe"
+                        tr!("Nouveau mot de passe")
                     } else {
-                        "Mot de passe"
+                        tr!("Mot de passe")
                     });
                     let response = ui.add(
                         crate::theme::field(&mut self.new)
@@ -79,7 +87,7 @@ impl ProtectionForm {
                             .desired_width(260.0),
                     );
                     ui.end_row();
-                    ui.label("Confirmation");
+                    ui.label(tr!("Confirmation"));
                     let confirm = ui.add(
                         crate::theme::field(&mut self.confirm)
                             .password(true)
@@ -98,10 +106,10 @@ impl ProtectionForm {
             }
             ui.add_space(4.0);
             ui.label(
-                RichText::new(
+                RichText::new(tr!(
                     "Une nouvelle clé de secours de 24 mots est créée avec le mot de passe : \
-                     notez-la, c'est le seul moyen d'ouvrir le fichier si vous l'oubliez.",
-                )
+                     notez-la, c'est le seul moyen d'ouvrir le fichier si vous l'oubliez."
+                ))
                 .small()
                 .color(pal.muted),
             );
@@ -111,26 +119,29 @@ impl ProtectionForm {
             }
             crate::dialogs::footer(ui, |ui| {
                 let label = if protected {
-                    "Changer le mot de passe"
+                    tr!("Changer le mot de passe")
                 } else {
-                    "Protéger"
+                    tr!("Protéger")
                 };
                 if crate::dialogs::primary(ui, label, true).clicked() {
                     action = Some(Action::SetPassword);
                 }
-                if crate::dialogs::button(ui, "Fermer").clicked()
+                if crate::dialogs::button(ui, tr!("Fermer")).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
                 }
                 if protected {
                     ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                        if crate::dialogs::button(ui, "Nouvelle clé de secours").clicked() {
+                        if crate::dialogs::button(ui, tr!("Nouvelle clé de secours")).clicked() {
                             action = Some(Action::NewRecoveryKey);
                         }
-                        if crate::dialogs::button(ui, RichText::new("Retirer").color(pal.negative))
-                            .on_hover_text("Retirer le mot de passe")
-                            .clicked()
+                        if crate::dialogs::button(
+                            ui,
+                            RichText::new(tr!("Retirer")).color(pal.negative),
+                        )
+                        .on_hover_text(tr!("Retirer le mot de passe"))
+                        .clicked()
                         {
                             action = Some(Action::RemovePassword);
                         }
@@ -154,17 +165,18 @@ impl ProtectionForm {
         protected: bool,
     ) -> Result<Outcome, String> {
         if protected && !check_current(doc, &self.current) {
-            return Err("Mot de passe actuel incorrect.".into());
+            return Err(tr!("Mot de passe actuel incorrect.").into());
         }
         let password = match action {
             Action::SetPassword => {
                 if self.new.chars().count() < MIN_LENGTH {
-                    return Err(format!(
-                        "Le mot de passe doit faire au moins {MIN_LENGTH} caractères."
+                    return Err(tr!(
+                        "Le mot de passe doit faire au moins {} caractères.",
+                        MIN_LENGTH
                     ));
                 }
                 if self.new != self.confirm {
-                    return Err("Les deux saisies ne correspondent pas.".into());
+                    return Err(tr!("Les deux saisies ne correspondent pas.").into());
                 }
                 Some(self.new.clone())
             }
@@ -182,7 +194,9 @@ impl ProtectionForm {
             }
             None => {
                 doc.protection = Some(Protection::none().map_err(|e| e.to_string())?);
-                Outcome::Done("Mot de passe retiré — enregistrez (Ctrl+S) pour l'appliquer".into())
+                Outcome::Done(
+                    tr!("Mot de passe retiré — enregistrez (Ctrl+S) pour l'appliquer").into(),
+                )
             }
         };
         doc.dirty = true;
@@ -226,9 +240,9 @@ fn strength(password: &str, pal: &crate::theme::Palette) -> (&'static str, egui:
     .filter(|&&b| b)
     .count();
     match (n, classes) {
-        (0..MIN_LENGTH, _) => ("Trop court", pal.negative),
-        (_, 0..=1) if n < 14 => ("Faible", pal.warning),
-        (_, 2) if n < 12 => ("Moyen", pal.future),
-        _ => ("Solide", pal.positive),
+        (0..MIN_LENGTH, _) => (tr!("Trop court"), pal.negative),
+        (_, 0..=1) if n < 14 => (tr!("Faible"), pal.warning),
+        (_, 2) if n < 12 => (tr!("Moyen"), pal.future),
+        _ => (tr!("Solide"), pal.positive),
     }
 }

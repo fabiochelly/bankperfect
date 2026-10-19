@@ -1,3 +1,5 @@
+**Français** · [English](README.en.md)
+
 # BankPerfect
 
 Gestion de comptes bancaires personnels, rapide et moderne, pour Linux, Windows et macOS.
@@ -51,9 +53,10 @@ cargo run --release -p bankperfect
 cargo test --workspace
 ```
 
-Le dépôt contient deux crates :
+Le dépôt contient trois crates :
 
-- `crates/bp-core` : formats de fichiers (lecture des anciens `.bp`, nouveau format chiffré), modèle de données et calculs ;
+- `crates/bp-core` : formats de fichiers (lecture des anciens `.bp`, nouveau format chiffré), modèle de données, calculs et traductions ;
+- `crates/bp-ext` : les extensions Luau (moteur, API, fenêtres déclaratives) ;
 - `crates/bp-app` : l'application (egui, rendu wgpu).
 
 `docs/inventaire/` décrit l'ancienne version fonctionnalité par fonctionnalité, et `docs/corrections.md` liste les bogues de l'ancienne version corrigés dans la réécriture.

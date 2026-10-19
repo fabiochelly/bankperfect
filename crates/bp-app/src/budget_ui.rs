@@ -5,7 +5,9 @@ use bp_core::budget::{
     AnnualBudgets, BudgetKind, BudgetOptions, BudgetPeriod, BudgetReport, BudgetTotal, LineInput,
     MonthCounting, MonthlyBudget, Spread, ValueKind, parse_amount_input,
 };
+use bp_core::i18n;
 use bp_core::model::{Amount, Date};
+use bp_core::{tr, trc, trn};
 use chrono::Datelike;
 use egui::{Color32, Key, RichText, vec2};
 use egui_phosphor::regular as icon;
@@ -17,23 +19,17 @@ use crate::theme::{Palette, palette};
 use crate::tools::Outcome;
 use crate::ui_kit;
 
-const MONTHS: [&str; 12] = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-];
-const SHORT_MONTHS: [&str; 12] = [
-    "Janv", "Févr", "Mars", "Avr", "Mai", "Juin", "Juil", "Août", "Sept", "Oct", "Nov", "Déc",
-];
+/// Montant saisi dans un tableau de budget ou l'échéancier. En anglais, une
+/// virgule suivie de trois chiffres sépare les milliers (« 1,234.56 »,
+/// « 1,500 ») ; ailleurs elle reste décimale, comme en français.
+pub(crate) fn amount_input(text: &str) -> String {
+    i18n::strip_thousands(text)
+}
+
+/// [`parse_amount_input`] avec les milliers à l'anglaise.
+fn parse_amount(text: &str) -> Option<Amount> {
+    parse_amount_input(&amount_input(text))
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum BudgetTab {
@@ -80,6 +76,8 @@ pub struct BudgetForm {
     confirm_delete: bool,
     error: Option<String>,
     message: Option<String>,
+    /// Devise des montants (devise principale du fichier).
+    currency: String,
 }
 
 impl BudgetForm {
@@ -118,6 +116,7 @@ impl BudgetForm {
             confirm_delete: false,
             error: None,
             message: None,
+            currency: doc.main_currency().to_string(),
         };
         form.select_table(selected);
         form
@@ -147,7 +146,7 @@ impl BudgetForm {
                 ui.allocate_ui_with_layout(
                     vec2(260.0, 36.0),
                     egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| crate::dialogs::header(ui, icon::PIGGY_BANK, pal.accent, "Budgets"),
+                    |ui| crate::dialogs::header(ui, icon::PIGGY_BANK, pal.accent, tr!("Budgets")),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     ui_kit::segmented(
@@ -157,13 +156,13 @@ impl BudgetForm {
                             (
                                 BudgetTab::Monthly,
                                 icon::CALENDAR_BLANK,
-                                "Budget mensuel",
+                                tr!("Budget mensuel"),
                                 pal.accent,
                             ),
                             (
                                 BudgetTab::Annual,
                                 icon::CALENDAR,
-                                "Budgets annuels",
+                                tr!("Budgets annuels"),
                                 pal.accent,
                             ),
                         ],
@@ -196,13 +195,17 @@ impl BudgetForm {
                     && self.editing.is_none()
                     && self.cell_edit.is_none()
                     && self.line_editor.is_none();
-                if crate::dialogs::primary(ui, "Fermer", true).clicked() || escape {
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked() || escape {
                     outcome = Outcome::Close;
                 }
                 if let Some((name, rows)) = export
                     && crate::dialogs::button(
                         ui,
-                        format!("{}  Exporter vers un tableur…", icon::MICROSOFT_EXCEL_LOGO),
+                        format!(
+                            "{}  {}",
+                            icon::MICROSOFT_EXCEL_LOGO,
+                            tr!("Exporter vers un tableur…")
+                        ),
                     )
                     .clicked()
                 {
@@ -231,12 +234,12 @@ impl BudgetForm {
             ui.spacing_mut().item_spacing = vec2(14.0, 10.0);
             let before = self.period_kind;
             let mut kinds = vec![
-                (PeriodKind::Month, "", "Un mois", pal.accent),
-                (PeriodKind::Year, "", "Une année", pal.accent),
-                (PeriodKind::All, "", "Tout", pal.accent),
+                (PeriodKind::Month, "", tr!("Un mois"), pal.accent),
+                (PeriodKind::Year, "", tr!("Une année"), pal.accent),
+                (PeriodKind::All, "", tr!("Tout"), pal.accent),
             ];
             if !self.filter_names.is_empty() {
-                kinds.push((PeriodKind::Filter, "", "Filtre", pal.accent));
+                kinds.push((PeriodKind::Filter, "", tr!("Filtre"), pal.accent));
             }
             ui_kit::segmented(
                 ui,
@@ -257,7 +260,7 @@ impl BudgetForm {
                 BudgetPeriod::Month { year, month } => {
                     if ui
                         .button(icon::CARET_LEFT)
-                        .on_hover_text("Mois précédent")
+                        .on_hover_text(tr!("Mois précédent"))
                         .clicked()
                     {
                         if *month == 1 {
@@ -267,7 +270,11 @@ impl BudgetForm {
                             *month -= 1;
                         }
                     }
-                    let label = format!("{} {}", MONTHS[(*month as usize - 1) % 12], year);
+                    let label = format!(
+                        "{} {}",
+                        i18n::month_name((*month as usize).saturating_sub(1)),
+                        year
+                    );
                     ui.add_sized(
                         vec2(150.0, 28.0),
                         egui::Label::new(
@@ -278,7 +285,7 @@ impl BudgetForm {
                     );
                     if ui
                         .button(icon::CARET_RIGHT)
-                        .on_hover_text("Mois suivant")
+                        .on_hover_text(tr!("Mois suivant"))
                         .clicked()
                     {
                         if *month == 12 {
@@ -337,10 +344,10 @@ impl BudgetForm {
                         (
                             MonthCounting::MonthsWithOperations,
                             "",
-                            "Mois avec opérations",
+                            tr!("Mois avec opérations"),
                             pal.accent,
                         ),
-                        (MonthCounting::Days, "", "Jours ÷ 30,4", pal.accent),
+                        (MonthCounting::Days, "", tr!("Jours ÷ 30,4"), pal.accent),
                     ],
                     32.0,
                     Some(330.0),
@@ -354,17 +361,25 @@ impl BudgetForm {
                 ui,
                 &mut self.all_accounts,
                 &[
-                    (true, "", "Tous les comptes", pal.accent),
-                    (false, "", "Compte courant", pal.accent),
+                    (true, "", tr!("Tous les comptes"), pal.accent),
+                    (false, "", tr!("Compte courant"), pal.accent),
                 ],
                 30.0,
                 Some(290.0),
             ) {
                 self.options.accounts = (!self.all_accounts).then(|| vec![doc.account]);
             }
-            crate::theme::checkbox(ui, &mut self.options.show_unbudgeted, "Lignes sans budget");
-            crate::theme::checkbox(ui, &mut self.options.show_zero, "Lignes à zéro");
-            crate::theme::checkbox(ui, &mut self.options.show_subcategories, "Sous-catégories");
+            crate::theme::checkbox(
+                ui,
+                &mut self.options.show_unbudgeted,
+                tr!("Lignes sans budget"),
+            );
+            crate::theme::checkbox(ui, &mut self.options.show_zero, tr!("Lignes à zéro"));
+            crate::theme::checkbox(
+                ui,
+                &mut self.options.show_subcategories,
+                tr!("Sous-catégories"),
+            );
         });
     }
 
@@ -396,22 +411,30 @@ impl BudgetForm {
             summary_tile(
                 ui,
                 tile,
-                "Dépenses",
-                icon::ARROW_DOWN_RIGHT,
+                (icon::ARROW_DOWN_RIGHT, tr!("Dépenses")),
                 &report.expenses,
                 Some(BudgetKind::Expense),
+                &self.currency,
                 pal,
             );
             summary_tile(
                 ui,
                 tile,
-                "Recettes",
-                icon::ARROW_UP_RIGHT,
+                (icon::ARROW_UP_RIGHT, tr!("Recettes")),
                 &report.income,
                 Some(BudgetKind::Income),
+                &self.currency,
                 pal,
             );
-            summary_tile(ui, tile, "Solde", icon::SCALES, &report.total, None, pal);
+            summary_tile(
+                ui,
+                tile,
+                (icon::SCALES, tr!("Solde")),
+                &report.total,
+                None,
+                &self.currency,
+                pal,
+            );
         });
         ui.add_space(8.0);
         ui.label(
@@ -428,7 +451,7 @@ impl BudgetForm {
                 self.save_monthly(doc);
                 self.error = None;
             } else {
-                match parse_amount_input(trimmed) {
+                match parse_amount(trimmed) {
                     Some(amount) => {
                         let kind = if trimmed.starts_with('+') {
                             BudgetKind::Income
@@ -441,11 +464,11 @@ impl BudgetForm {
                         self.save_monthly(doc);
                         self.error = None;
                     }
-                    None => self.error = Some(format!("Montant incorrect : « {trimmed} »")),
+                    None => self.error = Some(tr!("Montant incorrect : « {} »", trimmed)),
                 }
             }
         }
-        Some(("Budget mensuel".into(), monthly_rows(&report)))
+        Some((tr!("Budget mensuel").into(), monthly_rows(&report)))
     }
 
     /// Tableau du budget ; renvoie une saisie validée `(catégorie, texte,
@@ -476,19 +499,19 @@ impl BudgetForm {
         };
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;
-            header(ui, label_w, egui::Align::Min, "Catégorie");
-            header(ui, amount_w, egui::Align::Max, "Budget");
-            header(ui, amount_w, egui::Align::Max, "Réel");
-            header(ui, amount_w, egui::Align::Max, "Écart");
+            header(ui, label_w, egui::Align::Min, tr!("Catégorie"));
+            header(ui, amount_w, egui::Align::Max, tr!("Budget"));
+            header(ui, amount_w, egui::Align::Max, tr!("Réel"));
+            header(ui, amount_w, egui::Align::Max, tr!("Écart"));
             ui.add_space(24.0);
-            header(ui, bar_w, egui::Align::Min, "Consommation");
+            header(ui, bar_w, egui::Align::Min, tr!("Consommation"));
         });
         ui.separator();
         egui::ScrollArea::vertical().id_salt("budget_rows").auto_shrink([false, false]).show(ui, |ui| {
             ui.spacing_mut().item_spacing.y = 0.0;
             if report.rows.is_empty() {
                 ui.add_space(30.0);
-                ui.label(RichText::new("Aucune ligne : ajoutez des catégories ou affichez les lignes sans budget.").color(pal.muted));
+                ui.label(RichText::new(tr!("Aucune ligne : ajoutez des catégories ou affichez les lignes sans budget.")).color(pal.muted));
             }
             for (k, row) in report.rows.iter().enumerate() {
                 let (rect, response) = ui.allocate_exact_size(vec2(width - 16.0, ROW), egui::Sense::hover());
@@ -514,7 +537,7 @@ impl BudgetForm {
                     let (_, text) = self.editing.as_mut().unwrap();
                     let edit = ui.add_sized(
                         vec2(amount_w - 8.0, 28.0),
-                        egui::TextEdit::singleline(text).horizontal_align(egui::Align::Max).hint_text("-150 ou +2000"),
+                        egui::TextEdit::singleline(text).horizontal_align(egui::Align::Max).hint_text(tr!("-150 ou +2000")),
                     );
                     ui.add_space(8.0);
                     if !edit.has_focus() && !edit.lost_focus() {
@@ -529,7 +552,7 @@ impl BudgetForm {
                     }
                 } else {
                     let text = match row.budget {
-                        Some(b) => RichText::new(money(b, "€")).color(amount_color(b, pal)),
+                        Some(b) => RichText::new(money(b, &self.currency)).color(amount_color(b, pal)),
                         None => RichText::new("—").color(pal.muted.gamma_multiply(0.6)),
                     };
                     let response = ui
@@ -540,7 +563,7 @@ impl BudgetForm {
                         .response
                         .interact(egui::Sense::click())
                         .on_hover_cursor(egui::CursorIcon::Text)
-                        .on_hover_text("Cliquer pour modifier le budget (vide = aucun)");
+                        .on_hover_text(tr!("Cliquer pour modifier le budget (vide = aucun)"));
                     if response.hovered() {
                         ui.painter().rect_stroke(
                             response.rect.shrink2(vec2(0.0, 4.0)),
@@ -556,9 +579,9 @@ impl BudgetForm {
                         ));
                     }
                 }
-                ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(money(row.real, "€")).color(amount_color(row.real, pal)));
+                ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(money(row.real, &self.currency)).color(amount_color(row.real, pal)));
                 match row.difference {
-                    Some(d) => ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(signed(d)).color(difference_color(d, row.kind, pal))),
+                    Some(d) => ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new(signed(d, &self.currency)).color(difference_color(d, row.kind, pal))),
                     None => ui_kit::cell(ui, amount_w, egui::Align::Max, RichText::new("")),
                 }
                 ui.add_space(24.0);
@@ -566,12 +589,12 @@ impl BudgetForm {
                     let (ratio, color) = consumption(row.real, budget, kind, pal);
                     progress(ui, bar_w - 12.0, ratio, color, pal);
                     ui.add_space(12.0);
-                    ui_kit::cell(ui, pct_w, egui::Align::Max, RichText::new(format!("{:.0} %", ratio * 100.0)).color(pal.fg_dark));
+                    ui_kit::cell(ui, pct_w, egui::Align::Max, RichText::new(tr!("{} %", format!("{:.0}", ratio * 100.0))).color(pal.fg_dark));
                 }
             }
             ui.add_space(10.0);
             ui.label(
-                RichText::new("Cliquez sur un budget pour le modifier. Les montants négatifs sont des dépenses ; préfixez par + une recette. Les calculs simples sont acceptés (1200/12).")
+                RichText::new(tr!("Cliquez sur un budget pour le modifier. Les montants négatifs sont des dépenses ; préfixez par + une recette. Les calculs simples sont acceptés (1200/12)."))
                     .size(12.5)
                     .color(pal.muted),
             );
@@ -622,7 +645,7 @@ impl BudgetForm {
         let mut clicked = None;
         ui_kit::card(ui, width, |ui| {
             if labels.is_empty() {
-                ui.label(RichText::new("Aucun tableau.").color(pal.muted));
+                ui.label(RichText::new(tr!("Aucun tableau.")).color(pal.muted));
             }
             for (i, label) in labels.iter().enumerate() {
                 if ui
@@ -641,14 +664,16 @@ impl BudgetForm {
                 let mut cancel = false;
                 ui.add(
                     crate::theme::field(name)
-                        .hint_text("Nom du tableau")
+                        .hint_text(tr!("Nom du tableau"))
                         .desired_width(width - 40.0),
                 );
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.add(egui::DragValue::new(year).range(1900..=9999));
-                    create = ui.button(format!("{}  Créer", icon::CHECK)).clicked();
-                    cancel = ui.button("Annuler").clicked();
+                    create = ui
+                        .button(format!("{}  {}", icon::CHECK, tr!("Créer")))
+                        .clicked();
+                    cancel = ui.button(tr!("Annuler")).clicked();
                 });
                 let (name, year) = (name.clone(), *year);
                 if create {
@@ -665,11 +690,16 @@ impl BudgetForm {
                 }
             } else {
                 ui.horizontal(|ui| {
-                    if ui.button(format!("{}  Nouveau", icon::PLUS)).clicked() {
+                    if ui
+                        .button(format!("{}  {}", icon::PLUS, tr!("Nouveau")))
+                        .clicked()
+                    {
                         self.new_table = Some((String::new(), Date::today().to_naive().year()));
                     }
                     if let Some(i) = self.selected
-                        && ui.button(format!("{}  Dupliquer", icon::COPY)).clicked()
+                        && ui
+                            .button(format!("{}  {}", icon::COPY, tr!("Dupliquer")))
+                            .clicked()
                         && let Ok(j) = self.tables.duplicate(i)
                     {
                         self.save_annual(doc);
@@ -680,7 +710,7 @@ impl BudgetForm {
                             .add(egui::Button::new(
                                 RichText::new(icon::TRASH).color(pal.negative),
                             ))
-                            .on_hover_text("Supprimer")
+                            .on_hover_text(tr!("Supprimer"))
                             .clicked()
                     {
                         self.confirm_delete = true;
@@ -700,18 +730,18 @@ impl BudgetForm {
                 .inner_margin(14)
                 .show(ui, |ui| {
                     ui.set_width(width - 30.0);
-                    ui.label(format!("Supprimer le tableau « {name} » ?"));
+                    ui.label(tr!("Supprimer le tableau « {} » ?", name));
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
                         if ui
-                            .button(RichText::new("Supprimer").color(pal.negative))
+                            .button(RichText::new(tr!("Supprimer")).color(pal.negative))
                             .clicked()
                         {
                             let _ = self.tables.delete(i);
                             self.save_annual(doc);
                             clicked = Some(usize::MAX);
                         }
-                        if ui.button("Annuler").clicked() {
+                        if ui.button(tr!("Annuler")).clicked() {
                             self.confirm_delete = false;
                         }
                     });
@@ -735,7 +765,7 @@ impl BudgetForm {
             ui.add_space(40.0);
             ui.vertical_centered(|ui| {
                 ui.label(RichText::new(icon::TABLE).size(40.0).color(pal.muted));
-                ui.label(RichText::new("Créez un tableau pour prévoir mois par mois vos dépenses et recettes de l'année.").color(pal.muted));
+                ui.label(RichText::new(tr!("Créez un tableau pour prévoir mois par mois vos dépenses et recettes de l'année.")).color(pal.muted));
             });
             return None;
         };
@@ -760,14 +790,14 @@ impl BudgetForm {
             let chosen = self.tables.tables[index].account_indices(&doc.document);
             let all = self.tables.tables[index].accounts.is_none();
             let label = if all {
-                "Tous les comptes".to_string()
+                tr!("Tous les comptes").to_string()
             } else {
-                format!("{} compte(s)", chosen.len())
+                trn!(chosen.len(), "{} compte", "{} comptes")
             };
             let mut new_selection: Option<Option<Vec<usize>>> = None;
             ui.menu_button(format!("{}  {label}", icon::BANK), |ui| {
                 let mut every = all;
-                if crate::theme::checkbox(ui, &mut every, "Tous les comptes").changed() {
+                if crate::theme::checkbox(ui, &mut every, tr!("Tous les comptes")).changed() {
                     new_selection = Some(if every { None } else { Some(chosen.clone()) });
                 }
                 ui.separator();
@@ -802,16 +832,16 @@ impl BudgetForm {
                 ui,
                 &mut self.view,
                 &[
-                    (ValueKind::Budget, "", "Budget", pal.accent),
-                    (ValueKind::Real, "", "Réel", pal.accent),
-                    (ValueKind::Difference, "", "Écart", pal.accent),
+                    (ValueKind::Budget, "", tr!("Budget"), pal.accent),
+                    (ValueKind::Real, "", tr!("Réel"), pal.accent),
+                    (ValueKind::Difference, "", tr!("Écart"), pal.accent),
                 ],
                 32.0,
                 Some(300.0),
             );
             ui.add_space(12.0);
             if self.view != ValueKind::Difference {
-                ui.label(RichText::new("Saisie :").color(pal.fg_dark));
+                ui.label(RichText::new(tr!("Saisie :")).color(pal.fg_dark));
                 egui::ComboBox::from_id_salt("annual_spread")
                     .selected_text(spread_label(self.spread))
                     .width(170.0)
@@ -827,7 +857,10 @@ impl BudgetForm {
                     });
             }
             ui.add_space(12.0);
-            if ui.button(format!("{}  Ligne", icon::PLUS)).clicked() {
+            if ui
+                .button(format!("{}  {}", icon::PLUS, trc!("budget", "Ligne")))
+                .clicked()
+            {
                 self.line_editor = Some(LineEditor {
                     index: None,
                     input: LineInput {
@@ -852,7 +885,7 @@ impl BudgetForm {
             let value = if text.trim().is_empty() {
                 Some(Amount::ZERO)
             } else {
-                parse_amount_input(&text)
+                parse_amount(&text)
             };
             match value {
                 Some(v) => {
@@ -865,7 +898,7 @@ impl BudgetForm {
                         Err(e) => self.error = Some(capitalize(&e.to_string())),
                     }
                 }
-                None => self.error = Some(format!("Montant incorrect : « {} »", text.trim())),
+                None => self.error = Some(tr!("Montant incorrect : « {} »", text.trim())),
             }
         }
         if let Some(line) = edit_line {
@@ -956,7 +989,7 @@ impl BudgetForm {
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(title_w);
-                    fixed(ui, title_w, egui::Align::Min, RichText::new("Ligne").family(crate::theme::semibold()).color(pal.fg_dark));
+                    fixed(ui, title_w, egui::Align::Min, RichText::new(trc!("budget", "Ligne")).family(crate::theme::semibold()).color(pal.fg_dark));
                     for (l, row) in report.rows.iter().enumerate() {
                         let glyph = if row.auto_real { icon::LIGHTNING } else { icon::PENCIL_SIMPLE };
                         let response = fixed(
@@ -968,25 +1001,25 @@ impl BudgetForm {
                         .interact(egui::Sense::click())
                         .on_hover_cursor(egui::CursorIcon::PointingHand)
                         .on_hover_text(if row.auto_real {
-                            "Réel calculé d'après les catégories — cliquer pour modifier la ligne"
+                            tr!("Réel calculé d'après les catégories — cliquer pour modifier la ligne")
                         } else {
-                            "Réel saisi à la main — cliquer pour modifier la ligne"
+                            tr!("Réel saisi à la main — cliquer pour modifier la ligne")
                         });
                         if response.clicked() {
                             edit_line = Some(l);
                         }
                     }
-                    fixed(ui, title_w, egui::Align::Min, RichText::new("Totaux").family(crate::theme::semibold()));
+                    fixed(ui, title_w, egui::Align::Min, RichText::new(tr!("Totaux")).family(crate::theme::semibold()));
                 });
                 egui::ScrollArea::horizontal().id_salt("annual_values").show(ui, |ui| {
                     ui.vertical(|ui| {
                         let size = vec2(COL * 13.0, ROW);
                         let layout = egui::Layout::left_to_right(egui::Align::Center);
                         ui.allocate_ui_with_layout(size, layout, |ui| {
-                            for m in SHORT_MONTHS {
-                                fixed(ui, COL, egui::Align::Max, RichText::new(m).family(crate::theme::semibold()).color(pal.fg_dark));
+                            for m in 0..12 {
+                                fixed(ui, COL, egui::Align::Max, RichText::new(i18n::month_abbr(m)).family(crate::theme::semibold()).color(pal.fg_dark));
                             }
-                            fixed(ui, COL, egui::Align::Max, RichText::new("Total").family(crate::theme::semibold()).color(pal.fg_dark));
+                            fixed(ui, COL, egui::Align::Max, RichText::new(tr!("Total")).family(crate::theme::semibold()).color(pal.fg_dark));
                         });
                         for (l, row) in report.rows.iter().enumerate() {
                             let editable = match view {
@@ -1058,7 +1091,7 @@ impl BudgetForm {
         });
         if lines == 0 {
             ui.add_space(8.0);
-            ui.label(RichText::new("Ajoutez une ligne (loyer, courses, salaire…) puis saisissez ses montants mois par mois.").color(pal.muted));
+            ui.label(RichText::new(tr!("Ajoutez une ligne (loyer, courses, salaire…) puis saisissez ses montants mois par mois.")).color(pal.muted));
         }
         if let Some(edit) = start_edit {
             self.cell_edit = Some(edit);
@@ -1086,9 +1119,9 @@ impl BudgetForm {
                     ui,
                     icon::PENCIL_SIMPLE,
                     if editor.index.is_some() {
-                        "Modifier la ligne"
+                        tr!("Modifier la ligne")
                     } else {
-                        "Nouvelle ligne"
+                        tr!("Nouvelle ligne")
                     },
                 );
             });
@@ -1096,14 +1129,14 @@ impl BudgetForm {
             ui.horizontal(|ui| {
                 ui.add(
                     crate::theme::field(&mut editor.input.title)
-                        .hint_text("Titre de la ligne")
+                        .hint_text(tr!("Titre de la ligne"))
                         .desired_width(280.0),
                 );
                 ui.add_space(16.0);
                 crate::theme::checkbox(
                     ui,
                     &mut editor.input.auto_real,
-                    "Réel calculé d'après les catégories",
+                    tr!("Réel calculé d'après les catégories"),
                 );
             });
             if editor.input.auto_real {
@@ -1112,8 +1145,9 @@ impl BudgetForm {
                     ui.add(
                         crate::theme::field(&mut editor.search)
                             .hint_text(format!(
-                                "{}  Chercher une catégorie",
-                                icon::MAGNIFYING_GLASS
+                                "{}  {}",
+                                icon::MAGNIFYING_GLASS,
+                                tr!("Chercher une catégorie")
                             ))
                             .desired_width(280.0),
                     );
@@ -1124,11 +1158,11 @@ impl BudgetForm {
                         .iter()
                         .map(|c| {
                             c.and_then(|id| doc.document.category_label(id))
-                                .unwrap_or_else(|| "Sans catégorie".into())
+                                .unwrap_or_else(|| tr!("Sans catégorie").into())
                         })
                         .collect();
                     let summary = if names.is_empty() {
-                        "Aucune catégorie choisie".to_string()
+                        tr!("Aucune catégorie choisie").to_string()
                     } else {
                         names.join(", ")
                     };
@@ -1136,7 +1170,8 @@ impl BudgetForm {
                 });
                 ui.add_space(6.0);
                 let search = editor.search.to_lowercase();
-                let mut all: Vec<(Option<u32>, String)> = vec![(None, "Sans catégorie".into())];
+                let mut all: Vec<(Option<u32>, String)> =
+                    vec![(None, tr!("Sans catégorie").into())];
                 all.extend(doc.document.categories.iter().map(|c| {
                     (
                         Some(c.id),
@@ -1172,20 +1207,24 @@ impl BudgetForm {
                 if ui
                     .add(crate::theme::primary_button(
                         ui,
-                        format!("{}  Enregistrer", icon::CHECK),
+                        format!("{}  {}", icon::CHECK, tr!("Enregistrer")),
                     ))
                     .clicked()
                 {
                     action = Some(0);
                 }
-                if ui.button("Annuler").clicked() {
+                if ui.button(tr!("Annuler")).clicked() {
                     action = Some(1);
                 }
                 if editor.index.is_some()
                     && ui
                         .button(
-                            RichText::new(format!("{}  Supprimer la ligne", icon::TRASH))
-                                .color(pal.negative),
+                            RichText::new(format!(
+                                "{}  {}",
+                                icon::TRASH,
+                                tr!("Supprimer la ligne")
+                            ))
+                            .color(pal.negative),
                         )
                         .clicked()
                 {
@@ -1236,10 +1275,10 @@ fn capitalize(text: &str) -> String {
 
 fn spread_label(spread: Spread) -> &'static str {
     match spread {
-        Spread::Month => "Au mois choisi",
-        Spread::AllMonths => "À tous les mois",
-        Spread::EveryTwoMonths => "Un mois sur deux",
-        Spread::EveryThreeMonths => "Un mois sur trois",
+        Spread::Month => tr!("Au mois choisi"),
+        Spread::AllMonths => tr!("À tous les mois"),
+        Spread::EveryTwoMonths => tr!("Un mois sur deux"),
+        Spread::EveryThreeMonths => tr!("Un mois sur trois"),
     }
 }
 
@@ -1251,11 +1290,11 @@ fn amount_color(v: Amount, pal: &Palette) -> Color32 {
     }
 }
 
-fn signed(v: Amount) -> String {
+fn signed(v: Amount, currency: &str) -> String {
     if v.0 > 0 {
-        format!("+{}", money(v, "€"))
+        format!("+{}", money(v, currency))
     } else {
-        money(v, "€")
+        money(v, currency)
     }
 }
 
@@ -1295,13 +1334,14 @@ fn progress(ui: &mut egui::Ui, width: f32, ratio: f32, color: Color32, pal: &Pal
     }
 }
 
+/// Carte de synthèse : `(glyph, title)` en tête, montants dans `currency`.
 fn summary_tile(
     ui: &mut egui::Ui,
     width: f32,
-    title: &str,
-    glyph: &str,
+    (glyph, title): (&str, &str),
     total: &BudgetTotal,
     kind: Option<BudgetKind>,
+    currency: &str,
     pal: &Palette,
 ) {
     ui_kit::card(ui, width, |ui| {
@@ -1315,7 +1355,7 @@ fn summary_tile(
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     ui.label(
-                        RichText::new(format!("prévu {}", money(total.budget, "€")))
+                        RichText::new(tr!("prévu {}", money(total.budget, currency)))
                             .size(12.5)
                             .color(pal.muted),
                     );
@@ -1324,7 +1364,7 @@ fn summary_tile(
             ui.add_space(4.0);
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(money(total.real, "€"))
+                    RichText::new(money(total.real, currency))
                         .size(22.0)
                         .family(crate::theme::semibold())
                         .color(amount_color(total.real, pal)),
@@ -1332,11 +1372,8 @@ fn summary_tile(
                 if total.budget.0 != 0 {
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         ui.label(
-                            RichText::new(signed(total.difference)).color(difference_color(
-                                total.difference,
-                                kind,
-                                pal,
-                            )),
+                            RichText::new(signed(total.difference, currency))
+                                .color(difference_color(total.difference, kind, pal)),
                         );
                     });
                 }
@@ -1359,10 +1396,17 @@ fn summary_tile(
 
 fn monthly_rows(report: &BudgetReport) -> Vec<Vec<Cell>> {
     let mut rows = vec![
-        ["Catégorie", "Nature", "Budget", "Réel", "Écart", "Écart %"]
-            .map(|t| Cell::Bold(t.into()))
-            .into_iter()
-            .collect::<Vec<_>>(),
+        [
+            tr!("Catégorie"),
+            tr!("Nature"),
+            tr!("Budget"),
+            tr!("Réel"),
+            tr!("Écart"),
+            tr!("Écart %"),
+        ]
+        .map(|t| Cell::Bold(t.into()))
+        .into_iter()
+        .collect::<Vec<_>>(),
     ];
     for r in &report.rows {
         let label = if r.is_child {
@@ -1382,9 +1426,9 @@ fn monthly_rows(report: &BudgetReport) -> Vec<Vec<Cell>> {
         ]);
     }
     for (label, t) in [
-        ("Dépenses", &report.expenses),
-        ("Recettes", &report.income),
-        ("Total", &report.total),
+        (tr!("Dépenses"), &report.expenses),
+        (tr!("Recettes"), &report.income),
+        (tr!("Total"), &report.total),
     ] {
         rows.push(vec![
             Cell::Bold(label.into()),
@@ -1400,11 +1444,14 @@ fn monthly_rows(report: &BudgetReport) -> Vec<Vec<Cell>> {
 }
 
 fn annual_rows(report: &bp_core::budget::AnnualReport) -> Vec<Vec<Cell>> {
-    let mut header = vec![Cell::Bold("Ligne".into())];
-    for m in SHORT_MONTHS.iter().chain(std::iter::once(&"Total")) {
-        for k in ["budget", "réel", "écart"] {
-            header.push(Cell::Bold(format!("{m} {k}")));
-        }
+    let mut header = vec![Cell::Bold(trc!("budget", "Ligne").into())];
+    let months = (0..12).map(i18n::month_abbr);
+    for m in months.chain(std::iter::once(tr!("Total"))) {
+        header.extend([
+            Cell::Bold(tr!("{} budget", m)),
+            Cell::Bold(tr!("{} réel", m)),
+            Cell::Bold(tr!("{} écart", m)),
+        ]);
     }
     let mut rows = vec![header];
     let line = |row: &bp_core::budget::AnnualRow, bold: bool| {
@@ -1428,4 +1475,29 @@ fn annual_rows(report: &bp_core::budget::AnnualReport) -> Vec<Vec<Cell>> {
     rows.extend(report.rows.iter().map(|r| line(r, false)));
     rows.push(line(&report.totals, true));
     rows
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bp_core::i18n::Lang;
+
+    #[test]
+    fn reads_english_thousands() {
+        let value = |t: &str| parse_amount(t).map(|a| a.as_f64());
+        assert_eq!(value("1 234,56"), Some(1234.56));
+        assert_eq!(value("1,500"), Some(1.5));
+        i18n::with_lang(Lang::En, || {
+            assert_eq!(value("1,234.56"), Some(1234.56));
+            assert_eq!(value("-1,500"), Some(-1500.0));
+            assert_eq!(value("1,234,567.89"), Some(1_234_567.89));
+            assert_eq!(value("-€1,234.50"), Some(-1234.5));
+            assert_eq!(value("12,50"), Some(12.5));
+            assert_eq!(value("1200/12"), Some(100.0));
+            assert_eq!(
+                tr!("Montant incorrect : « {} »", "x"),
+                "Invalid amount: “x”"
+            );
+        });
+    }
 }

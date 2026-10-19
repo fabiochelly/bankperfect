@@ -1,14 +1,19 @@
-//! Dictionnaire des commerçants (`commercants.txt`, intégré au programme) et
-//! recherche dans un libellé.
+//! Dictionnaires des commerçants (intégrés au programme) et recherche dans un
+//! libellé : `commercants.txt` pour les relevés français, `merchants_en.txt`
+//! (enseignes britanniques, américaines, canadiennes, irlandaises,
+//! australiennes et internationales, mots génériques anglais) quand
+//! l'interface est en anglais.
 
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use super::taxonomy::{self, Flow};
 use super::text::{Nature, words};
+use crate::i18n::Lang;
 use crate::model::Amount;
 
 const SOURCE: &str = include_str!("commercants.txt");
+const SOURCE_EN: &str = include_str!("merchants_en.txt");
 
 /// Indice faible : nom ambigu ou mot courant.
 pub const WEAK: f32 = 0.55;
@@ -196,10 +201,23 @@ impl Dictionary {
         })
     }
 
-    /// Dictionnaire intégré.
+    /// Dictionnaire intégré de la langue en cours.
     pub fn builtin() -> &'static Dictionary {
-        static DICTIONARY: OnceLock<Dictionary> = OnceLock::new();
-        DICTIONARY.get_or_init(|| Dictionary::parse(SOURCE).expect("commercants.txt valide"))
+        Self::builtin_for(crate::i18n::lang())
+    }
+
+    /// Dictionnaire intégré d'une langue.
+    pub fn builtin_for(lang: Lang) -> &'static Dictionary {
+        static FR: OnceLock<Dictionary> = OnceLock::new();
+        static EN: OnceLock<Dictionary> = OnceLock::new();
+        match lang {
+            Lang::Fr => {
+                FR.get_or_init(|| Dictionary::parse(SOURCE).expect("commercants.txt valide"))
+            }
+            Lang::En => {
+                EN.get_or_init(|| Dictionary::parse(SOURCE_EN).expect("merchants_en.txt valide"))
+            }
+        }
     }
 
     pub fn len(&self) -> usize {
@@ -302,6 +320,85 @@ mod tests {
     fn builtin_dictionary_parses() {
         let d = Dictionary::builtin();
         assert!(d.len() > 1500, "{}", d.len());
+    }
+
+    #[test]
+    fn dictionary_follows_the_language() {
+        let en = Dictionary::builtin_for(Lang::En);
+        assert!(en.len() > 2000, "{}", en.len());
+        let same = crate::i18n::with_lang(Lang::En, Dictionary::builtin);
+        assert!(std::ptr::eq(same, en));
+        assert!(!std::ptr::eq(Dictionary::builtin(), en));
+    }
+
+    fn find_en(payee: &str, details: &str, cents: i64) -> Option<&'static str> {
+        crate::i18n::with_lang(Lang::En, || {
+            let nature = Nature::from_label(payee, None);
+            Dictionary::builtin()
+                .lookup(payee, details, Amount::from_cents(cents), nature)
+                .map(|m| m.slug)
+        })
+    }
+
+    #[test]
+    fn finds_english_merchants() {
+        let cases = [
+            (
+                "CARD PAYMENT TO TESCO STORES 2345 ON 12 MAR",
+                -4_520,
+                "alimentation.courses",
+            ),
+            ("SAINSBURYS S/MKTS", -3_000, "alimentation.courses"),
+            (
+                "WHOLEFDS MKT 10234 AUSTIN TX",
+                -6_712,
+                "alimentation.courses",
+            ),
+            ("TRADER JOE S #552", -4_000, "alimentation.courses"),
+            ("DIRECT DEBIT BRITISH GAS", -8_500, "logement.energie"),
+            ("CON ED OF NY INTELL CK", -11_000, "logement.energie"),
+            ("DD THAMES WATER", -3_800, "logement.eau"),
+            (
+                "POS DEBIT STARBUCKS #1234 SEATTLE WA",
+                -575,
+                "alimentation.restaurants",
+            ),
+            ("MCDONALD'S F12345", -899, "alimentation.restaurants"),
+            ("UBER *EATS", -2_350, "alimentation.restaurants"),
+            ("UBER *TRIP HELP.UBER.COM", -1_420, "transports.taxi"),
+            ("NETFLIX.COM", -1_549, "abonnements.medias"),
+            ("SPOTIFY USA", -1_099, "abonnements.medias"),
+            ("APPLE.COM/BILL", -299, "abonnements.logiciels"),
+            ("VERIZON WIRELESS PAYMENTS", -8_500, "abonnements.telecom"),
+            ("AMAZON MKTPLACE PMTS", -2_999, "shopping.divers"),
+            ("AMZN Mktp US*2K4", -1_850, "shopping.divers"),
+            ("SHELL OIL 57444", -5_000, "transports.carburant"),
+            ("BP CONNECT LONDON", -6_000, "transports.carburant"),
+            ("TFL TRAVEL CHARGE", -280, "transports.commun"),
+            ("CVS/PHARMACY #1234", -1_200, "sante.pharmacie"),
+            ("BOOTS 1234 LONDON", -800, "sante.pharmacie"),
+            ("GEICO AUTO", -12_000, "transports.assurance"),
+            ("HMRC SELF ASSESSMENT", -150_000, "impots.revenu"),
+            ("IRS USATAXPYMT", -200_000, "impots.revenu"),
+            ("COUNCIL TAX LB CAMDEN", -15_000, "impots.foncier"),
+            ("MONTHLY SERVICE FEE", -1_200, "banque.frais"),
+            ("ATM WITHDRAWAL", -6_000, "banque.retraits"),
+            ("ROCKET MORTGAGE", -180_000, "logement.credit"),
+            ("STANDING ORDER RENT FLAT 2", -120_000, "logement.loyer"),
+            ("SALARY ACME LTD", 300_000, "revenus.salaires"),
+            ("ACME CORP PAYROLL PPD", 250_000, "revenus.salaires"),
+            ("INTEREST PAID", 1_250, "revenus.financiers"),
+            ("PETSMART #123", -4_500, "divers.animaux"),
+            ("VANGUARD BUY INVESTMENT", -50_000, "epargne.bourse"),
+        ];
+        for (payee, cents, slug) in cases {
+            assert_eq!(find_en(payee, "", cents), Some(slug), "{payee}");
+        }
+        // Les revenus ne valent que pour les recettes.
+        assert_eq!(find_en("SALARY ACME LTD", "", -1_000), None);
+        // Le dictionnaire français ne sert pas en anglais, et inversement.
+        assert_eq!(find_en("CB CARREFOUR MARKET", "", -5_000), None);
+        assert_eq!(find("CARD PAYMENT TO TESCO STORES", "", -45), None);
     }
 
     #[test]

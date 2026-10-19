@@ -1,0 +1,5496 @@
+# English-language merchant and keyword dictionary for BankPerfect.
+#
+# Used instead of commercants.txt when the interface is in English. Covers
+# major chains and services in the United Kingdom, the United States,
+# Canada, Ireland and Australia, international brands, and generic English
+# words found on bank statements.
+#
+# Same syntax as commercants.txt:
+# one section per generic category: [slug] (see taxonomy.rs);
+# one entry per line: lowercase words without accents, matched as whole,
+# consecutive words in the payee, then in the memo. A trailing "*" accepts
+# any word ending ("sainsbury*"). Punctuation splits words: "M&S" is "m s",
+# "MCDONALD'S" is "mcdonald s", "7-ELEVEN" is "7 eleven".
+#
+# Options after ";", separated by spaces:
+#   -          expenses only             +       income only
+#   <30        amount <= 30              >100    amount >= 100
+#   20..80     amount between 20 and 80
+#   ~          weak hint (ambiguous name, common word)
+#   @cb @prlv @vir @dab @chq   transaction type (card, direct debit,
+#              transfer, ATM withdrawal, cheque)
+#
+# The longest entry wins; at equal length the payee comes before the memo.
+# A more specific memo refines a generic payee ("hmrc" then "self
+# assessment" -> income tax). Income sections ([revenus.*]) only match
+# credits.
+
+# ───────────────────────────── Food ─────────────────────────────
+
+[alimentation.courses]
+# United Kingdom
+tesco
+tesco stores
+tesco store
+tesco express
+tesco extra
+tesco metro
+tesco superstore
+tesco groceries
+tesco online
+sainsbury*
+sainsburys local
+j sainsbury
+asda
+asda stores
+asda superstore
+morrisons
+wm morrison
+morrison*
+waitrose
+waitrose partners
+aldi
+aldi stores
+lidl
+lidl gb
+lidl great britain
+lidl ireland
+co op
+coop
+co op food
+co op group food
+the co operative
+cooperative food
+central co op
+m s simply food
+marks spencer simply food
+marks spencer food
+marks and spencer
+marks spencer
+m s ; ~
+iceland foods
+iceland ; ~
+the food warehouse
+ocado
+ocado retail
+farmfoods
+budgens
+spar
+eurospar
+nisa
+nisa local
+londis
+costcutter
+one stop
+premier stores
+booths
+planet organic
+whole foods
+whole foods market
+wholefds
+amazon fresh
+getir
+gopuff
+go puff
+jiffy ; ~
+zapp ; ~
+oddbins
+majestic wine
+naked wines
+laithwaites
+virgin wines
+bargain booze
+# Ireland
+dunnes stores
+dunnes
+supervalu
+super valu
+centra
+mace
+daybreak ; ~
+tesco ireland
+eurogiant ; ~
+# United States
+walmart
+wal mart
+wm supercenter
+walmart supercenter
+walmart grocery
+kroger
+safeway
+albertsons
+publix
+h e b
+heb
+meijer
+wegmans
+trader joe*
+trader joes
+sprouts
+sprouts farmers
+food lion
+giant eagle
+giant food
+stop shop
+shoprite
+hannaford
+harris teeter
+winn dixie
+fresh market
+vons
+ralphs
+fred meyer
+king soopers
+smiths food
+frys food
+food 4 less
+winco
+winco foods
+piggly wiggly
+hy vee
+hyvee
+jewel osco
+acme markets
+shaws
+star market
+market basket
+price chopper
+tops markets
+save a lot
+grocery outlet
+instacart
+freshdirect
+fresh direct
+weis markets
+ingles
+bi lo
+lowes foods
+stater bros
+smart final
+food city
+brookshire
+schnucks
+dierbergs
+raleys
+new seasons
+natural grocers
+fairway market
+the fresh market
+aldi us
+costco
+costco whse
+costco wholesale
+sam s club
+sams club
+samsclub
+bj s wholesale
+bjs wholesale
+7 eleven
+7eleven
+seven eleven
+wawa ; <60
+sheetz ; <40
+circle k ; <30 ~
+casey s ; <30 ~
+caseys ; <30 ~
+quiktrip ; <30 ~
+qt ; <30 ~
+kum go ; <30 ~
+speedway ; <30 ~
+total wine
+bevmo
+liquor store
+liquor ; ~
+abc store ; ~
+# Canada
+loblaws
+loblaw
+no frills
+nofrills
+sobeys
+real canadian superstore
+superstore ; ~
+save on foods
+freshco
+food basics
+fortinos
+zehrs
+provigo
+maxi ; ~
+iga
+foodland
+t t supermarket
+farm boy
+longos
+metro inc
+metro plus ; ~
+safeway canada
+thrifty foods
+co op food canada
+voila ; ~
+lcbo
+saq
+bc liquor
+beer store
+# Australia
+woolworths
+woolies
+coles
+coles supermarkets
+coles express ; <40
+iga australia
+foodworks
+harris farm
+drakes ; ~
+ritchies
+dan murphy*
+bws
+liquorland
+first choice liquor
+# Generic
+grocery
+groceries
+grocer
+grocers
+grocery store
+supermarket
+supermarkets
+supermkt
+food store
+food market
+convenience store
+corner shop
+minimart
+mini mart
+mini market
+off licence
+offlicence
+wine shop
+food shopping
+hypermarket
+superette
+
+[alimentation.commerces]
+bakery ; <60
+bakeries ; <60
+bakehouse ; <60
+bakers ; <30 ~
+baker ; <30 ~
+patisserie ; <80
+boulangerie ; <60
+gail s ; <60
+gails ; <60
+gails bakery ; <60
+paul uk ; <40
+le pain quotidien ; <80
+konditor ; <80
+crumbs ; <40 ~
+cinnabon ; <30
+butcher
+butchers
+butchery
+meat market
+fishmonger
+fishmongers
+seafood market ; ~
+farmers market
+farmers mkt
+farm shop
+farm stand
+greengrocer
+greengrocers
+fruit and veg
+fruit veg
+produce market
+delicatessen
+deli ; <80 ~
+cheese shop
+cheesemonger
+chocolatier
+candy store ; ~
+sweet shop ; ~
+hotel chocolat ; ~
+lindt ; ~
+godiva ; ~
+whittard
+teavana
+david s tea
+davidstea
+roastery ; ~
+coffee roasters ; ~
+
+[alimentation.restaurants]
+# Fast food and coffee (international)
+mcdonald*
+mc donald*
+mcd ; ~
+burger king
+burgerking
+kfc
+kentucky fried
+subway ; @cb
+subway restaurant
+starbucks
+starbucks coffee
+costa ; ~
+costa coffee
+pret
+pret a manger
+caffe nero
+cafe nero
+nero ; ~
+greggs
+nandos
+nando s
+wagamama
+pizza hut
+pizzahut
+dominos
+domino s
+dominos pizza
+papa john*
+papa johns
+pizza express
+pizzaexpress
+five guys
+wendys
+wendy s
+taco bell
+chipotle
+chick fil a
+chickfila
+panera
+panera bread
+dunkin
+dunkin donuts
+tim hortons
+tims ; ~
+arby s
+arbys
+sonic drive
+jack in the box
+popeyes
+wingstop
+shake shack
+in n out
+whataburger
+carl s jr
+hardee s
+hardees
+dairy queen
+culver s
+culvers
+zaxby s
+raising cane s
+raising canes
+jimmy john s
+jimmy johns
+jersey mike s
+jersey mikes
+firehouse subs
+qdoba
+moe s southwest
+del taco
+el pollo loco
+panda express
+olive garden
+applebee s
+applebees
+chili s
+chilis
+outback steakhouse
+red lobster
+ihop
+denny s
+dennys
+cracker barrel
+buffalo wild wings
+texas roadhouse
+cheesecake factory
+red robin
+tgi friday*
+tgi fridays
+fridays ; ~
+p f chang s
+longhorn steakhouse
+waffle house
+krispy kreme
+baskin robbins
+cold stone
+ben jerry s
+peet s coffee
+peets coffee
+dutch bros
+caribou coffee
+blue bottle
+philz coffee
+sweetgreen
+cava
+noodles company
+potbelly
+wienerschnitzel
+white castle
+bojangles
+church s chicken
+golden corral
+bob evans
+perkins
+first watch
+steak n shake
+smashburger
+habit burger
+portillo s
+# United Kingdom
+harvester
+toby carvery
+beefeater
+brewers fayre
+wetherspoon*
+jd wetherspoon*
+j d wetherspoon*
+leon ; ~
+itsu
+wasabi
+yo sushi
+zizzi
+ask italian
+prezzo
+frankie benny s
+bella italia
+tortilla
+chopstix
+german doner kebab
+honest burgers
+byron burger
+dishoom
+franco manca
+wahaca
+las iguanas
+bills restaurant
+cote brasserie
+cafe rouge
+hungry horse
+miller carter
+mitchells butlers
+all bar one
+slug and lettuce
+pizza pilgrims
+crussh
+abokado
+tossed
+farmer j
+gourmet burger kitchen
+gbk ; ~
+tim hortons uk
+starbucks uk
+coffee 1
+black sheep coffee
+joe the juice
+benugo
+patisserie valerie
+caffe concerto
+krispy kreme uk
+taco bell uk
+popeyes uk
+wingstop uk
+# Ireland
+supermac s
+supermacs
+eddie rocket s
+eddie rockets
+insomnia coffee
+abrakebabra
+apache pizza
+butlers chocolate cafe
+bewleys
+# Canada
+harvey s
+harveys
+swiss chalet
+a w ; ~
+mary brown s
+boston pizza
+the keg
+east side mario s
+pizza pizza
+pizzapizza
+second cup
+mcdonalds canada
+mr sub
+freshii
+mucho burrito
+# Australia
+hungry jack*
+guzman y gomez
+oporto
+red rooster
+grill d
+nando s australia
+gloria jean s
+zarraffa s
+muffin break
+sushi hub
+roll d
+# Food delivery
+uber eats
+ubereats
+uber eat
+doordash
+door dash
+grubhub
+deliveroo
+just eat
+justeat
+seamless
+postmates
+skipthedishes
+skip the dishes
+menulog
+caviar ; ~
+waitr
+gopuff food ; ~
+# Card terminals used by restaurants
+tst ; ~ @cb
+toast ; ~ @cb
+# Generic
+restaurant
+restaurants
+restaurante
+ristorante
+trattoria
+pizzeria
+pizza
+pizzas
+burger
+burgers
+sushi
+ramen
+noodle ; ~
+noodles ; ~
+diner
+cafe ; <40 ~
+cafes ; <40 ~
+coffee ; <30 ~
+coffee shop ; <40
+coffeeshop ; <40
+coffee house ; <40
+espresso ; <30 ~
+bistro*
+brasserie
+steakhouse
+grill ; ~
+grille ; ~
+bar and grill
+bar grill
+kitchen ; ~
+eatery
+canteen
+cafeteria ; ~
+takeaway
+take away
+takeout
+kebab
+fish and chips
+fish chips
+chippy
+curry house
+tandoori
+taqueria
+tacos
+bbq ; ~
+barbecue ; ~
+smokehouse
+wings ; ~
+food truck
+pub ; ~
+tavern ; ~
+bar ; ~
+brewpub
+taproom ; ~
+gastropub
+juice bar
+smoothie ; ~
+bagel* ; <40
+donut* ; <40
+doughnut* ; <40
+ice cream
+gelato
+dessert ; ~
+food hall ; ~
+food court ; ~
+
+# ───────────────────────────── Housing ─────────────────────────────
+
+[logement.loyer]
+rent
+rent payment
+rental payment
+monthly rent
+rent for ; ~
+landlord
+letting agent
+letting agents
+lettings
+rent portal
+rentcafe
+rent cafe
+appfolio
+buildium
+yardi
+zillow rent*
+apartments com
+bilt rent*
+openrent
+housing association
+council rent
+property rent
+rent pmt
+rent pymt
+rnt ; ~
+apartments ; ~ >300
+realty ; ~ >300
+property management ; ~ >300
+property mgmt ; ~ >300
+mgmt ; ~ >300
+residential ; ~ >300
+leasing office ; >300
+
+[logement.credit]
+mortgage
+mortgages
+mortgage payment
+mortgage pmt
+mtg ; ~
+mtge ; ~
+home loan
+home loans
+home mtg
+home mortgage
+rocket mortgage
+quicken loans
+mr cooper
+mrcooper
+pennymac
+nationstar
+loancare
+newrez
+shellpoint
+freedom mortgage
+lakeview loan
+cenlar
+dovenmuehle
+flagstar
+nationwide mortgage
+halifax mortgage
+santander mortgage
+natwest mortgage
+barclays mortgage
+coventry building society ; ~
+yorkshire building society ; ~
+leeds building society ; ~
+skipton building society ; ~
+building society ; ~ >200
+heloc
+home equity
+
+[logement.charges]
+hoa
+hoa dues
+hoa fees
+homeowners association
+homeowners assn
+home owners association
+condo association
+condo fees
+condo fee
+condominium ; ~
+strata
+strata fees
+body corporate
+owners corporation
+service charge ; ~ >50
+ground rent
+estate charge
+estate management ; ~
+management company ; ~
+firstport
+fps property ; ~
+
+[logement.energie]
+# United Kingdom
+british gas
+britishgas
+edf energy
+edf
+eon
+e on
+eon next
+e on next
+octopus energy
+octopus ; ~
+ovo energy
+ovo
+scottish power
+scottishpower
+sse
+sse energy
+so energy
+bulb energy
+shell energy
+utilita
+utility warehouse
+ecotricity
+good energy
+outfox the market
+co op energy
+sainsburys energy
+npower
+boost power
+southern electric
+# Ireland
+electric ireland
+bord gais
+bord gais energy
+energia
+sse airtricity
+airtricity
+flogas
+pinergy
+panda power
+community power
+# United States
+con ed
+coned
+con edison
+consolidated edison
+pg e
+pge
+pacific gas
+pacific gas electric
+duke energy
+dominion energy
+southern california edison
+sce
+socalgas
+so cal gas
+sdge
+sdg e
+san diego gas
+xcel energy
+comed
+peco
+pseg
+pse g
+national grid
+georgia power
+alabama power
+florida power
+fpl
+dte energy
+dte
+consumers energy
+entergy
+aep
+ohio edison
+ameren
+eversource
+centerpoint
+centerpoint energy
+atmos energy
+nicor gas
+spire energy
+puget sound energy
+ppl electric
+firstenergy
+txu energy
+reliant energy
+direct energy
+evergy
+oncor
+nv energy
+aps
+salt river project
+srp
+tva ; ~
+idaho power
+rocky mountain power
+pacific power
+portland general
+pepco
+bge
+baltimore gas
+delmarva
+jcp l
+atlantic city electric
+avista
+we energies
+alliant energy
+mid american energy
+midamerican
+oge
+washington gas
+piedmont natural gas
+columbia gas
+peoples gas
+cps energy
+austin energy
+los angeles dwp
+ladwp
+smud
+# Canada
+hydro one
+bc hydro
+hydro quebec
+toronto hydro
+hydro ottawa
+enbridge gas
+enbridge
+fortisbc
+fortis ; ~
+atco
+epcor
+enmax
+alectra
+nb power
+nova scotia power
+manitoba hydro
+saskpower
+saskenergy
+# Australia
+agl
+origin energy
+energyaustralia
+energy australia
+red energy
+alinta
+alinta energy
+simply energy
+momentum energy
+powershop
+lumo energy
+dodo power
+synergy ; ~
+ergon ; ~
+aurora energy
+actewagl
+# Generic
+electricity
+electric bill
+electric co
+electric company
+electric service
+electric ; ~
+energy ; ~
+energy bill
+gas bill
+gas and electric
+gas electric
+gas electricity
+gas company
+natural gas
+utility bill
+utilities ; ~
+utility ; ~
+power co
+power company
+power bill
+heating oil
+home heating
+propane
+calor gas
+calor
+amerigas
+ferrellgas
+suburban propane
+firewood
+wood pellets
+
+[logement.eau]
+thames water
+severn trent
+united utilities
+anglian water
+yorkshire water
+southern water
+welsh water
+dwr cymru
+south west water
+wessex water
+northumbrian water
+affinity water
+south east water
+southern water services
+bristol water
+portsmouth water
+sutton east surrey water
+ses water
+south staffs water
+cambridge water
+essex suffolk water
+scottish water
+northern ireland water
+ni water
+irish water
+uisce eireann
+american water
+aqua america
+sydney water
+yarra valley water
+south east water au
+sa water
+city west water
+unitywater
+icon water
+water bill
+water rates
+water and sewer
+water sewer
+water utility
+water dept
+water department
+water district
+water authority
+water service
+water services
+city water
+sewer
+sewerage
+wastewater
+water ; ~
+
+[logement.assurance]
+home insurance
+house insurance
+homeowners insurance
+home owners insurance
+renters insurance
+renter s insurance
+contents insurance
+buildings insurance
+property insurance
+hazard insurance
+flood insurance
+lemonade
+lemonade insurance
+hippo insurance
+kin insurance
+openly insurance
+homesite
+direct line home
+lv home
+admiral home
+aviva home
+churchill home
+more than ; ~
+state farm fire
+
+[logement.travaux]
+home depot
+the home depot
+homedepot
+lowes
+lowe s
+lowes home
+menards
+ace hardware
+true value ; ~
+harbor freight
+northern tool
+sherwin williams
+benjamin moore
+b q
+b and q
+wickes
+homebase
+screwfix
+toolstation
+travis perkins
+jewson
+selco
+topps tiles
+tile giant
+magnet kitchens
+howdens
+bunnings
+bunnings warehouse
+mitre 10
+home hardware
+rona
+lee valley
+woodies diy
+woodies
+chadwicks
+dulux
+crown paints
+valspar
+hardware ; ~
+hardware store
+diy
+plumber
+plumbers
+plumbing
+electrician
+electrical contractor
+handyman
+roofing
+roofer
+contractor ; ~
+builders merchant
+builders ; ~
+landscaping
+landscaper
+lawn care
+lawn mowing
+tree service
+garden centre
+garden center
+garden nursery
+dobbies
+hillier
+squires garden
+wyevale
+notcutts
+pest control ; ~
+locksmith
+glazier
+carpet cleaning
+carpets ; ~
+flooring
+paint store
+lumber
+lumber yard
+home improvement
+renovation*
+remodeling
+remodel
+
+[logement.equipement]
+ikea
+wayfair
+pottery barn
+crate barrel
+crate and barrel
+west elm
+pier 1
+ashley furniture
+ashley homestore
+rooms to go
+bed bath beyond
+bed bath and beyond
+homegoods
+home goods
+homesense
+at home store
+kirklands
+la z boy
+lazboy
+williams sonoma
+restoration hardware
+rh ; ~ >100
+article com
+burrow ; ~
+living spaces
+bob s discount furniture
+havertys
+ethan allen
+dunelm
+the range
+habitat
+dfs
+sofology
+oak furnitureland
+furniture village
+loaf com
+made com
+next home
+john lewis home ; ~
+argos home ; ~
+b m home ; ~
+the white company
+cotswold company
+harvey norman
+freedom furniture
+fantastic furniture
+amart furniture
+adairs
+bed bath n table
+kmart home ; ~
+the brick
+leon s
+leons furniture
+structube
+sleep country
+mattress firm
+casper
+purple mattress
+tempur
+tempurpedic
+sealy ; ~
+simba sleep
+emma mattress
+eve sleep
+silentnight
+dreams beds
+bensons for beds
+furniture
+furnishings
+mattress
+mattresses
+homeware
+homewares
+home decor
+home furnishings
+bedding
+linens ; ~
+curtains ; ~
+blinds ; ~
+lighting ; ~
+rugs ; ~
+
+[logement.services]
+cleaning ; ~
+cleaner ; ~
+cleaners ; ~
+house cleaning
+house cleaner
+home cleaning
+cleaning service
+cleaning services
+maid ; ~
+maids ; ~
+molly maid
+merry maids
+the maids
+handy com
+helpling
+taskrabbit
+task rabbit
+angi
+angie s list
+thumbtack
+housekeeping
+housekeeper
+window cleaner
+window cleaning
+gardener ; ~
+gardening service
+lawn service
+snow removal
+pool service
+pool cleaning
+pest control
+terminix
+orkin
+rentokil
+truly nolen
+security system
+adt
+adt security
+simplisafe
+vivint
+brinks home
+alarm monitoring
+dog walker ; ~
+dry cleaning ; ~
+laundry service ; ~
+moving company
+movers
+removals
+removal company
+two men and a truck
+u haul ; ~
+uhaul ; ~
+storage ; ~
+self storage
+public storage
+extra space storage
+cubesmart
+big yellow
+safestore
+lock and store
+
+# ───────────────────────────── Subscriptions ─────────────────────────────
+
+[abonnements.telecom]
+# United Kingdom
+bt
+bt group
+bt group plc
+bt broadband
+bt mobile
+btopenreach ; ~
+ee
+ee limited
+ee mobile
+vodafone
+vodafone uk
+o2
+o2 uk
+telefonica uk
+three ; ~
+three co uk
+three uk
+h3g
+hutchison 3g
+virgin media
+virginmedia
+virgin mobile
+virgin media o2
+sky broadband
+sky mobile
+sky talk
+talktalk
+talk talk
+plusnet
+giffgaff
+tesco mobile
+id mobile
+lebara
+lyca mobile
+lycamobile
+smarty
+voxi
+hyperoptic
+community fibre
+zen internet
+shell energy broadband
+now broadband
+vodafone broadband
+cuckoo broadband
+gigaclear
+kcom
+truespeed
+# Ireland
+eir
+eir mobile
+three ireland
+vodafone ireland
+virgin media ireland
+48 mobile
+gomo
+tesco mobile ireland
+pure telecom
+digiweb
+# United States
+verizon
+verizon wireless
+vzw
+verizon fios
+at t
+att
+at t wireless
+at t mobility
+att mobility
+at t uverse
+t mobile
+tmobile
+sprint
+comcast
+xfinity
+comcast xfinity
+spectrum
+charter spectrum
+charter communications
+cox communications
+cox comm
+centurylink
+lumen
+frontier communications
+frontier comm
+optimum
+altice
+mediacom
+windstream
+metro by t mobile
+metropcs
+metro pcs
+cricket wireless
+cricket ; ~
+boost mobile
+mint mobile
+visible ; ~
+google fi
+us cellular
+straight talk
+tracfone
+consumer cellular
+ting
+starlink
+hughesnet
+viasat
+rcn
+wow internet
+astound
+ziply
+google fiber
+# Canada
+rogers ; ~
+rogers communications
+bell canada
+bell mobility
+bell ; ~
+telus
+telus mobility
+fido
+koodo
+virgin plus
+freedom mobile
+shaw ; ~
+shaw communications
+videotron
+chatr
+public mobile
+lucky mobile
+cogeco
+eastlink
+sasktel
+teksavvy
+# Australia
+telstra
+optus
+tpg
+iinet
+aussie broadband
+belong ; ~
+amaysim
+boost ; ~
+dodo ; ~
+vodafone au
+superloop
+exetel
+spintel
+# International
+lebara mobile
+skype
+vonage
+ooma
+airalo
+holafly
+# Generic
+broadband
+internet ; ~
+internet service
+mobile phone
+mobile bill
+phone bill
+cell phone
+cellphone
+wireless ; ~
+telecom
+telecoms
+fibre ; ~
+fiber ; ~
+sim only
+top up ; ~ <60
+topup ; ~ <60
+airtime
+
+[abonnements.medias]
+netflix
+netflix com
+spotify
+spotify uk
+spotify usa
+spotify ab
+disney plus
+disneyplus
+disney ; ~ <30 @prlv
+hulu
+hbo max
+hbomax
+max com
+paramount
+paramount plus
+peacock
+peacock tv
+apple tv
+prime video
+primevideo
+amazon prime
+prime membership
+amazon prime video
+youtube premium
+youtubepremium
+youtube tv
+youtube music
+google youtube
+sling tv
+sling ; ~
+fubo
+fubotv
+philo ; ~
+sirius xm
+siriusxm
+sirius
+pandora music ; ~
+audible
+kindle unlimited
+deezer
+tidal
+apple music
+amazon music
+crunchyroll
+dazn
+espn
+espn plus
+now tv
+nowtv
+now entertainment
+sky digital
+sky uk
+sky subscription
+sky ; ~ @prlv
+britbox
+discovery plus
+mubi
+curiosity stream
+nebula ; ~
+twitch
+patreon
+substack
+medium com
+onlyfans ; ~
+kayo
+kayo sports
+stan com
+stan ; ~ <30
+binge ; ~ <30
+foxtel
+crave
+crave tv
+cbc gem
+directv
+dish network
+dish ; ~ @prlv
+new york times
+nytimes
+nyt
+wall street journal
+wsj
+washington post
+the guardian
+guardian news
+guardian ; ~
+the times ; ~
+times newspapers
+the telegraph
+telegraph media
+the economist
+economist
+financial times
+ft com
+the atlantic
+the athletic
+the new yorker
+bloomberg ; ~
+washington post digital
+la times
+boston globe
+globe and mail
+toronto star
+irish times
+irish independent
+sydney morning herald
+the australian
+news corp
+readly
+zinio
+apple news
+pressreader
+newspaper
+newspapers
+magazine ; ~
+magazines ; ~
+streaming
+tv licensing ; ~
+
+[abonnements.logiciels]
+apple com bill
+apple com
+apple services
+itunes
+itunes com
+icloud
+google storage
+google one
+google play
+google workspace
+google gsuite
+google cloud
+google ; ~
+microsoft
+microsoft 365
+microsoft store ; ~
+office 365
+msft
+adobe
+adobe systems
+dropbox
+1password
+lastpass
+bitwarden
+dashlane
+nordvpn
+expressvpn
+surfshark
+private internet access
+proton
+protonmail
+openai
+chatgpt
+claude ; ~
+claude ai
+anthropic
+perplexity
+midjourney
+github
+gitlab
+notion ; ~
+slack ; ~
+zoom
+zoom us
+zoom video
+canva
+grammarly
+norton
+nortonlifelock
+gen digital
+mcafee
+avast
+kaspersky
+bitdefender
+malwarebytes
+evernote
+todoist
+godaddy
+squarespace
+wix
+namecheap
+bluehost
+hostgator
+siteground
+ionos
+hostinger
+aws
+amazon web services
+digitalocean
+linode
+heroku
+cloudflare
+vercel
+netlify
+atlassian
+jetbrains
+cursor ; ~
+setapp
+backblaze
+carbonite
+idrive
+fastmail
+mailchimp
+shopify
+linkedin
+linkedin premium
+duolingo
+babbel
+rosetta stone
+headspace
+calm com
+calm ; ~
+turbotax
+intuit
+quickbooks
+xero
+freeagent
+ynab
+you need a budget
+quicken
+docusign
+smallpdf
+ilovepdf
+paddle ; ~
+fastspring ; ~
+app store
+play store
+software
+saas ; ~
+
+# ───────────────────────────── Transportation ─────────────────────────────
+
+[transports.carburant]
+shell
+shell oil
+shell service
+shell uk
+bp ; @cb
+bp connect
+bp oil
+bp express
+esso
+exxon
+exxonmobil
+exxon mobil
+mobil
+chevron
+texaco
+gulf ; ~
+sunoco
+marathon petroleum
+marathon ; ~ @cb
+speedway gas
+arco
+valero
+phillips 66
+conoco
+citgo
+76 gas
+union 76
+sinclair
+cenex
+holiday stationstores
+racetrac
+race trac
+murphy usa
+murphy express
+loves travel
+love s travel
+loves country
+pilot travel
+pilot flying j
+flying j
+ta travel center
+petro stopping
+bucee s
+buc ee s
+kwik trip
+kwik star
+maverik
+thorntons ; ~
+getty ; ~
+hess ; ~
+costco gas
+sams club fuel
+kroger fuel
+safeway fuel
+walmart fuel
+wawa fuel
+sheetz fuel
+gas station
+gas stn
+fuel station
+filling station
+petrol station
+service station
+jet ; ~
+gulf oil
+harvest energy ; ~
+certas
+applegreen
+maxol
+circle k fuel
+topaz
+texaco ireland
+tesco fuel
+tesco petrol
+sainsburys fuel
+sainsburys petrol
+asda fuel
+asda petrol
+morrisons fuel
+morrisons petrol
+moto services ; ~
+welcome break ; ~
+roadchef ; ~
+petro canada
+petrocanada
+esso canada
+husky
+irving oil
+ultramar
+pioneer gas ; ~
+co op gas ; ~
+canadian tire gas
+canadian tire gas bar
+gas bar
+caltex
+ampol
+united petroleum
+puma energy
+7 eleven fuel
+liberty oil
+metro petroleum
+ev charging
+ev charge
+tesla supercharger
+supercharger
+chargepoint
+electrify america
+evgo
+blink charging
+ionity
+pod point
+podpoint
+bp pulse
+instavolt
+osprey charging
+gridserve
+shell recharge
+ubitricity
+fastned
+flo ; ~
+chargefox
+evie networks
+petrol
+gasoline
+diesel
+fuel
+unleaded
+
+[transports.entretien]
+jiffy lube
+valvoline
+midas
+meineke
+pep boys
+firestone
+firestone complete
+goodyear
+discount tire
+tire kingdom
+big o tires
+les schwab
+ntb
+mavis
+mavis tire
+monro
+grease monkey
+take 5 oil
+take 5
+autozone
+advance auto
+advance auto parts
+o reilly auto
+oreilly auto
+napa auto
+napa ; ~
+carquest
+halfords
+halfords autocentre
+kwik fit
+kwikfit
+national tyres
+ats euromaster
+formula one autocentres
+euro car parts
+mr clutch
+autoglass
+safelite
+speedy autoglass ; ~
+canadian tire ; ~
+mr lube
+active green ross
+kal tire
+ok tire
+repco
+supercheap auto
+autobarn
+bob jane
+ultra tune
+mycar
+car wash
+carwash
+auto wash
+hand car wash
+waves car wash ; ~
+mister car wash
+mot test
+mot ; ~
+mot centre
+vehicle inspection
+smog check
+emissions test ; ~
+auto repair
+car repair
+auto service
+auto body
+body shop ; ~
+collision ; ~
+auto parts
+car parts
+tire
+tires
+tyre
+tyres
+garage ; ~
+mechanic
+towing
+tow truck
+roadside assistance
+aaa ; ~
+the aa ; ~
+aa membership
+rac
+rac motoring
+green flag
+caa ; ~
+nrma ; ~
+racv ; ~
+dealership ; ~
+service center ; ~
+toyota ; ~
+honda ; ~
+ford ; ~
+chevrolet ; ~
+nissan ; ~
+hyundai ; ~
+kia ; ~
+volkswagen ; ~
+bmw ; ~
+mercedes ; ~
+audi ; ~
+subaru ; ~
+mazda ; ~
+tesla ; ~ >100
+
+[transports.assurance]
+car insurance
+auto insurance
+motor insurance
+vehicle insurance
+geico
+progressive
+progressive insurance
+state farm
+allstate
+farmers insurance
+liberty mutual
+nationwide insurance
+usaa ; ~
+travelers insurance
+the general
+esurance
+root insurance
+metromile
+safeco
+erie insurance
+american family insurance
+amica
+mercury insurance
+direct line
+admiral ; ~
+admiral insurance
+churchill ; ~
+churchill insurance
+aviva ; ~
+lv insurance
+lv ; ~
+hastings direct
+hastings insurance
+esure
+sheilas wheels
+sheila s wheels
+1st central
+privilege insurance
+elephant insurance
+diamond insurance
+saga insurance ; ~
+tesco bank insurance ; ~
+axa insurance ; ~
+aa insurance
+rac insurance
+by miles
+cuvva
+veygo
+zego
+aviva canada
+intact insurance
+td insurance
+belairdirect
+desjardins insurance
+nrma insurance
+aami
+budget direct
+youi
+allianz australia ; ~
+gio insurance
+racv insurance
+fbd insurance
+aig ; ~
+motorcycle insurance
+icbc
+
+[transports.credit]
+car loan
+car loans
+auto loan
+auto loans
+auto payment
+car payment
+car finance
+car lease
+auto lease
+vehicle finance
+vehicle lease
+leasing ; ~
+lease payment ; ~
+ally auto
+ally financial
+gm financial
+ford credit
+ford motor credit
+toyota financial
+toyota motor credit
+tfs ; ~
+honda financial
+american honda finance
+nissan motor acceptance
+nissan finance
+hyundai motor finance
+kia finance
+bmw financial
+bmw fs
+mercedes benz financial
+mb financial ; ~
+vw credit
+volkswagen financial
+audi financial
+subaru motors finance
+tesla finance ; ~
+carmax auto
+carmax ; ~
+carvana
+westlake financial
+santander consumer
+credit acceptance
+capital one auto
+chase auto
+wells fargo auto
+td auto finance
+exeter finance
+black horse
+close brothers motor
+moneybarn
+motonovo
+blue motor finance
+startline
+alphera
+pcp ; ~
+hire purchase ; ~
+autolease
+
+[transports.peages]
+# Tolls
+ezpass
+e zpass
+e z pass
+ez pass
+sunpass
+fastrak
+ipass
+i pass
+txtag
+ntta
+toll tag
+toll road
+toll roads
+tolls
+toll ; ~
+peach pass
+good to go
+pikepass
+the toll roads
+mta bridges ; ~
+dart charge
+congestion charge
+cc london
+ulez
+tfl congestion
+clean air zone
+caz ; ~
+m6 toll
+mersey gateway
+tyne tunnel
+407 etr
+407etr
+etoll
+e toll
+linkt
+transurban
+eflow
+m50 toll
+# Parking
+parking
+car park
+carpark
+parking garage
+parking lot
+parking meter
+parkmobile
+park mobile
+spothero
+parkwhiz
+paybyphone
+pay by phone
+ringgo
+ring go
+justpark
+just park
+ncp
+ncp parking
+apcoa
+q park
+qpark
+euro car parks
+indigo park
+impark
+easy park
+easypark
+honk mobile
+greenp
+green p
+laz parking
+sp plus
+abm parking
+premium parking
+propark
+wilson parking
+secure parking
+care park
+parking fee
+valet ; ~
+
+[transports.commun]
+# United Kingdom
+tfl
+tfl travel
+tfl gov uk
+transport for london
+oyster
+london underground
+tfl oyster
+national express west midlands
+west midlands metro
+nottingham express transit
+metrolink
+bee network
+stagecoach
+first bus
+firstbus
+arriva
+go ahead
+go north east
+national express ; ~
+lothian buses
+translink
+merseytravel
+nexus ; ~
+southern vectis
+metro tyne
+# Ireland
+leap card
+dublin bus
+go ahead ireland
+luas
+bus eireann
+transport for ireland
+tfi
+# United States
+mta
+nyc transit
+mta nyct
+omny
+metrocard
+bart
+clipper
+clipper card
+caltrain ; ~
+muni
+sfmta
+cta
+ventra
+wmata
+smartrip
+septa
+mbta
+charliecard
+metro transit
+king county metro
+orca
+trimet
+la metro
+lacmta
+tap card
+marta
+dart ; ~
+rtd denver
+valley metro
+nj transit
+njt
+path train
+metra
+lirr
+metro north
+# Canada
+presto
+presto card
+ttc
+go transit
+stm
+opus card
+translink bc
+compass card
+oc transpo
+calgary transit
+edmonton transit
+# Australia
+opal
+opal card
+myki
+go card
+translink qld
+transperth
+smartrider
+metrocard sa
+adelaide metro
+# Micromobility
+lime
+lime scooter
+bird ; ~
+citi bike
+citibike
+santander cycles
+divvy
+capital bikeshare
+bay wheels
+bluebikes
+voi ; ~
+tier ; ~
+dott ; ~
+beryl ; ~
+human forest
+spin ; ~
+# Generic
+public transit
+public transport
+transit
+bus fare
+bus pass
+bus ticket
+metro ; ~
+subway fare
+tram
+streetcar
+light rail
+commuter rail
+train ticket ; ~ <40
+season ticket ; ~
+
+[transports.taxi]
+taxi
+taxis
+cab ; ~
+cabs ; ~
+yellow cab
+uber ; ~
+uber trip
+uber bv
+uber rides
+ubr ; ~
+lyft
+lyft ride
+bolt
+bolt eu
+bolt ride
+free now
+freenow
+gett
+addison lee
+curb ; ~
+didi
+ola cabs
+ola ; ~
+13cabs
+silver service
+minicab
+mini cab
+rideshare
+ride share
+limo ; ~
+limousine
+car service ; ~
+chauffeur
+blacklane
+wheely
+
+# ───────────────────────────── Health ─────────────────────────────
+
+[sante.medecins]
+dr ; ~
+doctor
+doctors
+physician
+physicians
+medical center
+medical centre
+medical group
+medical clinic
+medical practice
+medical associates
+health center
+health centre
+urgent care
+walk in clinic
+clinic ; ~
+hospital
+hospitals
+infirmary
+emergency room
+er visit
+radiology
+imaging
+mri
+x ray
+xray
+laboratory ; ~
+lab corp
+labcorp
+quest diagnostics
+quest diag
+sonic healthcare
+lifelabs
+dynacare
+bupa ; ~
+nuffield health
+spire healthcare
+babylon health
+livi
+push doctor
+teladoc
+mdlive
+amwell
+doctor on demand
+zocdoc
+one medical
+kaiser permanente ; ~
+kaiser ; ~
+mayo clinic
+cleveland clinic
+minuteclinic
+minute clinic
+citymd
+medexpress
+concentra
+gp ; ~
+gp surgery
+surgery ; ~
+pediatrician
+paediatrician
+dermatologist
+dermatology
+gynecologist
+obgyn
+cardiologist
+cardiology
+orthopedic*
+orthopaedic*
+oncology
+neurology
+urology
+ent ; ~
+anesthesia
+anaesthesia
+copay
+co pay
+medical bill
+medical bills
+patient payment
+patient pay
+health system
+healthcare ; ~
+medical ; ~
+
+[sante.pharmacie]
+pharmacy
+pharmacies
+pharmacist
+chemist
+chemists
+drugstore
+drug store
+apothecary
+boots
+boots uk
+boots the chemist
+superdrug
+lloydspharmacy
+lloyds pharmacy
+well pharmacy
+rowlands pharmacy
+day lewis
+cohens chemist
+asda pharmacy
+tesco pharmacy
+cvs
+cvs pharmacy
+walgreens
+rite aid
+duane reade
+walmart pharmacy
+kroger pharmacy
+costco pharmacy
+publix pharmacy
+express scripts
+optumrx
+optum rx
+caremark
+amazon pharmacy
+capsule ; ~
+alto pharmacy
+shoppers drug mart
+shoppers drug
+pharmaprix
+london drugs
+rexall
+jean coutu
+pharmasave
+guardian pharmacy
+uniprix
+proxim
+chemist warehouse
+priceline pharmacy
+terrywhite chemmart
+terry white
+amcal
+blooms the chemist
+hickeys
+mccabes pharmacy
+haven pharmacy
+allcare pharmacy
+prescription
+prescriptions
+rx ; ~
+nhs prescription
+nhs prescriptions
+prescription prepayment
+
+[sante.dentaire]
+dentist
+dentists
+dental
+dental care
+dental practice
+dental office
+dental clinic
+dental group
+dentistry
+orthodontist
+orthodontics
+orthodontic
+invisalign
+smile direct
+mydentist
+my dentist
+bupa dental
+aspen dental
+heartland dental
+pacific dental
+western dental
+optician
+opticians
+optometrist
+optometry
+ophthalmologist
+ophthalmology
+eye care
+eyecare
+eye doctor
+eye clinic
+vision center
+vision centre
+specsavers
+vision express
+boots opticians
+optical express
+leightons
+scrivens
+lenscrafters
+pearle vision
+visionworks
+americas best
+warby parker
+eyemart
+for eyes
+glasses direct
+glasses com
+contacts direct
+1 800 contacts
+1800contacts
+lens com
+clearly ca
+oscar wylee
+opsm
+bailey nelson
+hearing aid*
+hidden hearing
+amplifon
+specsavers audiology
+eyeglasses
+glasses ; ~
+contact lenses
+
+[sante.paramedical]
+physio
+physios
+physiotherapy
+physiotherapist
+physical therapy
+physical therapist
+pt ; ~
+chiropractor
+chiropractic
+chiro ; ~
+osteopath
+osteopathy
+podiatrist
+podiatry
+chiropodist
+massage therapy
+massage therapist
+registered massage
+rmt ; ~
+acupuncture
+acupuncturist
+speech therapy
+speech therapist
+occupational therapy
+occupational therapist
+therapist
+therapy ; ~
+counseling
+counselling
+counselor
+counsellor
+psychologist
+psychology
+psychiatrist
+psychiatry
+psychotherapy
+psychotherapist
+mental health
+betterhelp
+better help
+talkspace
+cerebral ; ~
+headway ; ~
+dietitian
+dietician
+nutritionist
+midwife
+home health
+nursing ; ~
+
+[sante.mutuelle]
+health insurance
+medical insurance
+dental insurance
+vision insurance
+health plan
+health premium
+blue cross
+bluecross
+blue shield
+bcbs
+anthem
+aetna
+cigna
+humana
+unitedhealthcare
+united healthcare
+uhc ; ~
+kaiser foundation
+oscar health
+ambetter
+molina
+centene
+wellcare
+medicare
+medicare premium
+medicaid ; ~
+cobra premium
+healthcare gov
+covered california
+delta dental
+vsp vision
+metlife dental
+guardian dental
+bupa uk
+bupa insurance
+axa health
+axa ppp
+vitality health
+vitalityhealth
+aviva health
+simplyhealth
+wpa ; ~
+benenden
+westfield health
+health shield
+cs healthcare
+sun life ; ~
+manulife ; ~
+green shield
+canada life ; ~
+medibank
+hcf
+nib
+nib health
+ahm
+hbf
+teachers health
+australian unity
+laya healthcare
+laya
+irish life health
+vhi
+vhi healthcare
+level health
+
+[revenus.sante]
+health reimbursement
+medical reimbursement
+insurance reimbursement
+claim payment ; ~
+claim reimbursement
+claims payment
+hsa reimbursement
+fsa reimbursement
+hra reimbursement
+health refund
+medicare benefits
+medicare refund
+medicare au
+bupa claim
+medibank claim
+hcf claim
+nib claim
+simplyhealth claim
+healthshield claim
+vhi claim
+laya claim
+blue cross claim
+
+# ───────────────────────────── Children ─────────────────────────────
+
+[enfants.garde]
+childcare
+child care
+daycare
+day care
+day nursery
+nursery ; ~
+nursery school
+preschool
+pre school
+kindergarten ; ~
+creche
+kindercare
+bright horizons
+the learning experience
+primrose school
+goddard school
+la petite academie
+childtime
+tutor time
+busy bees
+kids planet
+n family
+childbase
+kido
+nanny
+nannies
+au pair
+babysitter
+babysitting
+baby sitting
+sittercity
+care com
+urbansitter
+bambino
+childminder
+after school
+afterschool
+after school club
+before school
+breakfast club
+holiday club
+tax free childcare
+childcare service
+ccs ; ~
+goodstart
+g8 education
+guardian childcare
+affinity education
+kids club ; ~
+ymca childcare
+
+[enfants.ecole]
+school
+schools
+school fees
+school fee
+school lunch
+school lunches
+school meals
+lunch money
+parentpay
+parent pay
+scopay
+schoolmoney
+myschoolbucks
+my school bucks
+school cash online
+schoolcashonline
+mylunchmoney
+paypams
+nutrislice
+k12 payment
+tuition
+tuition fee
+tuition fees
+academy ; ~
+primary school
+elementary school
+middle school
+high school
+secondary school
+grammar school
+college ; ~
+university
+univ ; ~
+slc ; ~
+textbook*
+school supplies
+school uniform
+uniform shop ; ~
+pta ; ~
+pto ; ~
+tutor
+tutors
+tutoring
+tuition centre
+kumon
+mathnasium
+sylvan learning
+khan academy
+chegg
+coursera
+udemy
+skillshare
+masterclass
+edx
+brilliant org
+pearson ; ~
+scholastic
+field trip
+school trip
+education ; ~
+
+[enfants.activites]
+extracurricular
+summer camp
+day camp
+camp ; ~
+scouts
+girl scouts
+boy scouts
+scouts bsa
+girlguiding
+cubs ; ~
+brownies ; ~
+ymca
+ywca
+swim lessons
+swimming lessons
+swim school
+swim club
+dance school
+dance studio
+dance class*
+ballet ; ~
+music lessons
+piano lessons
+guitar lessons
+music school
+karate
+taekwondo
+judo
+martial arts
+gymnastics
+little league
+youth soccer
+youth football
+youth sports
+ayso
+football club ; ~
+soccer club
+rugby club
+cricket club
+hockey club ; ~
+tennis lessons
+riding lessons
+horse riding
+equestrian
+drama club
+theatre school
+stagecoach performing arts
+coding club
+code ninjas
+lego club ; ~
+kids club
+activity club
+holiday camp
+camp registration
+registration fee ; ~
+club fees ; ~
+
+[enfants.jouets]
+toys r us
+toysrus
+smyths
+smyths toys
+the entertainer
+hamleys
+build a bear
+lego
+lego store
+fao schwarz
+learning express
+mastermind toys
+toy store
+toy shop
+toys
+toy ; ~
+babies r us
+buybuy baby
+buy buy baby
+mothercare
+mamas papas
+mamas and papas
+jojo maman bebe
+carters
+carter s
+oshkosh
+the children s place
+childrens place
+gymboree
+crazy 8
+janie and jack
+baby gap
+gap kids
+primark kids ; ~
+next kids ; ~
+pottery barn kids
+baby bunting
+baby gear
+baby store
+baby supplies
+nursery furniture
+pampers
+huggies
+diapers
+nappies
+baby formula
+infant formula
+aptamil
+similac
+enfamil
+stroller
+pram
+car seat
+
+# ───────────────────────────── Shopping ─────────────────────────────
+
+[shopping.vetements]
+zara
+h m
+hm
+h and m
+uniqlo
+primark
+gap ; ~
+old navy
+banana republic
+next ; ~
+next retail
+next plc
+river island
+new look
+topshop
+topman
+asos
+asos com
+boohoo
+prettylittlething
+pretty little thing
+missguided
+shein
+zalando
+nasty gal
+urban outfitters
+anthropologie
+free people
+abercrombie
+abercrombie fitch
+hollister
+american eagle
+aerie
+forever 21
+express ; ~ @cb
+j crew
+jcrew
+madewell
+ann taylor
+loft ; ~
+talbots
+chico s
+white house black market
+lululemon
+athleta
+fabletics
+gymshark
+under armour
+nike
+nike com
+adidas
+puma ; ~
+reebok
+new balance
+converse
+vans ; ~
+asics
+skechers
+timberland
+dr martens
+ugg
+crocs
+birkenstock
+the north face
+patagonia
+columbia sportswear
+arc teryx
+canada goose
+superdry
+tommy hilfiger
+ralph lauren
+polo ralph lauren
+calvin klein
+levi*
+wrangler ; ~
+lee jeans
+diesel jeans
+guess ; ~
+michael kors
+coach ; ~
+kate spade
+tory burch
+fossil
+mango
+massimo dutti
+bershka
+pull and bear
+pull bear
+stradivarius
+cos
+cos stores
+arket
+monki
+weekday ; ~
+other stories
+jack wills
+fat face
+fatface
+white stuff
+joules
+seasalt
+boden
+whistles
+reiss
+ted baker
+hobbs
+phase eight
+monsoon
+accessorize
+oasis ; ~
+warehouse ; ~
+dorothy perkins
+burton menswear
+burton ; ~
+evans ; ~
+wallis
+peacocks
+matalan
+tk maxx
+tkmaxx
+tj maxx
+tjmaxx
+marshalls
+ross stores
+ross dress
+burlington
+burlington coat
+nordstrom
+nordstrom rack
+macy s
+macys
+bloomingdale s
+bloomingdales
+saks
+saks fifth
+neiman marcus
+dillard s
+dillards
+kohl s
+kohls
+jcpenney
+jcp ; ~
+belk
+lord taylor
+hudson s bay
+hudsons bay
+the bay ; ~
+winners ; ~
+simons ; ~
+roots ; ~
+aritzia
+reitmans
+le chateau
+joe fresh
+mark s ; ~
+marks work wearhouse
+sport chek
+atmosphere ; ~
+dunnes stores clothing ; ~
+penneys
+brown thomas
+arnotts
+debenhams
+house of fraser
+selfridges
+harvey nichols
+harrods
+liberty london
+fenwick
+john lewis fashion ; ~
+david jones
+myer
+country road
+cotton on
+witchery
+seed heritage
+peter alexander
+target australia ; ~
+big w ; ~
+kmart australia ; ~
+best seller ; ~
+foot locker
+footlocker
+jd sports
+schuh
+office shoes
+clarks
+kurt geiger
+dune london
+russell bromley
+office ; ~ @cb
+famous footwear
+dsw
+payless
+journeys
+finish line
+shoe carnival
+champs sports
+the shoe company
+aldo
+spring shoes ; ~
+sports direct
+sportsdirect
+dry cleaner
+dry cleaners
+dry cleaning
+tailor
+tailoring
+alterations
+shoe repair
+cobbler
+timpson
+clothing
+clothes
+apparel
+fashion ; ~
+footwear
+shoes
+shoe store
+boutique ; ~
+outlet ; ~
+
+[shopping.beaute]
+hair salon
+hairdresser
+hairdressers
+hair studio
+hair design
+salon ; ~
+barber
+barbers
+barbershop
+barber shop
+supercuts
+great clips
+sport clips
+fantastic sams
+regis salons
+toni guy
+toni and guy
+headmasters
+rush hair
+saks hair ; ~
+drybar
+blow dry bar
+nail salon
+nails ; ~
+nail bar
+nail spa
+manicure
+pedicure
+waxing
+european wax
+european wax center
+brow bar
+benefit brow bar
+lash ; ~
+lashes ; ~
+spa ; ~ >30
+day spa
+med spa
+massage envy
+hand and stone
+sephora
+ulta
+ulta beauty
+sally beauty
+bath body works
+bath and body works
+lush
+the body shop
+body shop
+l occitane
+kiehl s
+kiehls
+mac cosmetics
+clinique
+estee lauder
+charlotte tilbury
+glossier
+fenty beauty
+rare beauty
+huda beauty
+nyx ; ~
+benefit cosmetics
+space nk
+cult beauty
+lookfantastic
+look fantastic
+feelunique
+beauty bay
+the ordinary
+deciem
+boots no7 ; ~
+the perfume shop
+perfume shop
+fragrance direct
+fragrancenet
+priceline ; ~
+mecca cosmetica
+mecca ; ~
+adore beauty
+shoppers beauty ; ~
+birchbox
+ipsy
+boxycharm
+dollar shave club
+harry s razors
+cosmetics
+beauty ; ~
+beauty salon
+beauty supply
+skincare
+skin care
+perfume ; ~
+fragrance ; ~
+tanning ; ~
+tanning salon
+
+[shopping.hightech]
+apple store
+apple ; ~ @cb
+best buy
+bestbuy
+currys
+currys pc world
+pc world
+argos ; ~
+game stop ; ~
+microcenter
+micro center
+b h photo
+bhphotovideo
+adorama
+newegg
+dell
+dell com
+hp ; ~
+hp inc
+lenovo
+samsung
+samsung electronics
+sony ; ~
+lg electronics
+google store
+google pixel ; ~
+microsoft surface ; ~
+bose
+sonos
+logitech
+razer
+corsair ; ~
+gopro
+dyson
+miele ; ~
+kitchenaid
+ninja kitchen
+sharkninja
+shark ; ~
+instant pot
+nespresso
+keurig
+breville
+vitamix
+roomba
+irobot
+fitbit
+garmin
+oura
+ring com
+nest ; ~
+arlo
+anker
+belkin
+the source
+staples ; ~
+office depot ; ~
+officemax ; ~
+office works
+officeworks
+jb hi fi
+jbhifi
+jb hifi
+the good guys
+harvey norman ; ~
+bing lee
+canada computers
+memory express
+visions electronics
+ao com
+ao retail
+appliances direct
+richer sounds
+very co uk
+very ; ~
+backmarket
+back market
+gazelle ; ~
+decluttr
+music magpie
+musicmagpie
+cex
+cex uk
+electronics
+electronic ; ~
+appliance*
+computer store
+phone shop ; ~
+tech store
+
+[shopping.divers]
+amazon
+amazon com
+amazon co uk
+amazon ca
+amazon com au
+amazon uk
+amazon marketplace
+amazon mktplace
+amazon mktp
+amazon mkt
+amazon retail
+amazon digital ; ~
+amazon payments
+amazon pay
+amzn
+amzn mktp
+amzn digital ; ~
+amazon prime ; ~
+ebay
+etsy
+temu
+aliexpress
+alibaba
+wish ; ~
+shein marketplace
+walmart com
+target
+target com
+target australia
+kmart
+big w
+the warehouse ; ~
+costco online ; ~
+dollar general
+dollar tree
+family dollar
+five below
+dollarama
+poundland
+wilkinson
+dealz
+poundstretcher
+pound shop
+b m ; ~
+b m retail
+b m bargains
+home bargains
+the range online ; ~
+wilko
+tk maxx online ; ~
+john lewis
+john lewis partnership
+argos
+argos ltd
+debenhams online ; ~
+marks spencer online ; ~
+qvc
+hsn
+overstock
+zulily
+groupon
+wayfair marketplace ; ~
+mercari
+poshmark
+depop
+vinted ; -
+facebook marketplace
+craigslist ; ~
+offerup
+gumtree ; -
+kijiji
+trademe
+trade me
+canadian tire store ; ~
+giant tiger
+winners homesense ; ~
+the reject shop
+daiso
+miniso
+flying tiger
+muji
+hema
+action ; ~
+tiger ; ~
+usps
+royal mail
+post office
+postoffice
+ups
+ups store
+fedex
+fedex office
+dhl
+evri
+hermes ; ~ @cb
+parcelforce
+yodel
+canada post
+australia post
+an post
+parcel ; ~
+shipping ; ~
+postage
+klarna
+afterpay
+affirm
+clearpay
+zip pay
+zip co
+sezzle
+paypal ; ~ -
+general store
+department store
+variety store
+discount store
+online shopping
+shopping ; ~
+shop ; ~
+store ; ~
+
+[loisirs.sports]
+decathlon
+sports direct ; ~
+dicks sporting goods
+dick s sporting
+academy sports
+big 5 sporting
+rei
+rei co op
+bass pro
+bass pro shops
+cabela s
+cabelas
+scheels
+mec ; ~
+mountain equipment
+sport chek ; ~
+rebel sport
+amart sports
+go outdoors
+blacks ; ~
+mountain warehouse
+cotswold outdoor
+evans cycles
+wiggle
+chain reaction cycles
+halfords cycles ; ~
+trek bicycle
+specialized ; ~
+rapha
+strava
+peloton
+zwift
+whoop
+myfitnesspal
+beachbody
+planet fitness
+la fitness
+24 hour fitness
+anytime fitness
+gold s gym
+golds gym
+equinox
+crunch fitness
+orangetheory
+orange theory
+f45
+soulcycle
+barry s
+barrys bootcamp
+crossfit
+pure gym
+puregym
+the gym group
+david lloyd
+virgin active
+nuffield health gym ; ~
+better leisure
+better gym
+everyone active
+fitness first
+jd gyms
+snap fitness
+goodlife fitness
+goodlife
+fit4less
+movati
+classpass
+gym ; ~
+gymnasium
+fitness ; ~
+fitness centre
+fitness center
+health club
+leisure centre
+leisure center
+recreation center
+rec center
+sports centre
+sports center
+swimming pool
+pool ; ~
+aquatic center
+yoga
+yoga studio
+pilates
+spin class
+bootcamp ; ~
+climbing
+climbing wall
+bouldering
+golf
+golf club
+golf course
+topgolf
+driving range
+tennis
+tennis club
+squash club
+padel
+pickleball
+bowling ; ~
+ski
+ski resort
+ski pass
+lift ticket*
+epic pass
+ikon pass
+vail resorts
+skate ; ~
+ice rink
+marathon ; ~
+race entry
+parkrun
+running club
+sporting goods
+sports ; ~
+sport ; ~
+athletic ; ~
+
+[loisirs.sorties]
+cinema
+cinemas
+movie theater
+movie theatre
+movies ; ~
+odeon
+vue cinema
+vue entertainment
+vue ; ~
+cineworld
+picturehouse
+everyman cinema
+showcase cinema
+curzon
+amc
+amc theatres
+amc theaters
+regal cinemas
+regal ; ~
+cinemark
+alamo drafthouse
+harkins
+marcus theatres
+cineplex
+landmark cinemas
+event cinemas
+hoyts
+village cinemas
+reading cinemas
+fandango
+atom tickets
+ticketmaster
+live nation
+livenation
+axs
+stubhub
+seatgeek
+vivid seats
+eventbrite
+see tickets
+dice fm
+dice ; ~
+skiddle
+ticketek
+ticketswap
+viagogo
+tickets ; ~
+box office
+theatre
+theater
+theatres
+broadway
+west end ; ~
+royal opera house
+national theatre
+opera
+ballet
+symphony
+philharmonic
+concert
+concerts
+festival
+festivals
+museum
+museums
+gallery ; ~
+art gallery
+exhibition
+zoo
+aquarium
+theme park
+amusement park
+disneyland
+disney world
+walt disney world
+disney resort ; ~
+universal studios
+universal orlando
+six flags
+cedar fair
+seaworld
+busch gardens
+legoland
+alton towers
+thorpe park
+chessington
+merlin entertainments
+madame tussauds
+london eye
+sea life
+national trust
+english heritage
+historic royal palaces
+canada s wonderland
+dreamworld
+movie world
+wet n wild
+bowling alley
+tenpin
+hollywood bowl
+lucky strike
+dave busters
+dave and buster s
+main event
+escape room
+laser tag
+trampoline park
+sky zone
+urban air
+mini golf
+crazy golf
+karaoke
+nightclub
+night club
+comedy club
+arcade
+casino ; ~
+attraction ; ~
+entertainment ; ~
+
+[loisirs.culture]
+barnes noble
+barnes and noble
+books a million
+waterstones
+foyles
+blackwell s
+blackwells
+whsmith ; ~
+wh smith ; ~
+indigo books
+chapters indigo
+indigo ; ~
+dymocks
+qbd books
+angus robertson
+easons
+book depository
+bookshop org
+powell s books
+half price books
+thriftbooks
+abebooks
+world of books
+wordery
+better world books
+kindle
+kindle ebooks
+amazon kindle
+kobo
+rakuten kobo
+apple books
+google play books
+scribd
+everand
+blinkist
+libro fm
+bookstore
+book store
+bookshop
+books ; ~
+book ; ~
+comics
+comic book*
+forbidden planet
+hmv
+fopp
+rough trade
+sunrise records
+jb hi fi music ; ~
+record store
+records ; ~
+vinyl ; ~
+bandcamp
+discogs
+itunes music ; ~
+dvd ; ~
+blu ray ; ~
+library ; ~
+library fine
+
+[loisirs.jeux]
+steam
+steampowered
+steam games
+valve ; ~
+playstation
+playstation network
+psn
+sony playstation
+sie ; ~
+nintendo
+nintendo eshop
+xbox
+xbox live
+microsoft xbox
+xbox game pass
+epic games
+riot games
+blizzard
+battle net
+activision
+electronic arts
+ea games
+ea com ; ~
+ubisoft
+rockstar games
+roblox
+minecraft
+mojang
+gog
+gog com
+humble bundle
+itch io
+gamestop
+game stop
+game uk
+eb games
+gamestation
+cex games ; ~
+green man gaming
+cdkeys
+eneba
+g2a
+twitch bits ; ~
+games workshop
+warhammer
+hobbycraft
+hobby lobby
+michaels ; ~
+michaels stores
+joann
+jo ann
+joann fabrics
+spotlight ; ~
+lincraft
+craft ; ~
+crafts ; ~
+art supplies
+fabric store
+yarn ; ~
+hobby shop
+hobbies
+model shop
+photo ; ~
+photobox
+snapfish
+shutterfly
+cewe
+vistaprint ; ~
+flickr
+camera ; ~
+board game*
+boardgame*
+tabletop ; ~
+video games
+video game
+gaming ; ~
+games ; ~
+game ; ~
+
+[vacances.hebergement]
+hotel
+hotels
+motel
+motels
+inn ; ~
+lodge ; ~
+resort ; ~
+hostel
+hostels
+hostelworld
+youth hostel
+yha
+airbnb ; -
+vrbo
+homeaway
+booking com ; -
+booking ; -
+expedia
+hotels com
+priceline
+agoda
+trivago
+kayak ; ~
+hopper ; ~
+marriott
+marriott hotels
+courtyard ; ~
+residence inn
+fairfield inn
+sheraton
+westin
+w hotel
+ritz carlton
+hilton
+hilton hotels
+hampton inn
+hampton by hilton
+doubletree
+embassy suites
+homewood suites
+hyatt
+hyatt regency
+hyatt place
+holiday inn
+holiday inn express
+crowne plaza
+intercontinental
+ihg
+staybridge
+candlewood
+best western
+radisson
+choice hotels
+comfort inn
+quality inn
+sleep inn
+days inn
+super 8
+motel 6
+la quinta
+red roof
+red roof inn
+extended stay
+wyndham
+ramada
+travelodge
+premier inn
+premier inns
+ibis
+novotel
+mercure
+sofitel
+accor
+pullman ; ~
+jurys inn
+leonardo hotels
+malmaison
+hotel du vin
+village hotel
+macdonald hotels
+britannia hotels
+dalata
+maldron
+clayton hotel
+fairmont
+four seasons
+mandarin oriental
+shangri la
+peninsula ; ~
+loews hotels
+omni hotels
+kimpton
+ace hotel
+citizenm
+citizen m
+yotel
+generator hostel
+center parcs
+butlins
+haven holidays
+parkdean
+hoseasons
+cottages com
+sykes cottages
+vacation rental
+holiday rental
+holiday let
+holiday cottage
+campground
+campsite
+camping
+koa
+caravan park
+glamping
+pitchup
+hipcamp
+reserve america
+recreation gov
+parks canada
+bed and breakfast
+b b ; ~
+guest house
+guesthouse
+lodging
+accommodation
+
+[vacances.transport]
+# Airlines
+british airways
+ba com ; ~
+easyjet
+easy jet
+ryanair
+jet2
+jet2 com
+tui ; ~
+tui airways
+virgin atlantic
+aer lingus
+loganair
+wizz air
+wizzair
+flybe
+norwegian air
+american airlines
+american air
+aa com ; ~
+delta air
+delta air lines
+delta airlines
+united airlines
+united air
+southwest airlines
+southwest air
+southwes ; ~
+jetblue
+jet blue
+alaska airlines
+alaska air
+spirit airlines
+spirit air
+frontier airlines
+allegiant
+hawaiian airlines
+sun country
+breeze airways
+air canada
+westjet
+porter airlines
+flair airlines
+swoop ; ~
+air transat
+qantas
+virgin australia
+jetstar
+rex airlines
+air new zealand
+air france
+klm
+lufthansa
+swiss air
+iberia
+vueling
+tap air portugal
+tap portugal
+emirates
+qatar airways
+etihad
+turkish airlines
+singapore airlines
+cathay pacific
+japan airlines
+ana airways
+korean air
+air india
+el al
+icelandair
+finnair
+sas airlines
+aeromexico
+copa airlines
+latam
+avianca
+# Rail and coaches
+amtrak
+via rail
+eurostar
+trainline
+thetrainline
+lner
+avanti west coast
+gwr
+great western railway
+southeastern
+south western railway
+southern railway
+thameslink
+govia
+northern rail
+northern trains
+transpennine
+tpe ; ~
+crosscountry
+cross country trains
+scotrail
+c2c
+greater anglia
+chiltern railways
+east midlands railway
+west midlands trains
+london northwestern
+merseyrail
+transport for wales
+tfw rail
+caledonian sleeper
+grand central rail
+hull trains
+lumo ; ~
+gatwick express
+heathrow express
+stansted express
+national rail
+irish rail
+iarnrod eireann
+megabus
+national express coaches
+flixbus
+greyhound
+coach usa
+peter pan bus
+ourbus
+busbud
+wanderu
+eurotunnel
+le shuttle
+p o ferries
+stena line
+dfds
+brittany ferries
+irish ferries
+condor ferries
+red funnel
+wightlink
+calmac
+bc ferries
+spirit of tasmania
+# Car rental
+hertz
+avis ; ~
+avis budget
+budget rent
+budget car
+enterprise rent
+enterprise rent a car
+enterprise ; ~
+national car rental
+alamo
+alamo rent
+dollar rent
+thrifty car
+sixt
+europcar
+zipcar
+turo
+getaround
+fox rent a car
+payless car
+advantage rent
+rentalcars
+rental cars
+car rental
+rent a car
+rental car
+discover cars
+holiday autos
+auto europe
+# Travel agencies and airports
+kayak flights
+skyscanner
+google flights
+cheapoair
+cheaptickets
+orbitz
+travelocity
+hopper flights
+kiwi com
+edreams
+opodo
+lastminute
+lastminute com
+on the beach
+loveholidays
+jet2holidays
+tui holidays
+trailfinders
+flight centre
+flight center
+student universe
+airport
+airport parking ; ~
+heathrow
+gatwick
+stansted
+luton airport
+manchester airport
+dublin airport
+jfk ; ~
+lax ; ~
+tsa precheck
+global entry
+clear secure
+esta ; ~
+eta canada
+visa application ; ~
+airfare
+air fare
+airline
+airlines
+flight ; ~
+flights ; ~
+
+# ───────────────────────────── Taxes ─────────────────────────────
+
+[impots]
+hmrc
+hm revenue
+hm revenue customs
+inland revenue
+irs
+internal revenue
+internal revenue service
+us treasury
+treas ; ~
+treasury ; ~
+tax payment
+tax pmt
+taxpayment
+usataxpymt
+state tax
+dept of revenue
+department of revenue
+dept revenue
+franchise tax board
+ftb ; ~
+comptroller
+tax collector
+tax office
+tax commissioner
+canada revenue
+canada revenue agency
+cra ; ~
+receiver general
+revenu quebec
+australian taxation office
+ato ; ~
+revenue commissioners
+revenue ie
+ros ; ~
+tax ; ~
+taxes ; ~
+taxation
+
+[impots.revenu]
+income tax
+income taxes
+self assessment
+self assesment
+sa payment ; ~
+paye ; ~
+hmrc self assessment
+hmrc sa
+hmrc paye
+federal tax
+federal taxes
+fed tax
+estimated tax
+est tax
+quarterly tax
+1040 ; ~
+1040es
+state income tax
+irs usataxpymt
+irs treas
+eftps
+direct pay ; ~
+tax return ; ~
+tax refund ; ~
+tax rfd ; ~
+income tax refund
+cra tax
+cra refund
+gst credit ; ~
+hst ; ~
+ato tax
+ato payment
+paye refund
+usc ; ~
+
+[impots.foncier]
+property tax
+property taxes
+prop tax
+real estate tax
+real estate taxes
+county tax
+county treasurer
+tax assessor
+assessor ; ~
+council tax
+counciltax
+ctax
+local property tax
+lpt ; ~
+municipal tax
+municipal taxes
+city taxes
+school tax
+land tax
+rates ; ~
+council rates
+borough council ; ~
+county council ; ~
+city council ; ~
+district council ; ~
+london borough ; ~
+
+[impots.autres]
+dvla
+dvla vehicle tax
+vehicle tax
+vehicle excise
+road tax
+car tax
+tv licence
+tv licensing
+tv license
+dmv
+department of motor vehicles
+motor vehicles
+vehicle registration
+registration renewal
+tag renewal
+license renewal
+licence renewal
+service ontario
+serviceontario
+saaq
+vicroads
+service nsw
+transport for nsw
+motor tax
+fine ; ~
+fines
+parking fine
+parking ticket
+parking citation
+pcn ; ~
+penalty charge
+penalty notice
+traffic fine
+traffic ticket
+speeding fine
+speeding ticket
+court fine
+court fees
+magistrates court
+fixed penalty
+toll violation
+citation ; ~
+passport
+passport office
+hm passport
+uscis
+immigration ; ~
+home office ; ~
+visa fee
+customs duty
+customs ; ~
+import duty
+vat ; ~
+hmrc vat
+sales tax ; ~
+stamp duty
+sdlt ; ~
+gov uk
+companies house
+ico registration ; ~
+fishing licence
+fishing license
+hunting license
+dog license
+dog licence
+
+# ───────────────────────────── Banking & insurance ─────────────────────────────
+
+[banque.frais]
+fee ; ~ -
+fees ; ~ -
+bank fee
+bank fees
+bank charge
+bank charges
+service charge ; ~ -
+service fee ; ~ -
+monthly fee
+monthly service fee
+monthly maintenance fee
+maintenance fee
+account fee
+account fees
+monthly account fee
+packaged account ; ~
+account maintenance
+overdraft
+overdraft fee
+overdraft charge
+overdraft interest
+od fee
+od interest
+nsf
+nsf fee
+non sufficient funds
+insufficient funds
+returned item
+returned payment fee
+unpaid item
+unpaid transaction fee
+paid item fee
+interest charge
+interest charged
+interest charges
+debit interest
+purchase interest
+cash advance fee
+cash advance interest
+finance charge
+finance charges
+late fee
+late payment fee
+late charge
+annual fee
+card fee
+card annual fee
+foreign transaction fee
+foreign fee
+intl transaction fee
+international transaction fee
+non sterling transaction fee
+non sterling fee
+non sterling cash fee
+non sterling purchase fee
+fx fee
+currency conversion fee
+exchange fee
+atm fee
+atm surcharge
+atm withdrawal fee
+cash machine fee
+non network atm
+out of network atm
+wire fee
+wire transfer fee
+incoming wire fee
+outgoing wire fee
+transfer fee
+stop payment fee
+statement fee
+paper statement fee
+cheque book fee
+check order
+check printing
+deluxe check
+harland clarke
+safe deposit box
+excess withdrawal fee
+arranged overdraft
+unarranged overdraft
+commission ; ~ -
+
+[banque.credit]
+loan payment
+loan pmt
+loan repayment
+loan repmt
+personal loan
+personal loans
+consumer loan
+installment loan
+instalment loan
+student loan
+student loans
+navient
+nelnet
+sallie mae
+great lakes ; ~
+mohela
+fedloan
+aidvantage
+edfinancial
+student loans company
+slc repayment
+nslsc
+sofi
+sofi loan
+lending club
+lendingclub
+prosper ; ~
+upstart
+avant
+best egg
+marcus loan
+discover personal loan
+discover student
+lightstream
+onemain
+one main
+oportun
+earnest ; ~
+laurel road
+zopa
+ratesetter
+novuna
+hitachi capital
+tesco bank loan
+amigo loans
+lendable
+plata ; ~
+monzo flex
+fair finance
+latitude financial
+humm
+societyone
+harmoney
+credit card payment ; ~
+credit card pymt ; ~
+card payment received ; ~
+amex payment ; ~
+american express payment ; ~
+amex epayment ; ~
+american express ach ; ~
+chase card ; ~
+chase credit crd ; ~
+chase credit card ; ~
+citi card ; ~
+citi cards ; ~
+citicard ; ~
+citibank card ; ~
+capital one ; ~
+capital one card ; ~
+capital one mobile pmt ; ~
+discover card ; ~
+discover e payment ; ~
+discover epayment ; ~
+synchrony ; ~
+synchrony bank ; ~
+comenity ; ~
+barclaycard ; ~
+barclaycard payment ; ~
+mbna ; ~
+vanquis ; ~
+aqua card ; ~
+capital one uk ; ~
+tesco credit card ; ~
+sainsburys credit card ; ~
+john lewis card ; ~
+nationwide credit card ; ~
+newday ; ~
+fluid card ; ~
+marbles card ; ~
+luma card ; ~
+bank of america credit card ; ~
+bk of amer ; ~
+wells fargo card ; ~
+us bank card ; ~
+td visa ; ~
+rbc visa ; ~
+scotia visa ; ~
+bmo mastercard ; ~
+cibc visa ; ~
+pc financial mastercard ; ~
+triangle mastercard ; ~
+mbna canada ; ~
+koho ; ~
+klarna payment
+afterpay payment
+affirm payment
+affirm inc
+paypal credit
+paypal pay in 3 ; ~
+paypal pay in 4 ; ~
+zip payment
+sezzle payment
+buy now pay later
+bnpl
+payday loan
+lendup ; ~
+cash advance ; ~
+tesco bank ; ~
+sainsburys bank ; ~
+loan ; ~
+loans ; ~
+
+[banque.assurances]
+insurance ; ~
+insurance premium
+insurance premiums
+ins prem
+insurance prem
+ins pymt
+life insurance
+term life
+whole life
+life assurance
+life cover
+income protection
+critical illness
+disability insurance
+long term care
+accident insurance
+travel insurance
+pet insurance ; ~
+gadget insurance
+phone insurance
+mobile insurance
+appliance cover
+domestic general
+domestic and general
+home warranty
+american home shield
+choice home warranty
+asurion
+assurant
+squaretrade
+allstate protection
+applecare
+apple care
+extended warranty
+warranty ; ~
+legal and general
+legal general
+l g insurance
+aviva life
+royal london
+zurich ; ~
+zurich insurance
+aegon
+scottish widows
+vitality life
+metlife
+met life
+prudential
+new york life
+northwestern mutual
+massmutual
+mass mutual
+lincoln financial
+transamerica
+pacific life
+principal financial
+mutual of omaha
+globe life
+colonial penn
+aflac
+haven life
+ladder life
+bestow ; ~
+policygenius
+banner life
+protective life
+john hancock
+primerica
+state farm life
+sun life
+manulife
+great west life
+canada life
+industrial alliance
+ia financial
+desjardins life ; ~
+tal life
+aia ; ~
+mlc life
+irish life
+new ireland
+zurich life
+aviva ireland
+royal london ireland
+lemonade life
+lemonade pet
+trupanion
+healthy paws
+petplan
+bought by many
+manypets
+nationwide pet
+embrace pet
+spot pet
+
+[banque.retraits]
+atm
+atm withdrawal
+atm withdrawl
+atm wd
+atm w d
+atm cash
+atm debit
+cash withdrawal
+cash withdrawl
+cash wdl
+cash machine
+cashpoint
+cash point
+link atm
+withdrawal ; ~ @dab
+withdrawl ; ~ @dab
+wdl ; ~
+cash ; ~ @dab
+cash back ; ~
+cashback at till ; ~
+note machine
+notemachine
+cardtronics
+euronet
+allpoint
+moneypass
+co op atm
+bank machine
+abm ; ~
+abm withdrawal
+interac cash
+cash out ; ~
+
+# ───────────────────────────── Savings & investments ─────────────────────────────
+
+[epargne.livrets]
+savings
+savings account
+savings acct
+savings transfer
+transfer to savings
+to savings
+save the change
+round up ; ~
+roundup ; ~
+round ups ; ~
+spare change ; ~
+savings pot
+pot ; ~
+monzo pot
+starling space
+saving space ; ~
+goal saver
+easy access saver
+saver ; ~
+isa
+cash isa
+lisa ; ~
+lifetime isa
+junior isa
+premium bonds
+ns i
+nsi
+ns and i
+national savings
+marcus savings
+marcus by goldman
+ally savings
+ally bank ; ~
+capital one 360
+cit bank
+synchrony savings
+discover savings
+american express savings
+amex savings
+sofi savings
+wealthfront cash
+betterment cash
+chime savings
+varo savings
+digit ; ~
+qapital
+acorns ; ~
+stash ; ~
+plum ; ~
+chip ; ~
+moneybox
+raisin
+eq bank
+tangerine savings
+simplii savings
+oaknorth
+atom bank
+kroo
+zopa savings
+ubank
+ing savings
+high interest savings
+hisa ; ~
+tfsa
+cd deposit ; ~
+certificate of deposit
+emergency fund
+rainy day fund
+
+[epargne.assurance_vie]
+401k
+401 k
+403b
+403 b
+457b
+ira contribution
+ira ; ~
+roth ira
+traditional ira
+sep ira
+simple ira
+retirement contribution
+retirement savings
+retirement account
+retirement plan
+pension contribution
+pension contributions
+pension scheme
+pension plan
+workplace pension
+sipp
+nest pension
+nest ; ~ @prlv
+the people s pension
+peoples pension
+now pensions
+smart pension
+aviva pension
+scottish widows pension
+royal london pension
+pensionbee
+penfold
+hargreaves lansdown sipp
+aj bell sipp
+fidelity retirement
+fidelity 401k
+vanguard ira
+vanguard 401k
+schwab ira
+tiaa
+tiaa cref
+empower retirement
+empower ; ~
+principal 401k
+voya
+voya financial
+transamerica retirement
+guideline 401k
+human interest
+annuity
+annuities
+rrsp
+rrsp contribution
+group rrsp
+rpp ; ~
+rdsp
+resp
+superannuation
+super contribution
+super fund
+australiansuper
+australian super
+aware super
+rest super
+hostplus
+unisuper
+cbus
+hesta
+art super
+colonial first state
+prsa
+irish life pension
+zurich pension
+whole life policy ; ~
+endowment ; ~
+
+[epargne.bourse]
+brokerage
+brokerage account
+investment
+investments
+investing
+invest ; ~
+stocks
+shares ; ~
+etf ; ~
+mutual fund
+vanguard
+fidelity
+fidelity investments
+schwab
+charles schwab
+td ameritrade
+etrade
+e trade
+e trade securities
+merrill edge
+merrill lynch
+merrill ; ~
+morgan stanley
+edward jones
+ameriprise
+robinhood
+webull
+public com
+m1 finance
+m1 ; ~
+stash invest
+acorns invest
+wealthfront
+betterment
+sofi invest
+interactive brokers
+ibkr
+tastytrade
+firstrade
+ally invest
+hargreaves lansdown
+aj bell
+interactive investor
+ii com ; ~
+fidelity uk
+vanguard uk
+freetrade
+trading 212
+trading212
+nutmeg
+moneyfarm
+wealthify
+wealthsimple
+questrade
+qtrade
+rbc direct investing
+td direct investing
+bmo investorline
+cibc investor s edge
+scotia itrade
+commsec
+selfwealth
+stake ; ~
+raiz
+spaceship ; ~
+pearler
+superhero ; ~
+degiro
+etoro
+trade republic
+revolut trading ; ~
+coinbase
+binance
+kraken
+gemini ; ~
+crypto com
+bitstamp
+bitpanda
+blockfi
+uphold ; ~
+cash app bitcoin
+bitcoin
+btc ; ~
+ethereum
+crypto ; ~
+cryptocurrency
+fundrise
+yieldstreet
+masterworks
+treasury direct
+treasurydirect
+savings bond*
+i bonds
+
+# ───────────────────────────── Income ─────────────────────────────
+
+[revenus.salaires]
+salary
+salaries
+sal ; ~
+wages
+wage
+payroll
+payroll deposit
+pay roll
+paycheck
+paycheque
+pay check
+net pay
+direct deposit ; ~
+dir dep ; ~
+directdep ; ~
+dirdep ; ~
+pay ; ~
+payslip
+pay slip
+bonus ; ~
+bonuses ; ~
+commission payment ; ~
+commissions ; ~
+overtime
+holiday pay
+vacation pay
+expenses reimbursement ; ~
+expense reimbursement ; ~
+expenses claim ; ~
+adp
+adp payroll
+paychex
+gusto
+gusto pay
+intuit payroll
+quickbooks payroll
+paylocity
+paycom
+paycor
+rippling
+justworks
+trinet
+insperity
+workday ; ~
+ceridian
+dayforce
+sage payroll
+xero payroll
+deel
+remote com ; ~
+oyster hr ; ~
+employer ; ~
+wages and salaries
+salary payment
+monthly salary
+
+[revenus.allocations]
+child benefit
+universal credit
+dwp
+dwp uc
+dwp jsa
+dwp esa
+dwp pip
+dwp ca ; ~
+department for work and pensions
+jobseekers
+jobseeker s allowance
+employment and support allowance
+personal independence payment
+pip ; ~
+carer s allowance
+carers allowance
+housing benefit
+tax credits
+working tax credit
+child tax credit
+hmrc child benefit
+hmrc tax credits
+winter fuel payment
+cost of living payment
+ssa treas ; ~
+ssi ; ~
+snap ; ~
+ebt ; ~
+wic ; ~
+unemployment
+unemployment benefit
+unemployment insurance
+edd ; ~
+ui benefits
+state of ; ~
+child tax credit irs
+stimulus
+economic impact payment
+canada child benefit
+ccb ; ~
+ei benefits
+employment insurance
+service canada
+gst hst credit
+gstc ; ~
+climate action incentive
+canada carbon rebate
+oas ; ~
+centrelink
+services australia
+family tax benefit
+jobseeker payment
+youth allowance
+age pension ; ~
+department of social protection
+social welfare
+dsp ; ~
+child benefit ie
+jobseekers benefit
+grant ; ~
+bursary
+scholarship
+financial aid
+student finance
+student finance england
+saas ; ~
+osap
+benefit ; ~
+benefits ; ~
+allowance ; ~
+
+[revenus.retraites]
+pension
+pensions
+state pension
+pension payment
+pension credit
+private pension
+annuity payment
+annuity income
+retirement income
+retirement benefit
+retirement
+social security
+soc sec
+ssa ; ~
+ssa treas
+us treasury ssa
+xxsoc sec
+railroad retirement
+cpp ; ~
+canada pension plan
+old age security
+qpp ; ~
+superannuation payment
+super pension
+age pension
+teachers pension
+nhs pension
+civil service pension
+armed forces pension
+local government pension
+lgps ; ~
+calpers
+calstrs
+fers ; ~
+opm retirement
+dfas ; ~
+
+[revenus.locatifs]
+rent received
+rent from ; ~
+rental income
+rental receipts
+rent payment from ; ~
+tenant
+tenants
+tenant payment
+airbnb payout
+airbnb payments
+vrbo payout
+booking com payout
+homeaway payout
+letting income
+rent ; ~
+rental ; ~
+
+[revenus.financiers]
+interest
+interest paid
+interest payment
+interest earned
+interest credit
+credit interest
+gross interest
+net interest
+int paid ; ~
+int earned ; ~
+apy earned ; ~
+savings interest
+deposit interest
+bonus interest ; ~
+dividend*
+div ; ~
+dividends paid
+capital gain*
+coupon ; ~
+distribution ; ~
+fund distribution
+investment income
+premium bonds prize
+premium bond prize
+nsandi prize ; ~
+ns i prize
+cashback interest ; ~
+
+[revenus.autres]
+refund
+refunds
+rfnd
+refnd ; ~
+reimbursement ; ~
+reimb ; ~
+rebate
+rebates
+reversal ; ~
+returned purchase
+return credit ; ~
+merchandise return ; ~
+credit adjustment ; ~
+adjustment ; ~
+cashback
+cash back reward
+rewards ; ~
+reward ; ~
+statement credit
+bonus offer ; ~
+sign up bonus
+referral bonus
+referral ; ~
+promo credit ; ~
+venmo ; ~
+venmo cashout
+cash app ; ~
+square cash ; ~
+zelle ; ~
+paypal ; ~
+paypal transfer ; ~
+wise ; ~
+revolut ; ~
+monzo ; ~
+starling ; ~
+interac e transfer ; ~
+e transfer ; ~
+etransfer ; ~
+ebay payout
+etsy payout
+etsy deposit
+amazon payout ; ~
+amazon seller
+shopify payout
+stripe payout
+square payout
+sq deposit ; ~
+vinted ; ~
+depop payout
+poshmark payout
+mercari payout
+facebook payout ; ~
+gumtree ; ~
+gift ; ~
+gift from ; ~
+birthday ; ~
+lottery ; ~
+lotto ; ~
+national lottery ; ~
+prize ; ~
+winnings
+sale ; ~
+sold ; ~
+insurance claim ; ~
+deposit refund ; ~
+security deposit return
+tax rebate ; ~
+uniform tax rebate
+class action settlement
+settlement ; ~
+inheritance
+child support
+alimony
+maintenance payment ; ~
+child maintenance
+from savings ; ~
+mobile deposit ; ~
+atm deposit ; ~
+cash deposit ; ~
+deposit ; ~
+
+# ───────────────────────────── Miscellaneous ─────────────────────────────
+
+[divers.animaux]
+vet
+vets
+veterinary
+veterinarian
+veterinary clinic
+veterinary hospital
+animal hospital
+animal clinic
+pet hospital
+banfield
+vca animal
+vca ; ~
+medivet
+vets4pets
+vets for pets
+companion care
+pets at home
+petsmart
+pet smart
+petco
+petsense
+pet supplies plus
+pet valu
+petvalu
+pet supermarket
+pet barn
+petbarn
+petstock
+chewy
+chewy com
+zooplus
+jollyes
+pets corner
+monster pet supplies
+bark box
+barkbox
+rover com
+rover ; ~
+wag walking
+wag ; ~
+tails com
+butternut box
+farmers dog
+the farmer s dog
+ollie pets
+pet food
+pet store
+pet shop
+pet supplies
+pet grooming
+grooming ; ~
+groomer
+dog grooming
+dog groomer
+dog walker
+dog walking
+dog daycare
+doggy daycare
+kennel*
+cattery
+pet sitter
+pet sitting
+pet boarding
+boarding kennel
+dog training
+dog trainer
+pet insurance
+animal shelter ; ~
+spca ; ~
+rspca ; ~
+humane society ; ~
+pets ; ~
+pet ; ~
+
+[divers.cadeaux]
+gift ; ~ -
+gifts ; ~ -
+gift shop
+gift card
+gift cards
+giftcard
+gift voucher
+one4all
+one for all
+love2shop
+flowers
+florist
+florists
+flower shop
+interflora
+1 800 flowers
+1800flowers
+ftd
+teleflora
+proflowers
+bloom wild
+bloom and wild
+serenata flowers
+moonpig
+funky pigeon
+card factory
+clintons
+hallmark
+paperchase
+papyrus ; ~
+american greetings
+greeting card*
+not on the high street
+notonthehighstreet
+uncommon goods
+red letter days
+virgin experience days
+buyagift
+tinggly
+cloud 9 ; ~
+jewelers
+jewellers
+jewelry
+jewellery
+jewelry store
+kay jewelers
+zales
+jared ; ~
+pandora jewelry
+pandora ; ~ @cb
+swarovski
+tiffany
+tiffany co
+cartier
+h samuel
+ernest jones
+goldsmiths
+beaverbrooks
+warren james
+michael hill
+peoples jewellers
+mappin webb
+claire s
+claires
+thomas sabo
+links of london
+hotel chocolat
+thorntons
+godiva chocolate
+see s candies
+lindt shop
+edible arrangements
+harry david
+wedding gift
+wedding registry
+baby shower ; ~
+present ; ~
+presents ; ~
+gofundme ; ~
+just giving
+justgiving ; ~
+collection pot ; ~
+
+[divers.dons]
+donation
+donations
+donate
+charity
+charities
+charitable
+nonprofit
+non profit
+foundation ; ~
+church
+parish
+diocese
+tithe
+tithing
+offering ; ~
+synagogue
+mosque
+temple ; ~
+gurdwara
+zakat
+sadaqah
+red cross
+american red cross
+british red cross
+canadian red cross
+salvation army ; ~
+goodwill ; ~
+unicef
+save the children
+oxfam
+cancer research
+cancer research uk
+macmillan cancer
+macmillan ; ~
+british heart foundation
+bhf ; ~
+barnardos
+barnardo s
+nspcc
+rspca
+rspb
+wwf
+greenpeace
+amnesty
+amnesty international
+doctors without borders
+msf ; ~
+st jude
+st jude children s
+make a wish
+habitat for humanity
+feeding america
+food bank
+foodbank
+trussell trust
+shelter ; ~
+crisis uk
+mind charity
+samaritans
+age uk
+alzheimer s society
+alzheimers association
+american cancer society
+american heart association
+aspca
+humane society
+world vision
+compassion international
+plan international
+action aid
+actionaid
+islamic relief
+christian aid
+tearfund
+water aid
+wateraid
+charity water
+kiva
+givewell
+against malaria
+oxfam shop ; ~
+st vincent de paul
+svp ; ~
+concern worldwide
+trocaire
+goal global
+barretstown
+focus ireland
+pieta house
+the smith family
+beyond blue
+movember
+comic relief
+children in need
+red nose day
+sport relief
+united way
+givedirectly
+patreon donation ; ~
+paypal giving
+paypal giving fund
+charities aid foundation
+caf ; ~
+gift aid
+benevity
+justgiving donation
+just giving donation
+virgin money giving
+gofundme
+go fund me
+crowdfunder
+wikimedia
+wikipedia
+mozilla foundation
+eff ; ~
+aclu
+planned parenthood
+npr ; ~
+pbs ; ~
+public radio
+public television
+membership dues ; ~
+dues ; ~
+
+[divers.tabac]
+tobacco
+tobacconist
+tobacco shop
+smoke shop
+cigarette*
+cigar*
+vape*
+vaping
+juul
+newsagent
+newsagents
+newsstand
+news agent
+news stand
+corner store ; ~
+lottery ; -
+lotto ; -
+national lottery ; -
+the national lottery ; -
+camelot
+allwyn
+powerball
+mega millions
+scratch card*
+scratchers
+lottery ticket*
+ladbrokes
+william hill
+paddy power
+betfair
+bet365
+sky bet
+skybet
+coral ; ~
+betfred
+betway
+unibet
+888 ; ~
+draftkings
+fanduel
+betmgm
+caesars sportsbook
+pointsbet
+sportsbet
+tab ; ~
+gambling
+betting
+bookmaker
+bookmakers
+bingo
+poker ; ~
+pokerstars
+online casino ; ~
+
+# ───────────────────────────── Internal transfers ─────────────────────────────
+
+[virements]
+internal transfer
+internal tfr
+own account transfer
+own account
+transfer to own account
+transfer between accounts
+account transfer
+acct transfer
+acct to acct
+account to account
+transfer to checking
+transfer from checking
+transfer to savings ; ~
+transfer from savings ; ~
+transfer to chequing
+online transfer to ; ~
+online transfer from ; ~
+online banking transfer ; ~
+mobile transfer ; ~
+tfr to ; ~
+tfr from ; ~
+to account ; ~
+from account ; ~
+to a c ; ~
+from a c ; ~
+via mobile xfer ; ~
+xfer to ; ~
+xfer from ; ~
+self transfer
+between my accounts
+book transfer ; ~

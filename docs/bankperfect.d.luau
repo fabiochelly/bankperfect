@@ -1,6 +1,7 @@
 -- Définitions de l'API des extensions BankPerfect, pour luau-lsp
 -- (auto-complétion et vérification des types dans l'éditeur).
 -- VS Code : "luau-lsp.types.definitionFiles": ["chemin/vers/bankperfect.d.luau"]
+-- Commentaires en anglais : bankperfect.en.d.luau.
 
 declare class BPDate
 	day: number
@@ -255,6 +256,8 @@ type FileFilters = { [string]: { string } }
 declare bp: {
 	version: string,
 	id: string,
+	-- Langue de l'interface : "fr" ou "en" (extensions rechargées quand elle change).
+	language: string,
 
 	extension: (spec: { name: string?, description: string?, version: string?, author: string?, permissions: { string }?, requires: string? }) -> (),
 	command: (spec: CommandSpec) -> (),

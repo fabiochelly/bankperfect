@@ -9,7 +9,9 @@
 
 use std::collections::HashMap;
 
+use bp_core::i18n::decimal_separator;
 use bp_core::model::{Amount, Mode};
+use bp_core::tr;
 use mlua::{Function, Lua, Table, Value};
 
 use crate::date::{LuaDate, date_value, parse_text};
@@ -329,7 +331,7 @@ pub(crate) fn color(value: &Value) -> mlua::Result<Option<Color>> {
             let channel = |i: usize| u8::from_str_radix(hex.get(i..i + 2).unwrap_or(""), 16);
             match (hex.len(), channel(0), channel(2), channel(4)) {
                 (6, Ok(r), Ok(g), Ok(b)) => Color::Rgb(r, g, b),
-                _ => return Err(runtime(format!("couleur inconnue : « {text} »"))),
+                _ => return Err(runtime(tr!("couleur inconnue : « {} »", text))),
             }
         }
     }))
@@ -354,8 +356,19 @@ fn text_style(value: Option<String>) -> TextStyle {
     }
 }
 
-/// Texte affiché d'une valeur Luau quelconque.
+/// Texte affiché d'une valeur Luau quelconque (virgule ou point décimal
+/// selon la langue).
 pub(crate) fn display(value: &Value) -> mlua::Result<String> {
+    text_with(value, decimal_separator())
+}
+
+/// Texte d'une valeur Luau rangée dans le fichier (zones d'une opération,
+/// d'une échéance…) : indépendant de la langue, virgule décimale.
+pub(crate) fn data_text(value: &Value) -> mlua::Result<String> {
+    text_with(value, ',')
+}
+
+fn text_with(value: &Value, decimal: char) -> mlua::Result<String> {
     Ok(match value {
         Value::Nil => String::new(),
         Value::Boolean(true) => "✓".into(),
@@ -365,7 +378,7 @@ pub(crate) fn display(value: &Value) -> mlua::Result<String> {
             if n.fract() == 0.0 && n.abs() < 1e15 {
                 format!("{}", *n as i64)
             } else {
-                format!("{n}").replace('.', ",")
+                format!("{n}").replace('.', &decimal.to_string())
             }
         }
         Value::String(s) => s.to_str()?.to_string(),
@@ -443,7 +456,7 @@ fn number_text(value: f64, decimals: u32) -> String {
         } else {
             text
         };
-        text.replace('.', ",")
+        text.replace('.', &decimal_separator().to_string())
     }
 }
 
@@ -470,7 +483,7 @@ impl Window {
         let state = match spec.get::<Value>("state")? {
             Value::Table(t) => t,
             Value::Nil => lua.create_table()?,
-            _ => return Err(runtime("state doit être une table")),
+            _ => return Err(runtime(tr!("state doit être une table"))),
         };
         let size = match spec.get::<Value>("size")? {
             Value::String(s) => match s.to_str()?.as_ref() {
@@ -486,7 +499,7 @@ impl Window {
             Value::Function(f) => (Some(f), None),
             Value::Nil => (None, Some(spec.get::<Value>("body")?)),
             Value::Table(t) => (None, Some(Value::Table(t))),
-            _ => return Err(runtime("view doit être une fonction")),
+            _ => return Err(runtime(tr!("view doit être une fonction"))),
         };
         let mut window = Self {
             id,
@@ -541,7 +554,7 @@ impl Window {
                 .call::<Value>(lua.create_table_from([
                     (
                         Value::Integer(1),
-                        Value::String(lua.create_string("Fermer")?),
+                        Value::String(lua.create_string(tr!("Fermer"))?),
                     ),
                     (
                         Value::String(lua.create_string("cancel")?),
@@ -570,7 +583,7 @@ impl Window {
                 Ok(Some(self.handlers.len() - 1))
             }
             Value::Nil => Ok(None),
-            _ => Err(runtime("on_click doit être une fonction")),
+            _ => Err(runtime(tr!("on_click doit être une fonction"))),
         }
     }
 
@@ -589,7 +602,7 @@ impl Window {
         };
         let kind: String = t
             .get::<Option<String>>("type")?
-            .ok_or_else(|| runtime("élément de fenêtre sans type (utilisez bp.ui.*)"))?;
+            .ok_or_else(|| runtime(tr!("élément de fenêtre sans type (utilisez bp.ui.*)")))?;
         let first = t.get::<Value>(1)?;
         Ok(Some(match kind.as_str() {
             "text" => Widget::Text {
@@ -695,8 +708,9 @@ impl Window {
                     Some("bars") => ChartStyle::Bars,
                     Some("donut") => ChartStyle::Donut,
                     Some(other) => {
-                        return Err(runtime(format!(
-                            "ui.chart : style « {other} » inconnu (\"line\", \"columns\", \"bars\" ou \"donut\")"
+                        return Err(runtime(tr!(
+                            "ui.chart : style « {} » inconnu (\"line\", \"columns\", \"bars\" ou \"donut\")",
+                            other
                         )));
                     }
                 };
@@ -767,7 +781,7 @@ impl Window {
             "space" => Widget::Space(t.get::<Option<f32>>("size")?.unwrap_or(12.0)),
             "table" => Widget::Table(self.table(lua, &t)?),
             "input" => Widget::Input(self.input(lua, &t)?),
-            other => return Err(runtime(format!("élément de fenêtre inconnu : « {other} »"))),
+            other => return Err(runtime(tr!("élément de fenêtre inconnu : « {} »", other))),
         }))
     }
 
@@ -775,7 +789,12 @@ impl Window {
         let key: String = t
             .get::<Option<String>>(1)?
             .or(t.get("key")?)
-            .ok_or_else(|| runtime("champ sans clé : bp.ui.input{ \"clé\", … }"))?;
+            .ok_or_else(|| {
+                runtime(tr!(
+                    "champ sans clé : bp.ui.input{{ \"{}\", … }}",
+                    tr!("clé")
+                ))
+            })?;
         let field: String = t
             .get::<Option<String>>("field")?
             .unwrap_or_else(|| "text".into());
@@ -813,7 +832,7 @@ impl Window {
                 };
                 text = match (&buffer, current) {
                     (Some(b), c) if Amount::parse(b) == c => b.clone(),
-                    (_, Some(c)) => c.format(2, ','),
+                    (_, Some(c)) => c.format(2, decimal_separator()),
                     (Some(b), None) => {
                         invalid = !b.trim().is_empty();
                         b.clone()
@@ -909,7 +928,7 @@ impl Window {
                     _ => None,
                 },
             },
-            other => return Err(runtime(format!("type de champ inconnu : « {other} »"))),
+            other => return Err(runtime(tr!("type de champ inconnu : « {} »", other))),
         };
         self.kinds.insert(key.clone(), kind.clone());
         let is_check = matches!(kind, InputKind::Checkbox | InputKind::Switch);
@@ -997,7 +1016,7 @@ impl Window {
             height: t.get("height")?,
             empty: t
                 .get::<Option<String>>("empty")?
-                .unwrap_or_else(|| "Aucune ligne".into()),
+                .unwrap_or_else(|| tr!("Aucune ligne").into()),
         };
         self.tables.push(TableBinding {
             key,
@@ -1053,9 +1072,7 @@ impl Window {
             }),
             Some(other) => {
                 let _ = lua;
-                Err(runtime(format!(
-                    "cellule de tableau invalide : « {other} »"
-                )))
+                Err(runtime(tr!("cellule de tableau invalide : « {} »", other)))
             }
         }
     }
@@ -1137,7 +1154,7 @@ impl Window {
                 Ok(change(self, &key))
             }
             UiEvent::Mode { key, mode } => {
-                self.state.set(key.as_str(), mode.label())?;
+                self.state.set(key.as_str(), mode.name())?;
                 Ok(change(self, &key))
             }
             UiEvent::Click { button } => {

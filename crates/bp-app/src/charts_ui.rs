@@ -2,7 +2,9 @@
 //! tranches de montant, jour du mois) et évolution du solde. Dessinés au
 //! pinceau : colonnes, barres horizontales, anneau et courbe, avec survol.
 
+use bp_core::i18n;
 use bp_core::reports::{self, AccountScope, BalanceStep, ChartData, ChartUnit};
+use bp_core::{tr, trn};
 use egui::{Color32, Pos2, Rect, RichText, Stroke, pos2, vec2};
 use egui_phosphor::regular as icon;
 
@@ -37,25 +39,25 @@ impl ChartKind {
 
     fn label(self) -> &'static str {
         match self {
-            ChartKind::Balances => "Soldes des comptes",
-            ChartKind::BalanceOverTime => "Évolution du solde",
-            ChartKind::Categories => "Par catégorie",
-            ChartKind::Months => "Par mois de l'année",
-            ChartKind::Modes => "Par mode de paiement",
-            ChartKind::DayOfMonth => "Par jour du mois",
-            ChartKind::AmountLevels => "Par tranche de montant",
+            ChartKind::Balances => tr!("Soldes des comptes"),
+            ChartKind::BalanceOverTime => tr!("Évolution du solde"),
+            ChartKind::Categories => tr!("Par catégorie"),
+            ChartKind::Months => tr!("Par mois de l'année"),
+            ChartKind::Modes => tr!("Par mode de paiement"),
+            ChartKind::DayOfMonth => tr!("Par jour du mois"),
+            ChartKind::AmountLevels => tr!("Par tranche de montant"),
         }
     }
 
     fn hint(self) -> &'static str {
         match self {
-            ChartKind::Balances => "Pointé, à venir et solde de chaque compte",
-            ChartKind::BalanceOverTime => "Solde cumulé au fil du temps",
-            ChartKind::Categories => "Où va l'argent, d'où il vient",
-            ChartKind::Months => "Toutes années confondues",
-            ChartKind::Modes => "Carte, chèque, prélèvement…",
-            ChartKind::DayOfMonth => "Du 1er au 31",
-            ChartKind::AmountLevels => "Nombre d'opérations par montant",
+            ChartKind::Balances => tr!("Pointé, à venir et solde de chaque compte"),
+            ChartKind::BalanceOverTime => tr!("Solde cumulé au fil du temps"),
+            ChartKind::Categories => tr!("Où va l'argent, d'où il vient"),
+            ChartKind::Months => tr!("Toutes années confondues"),
+            ChartKind::Modes => tr!("Carte, chèque, prélèvement…"),
+            ChartKind::DayOfMonth => tr!("Du 1er au 31"),
+            ChartKind::AmountLevels => tr!("Nombre d'opérations par montant"),
         }
     }
 
@@ -195,7 +197,7 @@ impl ChartsForm {
             ui.set_width(width);
             ui.set_height(height);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::CHART_BAR, pal.accent, "Graphiques");
+            crate::dialogs::header(ui, icon::CHART_BAR, pal.accent, tr!("Graphiques"));
             ui.add_space(10.0);
             let body = height - 36.0 - 10.0 - 96.0;
             let list_width = 270.0;
@@ -221,7 +223,7 @@ impl ChartsForm {
                         ui.add_space(12.0);
                         let data = self.data(doc);
                         let currency = if self.all_accounts {
-                            "€".to_string()
+                            doc.main_currency().to_string()
                         } else {
                             doc.current_account().currency.clone()
                         };
@@ -238,7 +240,7 @@ impl ChartsForm {
                 ui.label(RichText::new(format!("{}  {message}", icon::INFO)).color(pal.accent));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || ui.input(|i| i.key_pressed(egui::Key::Escape))
                 {
                     outcome = Outcome::Close;
@@ -246,14 +248,14 @@ impl ChartsForm {
                 if let Some(rows) = export
                     && crate::dialogs::button(
                         ui,
-                        format!("{}  Exporter les données…", icon::MICROSOFT_EXCEL_LOGO),
+                        tr!("{}  Exporter les données…", icon::MICROSOFT_EXCEL_LOGO),
                     )
                     .clicked()
                 {
                     let dir = crate::settings::shared::export_dir(
                         doc.path.parent().unwrap_or(std::path::Path::new(".")),
                     );
-                    let name = format!("Graphique - {}", self.kind.label());
+                    let name = tr!("Graphique - {}", self.kind.label());
                     crate::spreadsheet::export(ui.ctx(), &dir, &name, self.kind.label(), rows);
                 }
             });
@@ -345,8 +347,8 @@ impl ChartsForm {
                     ui,
                     &mut self.all_accounts,
                     &[
-                        (true, "", "Tous les comptes", pal.accent),
-                        (false, "", "Compte courant", pal.accent),
+                        (true, "", tr!("Tous les comptes"), pal.accent),
+                        (false, "", tr!("Compte courant"), pal.accent),
                     ],
                     32.0,
                     Some(290.0),
@@ -357,11 +359,11 @@ impl ChartsForm {
                     ui,
                     &mut self.style,
                     &[
-                        (Style::Donut, icon::CHART_DONUT, "Anneau", pal.accent),
+                        (Style::Donut, icon::CHART_DONUT, tr!("Anneau"), pal.accent),
                         (
                             Style::Bars,
                             icon::CHART_BAR_HORIZONTAL,
-                            "Barres",
+                            tr!("Barres"),
                             pal.accent,
                         ),
                     ],
@@ -373,8 +375,8 @@ impl ChartsForm {
                         ui,
                         &mut self.sign,
                         &[
-                            (Sign::Expenses, "", "Dépenses", pal.negative),
-                            (Sign::Income, "", "Recettes", pal.positive),
+                            (Sign::Expenses, "", tr!("Dépenses"), pal.negative),
+                            (Sign::Income, "", tr!("Recettes"), pal.positive),
                         ],
                         32.0,
                         Some(230.0),
@@ -386,8 +388,8 @@ impl ChartsForm {
                     ui,
                     &mut self.monthly,
                     &[
-                        (true, "", "Fin de mois", pal.accent),
-                        (false, "", "Chaque jour", pal.accent),
+                        (true, "", tr!("Fin de mois"), pal.accent),
+                        (false, "", tr!("Chaque jour"), pal.accent),
                     ],
                     32.0,
                     Some(250.0),
@@ -398,20 +400,28 @@ impl ChartsForm {
         ui.horizontal_wrapped(|ui| {
             ui.spacing_mut().item_spacing.x = 18.0;
             if self.kind.uses_lines() {
-                crate::theme::checkbox(ui, &mut self.filtered, "Seulement les lignes filtrées");
+                crate::theme::checkbox(
+                    ui,
+                    &mut self.filtered,
+                    tr!("Seulement les lignes filtrées"),
+                );
             }
             match self.kind {
                 ChartKind::Balances => {
-                    crate::theme::checkbox(ui, &mut self.detailed, "Détailler pointé et à venir");
+                    crate::theme::checkbox(
+                        ui,
+                        &mut self.detailed,
+                        tr!("Détailler pointé et à venir"),
+                    );
                 }
                 ChartKind::Categories => {
-                    crate::theme::checkbox(ui, &mut self.all_categories, "Sous-catégories");
+                    crate::theme::checkbox(ui, &mut self.all_categories, tr!("Sous-catégories"));
                 }
                 _ => {}
             }
             let donut = self.kind.can_donut() && self.style == Style::Donut;
             if !donut && self.kind != ChartKind::BalanceOverTime {
-                crate::theme::checkbox(ui, &mut self.zeros, "Valeurs nulles");
+                crate::theme::checkbox(ui, &mut self.zeros, tr!("Valeurs nulles"));
             }
         });
     }
@@ -430,7 +440,7 @@ impl ChartsForm {
             ui.painter().text(
                 rect.center(),
                 egui::Align2::CENTER_CENTER,
-                "Aucune opération à représenter",
+                tr!("Aucune opération à représenter"),
                 egui::FontId::proportional(15.0),
                 pal.muted,
             );
@@ -441,11 +451,7 @@ impl ChartsForm {
                 bp_core::model::Amount::from_cents((v * 100.0).round() as i64),
                 currency,
             ),
-            ChartUnit::Count => format!(
-                "{} opération{}",
-                v as i64,
-                if v.abs() >= 2.0 { "s" } else { "" }
-            ),
+            ChartUnit::Count => trn!(v as i64, "{} opération", "{} opérations"),
         };
         match self.kind {
             ChartKind::BalanceOverTime => curve(ui, rect, data, &format, pal, t),
@@ -503,7 +509,8 @@ fn short(v: f64) -> String {
     } else {
         format!("{v:.0}")
     };
-    text.replace(".0 ", " ").replace('.', ",")
+    text.replace(".0 ", " ")
+        .replace('.', &i18n::decimal_separator().to_string())
 }
 
 /// Bulle d'information près du pointeur.
@@ -764,7 +771,7 @@ pub(crate) fn columns(
             .filter_map(|(k, s)| {
                 s.points.get(i).map(|p| {
                     let text = if series_count > 1 {
-                        format!("{} : {}", s.name, format(p.value))
+                        tr!("{} : {}", s.name, format(p.value))
                     } else {
                         format(p.value)
                     };
@@ -896,7 +903,7 @@ pub(crate) fn donut(
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
-            "Aucune opération de ce sens",
+            tr!("Aucune opération de ce sens"),
             egui::FontId::proportional(15.0),
             pal.muted,
         );
@@ -909,7 +916,7 @@ pub(crate) fn donut(
         let rest: f64 = sorted[9..].iter().map(|p| p.1).sum();
         let count = sorted.len() - 9;
         sorted.truncate(9);
-        sorted.push((format!("Autres ({count})"), rest));
+        sorted.push((tr!("Autres ({})", count), rest));
     }
     let total: f64 = sorted.iter().map(|p| p.1).sum();
     let legend_width = (rect.width() * 0.42).clamp(260.0, 460.0);
@@ -989,7 +996,7 @@ pub(crate) fn donut(
     // Centre : total, ou la part survolée.
     let (title, value, share) = match hovered {
         Some(k) => (sorted[k].0.clone(), sorted[k].1, Some(sorted[k].1 / total)),
-        None => ("Total".to_string(), total, None),
+        None => (tr!("Total").to_string(), total, None),
     };
     let title = ui_kit::one_line(
         ui,
@@ -1021,7 +1028,11 @@ pub(crate) fn donut(
         painter.text(
             pos2(center.x, center.y + vh / 2.0 + 4.0),
             egui::Align2::CENTER_TOP,
-            format!("{:.1} %", share * 100.0).replace('.', ","),
+            tr!(
+                "{} %",
+                format!("{:.1}", share * 100.0)
+                    .replace('.', &i18n::decimal_separator().to_string())
+            ),
             egui::FontId::proportional(13.0),
             pal.muted,
         );
@@ -1040,7 +1051,7 @@ pub(crate) fn donut(
             crate::theme::chart_color(pal, k),
         );
         let pct = painter.layout_no_wrap(
-            format!("{:.0} %", v / total * 100.0),
+            tr!("{} %", format!("{:.0}", v / total * 100.0)),
             egui::FontId::proportional(12.5),
             pal.muted,
         );
@@ -1292,5 +1303,9 @@ mod tests {
         assert_eq!(short(1500.0), "1,5 k");
         assert_eq!(short(12000.0), "12 k");
         assert_eq!(short(-250.0), "-250");
+        i18n::with_lang(i18n::Lang::En, || {
+            assert_eq!(short(1500.0), "1.5 k");
+            assert_eq!(short(2_000_000.0), "2 M");
+        });
     }
 }

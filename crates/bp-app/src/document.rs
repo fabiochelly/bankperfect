@@ -9,6 +9,7 @@ use bp_core::filter::{Filters, SearchIndex};
 use bp_core::format_v6::Protection;
 use bp_core::model::{Amount, Date, Document, Operation, Tack};
 use bp_core::view::{SortColumn, running_balances, sorted_order};
+use bp_core::{tr, tr_mark};
 
 pub struct OpenDoc {
     pub path: PathBuf,
@@ -101,6 +102,9 @@ struct View {
     /// premier filtre de texte).
     indexed_account: Option<usize>,
     index: SearchIndex,
+    /// Langue de la vue : l'index de recherche et le tri contiennent des
+    /// textes traduits (modes), à recalculer après un changement de langue.
+    lang: bp_core::i18n::Lang,
     order: Vec<usize>,
     /// Solde progressif, indexé par opération.
     balance_of: Vec<Amount>,
@@ -176,9 +180,9 @@ impl ChartWindow {
         match self {
             Self::Month => "1M",
             Self::SixMonths => "6M",
-            Self::Year => "1A",
-            Self::FiveYears => "5A",
-            Self::All => "Tout",
+            Self::Year => tr!("1A"),
+            Self::FiveYears => tr!("5A"),
+            Self::All => tr!("Tout"),
         }
     }
 
@@ -289,6 +293,13 @@ impl OpenDoc {
     }
 
     pub fn refresh(&mut self) {
+        let lang = bp_core::i18n::lang();
+        if self.view.lang != lang {
+            self.view.lang = lang;
+            self.view.key = None;
+            self.view.filters = None;
+            self.view.indexed_account = None;
+        }
         let key = (self.account, self.sort, self.ascending, self.revision);
         if self.view.key != Some(key) {
             let account = &self.document.accounts[self.account];
@@ -439,6 +450,16 @@ impl OpenDoc {
 
     pub fn current_account(&self) -> &bp_core::model::Account {
         &self.document.accounts[self.account]
+    }
+
+    /// Devise principale du fichier (celle du compte par défaut), pour les
+    /// montants tous comptes confondus.
+    pub fn main_currency(&self) -> &str {
+        let accounts = &self.document.accounts;
+        accounts
+            .get(self.document.default_account)
+            .or_else(|| accounts.first())
+            .map_or("€", |a| a.currency.as_str())
     }
 
     pub fn operation(&self, index: usize) -> &Operation {
@@ -604,10 +625,11 @@ impl OpenDoc {
             return true;
         };
         if self.locked && self.current_account().operations[reference].tack == Tack::Reconciled {
-            self.notice = Some("Les lignes rapprochées sont verrouillées (menu Opérations)".into());
+            self.notice =
+                Some(tr!("Les lignes rapprochées sont verrouillées (menu Opérations)").into());
             return false;
         }
-        self.snapshot("pointage");
+        self.snapshot(tr_mark!("pointage"));
         let ops = &mut self.document.accounts[self.account].operations;
         let from = ops[reference].tack;
         let to = match (from, self.disable_reconcile) {
@@ -635,7 +657,7 @@ impl OpenDoc {
         if self.selection.is_empty() {
             return;
         }
-        self.snapshot("date de pointage");
+        self.snapshot(tr_mark!("date de pointage"));
         let ops = &mut self.document.accounts[self.account].operations;
         for &i in &self.selection {
             ops[i].mark_date = date;
@@ -653,7 +675,7 @@ impl OpenDoc {
 
     /// Rapprocher toutes les lignes pointées affichées (MARK-03).
     pub fn reconcile_all_pointed(&mut self) {
-        self.snapshot("rapprocher tout");
+        self.snapshot(tr_mark!("rapprocher tout"));
         let visible = Arc::clone(&self.view.visible);
         let ops = &mut self.document.accounts[self.account].operations;
         for &i in visible.iter() {
@@ -667,9 +689,9 @@ impl OpenDoc {
     /// Ajoute ou remplace une opération et la sélectionne.
     pub fn upsert_operation(&mut self, target: Option<usize>, mut op: Operation) {
         self.snapshot(if target.is_some() {
-            "modification"
+            tr_mark!("modification")
         } else {
-            "ajout"
+            tr_mark!("ajout")
         });
         let index = match target {
             Some(i) => {
@@ -763,7 +785,11 @@ impl OpenDoc {
             return self.upsert_operation(Some(index), op);
         };
         let account = self.account;
-        self.snapshot_accounts("modification du transfert", account, &[account, sister.0]);
+        self.snapshot_accounts(
+            tr_mark!("modification du transfert"),
+            account,
+            &[account, sister.0],
+        );
         let uid = self.current_account().operations[index].uid;
         self.document.accounts[account].operations[index] = Operation { uid, ..op };
         bp_core::split::copy_to_sister(&mut self.document, (account, index), sister);
@@ -783,7 +809,11 @@ impl OpenDoc {
             return self.delete_selection();
         };
         let account = self.account;
-        self.snapshot_accounts("suppression du transfert", account, &[account, sister.0]);
+        self.snapshot_accounts(
+            tr_mark!("suppression du transfert"),
+            account,
+            &[account, sister.0],
+        );
         if both {
             self.document.accounts[sister.0].operations.remove(sister.1);
         } else {
@@ -800,7 +830,7 @@ impl OpenDoc {
     }
 
     pub fn delete_selection(&mut self) {
-        self.snapshot("suppression");
+        self.snapshot(tr_mark!("suppression"));
         let ops = &mut self.document.accounts[self.account].operations;
         for &i in self.selection.iter().rev() {
             ops.remove(i);
@@ -820,7 +850,7 @@ impl OpenDoc {
         only: Option<usize>,
     ) -> (usize, Vec<String>) {
         let lines: Vec<usize> = self.view.visible.to_vec();
-        self.snapshot("règles automatiques");
+        self.snapshot(tr_mark!("règles automatiques"));
         let bp_core::model::Document {
             categories,
             accounts,
@@ -951,7 +981,7 @@ impl OpenDoc {
         if lines.is_empty() || account >= self.document.accounts.len() {
             return 0;
         }
-        self.snapshot_accounts("pointage intelligent", account, &[account]);
+        self.snapshot_accounts(tr_mark!("pointage intelligent"), account, &[account]);
         // Pointage simple : une ligne pointée est enregistrée « rapprochée ».
         let to = if self.disable_reconcile {
             Tack::Reconciled
@@ -1016,7 +1046,7 @@ impl OpenDoc {
         if operations.is_empty() {
             return 0;
         }
-        self.snapshot_accounts("import", account, &[account]);
+        self.snapshot_accounts(tr_mark!("import"), account, &[account]);
         let first = self.document.next_operation_uid();
         let target = &mut self.document.accounts[account].operations;
         let start = target.len();
@@ -1054,7 +1084,7 @@ impl OpenDoc {
         if operations.is_empty() {
             return 0;
         }
-        self.snapshot("coller");
+        self.snapshot(tr_mark!("coller"));
         let added = bp_core::edit::paste_operations(&mut self.document, self.account, operations);
         self.view.indexed_account = None;
         self.touch();
@@ -1081,7 +1111,7 @@ impl OpenDoc {
         if bp_core::edit::count_matches(&self.document.accounts[self.account], &lines, find) == 0 {
             return 0;
         }
-        self.snapshot("remplacer");
+        self.snapshot(tr_mark!("remplacer"));
         let count = bp_core::edit::replace_text(
             &mut self.document.accounts[self.account],
             &lines,
@@ -1099,7 +1129,7 @@ impl OpenDoc {
         if lines.is_empty() {
             return 0;
         }
-        self.snapshot("modifier le groupe");
+        self.snapshot(tr_mark!("modifier le groupe"));
         let document = self.document.clone_without_operations();
         let changed = bp_core::edit::apply_group_edit(
             &document,
@@ -1141,7 +1171,7 @@ impl OpenDoc {
         {
             return;
         }
-        self.snapshot("champs supplémentaires");
+        self.snapshot(tr_mark!("champs supplémentaires"));
         self.document.accounts[self.account].operations[index].extra = extra;
         self.view.indexed_account = None;
         self.touch();
@@ -1331,12 +1361,14 @@ impl OpenDoc {
         self.refresh();
     }
 
+    /// Nom de l'action à annuler, dans la langue en cours (les noms donnés
+    /// par `tr_mark!` sont traduits à l'affichage).
     pub fn undo_label(&self) -> Option<&str> {
-        self.undo.last().map(|e| e.label.as_str())
+        self.undo.last().map(|e| bp_core::i18n::tr(&e.label))
     }
 
     pub fn redo_label(&self) -> Option<&str> {
-        self.redo.last().map(|e| e.label.as_str())
+        self.redo.last().map(|e| bp_core::i18n::tr(&e.label))
     }
 
     pub fn undo(&mut self) -> bool {
@@ -1700,6 +1732,17 @@ mod tests {
         assert!(d.redo());
         d.refresh();
         assert_eq!(d.visible().len(), 2);
+    }
+
+    #[test]
+    fn undo_label_follows_the_language() {
+        let mut d = doc();
+        d.replace_in_visible("Carrefour", "Monoprix");
+        bp_core::i18n::with_lang(bp_core::i18n::Lang::En, || {
+            assert_eq!(d.undo_label(), Some("replace"));
+            assert_eq!(ChartWindow::All.label(), "All");
+        });
+        assert_eq!(d.undo_label(), Some("remplacer"));
     }
 
     #[test]

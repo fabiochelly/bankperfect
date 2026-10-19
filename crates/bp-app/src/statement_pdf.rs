@@ -5,6 +5,7 @@
 
 use bp_core::filter::TackFilter;
 use bp_core::model::{Amount, Tack};
+use bp_core::{tr, trn};
 use printpdf::{
     Color, IndirectFontRef, Line, Mm, PdfDocument, PdfLayerReference, Point, Rect, Rgb,
 };
@@ -171,28 +172,30 @@ fn filter_lines(doc: &OpenDoc) -> Vec<String> {
     let f = &doc.filters;
     let mut lines = Vec::new();
     if !f.mode.is_empty() {
-        lines.push(format!("Mode de paiement : {}", f.mode));
+        lines.push(tr!("Mode de paiement : {}", f.mode));
     }
     if !f.payee.is_empty() {
-        lines.push(format!("Tiers : {}", f.payee));
+        lines.push(tr!("Tiers : {}", f.payee));
     }
     if !f.category.is_empty() {
-        lines.push(format!("Catégorie : {}", f.category));
+        lines.push(tr!("Catégorie : {}", f.category));
     }
     if !f.amount.is_empty() {
-        lines.push(format!("Montant : {}", f.amount));
+        lines.push(tr!("Montant : {}", f.amount));
     }
     match f.tack {
         TackFilter::All => {}
-        TackFilter::NotPointed => lines.push("Opérations non pointées".into()),
-        TackFilter::Pointed => lines.push("Opérations pointées".into()),
-        TackFilter::Reconciled => lines.push("Opérations rapprochées".into()),
-        TackFilter::PointedOrReconciled => lines.push("Opérations pointées ou rapprochées".into()),
+        TackFilter::NotPointed => lines.push(tr!("Opérations non pointées").into()),
+        TackFilter::Pointed => lines.push(tr!("Opérations pointées").into()),
+        TackFilter::Reconciled => lines.push(tr!("Opérations rapprochées").into()),
+        TackFilter::PointedOrReconciled => {
+            lines.push(tr!("Opérations pointées ou rapprochées").into())
+        }
     }
     match (f.date_from, f.date_to) {
-        (Some(a), Some(b)) => lines.push(format!("Du {a} au {b}")),
-        (Some(a), None) => lines.push(format!("Depuis le {a}")),
-        (None, Some(b)) => lines.push(format!("Jusqu'au {b}")),
+        (Some(a), Some(b)) => lines.push(tr!("Du {} au {}", a, b)),
+        (Some(a), None) => lines.push(tr!("Depuis le {}", a)),
+        (None, Some(b)) => lines.push(tr!("Jusqu'au {}", b)),
         (None, None) => {}
     }
     lines
@@ -237,8 +240,8 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
         1 + (lines.len() - first_rows).div_ceil(next_rows)
     };
 
-    let title = format!("BankPerfect — relevé du compte {}", account.name);
-    let (pdf, page1, layer1) = PdfDocument::new(&title, Mm(PAGE_W), Mm(PAGE_H), "Relevé");
+    let title = tr!("BankPerfect — relevé du compte {}", account.name);
+    let (pdf, page1, layer1) = PdfDocument::new(&title, Mm(PAGE_W), Mm(PAGE_H), tr!("Relevé"));
     let regular = pdf.add_external_font(REGULAR).map_err(|e| e.to_string())?;
     let semibold = pdf.add_external_font(SEMIBOLD).map_err(|e| e.to_string())?;
     let metrics = Metrics::new(REGULAR);
@@ -261,7 +264,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
         let (page_idx, layer_idx) = if page == 0 {
             (page1, layer1)
         } else {
-            pdf.add_page(Mm(PAGE_W), Mm(PAGE_H), "Relevé")
+            pdf.add_page(Mm(PAGE_W), Mm(PAGE_H), tr!("Relevé"))
         };
         let p = Painter {
             layer: pdf.get_page(page_idx).get_layer(layer_idx),
@@ -290,7 +293,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             }
             p.text(&sub, 9.0, left + 18.0, y + 12.0, false, muted);
             p.text_right(
-                &format!("Relevé du {today}"),
+                &tr!("Relevé du {}", today),
                 9.0,
                 right,
                 y + 6.5,
@@ -311,13 +314,13 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             let totals = doc.totals();
             let box_w = (right - left - 8.0) / 3.0;
             for (k, (label, value, color)) in [
-                ("Pointé", totals.pointed, accent),
+                (tr!("Pointé"), totals.pointed, accent),
                 (
-                    "À venir",
+                    tr!("À venir"),
                     totals.pending,
                     if bw { ink } else { [0xd9, 0x7b, 0x29] },
                 ),
-                ("Solde", totals.balance, green),
+                (tr!("Solde"), totals.balance, green),
             ]
             .into_iter()
             .enumerate()
@@ -339,7 +342,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             y += 24.0;
 
             if !filters.is_empty() {
-                p.text("Filtres appliqués", 8.5, left, y + 4.0, true, muted);
+                p.text(tr!("Filtres appliqués"), 8.5, left, y + 4.0, true, muted);
                 y += 6.0;
                 for line in &filters {
                     p.text(&format!("• {line}"), 8.5, left + 2.0, y + 3.5, false, ink);
@@ -349,7 +352,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             y += 8.0;
         } else {
             p.text(
-                &format!("{} — suite", account.name),
+                &tr!("{} — suite", account.name),
                 10.0,
                 left,
                 y + 5.0,
@@ -362,13 +365,13 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
         // En-tête du tableau.
         let header_y = y + 4.5;
         let header = |text: &str, x: f32| p.text(text, 8.0, x, header_y, true, muted);
-        header("Date", col_date);
-        header("Mode", col_mode);
-        header("Tiers", col_payee);
-        header("Catégorie", col_cat);
-        p.text_right("Dépense", 8.0, col_debit_r, header_y, true, muted);
-        p.text_right("Recette", 8.0, col_credit_r, header_y, true, muted);
-        header("P", col_tack);
+        header(tr!("Date"), col_date);
+        header(tr!("Mode"), col_mode);
+        header(tr!("Tiers"), col_payee);
+        header(tr!("Catégorie"), col_cat);
+        p.text_right(tr!("Dépense"), 8.0, col_debit_r, header_y, true, muted);
+        p.text_right(tr!("Recette"), 8.0, col_credit_r, header_y, true, muted);
+        header(tr!("P"), col_tack);
         y += 7.0;
         p.hline(left, right, y, rule, 0.6);
 
@@ -455,7 +458,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             }
             let tack = match op.tack {
                 Tack::None => "",
-                Tack::Pointed => "P",
+                Tack::Pointed => tr!("P"),
                 Tack::Reconciled => "R",
             };
             p.text(tack, 8.0, col_tack, base, true, accent);
@@ -466,7 +469,12 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
         // Pied de page.
         let footer_y = PAGE_H - MARGIN + 2.0;
         p.text(
-            &format!("BankPerfect · {} ligne(s) · {currency}", lines.len()),
+            &trn!(
+                lines.len(),
+                "BankPerfect · {} ligne · {1}",
+                "BankPerfect · {} lignes · {1}",
+                currency
+            ),
             7.5,
             left,
             footer_y,
@@ -474,7 +482,7 @@ pub fn build(doc: &OpenDoc, options: StatementOptions) -> Result<Vec<u8>, String
             muted,
         );
         p.text_right(
-            &format!("Page {} / {pages}", page + 1),
+            &tr!("Page {} / {}", page + 1, pages),
             7.5,
             right,
             footer_y,

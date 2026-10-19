@@ -1,26 +1,9 @@
 //! Dates côté Luau : `bp.date(2026, 10, 12)`, `bp.today() + 30`, `d.month`…
 
 use bp_core::model::Date;
+use bp_core::tr;
 use chrono::{Datelike, Months, NaiveDate};
 use mlua::{Lua, MetaMethod, UserData, UserDataFields, UserDataMethods, Value};
-
-const WEEKDAYS: [&str; 7] = [
-    "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
-];
-const MONTHS: [&str; 12] = [
-    "janvier",
-    "février",
-    "mars",
-    "avril",
-    "mai",
-    "juin",
-    "juillet",
-    "août",
-    "septembre",
-    "octobre",
-    "novembre",
-    "décembre",
-];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct LuaDate(pub Date);
@@ -51,9 +34,13 @@ impl UserData for LuaDate {
             Ok(d.naive().weekday().number_from_monday())
         });
         fields.add_field_method_get("weekday_name", |_, d| {
-            Ok(WEEKDAYS[d.naive().weekday().num_days_from_monday() as usize])
+            Ok(bp_core::i18n::weekday_name(
+                d.naive().weekday().num_days_from_monday() as usize,
+            ))
         });
-        fields.add_field_method_get("month_name", |_, d| Ok(MONTHS[d.naive().month0() as usize]));
+        fields.add_field_method_get("month_name", |_, d| {
+            Ok(bp_core::i18n::month_name(d.naive().month0() as usize))
+        });
         fields.add_field_method_get("serial", |_, d| Ok(d.0.0));
     }
 
@@ -97,7 +84,7 @@ impl UserData for LuaDate {
                     .replace("aa", &format!("{:02}", n.year() % 100))
                     .replace("mm", &format!("{:02}", n.month()))
                     .replace("jj", &format!("{:02}", n.day()))
-                    .replace("mois", MONTHS[n.month0() as usize]),
+                    .replace("mois", bp_core::i18n::month_name(n.month0() as usize)),
             })
         });
         methods.add_method("iso", |_, d, ()| {
@@ -121,7 +108,7 @@ impl UserData for LuaDate {
             let days = crate::objects::number(&days)
                 .map(|f| f.round() as i64)
                 .ok_or_else(|| {
-                    mlua::Error::runtime("une date s'additionne avec un nombre de jours")
+                    mlua::Error::runtime(tr!("une date s'additionne avec un nombre de jours"))
                 })?;
             Ok(LuaDate(Date(date.0 + days as i32)))
         });
@@ -144,13 +131,13 @@ pub(crate) fn to_date(_lua: &Lua, value: &Value) -> mlua::Result<Date> {
         Value::UserData(ud) => ud
             .borrow::<LuaDate>()
             .map(|d| d.0)
-            .map_err(|_| mlua::Error::runtime("une date est attendue")),
+            .map_err(|_| mlua::Error::runtime(tr!("une date est attendue"))),
         Value::String(s) => {
             let text = s.to_str()?.to_string();
             parse_text(&text)
-                .ok_or_else(|| mlua::Error::runtime(format!("date invalide : « {text} »")))
+                .ok_or_else(|| mlua::Error::runtime(tr!("date invalide : « {} »", text)))
         }
-        _ => Err(mlua::Error::runtime(format!(
+        _ => Err(mlua::Error::runtime(tr!(
             "une date est attendue (reçu : {})",
             value.type_name()
         ))),

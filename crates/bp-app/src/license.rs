@@ -16,6 +16,7 @@
 
 use base64::Engine;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
+use bp_core::tr;
 use ed25519_dalek::{Signature, VerifyingKey};
 use serde::Deserialize;
 
@@ -41,8 +42,11 @@ pub struct License {
 impl License {
     /// « Licence n° 1234 · Nom » (ou « Licence Gold n° … »).
     pub fn label(&self) -> String {
-        let kind = if self.gold { "Licence Gold" } else { "Licence" };
-        format!("{kind} n° {} · {}", self.number, self.name)
+        if self.gold {
+            tr!("Licence Gold n° {} · {}", self.number, self.name)
+        } else {
+            tr!("Licence n° {} · {}", self.number, self.name)
+        }
     }
 }
 
@@ -92,10 +96,13 @@ pub fn activate(key: &str) -> Result<(String, License), String> {
         .post(&url)
         .send_form([("key", key.as_str())])
         .map_err(|e| {
-            format!("Le serveur de licences ne répond pas. Vérifiez la connexion à Internet. ({e})")
+            tr!(
+                "Le serveur de licences ne répond pas. Vérifiez la connexion à Internet. ({})",
+                e
+            )
         })?;
     let unexpected =
-        || "Réponse inattendue du serveur de licences. Réessayez plus tard.".to_string();
+        || tr!("Réponse inattendue du serveur de licences. Réessayez plus tard.").to_string();
     let body = response
         .body_mut()
         .read_to_string()
@@ -103,13 +110,14 @@ pub fn activate(key: &str) -> Result<(String, License), String> {
     let answer: Answer = serde_json::from_str(&body).map_err(|_| unexpected())?;
     if !answer.ok {
         return Err(if answer.error.is_empty() {
-            "Cette clé de licence n'a pas été acceptée.".into()
+            tr!("Cette clé de licence n'a pas été acceptée.").into()
         } else {
             answer.error
         });
     }
-    let license = verify(&answer.certificate)
-        .ok_or_else(|| "Le certificat reçu du serveur de licences n'est pas valide.".to_string())?;
+    let license = verify(&answer.certificate).ok_or_else(|| {
+        tr!("Le certificat reçu du serveur de licences n'est pas valide.").to_string()
+    })?;
     Ok((answer.certificate, license))
 }
 

@@ -25,25 +25,10 @@ use crate::filter::{SearchIndex, normalize};
 use crate::formula::{Formula, Value};
 use crate::model::{Amount, Date, Document};
 use crate::pyvalue::{LegacyError, PyValue};
+use crate::{tr, trn};
 
-/// Libellé de la ligne des opérations sans catégorie.
-pub const UNCATEGORIZED_LABEL: &str = "[Sans catégorie]";
-
-/// Noms des mois, de janvier à décembre.
-pub const MONTH_NAMES: [&str; 12] = [
-    "Janvier",
-    "Février",
-    "Mars",
-    "Avril",
-    "Mai",
-    "Juin",
-    "Juillet",
-    "Août",
-    "Septembre",
-    "Octobre",
-    "Novembre",
-    "Décembre",
-];
+/// Libellé de la ligne des opérations sans catégorie (à traduire à l'affichage).
+pub const UNCATEGORIZED_LABEL: &str = crate::tr_mark!("[Sans catégorie]");
 
 // ---------------------------------------------------------------------------
 // Outils communs
@@ -77,9 +62,10 @@ fn percent(real: Amount, budget: Amount) -> Option<f64> {
 /// milliers tolérés, et petites expressions arithmétiques (`1200/12`,
 /// `45*2+10`). Contrairement à l'original, `/` est une vraie division
 /// (`100/3` = 33,3333 et non 33). Renvoie `None` si le texte est vide ou
-/// invalide.
+/// invalide. En anglais, `,` sépare aussi les milliers (« 1,234.56 »,
+/// voir [`i18n::strip_thousands`](crate::i18n::strip_thousands)).
 pub fn parse_amount_input(text: &str) -> Option<Amount> {
-    let cleaned: String = text
+    let cleaned: String = crate::i18n::strip_thousands(text)
         .chars()
         .filter(|c| !c.is_whitespace() && !matches!(c, '$' | '€' | 'F' | '%'))
         .map(|c| if c == ',' { '.' } else { c })
@@ -113,10 +99,10 @@ fn legacy_category(value: &PyValue) -> Result<Option<u32>, LegacyError> {
     match value.as_i64() {
         Some(-1) => Ok(None),
         Some(id) => u32::try_from(id).map(Some).map_err(|_| {
-            LegacyError::Structure(format!("identifiant de catégorie invalide : {id}"))
+            LegacyError::Structure(tr!("identifiant de catégorie invalide : {id}", id = id))
         }),
         None => Err(LegacyError::Structure(
-            "identifiant de catégorie non entier".into(),
+            tr!("identifiant de catégorie non entier").into(),
         )),
     }
 }
@@ -125,7 +111,7 @@ fn legacy_amount(value: &PyValue) -> Result<Amount, LegacyError> {
     value
         .as_f64()
         .and_then(amount_from_f64)
-        .ok_or_else(|| LegacyError::Structure("montant non numérique".into()))
+        .ok_or_else(|| LegacyError::Structure(tr!("montant non numérique").into()))
 }
 
 /// Comptes retenus : `None` = tous les comptes du document.
@@ -197,8 +183,8 @@ pub enum BudgetKind {
 impl BudgetKind {
     pub fn label(self) -> &'static str {
         match self {
-            BudgetKind::Expense => "Dépense",
-            BudgetKind::Income => "Recette",
+            BudgetKind::Expense => tr!("Dépense"),
+            BudgetKind::Income => tr!("Recette"),
         }
     }
 }
@@ -248,20 +234,34 @@ impl BudgetPeriod {
     pub fn description(&self, today: Date) -> String {
         match self {
             BudgetPeriod::Month { year, month } => {
-                let name = MONTH_NAMES
-                    .get((*month as usize).wrapping_sub(1))
-                    .map_or_else(|| month.to_string(), |n| n.to_lowercase());
-                let article = if name.starts_with(['a', 'o']) {
-                    "d'"
-                } else {
-                    "de "
+                let index = (*month as usize).wrapping_sub(1);
+                // En français, le mois est précédé de « de » ou « d' ».
+                let name = match crate::i18n::lang() {
+                    _ if index >= 12 => month.to_string(),
+                    crate::i18n::Lang::Fr => {
+                        let name = crate::i18n::month_name(index);
+                        let article = if name.starts_with(['a', 'o']) {
+                            "d'"
+                        } else {
+                            "de "
+                        };
+                        format!("{article}{name}")
+                    }
+                    crate::i18n::Lang::En => crate::i18n::month_title(index).to_string(),
                 };
-                format!("Opérations concernées : toutes les lignes du mois {article}{name} {year}")
+                tr!(
+                    "Opérations concernées : toutes les lignes du mois {month} {year}",
+                    month = name,
+                    year = year
+                )
             }
             BudgetPeriod::Year(year) => {
-                format!("Opérations concernées : toutes les lignes de l'année {year}")
+                tr!(
+                    "Opérations concernées : toutes les lignes de l'année {year}",
+                    year = year
+                )
             }
-            BudgetPeriod::All => "Opérations concernées : toutes".into(),
+            BudgetPeriod::All => tr!("Opérations concernées : toutes").into(),
             BudgetPeriod::Filter(filter) => filter.description(today),
         }
     }
@@ -290,6 +290,15 @@ pub enum PeriodSpan {
     Days(i64),
 }
 
+/// « 3 mois » (le français a la même forme au singulier et au pluriel).
+fn months_text(n: i64) -> String {
+    if crate::i18n::singular(n) {
+        crate::trc!("singulier", "{} mois", n)
+    } else {
+        tr!("{} mois", n)
+    }
+}
+
 /// Jours moyens par mois, en dix-millièmes (30,4375).
 const DAYS_PER_MONTH_E4: i128 = 304_375;
 
@@ -310,16 +319,23 @@ impl PeriodSpan {
     pub fn label(self) -> String {
         match self {
             PeriodSpan::SingleMonth => String::new(),
-            PeriodSpan::Months(n) => format!("({n} mois)"),
+            PeriodSpan::Months(n) => format!("({})", months_text(i64::from(n))),
             PeriodSpan::Days(count) => {
                 let scaled = i128::from(count) * 10_000;
-                let months = scaled / DAYS_PER_MONTH_E4;
-                let days = (scaled - months * DAYS_PER_MONTH_E4) / 10_000;
-                let unit = if days == 1 { "jour" } else { "jours" };
+                let months = (scaled / DAYS_PER_MONTH_E4) as i64;
+                let days = ((scaled - i128::from(months) * DAYS_PER_MONTH_E4) / 10_000) as i64;
+                let days_text = trn!(days, "{} jour", "{} jours");
                 match (months, days) {
-                    (0, _) => format!("({days} {unit})"),
-                    (_, 0) => format!("({months} mois)"),
-                    _ => format!("({months} mois et {days} {unit})"),
+                    (0, _) => format!("({days_text})"),
+                    (_, 0) => format!("({})", months_text(months)),
+                    _ => format!(
+                        "({})",
+                        tr!(
+                            "{months} et {days}",
+                            months = months_text(months),
+                            days = days_text
+                        )
+                    ),
                 }
             }
         }
@@ -558,7 +574,7 @@ impl MonthlyBudget {
                     c.name.trim().to_string(),
                     c.is_child && !tree.parents.contains(&id),
                 ),
-                None => (UNCATEGORIZED_LABEL.to_string(), false),
+                None => (crate::i18n::tr(UNCATEGORIZED_LABEL).to_string(), false),
             };
             let mut row = BudgetRow {
                 category: id,
@@ -607,7 +623,7 @@ impl MonthlyBudget {
     pub fn from_legacy(value: &PyValue) -> Result<Self, LegacyError> {
         let Some(items) = value.as_dict() else {
             return Err(LegacyError::Structure(
-                "budget : dictionnaire attendu".into(),
+                tr!("budget : dictionnaire attendu").into(),
             ));
         };
         let mut budget = Self::default();
@@ -647,24 +663,31 @@ impl MonthlyBudget {
 /// Erreur de saisie du budget annuel.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum AnnualBudgetError {
-    #[error("le nom spécifié est incorrect (2 caractères au moins)")]
     InvalidName,
-    #[error("le nom spécifié existe déjà")]
     DuplicateName,
-    #[error("l'année saisie est incorrecte (1900 à 9999)")]
     InvalidYear,
-    #[error("le titre est incorrect (2 caractères au moins)")]
     InvalidTitle,
-    #[error("vous devez sélectionner au moins une catégorie à affecter")]
     NoCategory,
-    #[error("tableau inexistant")]
     TableNotFound,
-    #[error("ligne inexistante")]
     LineNotFound,
-    #[error("mois invalide (0 à 11)")]
     InvalidMonth,
-    #[error("le réalisé de cette ligne est calculé automatiquement")]
     RealIsAutomatic,
+}
+
+impl std::fmt::Display for AnnualBudgetError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::InvalidName => tr!("le nom spécifié est incorrect (2 caractères au moins)"),
+            Self::DuplicateName => tr!("le nom spécifié existe déjà"),
+            Self::InvalidYear => tr!("l'année saisie est incorrecte (1900 à 9999)"),
+            Self::InvalidTitle => tr!("le titre est incorrect (2 caractères au moins)"),
+            Self::NoCategory => tr!("vous devez sélectionner au moins une catégorie à affecter"),
+            Self::TableNotFound => tr!("tableau inexistant"),
+            Self::LineNotFound => tr!("ligne inexistante"),
+            Self::InvalidMonth => tr!("mois invalide (0 à 11)"),
+            Self::RealIsAutomatic => tr!("le réalisé de cette ligne est calculé automatiquement"),
+        })
+    }
 }
 
 /// Colonne de valeurs d'une ligne.
@@ -1018,7 +1041,7 @@ impl AnnualBudget {
                 .fold(MonthValues::default(), MonthValues::add)
         });
         let totals = AnnualRow {
-            title: "Totaux".into(),
+            title: tr!("Totaux").into(),
             auto_real: false,
             total: months
                 .iter()
@@ -1036,19 +1059,19 @@ impl AnnualBudget {
     pub fn from_legacy(value: &PyValue, document: &Document) -> Result<Self, LegacyError> {
         if value.as_dict().is_none() {
             return Err(LegacyError::Structure(
-                "budget annuel : dictionnaire attendu".into(),
+                tr!("budget annuel : dictionnaire attendu").into(),
             ));
         }
         let year = value
             .get("year")
             .and_then(PyValue::as_i64)
             .and_then(|y| i32::try_from(y).ok())
-            .ok_or_else(|| LegacyError::Structure("budget annuel : année manquante".into()))?;
+            .ok_or_else(|| LegacyError::Structure(tr!("budget annuel : année manquante").into()))?;
         let accounts = match value.get("accounts") {
             None | Some(PyValue::None) => None,
             Some(list) => {
                 let items = list.as_list().ok_or_else(|| {
-                    LegacyError::Structure("budget annuel : liste de comptes attendue".into())
+                    LegacyError::Structure(tr!("budget annuel : liste de comptes attendue").into())
                 })?;
                 Some(
                     items
@@ -1066,7 +1089,7 @@ impl AnnualBudget {
             Some(lines) => lines
                 .as_list()
                 .ok_or_else(|| {
-                    LegacyError::Structure("budget annuel : liste de lignes attendue".into())
+                    LegacyError::Structure(tr!("budget annuel : liste de lignes attendue").into())
                 })?
                 .iter()
                 .map(AnnualLine::from_legacy)
@@ -1085,15 +1108,16 @@ impl AnnualLine {
     fn from_legacy(value: &PyValue) -> Result<Self, LegacyError> {
         if value.as_dict().is_none() {
             return Err(LegacyError::Structure(
-                "ligne de budget : dictionnaire attendu".into(),
+                tr!("ligne de budget : dictionnaire attendu").into(),
             ));
         }
         let values = |key: &str| -> Result<[Amount; 12], LegacyError> {
             let mut out = [Amount::ZERO; 12];
             if let Some(list) = value.get(key) {
                 let items = list.as_list().ok_or_else(|| {
-                    LegacyError::Structure(format!(
-                        "ligne de budget : « {key} » doit être une liste"
+                    LegacyError::Structure(tr!(
+                        "ligne de budget : « {key} » doit être une liste",
+                        key = key
                     ))
                 })?;
                 for (slot, item) in out.iter_mut().zip(items) {
@@ -1107,7 +1131,9 @@ impl AnnualLine {
             Some(list) => list
                 .as_list()
                 .ok_or_else(|| {
-                    LegacyError::Structure("ligne de budget : catégories en liste attendues".into())
+                    LegacyError::Structure(
+                        tr!("ligne de budget : catégories en liste attendues").into(),
+                    )
                 })?
                 .iter()
                 .map(legacy_category)
@@ -1219,7 +1245,7 @@ impl AnnualBudgets {
             .get(index)
             .cloned()
             .ok_or(AnnualBudgetError::TableNotFound)?;
-        let base = format!("Copie de {}", copy.name);
+        let base = tr!("Copie de {}", copy.name);
         let mut name = base.clone();
         let mut n = 2;
         while self.index_of(&name).is_some() {
@@ -1234,9 +1260,9 @@ impl AnnualBudgets {
 
     /// Conversion depuis l'ancien pickle (liste de tableaux).
     pub fn from_legacy(value: &PyValue, document: &Document) -> Result<Self, LegacyError> {
-        let items = value
-            .as_list()
-            .ok_or_else(|| LegacyError::Structure("budgets annuels : liste attendue".into()))?;
+        let items = value.as_list().ok_or_else(|| {
+            LegacyError::Structure(tr!("budgets annuels : liste attendue").into())
+        })?;
         let mut budgets = Self {
             tables: items
                 .iter()
@@ -1632,6 +1658,43 @@ mod tests {
         assert_eq!(parse_amount_input("abc"), None);
         assert_eq!(parse_amount_input("1/0"), None);
         assert_eq!(parse_amount_input("open('x')"), None);
+    }
+
+    #[test]
+    fn amount_input_in_english() {
+        use crate::i18n::{Lang, with_lang};
+        with_lang(Lang::En, || {
+            assert_eq!(parse_amount_input("1,234.56"), Some(eur(123_456)));
+            assert_eq!(parse_amount_input("$1,234"), Some(eur(123_400)));
+            assert_eq!(parse_amount_input("1,234,567"), Some(eur(123_456_700)));
+            assert_eq!(parse_amount_input("-12.5"), Some(eur(-1_250)));
+            assert_eq!(parse_amount_input("1,200/12"), Some(eur(10_000)));
+        });
+        // En français, la virgule reste décimale.
+        with_lang(Lang::Fr, || {
+            assert_eq!(parse_amount_input("1,234"), Some(Amount(12_340)));
+        });
+    }
+
+    #[test]
+    fn labels_in_english() {
+        use crate::i18n::{Lang, with_lang};
+        with_lang(Lang::En, || {
+            assert_eq!(PeriodSpan::Days(1).label(), "(1 day)");
+            assert_eq!(PeriodSpan::Days(31).label(), "(1 month)");
+            assert_eq!(PeriodSpan::Days(62).label(), "(2 months and 1 day)");
+            assert_eq!(PeriodSpan::Months(4).label(), "(4 months)");
+            let today = Date::from_ymd(2026, 4, 15).unwrap();
+            assert_eq!(
+                BudgetPeriod::current_month(today).description(today),
+                "Transactions included: all lines for April 2026"
+            );
+        });
+        let today = Date::from_ymd(2026, 4, 15).unwrap();
+        assert_eq!(
+            BudgetPeriod::current_month(today).description(today),
+            "Opérations concernées : toutes les lignes du mois d'avril 2026"
+        );
     }
 
     #[test]

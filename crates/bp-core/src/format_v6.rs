@@ -37,6 +37,7 @@ use sha2::Sha256;
 use zeroize::Zeroizing;
 
 use crate::error::{Error, Result};
+use crate::tr;
 
 pub const MAGIC: &[u8; 8] = b"BPFILE6\0";
 const VERSION: u8 = 1;
@@ -162,7 +163,7 @@ impl Protection {
                     aad: &out,
                 },
             )
-            .map_err(|_| Error::Crypto("chiffrement impossible".into()))?;
+            .map_err(|_| Error::Crypto(tr!("chiffrement impossible").into()))?;
         out.extend_from_slice(&ciphertext);
         Ok(out)
     }
@@ -306,9 +307,9 @@ fn tempfile_in(dir: &Path, target: &Path) -> Result<(std::path::PathBuf, fs::Fil
             Err(e) => return Err(e.into()),
         }
     }
-    Err(Error::Io(std::io::Error::other(
-        "impossible de créer un fichier temporaire",
-    )))
+    Err(Error::Io(std::io::Error::other(tr!(
+        "impossible de créer un fichier temporaire"
+    ))))
 }
 
 fn cipher(key: &[u8; KEY_LEN]) -> XChaCha20Poly1305 {
@@ -349,7 +350,7 @@ fn wrap_key(
                 aad: &aad,
             },
         )
-        .map_err(|_| Error::Crypto("chiffrement de la clé impossible".into()))?;
+        .map_err(|_| Error::Crypto(tr!("chiffrement de la clé impossible").into()))?;
     Ok([nonce.as_slice(), &wrapped].concat())
 }
 

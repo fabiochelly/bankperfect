@@ -1,6 +1,7 @@
 //! Palette de commandes (Ctrl+K) : toutes les fonctions de l'application,
 //! trouvées par recherche floue (insensible à la casse et aux accents).
 
+use bp_core::tr;
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Align2, Color32, FontId, Id, Key, Modal, Modifiers, RichText, Sense};
 use egui_phosphor::regular as icon;
@@ -207,7 +208,7 @@ impl CommandPalette {
                     );
                     let edit = egui::TextEdit::singleline(&mut self.query)
                         .id(Id::new("command_palette_query"))
-                        .hint_text("Rechercher une commande…")
+                        .hint_text(tr!("Rechercher une commande…"))
                         .font(FontId::proportional(17.0))
                         .frame(egui::Frame::NONE)
                         .margin(egui::Margin::symmetric(4, 10))
@@ -230,7 +231,9 @@ impl CommandPalette {
                 if entries.is_empty() {
                     ui.add_space(14.0);
                     ui.vertical_centered(|ui| {
-                        ui.label(RichText::new("Aucune commande ne correspond").color(pal.muted));
+                        ui.label(
+                            RichText::new(tr!("Aucune commande ne correspond")).color(pal.muted),
+                        );
                     });
                     ui.add_space(14.0);
                 } else {
@@ -244,9 +247,9 @@ impl CommandPalette {
                                     && previous_recent != Some(entry.recent)
                                 {
                                     let title = if entry.recent {
-                                        "Récemment utilisées"
+                                        tr!("Récemment utilisées")
                                     } else {
-                                        "Toutes les commandes"
+                                        tr!("Toutes les commandes")
                                     };
                                     ui.add_space(if k == 0 { 2.0 } else { 8.0 });
                                     ui.label(
@@ -276,7 +279,7 @@ impl CommandPalette {
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
                     ui.add_space(10.0);
-                    let hint = format!(
+                    let hint = tr!(
                         "{}{}  naviguer     Entrée  exécuter     Échap  fermer",
                         icon::ARROW_UP,
                         icon::ARROW_DOWN

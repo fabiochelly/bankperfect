@@ -10,6 +10,7 @@ use bp_core::autofields::{AutoFieldRules, CategoryChange, Rule, RuleField};
 use bp_core::budget::{BudgetOptions, BudgetPeriod, BudgetTotal, MonthlyBudget};
 use bp_core::model::{Amount, Date, Document, Mode};
 use bp_core::scheduler::{self, PeriodUnit, Schedule};
+use bp_core::tr;
 use mlua::{Lua, Table, Value};
 
 use crate::date::{date_value, to_date};
@@ -28,7 +29,7 @@ fn parse_py(bytes: &[u8]) -> Option<bp_core::pyvalue::PyValue> {
 fn load_schedules(document: &Document) -> mlua::Result<Vec<Schedule>> {
     scheduler::load(document)
         .map(|l| l.schedules)
-        .map_err(|e| runtime(format!("échéancier illisible : {e}")))
+        .map_err(|e| runtime(tr!("échéancier illisible : {}", e)))
 }
 
 fn save_schedules(s: &mut Session, schedules: &[Schedule]) -> mlua::Result<()> {
@@ -56,8 +57,9 @@ fn parse_unit(text: &str) -> mlua::Result<PeriodUnit> {
         "months" | "month" | "mois" => PeriodUnit::Months,
         "years" | "year" | "ans" => PeriodUnit::Years,
         other => {
-            return Err(runtime(format!(
-                "unité inconnue « {other} » (\"days\", \"weeks\", \"months\" ou \"years\")"
+            return Err(runtime(tr!(
+                "unité inconnue « {} » (\"days\", \"weeks\", \"months\" ou \"years\")",
+                other
             )));
         }
     })
@@ -76,7 +78,7 @@ fn schedule_table(lua: &Lua, s: &Session, index: usize, sc: &Schedule) -> mlua::
     t.set("transfer", sc.transfer.as_deref().and_then(account))?;
     t.set("payee", sc.payee.clone())?;
     t.set("details", sc.details.clone())?;
-    t.set("mode", sc.mode.label().to_string())?;
+    t.set("mode", sc.mode.name().to_string())?;
     t.set(
         "category",
         sc.category.and_then(|id| s.document.category_label(id)),
@@ -123,13 +125,13 @@ fn apply_schedule(lua: &Lua, s: &Session, sc: &mut Schedule, t: &Table) -> mlua:
         };
     }
     if let Some(v) = present("payee")? {
-        sc.payee = crate::ui::display(&v)?.trim().to_string();
+        sc.payee = crate::ui::data_text(&v)?.trim().to_string();
     }
     if let Some(v) = present("details")? {
-        sc.details = crate::ui::display(&v)?.trim().to_string();
+        sc.details = crate::ui::data_text(&v)?.trim().to_string();
     }
     if let Some(v) = present("mode")? {
-        sc.mode = resolve_mode(&s.document, &crate::ui::display(&v)?)?;
+        sc.mode = resolve_mode(&s.document, &crate::ui::data_text(&v)?)?;
     }
     if let Some(v) = present("category")? {
         sc.category = resolve_category(&s.document, &v)?;
@@ -149,11 +151,11 @@ fn apply_schedule(lua: &Lua, s: &Session, sc: &mut Schedule, t: &Table) -> mlua:
     if let Some(v) = present("every")? {
         let every = crate::objects::number(&v)
             .filter(|n| *n >= 1.0 && n.fract() == 0.0)
-            .ok_or_else(|| runtime("every : un nombre entier positif est attendu"))?;
+            .ok_or_else(|| runtime(tr!("every : un nombre entier positif est attendu")))?;
         sc.period.every = every as u32;
     }
     if let Some(v) = present("unit")? {
-        sc.period.unit = parse_unit(&crate::ui::display(&v)?)?;
+        sc.period.unit = parse_unit(&crate::ui::data_text(&v)?)?;
     }
     if let Some(v) = present("day")? {
         sc.anchor_day = match v {
@@ -161,7 +163,7 @@ fn apply_schedule(lua: &Lua, s: &Session, sc: &mut Schedule, t: &Table) -> mlua:
             v => Some(
                 crate::objects::number(&v)
                     .filter(|n| (1.0..=31.0).contains(n))
-                    .ok_or_else(|| runtime("day : un jour de 1 à 31 est attendu"))?
+                    .ok_or_else(|| runtime(tr!("day : un jour de 1 à 31 est attendu")))?
                     as u8,
             ),
         };
@@ -188,13 +190,13 @@ fn schedule_index(list: &[Schedule], index: usize) -> mlua::Result<usize> {
     index
         .checked_sub(1)
         .filter(|&i| i < list.len())
-        .ok_or_else(|| runtime(format!("échéance n°{index} inexistante")))
+        .ok_or_else(|| runtime(tr!("échéance n°{} inexistante", index)))
 }
 
 // ─────────────────────────────── Budget ───────────────────────────────
 
 fn load_budget(document: &Document) -> mlua::Result<MonthlyBudget> {
-    MonthlyBudget::load(document, &parse_py).map_err(|e| runtime(format!("budget illisible : {e}")))
+    MonthlyBudget::load(document, &parse_py).map_err(|e| runtime(tr!("budget illisible : {}", e)))
 }
 
 fn total_table(lua: &Lua, t: &BudgetTotal) -> mlua::Result<Table> {
@@ -209,8 +211,7 @@ fn total_table(lua: &Lua, t: &BudgetTotal) -> mlua::Result<Table> {
 // ─────────────────────────────── Règles ───────────────────────────────
 
 fn load_rules(document: &Document) -> mlua::Result<AutoFieldRules> {
-    AutoFieldRules::load(document, &parse_py)
-        .map_err(|e| runtime(format!("règles illisibles : {e}")))
+    AutoFieldRules::load(document, &parse_py).map_err(|e| runtime(tr!("règles illisibles : {}", e)))
 }
 
 fn field_name(field: RuleField) -> &'static str {
@@ -224,7 +225,7 @@ fn field_name(field: RuleField) -> &'static str {
 fn text_option(t: &Table, key: &str) -> mlua::Result<Option<String>> {
     Ok(match t.get::<Value>(key)? {
         Value::Nil => None,
-        v => Some(crate::ui::display(&v)?).filter(|s| !s.is_empty()),
+        v => Some(crate::ui::data_text(&v)?).filter(|s| !s.is_empty()),
     })
 }
 
@@ -254,7 +255,7 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                 };
                 apply_schedule(lua, s, &mut sc, &spec)?;
                 if sc.payee.is_empty() {
-                    return Err(runtime("bp.add_schedule : payee est obligatoire"));
+                    return Err(runtime(tr!("bp.add_schedule : payee est obligatoire")));
                 }
                 list.push(sc);
                 save_schedules(s, &list)?;
@@ -476,15 +477,16 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
         lua.create_function(|lua, spec: Table| {
             with_session(lua, |s| {
                 let contains = text_option(&spec, "contains")?
-                    .ok_or_else(|| runtime("bp.rules.add : contains est obligatoire"))?;
+                    .ok_or_else(|| runtime(tr!("bp.rules.add : contains est obligatoire")))?;
                 let mut rule = Rule::new(contains);
                 rule.field = match text_option(&spec, "field")?.as_deref() {
                     None | Some("payee") => RuleField::Payee,
                     Some("details") => RuleField::Details,
                     Some("both") => RuleField::PayeeOrDetails,
                     Some(other) => {
-                        return Err(runtime(format!(
-                            "field « {other} » inconnu (\"payee\", \"details\" ou \"both\")"
+                        return Err(runtime(tr!(
+                            "field « {} » inconnu (\"payee\", \"details\" ou \"both\")",
+                            other
                         )));
                     }
                 };
@@ -500,7 +502,9 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                     Some(label) => Some(match resolve_mode(&s.document, &label)? {
                         Mode::Standard(m) => m,
                         Mode::Custom(_) => {
-                            return Err(runtime("une règle n'applique que les modes standard"));
+                            return Err(runtime(tr!(
+                                "une règle n'applique que les modes standard"
+                            )));
                         }
                     }),
                 };
@@ -515,7 +519,7 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                 rule.active = spec.get::<Option<bool>>("active")?.unwrap_or(true);
                 rule.auto_apply = spec.get::<Option<bool>>("auto")?.unwrap_or(false);
                 rule.validate(&s.document.categories)
-                    .map_err(|e| runtime(format!("règle refusée : {e}")))?;
+                    .map_err(|e| runtime(tr!("règle refusée : {}", e)))?;
                 let mut all = load_rules(&s.document)?;
                 all.rules.push(rule);
                 s.store_mut(AutoFieldRules::LEGACY_KEY);
@@ -533,7 +537,7 @@ pub(crate) fn install(lua: &Lua, bp: &Table) -> mlua::Result<()> {
                 let i = index
                     .checked_sub(1)
                     .filter(|&i| i < all.rules.len())
-                    .ok_or_else(|| runtime(format!("règle n°{index} inexistante")))?;
+                    .ok_or_else(|| runtime(tr!("règle n°{} inexistante", index)))?;
                 all.rules.remove(i);
                 s.store_mut(AutoFieldRules::LEGACY_KEY);
                 let document = s.store_mut(AutoFieldRules::KEY);

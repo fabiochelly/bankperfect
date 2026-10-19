@@ -50,6 +50,7 @@ mod transfer_ui;
 mod ui_kit;
 
 pub use app::BankPerfectApp;
+pub use settings::Settings;
 
 /// Le fond translucide est-il demandé dans les réglages (à lire avant de
 /// créer la fenêtre, qui doit alors avoir une surface transparente) ?

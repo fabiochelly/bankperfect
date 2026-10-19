@@ -583,7 +583,7 @@ pub const THEMES: &[ThemeDef] = &[
     },
     ThemeDef {
         id: "gruvbox-light",
-        name: "Gruvbox clair",
+        name: bp_core::tr_mark!("Gruvbox clair"),
         dark: false,
         palette: derive(Base {
             dark: false,
@@ -608,7 +608,7 @@ pub const THEMES: &[ThemeDef] = &[
     },
     ThemeDef {
         id: "everforest-light",
-        name: "Everforest clair",
+        name: bp_core::tr_mark!("Everforest clair"),
         dark: false,
         palette: derive(Base {
             dark: false,
@@ -633,7 +633,7 @@ pub const THEMES: &[ThemeDef] = &[
     },
     ThemeDef {
         id: "solarized-light",
-        name: "Solarized clair",
+        name: bp_core::tr_mark!("Solarized clair"),
         dark: false,
         palette: derive(Base {
             dark: false,

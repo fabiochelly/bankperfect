@@ -5,7 +5,9 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use bp_core::i18n::{self, Lang};
 use bp_core::model::{Amount, Date, Document};
+use bp_core::tr;
 use mlua::{Function, Lua, LuaSerdeExt, Table, Value, Variadic};
 
 use crate::date::{LuaDate, date_value, to_date};
@@ -15,25 +17,29 @@ use crate::objects::{
 };
 use crate::{CommandInfo, Event, Needs, Services};
 
-/// `-1 234,56 €` : espace fine insécable entre les milliers.
+/// `-1 234,56 €` : espace fine insécable entre les milliers (en anglais :
+/// `-€1,234.56`, un code de devise restant derrière : `12.50 CHF`).
 pub(crate) fn money_text(amount: Amount, currency: &str) -> String {
-    let plain = amount.format(2, ',');
+    let plain = amount.format(2, '.');
     let (sign, rest) = match plain.strip_prefix('-') {
         Some(rest) => ("-", rest),
         None => ("", plain.as_str()),
     };
-    let (int_part, frac) = rest.split_once(',').unwrap_or((rest, "00"));
+    let (int_part, frac) = rest.split_once('.').unwrap_or((rest, "00"));
     let mut grouped = String::new();
     for (i, c) in int_part.chars().enumerate() {
         if i > 0 && (int_part.len() - i) % 3 == 0 {
-            grouped.push('\u{202f}');
+            grouped.push(i18n::thousands_separator());
         }
         grouped.push(c);
     }
+    let number = format!("{grouped}{}{frac}", i18n::decimal_separator());
     if currency.is_empty() {
-        format!("{sign}{grouped},{frac}")
+        format!("{sign}{number}")
+    } else if i18n::lang() == Lang::En && currency.chars().count() == 1 {
+        format!("{sign}{currency}{number}")
     } else {
-        format!("{sign}{grouped},{frac}\u{a0}{currency}")
+        format!("{sign}{number}\u{a0}{currency}")
     }
 }
 
@@ -111,9 +117,9 @@ fn to_json(lua: &Lua, value: Value) -> mlua::Result<serde_json::Value> {
         if let Ok(d) = to_date(lua, &value) {
             return Ok(serde_json::Value::String(d.to_string()));
         }
-        return Err(runtime(
-            "seules les données simples (texte, nombres, tables, dates) se stockent",
-        ));
+        return Err(runtime(tr!(
+            "seules les données simples (texte, nombres, tables, dates) se stockent"
+        )));
     }
     lua.from_value(value)
 }
@@ -170,6 +176,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
 
     bp.set("version", env!("CARGO_PKG_VERSION"))?;
     bp.set("id", id.clone())?;
+    // Langue de l'interface au chargement ; l'application recharge les
+    // extensions quand elle change (Luau fige les lectures de `bp.*`).
+    bp.set("language", bp_core::i18n::lang().code())?;
 
     // ─────────────────────── Déclarations ───────────────────────
     {
@@ -190,9 +199,10 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 if let Some(required) = spec.get::<Option<String>>("requires")?
                     && version_parts(env!("CARGO_PKG_VERSION")) < version_parts(&required)
                 {
-                    return Err(runtime(format!(
-                        "cette extension nécessite BankPerfect {required} ou plus récent (version actuelle : {})",
-                        env!("CARGO_PKG_VERSION")
+                    return Err(runtime(tr!(
+                        "cette extension nécessite BankPerfect {required} ou plus récent (version actuelle : {current})",
+                        required = required,
+                        current = env!("CARGO_PKG_VERSION")
                     )));
                 }
                 Ok(())
@@ -206,21 +216,24 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
             lua.create_function(move |_, spec: Table| {
                 let mut r = registry.borrow_mut();
                 if !r.loading {
-                    return Err(runtime("bp.command se déclare au chargement de l'extension"));
+                    return Err(runtime(tr!(
+                        "bp.command se déclare au chargement de l'extension"
+                    )));
                 }
                 let title: String = spec
                     .get::<Option<String>>("title")?
-                    .ok_or_else(|| runtime("bp.command : title est obligatoire"))?;
+                    .ok_or_else(|| runtime(tr!("bp.command : title est obligatoire")))?;
                 let run: Function = spec
                     .get::<Option<Function>>("run")?
-                    .ok_or_else(|| runtime("bp.command : run (fonction) est obligatoire"))?;
+                    .ok_or_else(|| runtime(tr!("bp.command : run (fonction) est obligatoire")))?;
                 let needs = match spec.get::<Option<String>>("needs")?.as_deref() {
                     None | Some("file") => Needs::File,
                     Some("selection") => Needs::Selection,
                     Some("nothing" | "none") => Needs::Nothing,
                     Some(other) => {
-                        return Err(runtime(format!(
-                            "bp.command : needs « {other} » inconnu (\"file\", \"selection\" ou \"nothing\")"
+                        return Err(runtime(tr!(
+                            "bp.command : needs « {} » inconnu (\"file\", \"selection\" ou \"nothing\")",
+                            other
                         )));
                     }
                 };
@@ -228,13 +241,18 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     Value::Nil => Vec::new(),
                     Value::String(s) => vec![s.to_str()?.to_string()],
                     Value::Table(t) => t.sequence_values::<String>().collect::<mlua::Result<_>>()?,
-                    _ => return Err(runtime("bp.command : menu est un texte ou une liste de textes")),
+                    _ => {
+                        return Err(runtime(tr!(
+                            "bp.command : menu est un texte ou une liste de textes"
+                        )));
+                    }
                 };
                 for m in &menus {
                     if !crate::MENUS.iter().any(|(id, _)| id == m) {
                         let known: Vec<&str> = crate::MENUS.iter().map(|(id, _)| *id).collect();
-                        return Err(runtime(format!(
-                            "bp.command : menu « {m} » inconnu ({})",
+                        return Err(runtime(tr!(
+                            "bp.command : menu « {} » inconnu ({})",
+                            m,
                             known.join(", ")
                         )));
                     }
@@ -264,9 +282,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
             lua.create_function(move |_, spec: Table| {
                 let mut r = registry.borrow_mut();
                 if !r.loading {
-                    return Err(runtime(
-                        "bp.importer se déclare au chargement de l'extension",
-                    ));
+                    return Err(runtime(tr!(
+                        "bp.importer se déclare au chargement de l'extension"
+                    )));
                 }
                 r.importers
                     .push(crate::import::ImporterSpec::parse_spec(&spec)?);
@@ -285,8 +303,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     .map(|(_, e)| *e)
                     .ok_or_else(|| {
                         let known: Vec<&str> = Event::NAMES.iter().map(|(n, _)| *n).collect();
-                        runtime(format!(
-                            "évènement inconnu : « {event} » ({})",
+                        runtime(tr!(
+                            "évènement inconnu : « {} » ({})",
+                            event,
                             known.join(", ")
                         ))
                     })?;
@@ -385,7 +404,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         lua.create_function(|lua, spec: Table| {
             let name: String = spec
                 .get::<Option<String>>("name")?
-                .ok_or_else(|| runtime("bp.add_account : name est obligatoire"))?;
+                .ok_or_else(|| runtime(tr!("bp.add_account : name est obligatoire")))?;
             let initial = match spec.get::<Value>("initial")? {
                 Value::Nil => Amount::ZERO,
                 v => amount_from_value(&v)?,
@@ -544,8 +563,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                         Some("reconciled") => TackFilter::Reconciled,
                         Some("marked") => TackFilter::PointedOrReconciled,
                         Some(other) => {
-                            return Err(runtime(format!(
-                                "bp.filter : tack « {other} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\" ou \"all\")"
+                            return Err(runtime(tr!(
+                                "bp.filter : tack « {} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\" ou \"all\")",
+                                other
                             )));
                         }
                     };
@@ -568,7 +588,12 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                         Ok(Value::Nil)
                     })
                 }
-                _ => Err(runtime("bp.filter{ … }, bp.filter(false) ou bp.filter()")),
+                _ => Err(runtime(tr!(
+                    "{0}, {1} ou {2}",
+                    "bp.filter{ … }",
+                    "bp.filter(false)",
+                    "bp.filter()"
+                ))),
             }
         })?,
     )?;
@@ -603,7 +628,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     None | Some(Value::Nil) => None,
                     Some(p) => {
                         let id = resolve_category(&s.document, p)?
-                            .ok_or_else(|| runtime("catégorie mère inconnue"))?;
+                            .ok_or_else(|| runtime(tr!("catégorie mère inconnue")))?;
                         let pos = s
                             .document
                             .categories
@@ -611,7 +636,9 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                             .position(|c| c.id == id)
                             .expect("catégorie");
                         if s.document.categories[pos].is_child {
-                            return Err(runtime("une sous-catégorie ne peut pas avoir d'enfant"));
+                            return Err(runtime(tr!(
+                                "une sous-catégorie ne peut pas avoir d'enfant"
+                            )));
                         }
                         Some(pos)
                     }
@@ -652,7 +679,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         lua.create_function(|lua, (category, name): (Value, String)| {
             with_session(lua, |s| {
                 let id = resolve_category(&s.document, &category)?
-                    .ok_or_else(|| runtime("catégorie inconnue"))?;
+                    .ok_or_else(|| runtime(tr!("catégorie inconnue")))?;
                 let pos = s
                     .document
                     .categories
@@ -669,7 +696,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         lua.create_function(|lua, category: Value| {
             with_session(lua, |s| {
                 let id = resolve_category(&s.document, &category)?
-                    .ok_or_else(|| runtime("catégorie inconnue"))?;
+                    .ok_or_else(|| runtime(tr!("catégorie inconnue")))?;
                 let pos = s
                     .document
                     .categories
@@ -688,7 +715,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 let list = lua.create_table()?;
                 for m in s.document.mode_list() {
                     let t = lua.create_table()?;
-                    t.set("name", m.label())?;
+                    t.set("name", m.name())?;
                     t.set("debit", bp_core::edit::mode_is_debit(&s.document, &m))?;
                     t.set("custom", matches!(m, bp_core::model::Mode::Custom(_)))?;
                     list.raw_push(t)?;
@@ -702,7 +729,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         lua.create_function(|lua, (name, debit): (String, Option<bool>)| {
             with_session(lua, |s| {
                 if let Ok(mode) = crate::objects::resolve_mode(&s.document, &name) {
-                    return Ok(mode.label().to_string());
+                    return Ok(mode.name().to_string());
                 }
                 Ok(bp_core::manage::add_mode(
                     s.referentials_mut(),
@@ -722,7 +749,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     t.set("caption", p.caption.clone())?;
                     t.set("payee", p.payee.clone())?;
                     t.set("details", p.details.clone())?;
-                    t.set("mode", p.mode.label())?;
+                    t.set("mode", p.mode.name())?;
                     t.set(
                         "category",
                         p.category.and_then(|id| s.document.category_label(id)),
@@ -833,15 +860,15 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 let n = |v: &Value| {
                     crate::objects::number(v)
                         .map(|f| f as i64)
-                        .ok_or_else(|| runtime("bp.date(année, mois, jour)"))
+                        .ok_or_else(|| runtime(tr!("bp.date(année, mois, jour)")))
                 };
                 let date = Date::from_ymd(n(y)? as i32, n(m)? as u32, n(d)? as u32)
-                    .ok_or_else(|| runtime("date inexistante"))?;
+                    .ok_or_else(|| runtime(tr!("date inexistante")))?;
                 date_value(lua, date)
             }
-            _ => Err(runtime(
-                "bp.date(année, mois, jour) ou bp.date(\"jj/mm/aaaa\")",
-            )),
+            _ => Err(runtime(tr!(
+                "bp.date(année, mois, jour) ou bp.date(\"jj/mm/aaaa\")"
+            ))),
         })?,
     )?;
     bp.set(
@@ -964,7 +991,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         "decode",
         lua.create_function(|lua, text: String| {
             let v: serde_json::Value =
-                serde_json::from_str(&text).map_err(|e| runtime(format!("JSON invalide : {e}")))?;
+                serde_json::from_str(&text).map_err(|e| runtime(tr!("JSON invalide : {}", e)))?;
             from_json(lua, &v)
         })?,
     )?;
@@ -975,12 +1002,14 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
     let request = |method: &'static str, registry: Rc<RefCell<Registry>>| {
         move |lua: &Lua, (url, body, opts): (String, Option<String>, Option<Table>)| {
             if !registry.borrow().permissions.iter().any(|p| p == "network") {
-                return Err(runtime(
-                    "accès à Internet non déclaré : ajoutez permissions = { \"network\" } dans bp.extension{ … }",
-                ));
+                return Err(runtime(tr!(
+                    "accès à Internet non déclaré : ajoutez {code} dans {call}",
+                    code = "permissions = { \"network\" }",
+                    call = "bp.extension{ … }"
+                )));
             }
             if !(url.starts_with("https://") || url.starts_with("http://")) {
-                return Err(runtime("adresse web invalide (http:// ou https://)"));
+                return Err(runtime(tr!("adresse web invalide (http:// ou https://)")));
             }
             let agent: ureq::Agent = ureq::Agent::config_builder()
                 .http_status_as_error(false)
@@ -1012,14 +1041,14 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 }
                 req.send(body.unwrap_or_default().as_bytes())
             };
-            let mut response = result.map_err(|e| runtime(format!("requête impossible : {e}")))?;
+            let mut response = result.map_err(|e| runtime(tr!("requête impossible : {}", e)))?;
             let status = response.status().as_u16();
             let bytes = response
                 .body_mut()
                 .with_config()
                 .limit(32 << 20)
                 .read_to_vec()
-                .map_err(|e| runtime(format!("réponse illisible : {e}")))?;
+                .map_err(|e| runtime(tr!("réponse illisible : {}", e)))?;
             let t = lua.create_table()?;
             t.set("status", status)?;
             t.set("ok", (200..300).contains(&status))?;
@@ -1052,12 +1081,12 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                     .map(|s| s.get::<Option<String>>("title"))
                     .transpose()?
                     .flatten()
-                    .unwrap_or_else(|| "Ouvrir un fichier".into());
+                    .unwrap_or_else(|| tr!("Ouvrir un fichier").into());
                 let Some(path) = services.pick_open(&title, &filters(spec.as_ref())?) else {
                     return Ok(Value::Nil);
                 };
                 let bytes = std::fs::read(&path).map_err(|e| {
-                    runtime(format!("lecture de {} impossible : {e}", path.display()))
+                    runtime(tr!("lecture de {} impossible : {}", path.display(), e))
                 })?;
                 let t = lua.create_table()?;
                 t.set("path", path.display().to_string())?;
@@ -1077,16 +1106,16 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
             lua.create_function(move |_, spec: Table| {
                 let title = spec
                     .get::<Option<String>>("title")?
-                    .unwrap_or_else(|| "Enregistrer".into());
+                    .unwrap_or_else(|| tr!("Enregistrer").into());
                 let name = spec.get::<Option<String>>("name")?.unwrap_or_default();
                 let text: String = spec
                     .get::<Option<String>>("text")?
-                    .ok_or_else(|| runtime("bp.files.save : text est obligatoire"))?;
+                    .ok_or_else(|| runtime(tr!("bp.files.save : text est obligatoire")))?;
                 let Some(path) = services.pick_save(&title, &name, &filters(Some(&spec))?) else {
                     return Ok(None);
                 };
                 std::fs::write(&path, text.as_bytes())
-                    .map_err(|e| runtime(format!("écriture impossible : {e}")))?;
+                    .map_err(|e| runtime(tr!("écriture impossible : {}", e)))?;
                 Ok(Some(path.display().to_string()))
             })?,
         )?;
@@ -1098,7 +1127,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
             "open_url",
             lua.create_function(move |_, url: String| {
                 if !(url.starts_with("https://") || url.starts_with("http://")) {
-                    return Err(runtime("adresse web invalide"));
+                    return Err(runtime(tr!("adresse web invalide")));
                 }
                 services.open_url(&url);
                 Ok(())
@@ -1132,7 +1161,7 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                 }
                 let dir = dir
                     .as_ref()
-                    .ok_or_else(|| runtime("require : réservé aux extensions en dossier"))?;
+                    .ok_or_else(|| runtime(tr!("require : réservé aux extensions en dossier")))?;
                 let relative = name.trim_start_matches("./").trim_end_matches(".luau");
                 if relative.is_empty()
                     || relative
@@ -1140,11 +1169,11 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                         .any(|p| p.is_empty() || p == "." || p == "..")
                     || relative.contains('\\')
                 {
-                    return Err(runtime(format!("require : module invalide « {name} »")));
+                    return Err(runtime(tr!("require : module invalide « {} »", name)));
                 }
                 let path = dir.join(format!("{relative}.luau"));
                 let source = std::fs::read_to_string(&path)
-                    .map_err(|_| runtime(format!("require : module introuvable « {name} »")))?;
+                    .map_err(|_| runtime(tr!("require : module introuvable « {} »", name)))?;
                 let value: Value = lua
                     .load(source)
                     .set_name(format!("@{relative}.luau"))
@@ -1161,6 +1190,42 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
     }
 
     crate::features::install(lua, &bp)?;
+
     lua.globals().set("bp", bp)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bp_core::i18n::with_lang;
+
+    #[test]
+    fn money_text_follows_language() {
+        let amount = Amount::parse("-1234,5").unwrap();
+        with_lang(Lang::Fr, || {
+            assert_eq!(money_text(amount, "€"), "-1\u{202f}234,50\u{a0}€");
+        });
+        with_lang(Lang::En, || {
+            assert_eq!(money_text(amount, "€"), "-€1,234.50");
+            assert_eq!(money_text(amount, "CHF"), "-1,234.50\u{a0}CHF");
+            assert_eq!(money_text(amount, ""), "-1,234.50");
+        });
+    }
+
+    #[test]
+    fn errors_follow_language() {
+        let lua = Lua::new();
+        let message = |lua: &Lua| {
+            crate::objects::amount_from_value(&Value::String(lua.create_string("abc").unwrap()))
+                .unwrap_err()
+                .to_string()
+        };
+        with_lang(Lang::Fr, || {
+            assert!(message(&lua).contains("montant invalide : « abc »"));
+        });
+        with_lang(Lang::En, || {
+            assert!(message(&lua).contains("invalid amount: “abc”"));
+        });
+    }
 }

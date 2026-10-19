@@ -1,9 +1,18 @@
 -- Total de la sélection : somme, moyenne, dépenses et recettes des lignes
 -- sélectionnées, d'un clic droit dans la grille.
 
+-- Texte dans la langue de l'interface : bp.language vaut "fr" ou "en" (les
+-- extensions sont rechargées quand l'utilisateur change de langue).
+local function tr(fr, en)
+	return if bp.language == "en" then en else fr
+end
+
 bp.extension({
-	name = "Total de la sélection",
-	description = "Additionne les opérations sélectionnées : total, moyenne, dépenses, recettes.",
+	name = tr("Total de la sélection", "Selection total"),
+	description = tr(
+		"Additionne les opérations sélectionnées : total, moyenne, dépenses, recettes.",
+		"Adds up the selected transactions: total, average, expenses, income."
+	),
 	version = "1.0",
 	author = "BankPerfect",
 })
@@ -12,7 +21,7 @@ local ui = bp.ui
 
 bp.command({
 	id = "total",
-	title = "Total de la sélection…",
+	title = tr("Total de la sélection…", "Selection total…"),
 	icon = "sigma",
 	shortcut = "Ctrl+Alt+T",
 	needs = "selection", -- grisée tant qu'aucune ligne n'est sélectionnée
@@ -40,29 +49,29 @@ bp.command({
 			end
 		end
 		ui.window({
-			title = "Total de la sélection",
+			title = tr("Total de la sélection", "Selection total"),
 			icon = "sigma",
 			size = "small",
-			subtitle = `{#ops} opération(s), du {first} au {last}.`,
+			subtitle = tr(`{#ops} opération(s), du {first} au {last}.`, `{#ops} transaction(s), from {first} to {last}.`),
 			view = function()
 				return {
 					ui.columns({
 						ui.stat({ label = "Total", value = ui.money(total, { currency = currency }), icon = "sigma" }),
 						ui.stat({
-							label = "Moyenne",
+							label = tr("Moyenne", "Average"),
 							value = ui.money(total / #ops, { currency = currency }),
 							icon = "equals",
 						}),
 					}),
 					ui.columns({
 						ui.stat({
-							label = "Dépenses",
+							label = tr("Dépenses", "Expenses"),
 							value = ui.money(debits, { currency = currency }),
 							icon = "arrow-down-right",
 							color = "negative",
 						}),
 						ui.stat({
-							label = "Recettes",
+							label = tr("Recettes", "Income"),
 							value = ui.money(credits, { currency = currency }),
 							icon = "arrow-up-right",
 							color = "positive",

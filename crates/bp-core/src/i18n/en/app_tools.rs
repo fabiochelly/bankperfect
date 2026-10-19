@@ -544,7 +544,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{} opération catégorisée", "{} transaction categorized"),
     ("{} opérations catégorisées", "{} transactions categorized"),
     ("L'IA réfléchit…", "The AI is thinking…"),
-    ("Demander à l'IA ({})", "Ask the AI ({})"),
+    ("Demander à l'IA ({})", "Ask AI ({})"),
     (
         "Envoie à Anthropic les libellés inconnus (sans numéros ni références), le sens et l'ordre de grandeur des montants et vos noms de catégories",
         "Sends Anthropic the unknown descriptions (without numbers or references), the direction and rough size of the amounts, and your category names",

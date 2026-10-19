@@ -428,8 +428,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "This file already exists: choose another name.",
     ),
     // Licence.
-    ("Licence Gold n° {} · {}", "Gold license no. {} · {}"),
-    ("Licence n° {} · {}", "License no. {} · {}"),
+    ("Licence Gold n° {} · {}", "Gold License #{} · {}"),
+    ("Licence n° {} · {}", "License #{} · {}"),
     (
         "Le serveur de licences ne répond pas. Vérifiez la connexion à Internet. ({})",
         "The license server is not responding. Check your Internet connection. ({})",
@@ -447,8 +447,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "The certificate received from the license server is not valid.",
     ),
     ("Licence BankPerfect", "BankPerfect license"),
-    ("Licence Gold n° {}", "Gold license no. {}"),
-    ("Licence n° {}", "License no. {}"),
+    ("Licence Gold n° {}", "Gold License #{}"),
+    ("Licence n° {}", "License #{}"),
     (
         "Merci pour votre soutien ! Votre nom et votre numéro de licence s'affichent en bas de la fenêtre.",
         "Thank you for your support! Your name and license number are shown at the bottom of the window.",

@@ -862,8 +862,7 @@ fn add_features(document: &mut Document, lang: Lang, today: Date, end: Date) {
         let Some(last) = document.accounts[account]
             .operations
             .iter()
-            .filter(|op| op.payee == payee && !skipped.contains(&op.details.as_str()))
-            .next_back()
+            .rfind(|op| op.payee == payee && !skipped.contains(&op.details.as_str()))
         else {
             continue;
         };

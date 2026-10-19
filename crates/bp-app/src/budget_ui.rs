@@ -411,8 +411,7 @@ impl BudgetForm {
             summary_tile(
                 ui,
                 tile,
-                tr!("Dépenses"),
-                icon::ARROW_DOWN_RIGHT,
+                (icon::ARROW_DOWN_RIGHT, tr!("Dépenses")),
                 &report.expenses,
                 Some(BudgetKind::Expense),
                 &self.currency,
@@ -421,8 +420,7 @@ impl BudgetForm {
             summary_tile(
                 ui,
                 tile,
-                tr!("Recettes"),
-                icon::ARROW_UP_RIGHT,
+                (icon::ARROW_UP_RIGHT, tr!("Recettes")),
                 &report.income,
                 Some(BudgetKind::Income),
                 &self.currency,
@@ -431,8 +429,7 @@ impl BudgetForm {
             summary_tile(
                 ui,
                 tile,
-                tr!("Solde"),
-                icon::SCALES,
+                (icon::SCALES, tr!("Solde")),
                 &report.total,
                 None,
                 &self.currency,
@@ -1337,11 +1334,11 @@ fn progress(ui: &mut egui::Ui, width: f32, ratio: f32, color: Color32, pal: &Pal
     }
 }
 
+/// Carte de synthèse : `(glyph, title)` en tête, montants dans `currency`.
 fn summary_tile(
     ui: &mut egui::Ui,
     width: f32,
-    title: &str,
-    glyph: &str,
+    (glyph, title): (&str, &str),
     total: &BudgetTotal,
     kind: Option<BudgetKind>,
     currency: &str,

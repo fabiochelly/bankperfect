@@ -3,6 +3,7 @@
 
 use bp_core::autofields::{AutoFieldRules, CategoryChange, Rule, RuleField};
 use bp_core::model::{Mode, StandardMode};
+use bp_core::{tr, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -47,7 +48,7 @@ impl RulesForm {
             ui.set_width(width);
             ui.set_height(height);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::MAGIC_WAND, pal.accent, "Règles automatiques");
+            crate::dialogs::header(ui, icon::MAGIC_WAND, pal.accent, tr!("Règles automatiques"));
             let body = height - 36.0 - 14.0 - 110.0;
             let gap = 22.0;
             let list_width = (width * 0.4).clamp(340.0, 600.0);
@@ -84,15 +85,20 @@ impl RulesForm {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.warning));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
                 }
                 let active = self.rules.rules.iter().filter(|r| r.active).count();
                 let label = format!(
-                    "{}  Appliquer les {active} règle(s) actives aux lignes affichées",
-                    icon::LIGHTNING
+                    "{}  {}",
+                    icon::LIGHTNING,
+                    trn!(
+                        active,
+                        "Appliquer {} règle active aux lignes affichées",
+                        "Appliquer les {} règles actives aux lignes affichées"
+                    )
                 );
                 if ui
                     .add_enabled(
@@ -102,7 +108,11 @@ impl RulesForm {
                     .clicked()
                 {
                     let (n, errors) = doc.apply_rules(&self.rules, None);
-                    self.message = Some(format!("{n} ligne(s) modifiée(s) (Ctrl+Z pour annuler)"));
+                    self.message = Some(trn!(
+                        n,
+                        "{} ligne modifiée (Ctrl+Z pour annuler)",
+                        "{} lignes modifiées (Ctrl+Z pour annuler)"
+                    ));
                     self.errors = errors;
                 }
             });
@@ -135,7 +145,7 @@ impl RulesForm {
                                 ui.label(RichText::new(icon::MAGIC_WAND).size(34.0).color(pal.muted));
                                 ui.add_space(6.0);
                                 ui.label(
-                                    RichText::new("Aucune règle. Exemple : si le tiers contient « EDF », mettre la catégorie Électricité.")
+                                    RichText::new(tr!("Aucune règle. Exemple : si le tiers contient « EDF », mettre la catégorie Électricité."))
                                         .color(pal.muted),
                                 );
                             });
@@ -144,7 +154,7 @@ impl RulesForm {
                             let (condition, actions) = rule.summary(&categories);
                             let selected = self.selected == Some(k);
                             ui.horizontal(|ui| {
-                                if crate::theme::checkbox(ui, &mut rule.active, "").on_hover_text("Règle active").changed() {
+                                if crate::theme::checkbox(ui, &mut rule.active, "").on_hover_text(tr!("Règle active")).changed() {
                                     changed = true;
                                 }
                                 let (rect, response) =
@@ -160,7 +170,7 @@ impl RulesForm {
                                 let color = if rule.active { pal.fg } else { pal.muted };
                                 let galley = ui_kit::one_line(ui, format!("{}  {condition}", icon::MAGNIFYING_GLASS), egui::FontId::new(13.5, crate::theme::medium()), color, rect.width() - 80.0);
                                 ui.painter().galley(rect.min + egui::vec2(10.0, 7.0), galley, color);
-                                let actions_text = if actions.is_empty() { "aucune action".to_string() } else { actions };
+                                let actions_text = if actions.is_empty() { tr!("aucune action").to_string() } else { actions };
                                 let galley = ui_kit::one_line(ui, format!("{}  {actions_text}", icon::ARROW_RIGHT), egui::FontId::new(12.0, egui::FontFamily::Proportional), pal.muted, rect.width() - 20.0);
                                 ui.painter().galley(rect.min + egui::vec2(10.0, 28.0), galley, pal.muted);
                                 if rule.auto_apply {
@@ -180,7 +190,7 @@ impl RulesForm {
                     });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(format!("{}  Nouvelle règle", icon::PLUS)).min_size(egui::vec2(0.0, 34.0))).clicked() {
+                    if ui.add(egui::Button::new(format!("{}  {}", icon::PLUS, tr!("Nouvelle règle"))).min_size(egui::vec2(0.0, 34.0))).clicked() {
                         let mut rule = Rule::new("");
                         rule.active = true;
                         self.rules.rules.push(rule);
@@ -188,8 +198,8 @@ impl RulesForm {
                         changed = true;
                     }
                     let (import, export) = (egui::Id::new("rules_import"), egui::Id::new("rules_export"));
-                    if ui.add(egui::Button::new(icon::DOWNLOAD_SIMPLE).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Importer des règles…").clicked() {
-                        let dialog = rfd::FileDialog::new().add_filter("Règles", &["bprules", "txt", "dat"]);
+                    if ui.add(egui::Button::new(icon::DOWNLOAD_SIMPLE).min_size(egui::vec2(34.0, 34.0))).on_hover_text(tr!("Importer des règles…")).clicked() {
+                        let dialog = rfd::FileDialog::new().add_filter(tr!("Règles"), &["bprules", "txt", "dat"]);
                         crate::file_picker::open(ui.ctx(), import, crate::file_picker::Kind::File, dialog);
                     }
                     if let Some(path) = crate::file_picker::chosen(ui.ctx(), import) {
@@ -198,34 +208,34 @@ impl RulesForm {
                                 let n = rules.len();
                                 self.rules.rules.extend(rules);
                                 changed = true;
-                                self.message = Some(format!("{n} règle(s) importée(s)"));
+                                self.message = Some(trn!(n, "{} règle importée", "{} règles importées"));
                             }
                             Err(e) => self.errors = vec![e],
                         }
                     }
-                    if ui.add(egui::Button::new(icon::EXPORT).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Exporter les règles…").clicked() {
-                        let dialog = rfd::FileDialog::new().set_file_name("regles.bprules").add_filter("Règles", &["bprules"]);
+                    if ui.add(egui::Button::new(icon::EXPORT).min_size(egui::vec2(34.0, 34.0))).on_hover_text(tr!("Exporter les règles…")).clicked() {
+                        let dialog = rfd::FileDialog::new().set_file_name(tr!("regles.bprules")).add_filter(tr!("Règles"), &["bprules"]);
                         crate::file_picker::open(ui.ctx(), export, crate::file_picker::Kind::Save, dialog);
                     }
                     if let Some(path) = crate::file_picker::chosen(ui.ctx(), export) {
                         self.message = Some(match std::fs::write(&path, self.rules.export_text()) {
-                            Ok(()) => format!("Règles exportées dans {}", path.display()),
-                            Err(e) => format!("Export impossible : {e}"),
+                            Ok(()) => tr!("Règles exportées dans {}", path.display()),
+                            Err(e) => tr!("Export impossible : {}", e),
                         });
                     }
                     if let Some(i) = self.selected {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                            if ui.add(egui::Button::new(RichText::new(icon::TRASH).color(pal.negative)).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Supprimer la règle").clicked() {
+                            if ui.add(egui::Button::new(RichText::new(icon::TRASH).color(pal.negative)).min_size(egui::vec2(34.0, 34.0))).on_hover_text(tr!("Supprimer la règle")).clicked() {
                                 self.rules.rules.remove(i);
                                 self.selected = (!self.rules.rules.is_empty()).then(|| i.min(self.rules.rules.len() - 1));
                                 changed = true;
                             }
-                            if ui.add_enabled(i + 1 < self.rules.rules.len(), egui::Button::new(icon::ARROW_DOWN).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Descendre (les règles s'appliquent dans l'ordre)").clicked() {
+                            if ui.add_enabled(i + 1 < self.rules.rules.len(), egui::Button::new(icon::ARROW_DOWN).min_size(egui::vec2(34.0, 34.0))).on_hover_text(tr!("Descendre (les règles s'appliquent dans l'ordre)")).clicked() {
                                 self.rules.rules.swap(i, i + 1);
                                 self.selected = Some(i + 1);
                                 changed = true;
                             }
-                            if ui.add_enabled(i > 0, egui::Button::new(icon::ARROW_UP).min_size(egui::vec2(34.0, 34.0))).on_hover_text("Monter").clicked() {
+                            if ui.add_enabled(i > 0, egui::Button::new(icon::ARROW_UP).min_size(egui::vec2(34.0, 34.0))).on_hover_text(tr!("Monter")).clicked() {
                                 self.rules.rules.swap(i - 1, i);
                                 self.selected = Some(i - 1);
                                 changed = true;
@@ -246,7 +256,9 @@ impl RulesForm {
         let Some(i) = self.selected.filter(|&i| i < self.rules.rules.len()) else {
             ui.add_space(60.0);
             ui.vertical_centered(|ui| {
-                ui.label(RichText::new("Sélectionnez une règle dans la liste.").color(pal.muted));
+                ui.label(
+                    RichText::new(tr!("Sélectionnez une règle dans la liste.")).color(pal.muted),
+                );
             });
             return false;
         };
@@ -255,164 +267,182 @@ impl RulesForm {
         let styles = doc.category_styles.clone();
         let rule = &mut self.rules.rules[i];
 
-        ui_kit::section(ui, width, icon::MAGNIFYING_GLASS, "Si je trouve", |ui| {
-            ui_kit::row(ui, "Dans", LABEL_WIDTH, |ui| {
-                changed |= ui_kit::segmented(
-                    ui,
-                    &mut rule.field,
-                    &[
-                        (RuleField::Payee, "", "le tiers", pal.accent),
-                        (RuleField::Details, "", "le détail", pal.accent),
-                        (RuleField::PayeeOrDetails, "", "les deux", pal.accent),
-                    ],
-                    32.0,
-                    Some(full.min(380.0)),
-                );
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Le texte", LABEL_WIDTH, |ui| {
-                changed |= ui
-                    .add(
-                        crate::theme::field(&mut rule.contains)
-                            .hint_text("edf+facture, !avoir, ou une formule =…")
-                            .desired_width(full),
-                    )
-                    .changed();
-            });
-            ui.add_space(6.0);
-            ui.label(
-                RichText::new(
-                    "Mots séparés par + : tous doivent être présents (!mot = absent), sans tenir compte des majuscules. Une formule commence par = : =\"tresor\" in tiers and montant < -70.",
-                )
+        ui_kit::section(
+            ui,
+            width,
+            icon::MAGNIFYING_GLASS,
+            tr!("Si je trouve"),
+            |ui| {
+                ui_kit::row(ui, tr!("Dans"), LABEL_WIDTH, |ui| {
+                    changed |= ui_kit::segmented(
+                        ui,
+                        &mut rule.field,
+                        &[
+                            (RuleField::Payee, "", tr!("le tiers"), pal.accent),
+                            (RuleField::Details, "", tr!("le détail"), pal.accent),
+                            (RuleField::PayeeOrDetails, "", tr!("les deux"), pal.accent),
+                        ],
+                        32.0,
+                        Some(full.min(380.0)),
+                    );
+                });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Le texte"), LABEL_WIDTH, |ui| {
+                    changed |= ui
+                        .add(
+                            crate::theme::field(&mut rule.contains)
+                                .hint_text(tr!("edf+facture, !avoir, ou une formule =…"))
+                                .desired_width(full),
+                        )
+                        .changed();
+                });
+                ui.add_space(6.0);
+                ui.label(
+                RichText::new(tr!(
+                    "Mots séparés par + : tous doivent être présents (!mot = absent), sans tenir compte des majuscules. Une formule commence par = : =\"tresor\" in tiers and montant < -70."
+                ))
                 .size(12.5)
                 .color(pal.muted),
             );
-            ui.add_space(8.0);
-            changed |= crate::theme::checkbox(
-                ui,
-                &mut rule.plus_is_or,
-                "Un seul des mots suffit (+ veut dire OU)",
-            )
-            .changed();
-            ui.add_space(6.0);
-            changed |= crate::theme::checkbox(
-                ui,
-                &mut rule.only_uncategorized,
-                "Seulement les opérations sans catégorie",
-            )
-            .changed();
-        });
+                ui.add_space(8.0);
+                changed |= crate::theme::checkbox(
+                    ui,
+                    &mut rule.plus_is_or,
+                    tr!("Un seul des mots suffit (+ veut dire OU)"),
+                )
+                .changed();
+                ui.add_space(6.0);
+                changed |= crate::theme::checkbox(
+                    ui,
+                    &mut rule.only_uncategorized,
+                    tr!("Seulement les opérations sans catégorie"),
+                )
+                .changed();
+            },
+        );
 
-        ui_kit::section(ui, width, icon::PENCIL_SIMPLE, "Alors je modifie", |ui| {
-            // Mode (modes standard seulement, comme l'original).
-            ui.horizontal(|ui| {
-                let mut on = rule.set_mode.is_some();
-                ui.allocate_ui_with_layout(
-                    egui::vec2(LABEL_WIDTH, 34.0),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.set_min_width(LABEL_WIDTH);
-                        if crate::theme::checkbox(ui, &mut on, "Mode").changed() {
-                            rule.set_mode = on.then_some(StandardMode::Carte);
-                            changed = true;
-                        }
-                    },
-                );
-                ui.add_enabled_ui(on, |ui| {
-                    let mut mode = Mode::Standard(rule.set_mode.unwrap_or(StandardMode::Carte));
-                    let before = mode.clone();
-                    egui::ComboBox::from_id_salt("rule_mode")
-                        .selected_text(mode.label().to_string())
-                        .width(full - 12.0)
-                        .show_ui(ui, |ui| {
-                            for m in StandardMode::ALL {
-                                ui.selectable_value(&mut mode, Mode::Standard(m), m.label());
-                            }
-                        });
-                    if mode != before
-                        && let Mode::Standard(m) = mode
-                    {
-                        rule.set_mode = Some(m);
-                        changed = true;
-                    }
-                });
-            });
-            ui.add_space(6.0);
-            for (label, value, hint) in [
-                ("Tiers", &mut rule.set_payee, "nouveau tiers"),
-                (
-                    "Détail",
-                    &mut rule.set_details,
-                    "nouveau détail, ou =formule",
-                ),
-                ("Date", &mut rule.set_date, "jj/mm/aaaa ou =formule"),
-            ] {
+        ui_kit::section(
+            ui,
+            width,
+            icon::PENCIL_SIMPLE,
+            tr!("Alors je modifie"),
+            |ui| {
+                // Mode (modes standard seulement, comme l'original).
                 ui.horizontal(|ui| {
-                    let mut on = value.is_some();
+                    let mut on = rule.set_mode.is_some();
                     ui.allocate_ui_with_layout(
                         egui::vec2(LABEL_WIDTH, 34.0),
                         egui::Layout::left_to_right(egui::Align::Center),
                         |ui| {
                             ui.set_min_width(LABEL_WIDTH);
-                            if crate::theme::checkbox(ui, &mut on, label).changed() {
-                                *value = on.then(String::new);
+                            if crate::theme::checkbox(ui, &mut on, tr!("Mode")).changed() {
+                                rule.set_mode = on.then_some(StandardMode::Carte);
                                 changed = true;
                             }
                         },
                     );
-                    if let Some(text) = value {
-                        changed |= ui
-                            .add(
-                                crate::theme::field(text)
-                                    .hint_text(hint)
-                                    .desired_width(full),
-                            )
-                            .changed();
-                    }
-                });
-                ui.add_space(6.0);
-            }
-            ui.horizontal(|ui| {
-                let mut on = rule.set_category.is_some();
-                ui.allocate_ui_with_layout(
-                    egui::vec2(LABEL_WIDTH, 34.0),
-                    egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| {
-                        ui.set_min_width(LABEL_WIDTH);
-                        if crate::theme::checkbox(ui, &mut on, "Catégorie").changed() {
-                            rule.set_category = on.then_some(CategoryChange::Clear);
+                    ui.add_enabled_ui(on, |ui| {
+                        let mut mode = Mode::Standard(rule.set_mode.unwrap_or(StandardMode::Carte));
+                        let before = mode.clone();
+                        egui::ComboBox::from_id_salt("rule_mode")
+                            .selected_text(mode.label().to_string())
+                            .width(full - 12.0)
+                            .show_ui(ui, |ui| {
+                                for m in StandardMode::ALL {
+                                    ui.selectable_value(&mut mode, Mode::Standard(m), m.label());
+                                }
+                            });
+                        if mode != before
+                            && let Mode::Standard(m) = mode
+                        {
+                            rule.set_mode = Some(m);
                             changed = true;
                         }
-                    },
-                );
-                if let Some(change) = rule.set_category {
-                    let mut category = match change {
-                        CategoryChange::Clear => None,
-                        CategoryChange::Set(id) => Some(id),
-                    };
-                    if ui_kit::category_combo(
-                        ui,
-                        "rule_cat",
-                        &document,
-                        &styles,
-                        &mut category,
-                        full,
-                    ) {
-                        rule.set_category =
-                            Some(category.map_or(CategoryChange::Clear, CategoryChange::Set));
-                        changed = true;
-                    }
+                    });
+                });
+                ui.add_space(6.0);
+                for (label, value, hint) in [
+                    (tr!("Tiers"), &mut rule.set_payee, tr!("nouveau tiers")),
+                    (
+                        tr!("Détail"),
+                        &mut rule.set_details,
+                        tr!("nouveau détail, ou =formule"),
+                    ),
+                    (
+                        tr!("Date"),
+                        &mut rule.set_date,
+                        tr!("jj/mm/aaaa ou =formule"),
+                    ),
+                ] {
+                    ui.horizontal(|ui| {
+                        let mut on = value.is_some();
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(LABEL_WIDTH, 34.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_width(LABEL_WIDTH);
+                                if crate::theme::checkbox(ui, &mut on, label).changed() {
+                                    *value = on.then(String::new);
+                                    changed = true;
+                                }
+                            },
+                        );
+                        if let Some(text) = value {
+                            changed |= ui
+                                .add(
+                                    crate::theme::field(text)
+                                        .hint_text(hint)
+                                        .desired_width(full),
+                                )
+                                .changed();
+                        }
+                    });
+                    ui.add_space(6.0);
                 }
-            });
-        });
+                ui.horizontal(|ui| {
+                    let mut on = rule.set_category.is_some();
+                    ui.allocate_ui_with_layout(
+                        egui::vec2(LABEL_WIDTH, 34.0),
+                        egui::Layout::left_to_right(egui::Align::Center),
+                        |ui| {
+                            ui.set_min_width(LABEL_WIDTH);
+                            if crate::theme::checkbox(ui, &mut on, tr!("Catégorie")).changed() {
+                                rule.set_category = on.then_some(CategoryChange::Clear);
+                                changed = true;
+                            }
+                        },
+                    );
+                    if let Some(change) = rule.set_category {
+                        let mut category = match change {
+                            CategoryChange::Clear => None,
+                            CategoryChange::Set(id) => Some(id),
+                        };
+                        if ui_kit::category_combo(
+                            ui,
+                            "rule_cat",
+                            &document,
+                            &styles,
+                            &mut category,
+                            full,
+                        ) {
+                            rule.set_category =
+                                Some(category.map_or(CategoryChange::Clear, CategoryChange::Set));
+                            changed = true;
+                        }
+                    }
+                });
+            },
+        );
 
-        ui_kit::section(ui, width, icon::LIGHTNING, "Quand", |ui| {
-            changed |= crate::theme::checkbox(ui, &mut rule.active, "Règle active").changed();
+        ui_kit::section(ui, width, icon::LIGHTNING, tr!("Quand"), |ui| {
+            changed |= crate::theme::checkbox(ui, &mut rule.active, tr!("Règle active")).changed();
             ui.add_space(6.0);
             changed |= crate::theme::checkbox(
                 ui,
                 &mut rule.auto_apply,
-                "Appliquer automatiquement aux opérations saisies, importées ou insérées par l'échéancier",
+                tr!(
+                    "Appliquer automatiquement aux opérations saisies, importées ou insérées par l'échéancier"
+                ),
             )
             .changed();
         });
@@ -426,20 +456,27 @@ impl RulesForm {
             ui,
             width,
             icon::FLASK,
-            "Essai sur les lignes affichées",
+            tr!("Essai sur les lignes affichées"),
             |ui| match result {
                 Ok(outcome) => {
                     ui.horizontal(|ui| {
                         let n = outcome.matched.len();
                         let text = match n {
-                            0 => "aucune ligne ne vérifie la règle".to_string(),
-                            1 => "1 ligne vérifie la règle".to_string(),
-                            n => format!("{n} lignes vérifient la règle"),
+                            0 => tr!("aucune ligne ne vérifie la règle").to_string(),
+                            n => trn!(
+                                n,
+                                "{} ligne vérifie la règle",
+                                "{} lignes vérifient la règle"
+                            ),
                         };
                         ui_kit::pill(ui, &text, if n == 0 { pal.muted } else { pal.accent });
                         if n > 0
                             && ui
-                                .button(format!("{}  Appliquer à ces lignes", icon::LIGHTNING))
+                                .button(format!(
+                                    "{}  {}",
+                                    icon::LIGHTNING,
+                                    tr!("Appliquer à ces lignes")
+                                ))
                                 .clicked()
                         {
                             apply_now = true;
@@ -466,8 +503,10 @@ impl RulesForm {
         );
         if apply_now {
             let (changed_lines, errors) = doc.apply_rules(&self.rules, Some(i));
-            self.message = Some(format!(
-                "{changed_lines} ligne(s) modifiée(s) (Ctrl+Z pour annuler)"
+            self.message = Some(trn!(
+                changed_lines,
+                "{} ligne modifiée (Ctrl+Z pour annuler)",
+                "{} lignes modifiées (Ctrl+Z pour annuler)"
             ));
             self.errors = errors;
         }

@@ -3,6 +3,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use bp_core::tr;
 use egui::RichText;
 use egui_phosphor::regular as icon;
 
@@ -77,7 +78,7 @@ impl LicenseForm {
         dialogs::modal(ctx, "license").show(ctx, |ui| {
             ui.set_width(crate::ui_kit::dialog_width(ui.ctx(), 0.4, 460.0, 560.0));
             let pal = palette(ui);
-            dialogs::header(ui, icon::KEY, pal.accent, "Licence BankPerfect");
+            dialogs::header(ui, icon::KEY, pal.accent, tr!("Licence BankPerfect"));
             match current {
                 Some(license) => {
                     crate::ui_kit::card(ui, ui.available_width(), |ui| {
@@ -89,13 +90,13 @@ impl LicenseForm {
                             );
                             ui.add_space(6.0);
                             ui.vertical(|ui| {
-                                let kind = if license.gold {
-                                    "Licence Gold"
+                                let title = if license.gold {
+                                    tr!("Licence Gold n° {}", license.number)
                                 } else {
-                                    "Licence"
+                                    tr!("Licence n° {}", license.number)
                                 };
                                 ui.label(
-                                    RichText::new(format!("{kind} n° {}", license.number))
+                                    RichText::new(title)
                                         .size(17.0)
                                         .family(crate::theme::semibold()),
                                 );
@@ -105,19 +106,19 @@ impl LicenseForm {
                     });
                     ui.add_space(12.0);
                     ui.label(
-                        RichText::new(
+                        RichText::new(tr!(
                             "Merci pour votre soutien ! Votre nom et votre numéro de licence \
-                             s'affichent en bas de la fenêtre.",
-                        )
+                             s'affichent en bas de la fenêtre."
+                        ))
                         .color(pal.fg_dark),
                     );
                     dialogs::footer(ui, |ui| {
-                        if dialogs::primary(ui, "Fermer", true).clicked()
+                        if dialogs::primary(ui, tr!("Fermer"), true).clicked()
                             || ui.input(|i| i.key_pressed(egui::Key::Escape))
                         {
                             action = LicenseAction::Close;
                         }
-                        if dialogs::button(ui, "Retirer de cet ordinateur").clicked() {
+                        if dialogs::button(ui, tr!("Retirer de cet ordinateur")).clicked() {
                             action = LicenseAction::Remove;
                         }
                     });
@@ -125,16 +126,18 @@ impl LicenseForm {
                 None => {
                     crate::ui_kit::subtitle(
                         ui,
-                        "Si vous avez acheté une licence, collez ici la clé reçue lors de \
-                         l'achat. Elle est vérifiée une seule fois auprès du serveur de \
-                         l'auteur ; votre nom et votre numéro de licence s'afficheront \
-                         ensuite en bas de la fenêtre.",
+                        tr!(
+                            "Si vous avez acheté une licence, collez ici la clé reçue lors de \
+                             l'achat. Elle est vérifiée une seule fois auprès du serveur de \
+                             l'auteur ; votre nom et votre numéro de licence s'afficheront \
+                             ensuite en bas de la fenêtre."
+                        ),
                     );
                     let busy = self.pending.is_some();
                     let field = ui.add_enabled(
                         !busy,
                         crate::theme::field(&mut self.key)
-                            .hint_text("Clé de licence")
+                            .hint_text(tr!("Clé de licence"))
                             .desired_width(f32::INFINITY),
                     );
                     // Prêt à coller dès l'ouverture.
@@ -146,8 +149,9 @@ impl LicenseForm {
                         ui.add_space(6.0);
                         ui.label(
                             RichText::new(format!(
-                                "{}  Clé retrouvée dans l'ancienne version de BankPerfect.",
-                                icon::INFO
+                                "{}  {}",
+                                icon::INFO,
+                                tr!("Clé retrouvée dans l'ancienne version de BankPerfect.")
                             ))
                             .small()
                             .color(pal.muted),
@@ -164,17 +168,19 @@ impl LicenseForm {
                         ui.add_space(10.0);
                         ui.horizontal(|ui| {
                             ui.spinner();
-                            ui.label(RichText::new("Vérification de la clé…").color(pal.fg_dark));
+                            ui.label(
+                                RichText::new(tr!("Vérification de la clé…")).color(pal.fg_dark),
+                            );
                         });
                     }
                     let ready = !busy && !self.key.trim().is_empty();
                     dialogs::footer(ui, |ui| {
-                        if dialogs::primary(ui, "Activer", ready).clicked()
+                        if dialogs::primary(ui, tr!("Activer"), ready).clicked()
                             || (ready && ui.input(|i| i.key_pressed(egui::Key::Enter)))
                         {
                             self.start(ui.ctx());
                         }
-                        if dialogs::button(ui, "Annuler").clicked()
+                        if dialogs::button(ui, tr!("Annuler")).clicked()
                             || ui.input(|i| i.key_pressed(egui::Key::Escape))
                         {
                             action = LicenseAction::Close;

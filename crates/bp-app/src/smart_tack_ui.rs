@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 
 use bp_core::model::{Amount, Date};
 use bp_core::smart_tack::{self, Options, Proposal, SmartTack};
+use bp_core::{tr, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -42,7 +43,9 @@ impl SmartTackForm {
         let known = doc.bank_balance(doc.account);
         Self {
             account: doc.account,
-            balance: known.map_or(String::new(), |(a, _)| a.format(2, ',')),
+            balance: known.map_or(String::new(), |(a, _)| {
+                a.format(2, bp_core::i18n::decimal_separator())
+            }),
             date: known
                 .and_then(|(_, d)| d)
                 .unwrap_or_else(Date::today)
@@ -58,8 +61,9 @@ impl SmartTackForm {
 
     fn inputs(&self) -> Result<(Amount, Date), String> {
         let amount = bp_core::budget::parse_amount_input(&self.balance)
-            .ok_or("Indiquez le solde affiché par votre banque")?;
-        let date = Date::parse_fr(&self.date, Date::today()).ok_or("Date invalide (jj/mm/aaaa)")?;
+            .ok_or(tr!("Indiquez le solde affiché par votre banque"))?;
+        let date =
+            Date::parse_fr(&self.date, Date::today()).ok_or(tr!("Date invalide (jj/mm/aaaa)"))?;
         Ok((amount, date))
     }
 
@@ -127,15 +131,15 @@ impl SmartTackForm {
             ui.set_width(width);
             ui.set_height(height);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::CHECKS, pal.pointed, "Pointage intelligent");
+            crate::dialogs::header(ui, icon::CHECKS, pal.pointed, tr!("Pointage intelligent"));
             let account = &doc.document.accounts[self.account];
             let currency = account.currency.clone();
             ui.label(
-                RichText::new(
+                RichText::new(tr!(
                     "Indiquez le solde affiché par votre banque : BankPerfect cherche les \
                      opérations non pointées qu'elle a déjà passées, en tenant compte des délais \
-                     habituels (cartes, chèques).",
-                )
+                     habituels (cartes, chèques)."
+                ))
                 .color(pal.fg_dark),
             );
             ui.add_space(12.0);
@@ -144,10 +148,10 @@ impl SmartTackForm {
                 ui.label(RichText::new(format!("{}  {}", icon::BANK, account.name)).color(pal.muted));
             });
             ui.add_space(6.0);
-            ui_kit::row(ui, "Solde en banque", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Solde en banque"), LABEL_WIDTH, |ui| {
                 let field = ui.add(
                     crate::theme::field(&mut self.balance)
-                        .hint_text("0,00")
+                        .hint_text(tr!("0,00"))
                         .horizontal_align(egui::Align::Max)
                         .desired_width(160.0),
                 );
@@ -156,7 +160,7 @@ impl SmartTackForm {
                 }
                 ui.label(RichText::new(&currency).color(pal.muted));
                 ui.add_space(18.0);
-                ui.label(RichText::new("au").color(pal.fg_dark));
+                ui.label(RichText::new(tr!("au")).color(pal.fg_dark));
                 crate::datepicker::date_field(
                     ui,
                     "smart_tack_date",
@@ -167,9 +171,9 @@ impl SmartTackForm {
                 ui.add_space(12.0);
                 let busy = self.job.is_some();
                 let label = if busy {
-                    format!("{}  Recherche…", icon::HOURGLASS)
+                    format!("{}  {}", icon::HOURGLASS, tr!("Recherche…"))
                 } else {
-                    format!("{}  Chercher", icon::MAGNIFYING_GLASS)
+                    format!("{}  {}", icon::MAGNIFYING_GLASS, tr!("Chercher"))
                 };
                 if ui
                     .add_enabled(!busy, egui::Button::new(label).min_size(egui::vec2(120.0, 34.0)))
@@ -192,11 +196,12 @@ impl SmartTackForm {
                 ui.horizontal(|ui| {
                     ui.add_space(LABEL_WIDTH + 8.0);
                     ui.label(
-                        RichText::new(format!(
-                            "Solde pointé {} · écart {} · {} opération(s) non pointée(s) jusqu'à cette date",
+                        RichText::new(trn!(
+                            unpointed,
+                            "Solde pointé {1} · écart {2} · {0} opération non pointée jusqu'à cette date",
+                            "Solde pointé {1} · écart {2} · {0} opérations non pointées jusqu'à cette date",
                             money(pointed, &currency),
-                            money(Amount(amount.0 - pointed.0), &currency),
-                            unpointed
+                            money(Amount(amount.0 - pointed.0), &currency)
                         ))
                         .color(pal.muted),
                     );
@@ -217,7 +222,11 @@ impl SmartTackForm {
 
             let count = self.checked.iter().filter(|(_, c)| *c).count();
             crate::dialogs::footer(ui, |ui| {
-                let label = format!("{}  Pointer {count} opération(s)", icon::CHECK);
+                let label = format!(
+                    "{}  {}",
+                    icon::CHECK,
+                    trn!(count, "Pointer {} opération", "Pointer {} opérations")
+                );
                 if crate::dialogs::primary(ui, &label, count > 0).clicked() {
                     let lines: Vec<usize> = self
                         .checked
@@ -226,9 +235,9 @@ impl SmartTackForm {
                         .map(|&(i, _)| i)
                         .collect();
                     let n = doc.point_lines(self.account, &lines);
-                    outcome = Outcome::Done(format!("{n} opération(s) pointée(s)"));
+                    outcome = Outcome::Done(trn!(n, "{} opération pointée", "{} opérations pointées"));
                 }
-                if crate::dialogs::button(ui, "Fermer").clicked()
+                if crate::dialogs::button(ui, tr!("Fermer")).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
@@ -259,7 +268,7 @@ impl SmartTackForm {
         };
         let result = match &self.result {
             None if self.job.is_some() => {
-                message(ui, icon::HOURGLASS, pal.muted, "Recherche en cours…");
+                message(ui, icon::HOURGLASS, pal.muted, tr!("Recherche en cours…"));
                 return;
             }
             None => {
@@ -267,7 +276,7 @@ impl SmartTackForm {
                     ui,
                     icon::BANK,
                     pal.muted,
-                    "Saisissez le solde de votre relevé ou de votre application bancaire.",
+                    tr!("Saisissez le solde de votre relevé ou de votre application bancaire."),
                 );
                 return;
             }
@@ -278,13 +287,13 @@ impl SmartTackForm {
                 ui,
                 icon::CHECK_CIRCLE,
                 pal.positive,
-                "Le solde pointé correspond déjà au solde en banque.",
+                tr!("Le solde pointé correspond déjà au solde en banque."),
             ),
             SmartTack::Impossible { difference } => message(
                 ui,
                 icon::WARNING,
                 pal.warning,
-                &format!(
+                &tr!(
                     "Aucune combinaison d'opérations non pointées ne donne cet écart ({}).\n\
                      Une opération manque, est en double ou a un montant différent.",
                     money(difference, currency)
@@ -292,20 +301,21 @@ impl SmartTackForm {
             ),
             SmartTack::NoPlausible { difference, exists } => {
                 let detail = match exists {
-                    Some(true) => {
+                    Some(true) => tr!(
                         "Certaines combinaisons tombent juste, mais aucune ne ressemble à \
                          l'ordre de passage habituel : les proposer serait du hasard."
-                    }
-                    _ => "Le calcul complet a pris trop de temps.",
+                    ),
+                    _ => tr!("Le calcul complet a pris trop de temps."),
                 };
                 message(
                     ui,
                     icon::QUESTION,
                     pal.warning,
-                    &format!(
-                        "Aucune combinaison vraisemblable pour un écart de {}.\n{detail}\n\
+                    &tr!(
+                        "Aucune combinaison vraisemblable pour un écart de {}.\n{}\n\
                          Vérifiez d'abord les opérations manquantes ou les montants.",
-                        money(difference, currency)
+                        money(difference, currency),
+                        detail
                     ),
                 );
             }
@@ -324,17 +334,13 @@ impl SmartTackForm {
     ) {
         let pal = palette(ui);
         let account = &doc.document.accounts[self.account];
-        let until = |what: &str, none: &str, d: Option<Date>| match d {
-            Some(d) => format!("{what} jusqu'au {}", crate::settings::shared::date(d)),
-            None => format!("{what} : {none}"),
-        };
         ui.horizontal(|ui| {
             if list.len() > 1 {
                 let before = self.shown;
                 let options: Vec<(usize, String)> = list
                     .iter()
                     .enumerate()
-                    .map(|(k, _)| (k, format!("Proposition {}", k + 1)))
+                    .map(|(k, _)| (k, tr!("Proposition {}", k + 1)))
                     .collect();
                 let options: Vec<(usize, &str, &str, egui::Color32)> = options
                     .iter()
@@ -355,7 +361,7 @@ impl SmartTackForm {
                 if list[1].score - list[0].score < 0.5 {
                     ui_kit::pill(
                         ui,
-                        "Plusieurs combinaisons plausibles : vérifiez",
+                        tr!("Plusieurs combinaisons plausibles : vérifiez"),
                         pal.warning,
                     );
                 }
@@ -365,12 +371,20 @@ impl SmartTackForm {
             return;
         };
         ui.add_space(8.0);
-        let mut summary = format!(
-            "{} · {} · {}",
-            until("Autres opérations", "aucune", p.until),
-            until("cartes", "aucune", p.cards_until),
-            until("chèques", "aucun", p.cheques_until)
-        );
+        let date = |d: Option<Date>| d.map(crate::settings::shared::date);
+        let others = match date(p.until) {
+            Some(d) => tr!("Autres opérations jusqu'au {}", d),
+            None => tr!("Autres opérations : aucune").to_string(),
+        };
+        let cards = match date(p.cards_until) {
+            Some(d) => tr!("cartes jusqu'au {}", d),
+            None => tr!("cartes : aucune").to_string(),
+        };
+        let cheques = match date(p.cheques_until) {
+            Some(d) => tr!("chèques jusqu'au {}", d),
+            None => tr!("chèques : aucun").to_string(),
+        };
+        let mut summary = format!("{others} · {cards} · {cheques}");
         let names = |lines: &[usize]| -> String {
             lines
                 .iter()
@@ -382,10 +396,12 @@ impl SmartTackForm {
                 .join(", ")
         };
         if !p.held_back.is_empty() {
-            summary.push_str(&format!("\nPas encore passées : {}", names(&p.held_back)));
+            summary.push('\n');
+            summary.push_str(&tr!("Pas encore passées : {}", names(&p.held_back)));
         }
         if !p.early.is_empty() {
-            summary.push_str(&format!("\nDéjà passées : {}", names(&p.early)));
+            summary.push('\n');
+            summary.push_str(&tr!("Déjà passées : {}", names(&p.early)));
         }
         ui.label(RichText::new(summary).color(pal.fg_dark));
         ui.add_space(8.0);
@@ -398,15 +414,23 @@ impl SmartTackForm {
             .sum();
         let matches = checked_total == p.total;
         ui.horizontal(|ui| {
-            ui_kit::pill(ui, &format!("{} ligne(s)", p.lines.len()), pal.accent);
+            ui_kit::pill(
+                ui,
+                &trn!(p.lines.len(), "{} ligne", "{} lignes"),
+                pal.accent,
+            );
             let (text, color) = if matches {
                 (
-                    format!("{} total : solde en banque retrouvé", icon::CHECK),
+                    format!(
+                        "{} {}",
+                        icon::CHECK,
+                        tr!("total : solde en banque retrouvé")
+                    ),
                     pal.positive,
                 )
             } else {
                 (
-                    format!(
+                    tr!(
                         "total coché {} au lieu de {}",
                         money(checked_total, currency),
                         money(p.total, currency)

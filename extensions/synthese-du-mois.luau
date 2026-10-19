@@ -68,6 +68,17 @@ local function six_months(account, month)
 	return labels, spent, earned
 end
 
+-- Tiers à afficher : pour un transfert, le compte de l'autre ligne (le tiers
+-- enregistré, « Transfert vers le compte … », reste en français).
+local function payee(op)
+	local sister = if op.is_transfer then op:sister() else nil
+	if sister then
+		local to = if op.amount < 0 then tr("Vers ", "To ") else tr("Depuis ", "From ")
+		return to .. sister.account.name
+	end
+	return op.payee
+end
+
 bp.command({
 	id = "synthese",
 	title = tr("Synthèse du mois…", "Monthly summary…"),
@@ -88,11 +99,12 @@ bp.command({
 			size = "large",
 			state = { month = start:start_of_month() },
 			view = function(s)
+				local cur = { currency = account.currency }
 				local spent, earned, bars, biggest = summary(account, s.month)
 				local top = {}
 				for i = 1, math.min(5, #biggest) do
 					local op = biggest[i]
-					table.insert(top, { op.date, op.payee, ui.cell(op.category or "—", { color = "muted" }), ui.money(op.amount), id = op })
+					table.insert(top, { op.date, payee(op), ui.cell(op.category or "—", { color = "muted" }), ui.money(op.amount, cur), id = op })
 				end
 				local name = s.month.month_name -- dans la langue de l'interface
 				return {
@@ -109,19 +121,19 @@ bp.command({
 					ui.row({
 						ui.stat({
 							label = tr("Dépenses", "Expenses"),
-							value = ui.money(-spent),
+							value = ui.money(-spent, cur),
 							icon = "arrow-down-right",
 							color = "negative",
 						}),
 						ui.stat({
 							label = tr("Recettes", "Income"),
-							value = ui.money(earned),
+							value = ui.money(earned, cur),
 							icon = "arrow-up-right",
 							color = "positive",
 						}),
 						ui.stat({
 							label = tr("Solde du mois", "Net for the month"),
-							value = ui.money(earned - spent),
+							value = ui.money(earned - spent, cur),
 							icon = "scales",
 							color = if earned >= spent then "positive" else "negative",
 						}),
@@ -132,7 +144,7 @@ bp.command({
 							title = tr("Par catégorie", "By category"),
 							icon = "chart-bar-horizontal",
 							if #bars > 0
-								then ui.bars({ data = bars })
+								then ui.bars({ data = bars, currency = account.currency })
 								else ui.muted(tr("Aucune dépense ce mois-ci.", "No expenses this month.")),
 						}),
 						ui.section({

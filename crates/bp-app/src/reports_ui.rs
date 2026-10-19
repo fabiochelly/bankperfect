@@ -320,7 +320,7 @@ impl ReportsForm {
                         totals.total.upcoming,
                         totals.total.balance,
                     ] {
-                        amount_label(ui, AMOUNT, value, "€", true);
+                        amount_label(ui, AMOUNT, value, doc.main_currency(), true);
                     }
                 });
                 rows.push(vec![
@@ -500,17 +500,26 @@ impl ReportsForm {
             );
             ui_kit::pill(
                 ui,
-                &tr!("Pointé {}", money(statement.totals.pointed, "€")),
+                &tr!(
+                    "Pointé {}",
+                    money(statement.totals.pointed, doc.main_currency())
+                ),
                 pal.pointed,
             );
             ui_kit::pill(
                 ui,
-                &tr!("À venir {}", money(statement.totals.upcoming, "€")),
+                &tr!(
+                    "À venir {}",
+                    money(statement.totals.upcoming, doc.main_currency())
+                ),
                 pal.future,
             );
             ui_kit::pill(
                 ui,
-                &tr!("Solde {}", money(statement.totals.balance, "€")),
+                &tr!(
+                    "Solde {}",
+                    money(statement.totals.balance, doc.main_currency())
+                ),
                 pal.positive,
             );
         });
@@ -576,7 +585,12 @@ impl ReportsForm {
                             egui::Align::Min,
                             RichText::new(op.mode_label()).color(pal.fg_dark),
                         );
-                        ui_kit::cell(ui, payee_width, egui::Align::Min, RichText::new(&op.payee));
+                        ui_kit::cell(
+                            ui,
+                            payee_width,
+                            egui::Align::Min,
+                            RichText::new(bp_core::split::payee_label(&op.payee)),
+                        );
                         let color = if op.amount.is_negative() {
                             pal.negative
                         } else {
@@ -604,7 +618,7 @@ impl ReportsForm {
                 Cell::Text(op.date.to_string()),
                 Cell::Text(account.name.clone()),
                 Cell::Text(op.mode_label()),
-                Cell::Text(op.payee.clone()),
+                Cell::Text(bp_core::split::payee_label(&op.payee).into_owned()),
                 Cell::Text(op.details.clone()),
                 Cell::Money(op.amount.as_f64()),
                 Cell::Text(tack_letter(op.tack).into()),
@@ -713,6 +727,10 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
                                 .color(pal.muted),
                             Line::Row(row) if row.is_child => {
                                 RichText::new(format!("      {}", row.label)).color(pal.fg_dark)
+                            }
+                            Line::Row(row) if by_payee => {
+                                RichText::new(bp_core::split::payee_label(&row.label))
+                                    .family(crate::theme::medium())
                             }
                             Line::Row(row) => {
                                 RichText::new(&row.label).family(crate::theme::medium())
@@ -860,7 +878,7 @@ pub fn visible_rows(doc: &mut OpenDoc) -> Vec<Vec<Cell>> {
         rows.push(vec![
             Cell::Text(op.date.to_string()),
             Cell::Text(op.mode_label()),
-            Cell::Text(op.payee.clone()),
+            Cell::Text(bp_core::split::payee_label(&op.payee).into_owned()),
             Cell::Text(op.details.clone()),
             Cell::Text(
                 op.category

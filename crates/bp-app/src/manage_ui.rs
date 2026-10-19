@@ -5,7 +5,7 @@
 
 use bp_core::manage;
 use bp_core::model::{Amount, Mode, Payee, StandardMode};
-use bp_core::{tr, trn};
+use bp_core::{tr, trc, trn};
 use egui::{Color32, Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -229,7 +229,12 @@ impl ManageForm {
                         &[
                             (Tab::Accounts, icon::BANK, tr!("Comptes"), pal.accent),
                             (Tab::Categories, icon::TAG, tr!("Catégories"), pal.accent),
-                            (Tab::Payees, icon::ADDRESS_BOOK, tr!("Tiers"), pal.accent),
+                            (
+                                Tab::Payees,
+                                icon::ADDRESS_BOOK,
+                                trc!("onglet", "Tiers"),
+                                pal.accent,
+                            ),
                             (
                                 Tab::Modes,
                                 icon::CREDIT_CARD,
@@ -645,7 +650,10 @@ impl ManageForm {
             ui_kit::row(ui, tr!("N° de compte"), LABEL_WIDTH, |ui| {
                 field!(ui, "number", a.number, 240.0, |d, v| d.accounts[i].number =
                     v.to_uppercase());
-                if !a.number.is_empty() {
+                // Clé RIB (comptes français) : seulement si un code banque
+                // ou guichet est saisi.
+                let rib = !(a.bank_code.is_empty() && a.agency_code.is_empty());
+                if !a.number.is_empty() && rib {
                     match bp_core::calc::rib_key(&a.bank_code, &a.agency_code, &a.number) {
                         Some(key) => ui_kit::pill(ui, &tr!("clé RIB {}", key), pal.accent),
                         None => ui_kit::pill(ui, tr!("clé RIB incalculable"), pal.warning),

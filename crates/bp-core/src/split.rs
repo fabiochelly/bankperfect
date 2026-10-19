@@ -18,6 +18,19 @@ use crate::view::payee_without_ventilation;
 pub const TRANSFER_TO: &str = "Transfert vers le compte ";
 /// Début du tiers d'un transfert entrant.
 pub const TRANSFER_FROM: &str = "Transfert depuis le compte ";
+/// Tiers tel qu'affiché : celui d'un transfert est enregistré en français
+/// (« Transfert vers le compte Épargne », lien avec la ligne sœur et
+/// compatibilité des fichiers) et s'affiche dans la langue de l'interface.
+pub fn payee_label(payee: &str) -> std::borrow::Cow<'_, str> {
+    if let Some(account) = payee.strip_prefix(TRANSFER_TO) {
+        tr!("Transfert vers le compte {}", account).into()
+    } else if let Some(account) = payee.strip_prefix(TRANSFER_FROM) {
+        tr!("Transfert depuis le compte {}", account).into()
+    } else {
+        payee.into()
+    }
+}
+
 /// Champ supplémentaire : UID du compte de la ligne sœur.
 pub const SISTER_ACCOUNT_KEY: &str = "#sisterAccUid";
 /// Champ supplémentaire : UId de la ligne sœur.

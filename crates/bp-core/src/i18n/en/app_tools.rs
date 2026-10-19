@@ -144,7 +144,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Inclure la ligne d'en-tête", "Include the header row"),
     (
         "Remplacer « Chq XXX » par « Chèque émis »",
-        "Replace “Chq XXX” with “Cheque issued”",
+        "Replace “Chq XXX” with “Check”",
     ),
     (
         "Catégorie et sous-catégorie dans une colonne, séparées par",
@@ -261,6 +261,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Coordonnées bancaires", "Bank details"),
     ("Banque · guichet", "Bank · branch code"),
     ("N° de compte", "Account number"),
+    ("onglet|Tiers", "Payees"),
     ("clé RIB {}", "RIB key {}"),
     ("clé RIB incalculable", "RIB key cannot be computed"),
     ("valide", "valid"),
@@ -571,7 +572,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Pointage intelligent", "Smart clearing"),
     (
         "Indiquez le solde affiché par votre banque : BankPerfect cherche les opérations non pointées qu'elle a déjà passées, en tenant compte des délais habituels (cartes, chèques).",
-        "Enter the balance shown by your bank: BankPerfect looks for the uncleared transactions it has already processed, allowing for the usual delays (cards, cheques).",
+        "Enter the balance shown by your bank: BankPerfect looks for the uncleared transactions it has already processed, allowing for the usual delays (cards, checks).",
     ),
     ("Solde en banque", "Bank balance"),
     ("au", "as of"),
@@ -629,8 +630,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Autres opérations : aucune", "Other transactions: none"),
     ("cartes jusqu'au {}", "cards up to {}"),
     ("cartes : aucune", "cards: none"),
-    ("chèques jusqu'au {}", "cheques up to {}"),
-    ("chèques : aucun", "cheques: none"),
+    ("chèques jusqu'au {}", "checks up to {}"),
+    ("chèques : aucun", "checks: none"),
     ("Pas encore passées : {}", "Not processed yet: {}"),
     ("Déjà passées : {}", "Already processed: {}"),
     (

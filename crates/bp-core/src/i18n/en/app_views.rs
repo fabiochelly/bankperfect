@@ -83,15 +83,15 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Par tranche de montant", "By amount range"),
     (
         "Pointé, à venir et solde de chaque compte",
-        "Cleared, pending and balance of each account",
+        "Cleared, pending, total",
     ),
     ("Solde cumulé au fil du temps", "Running balance over time"),
     (
         "Où va l'argent, d'où il vient",
-        "Where money goes, where it comes from",
+        "Where money goes and comes from",
     ),
     ("Toutes années confondues", "All years combined"),
-    ("Carte, chèque, prélèvement…", "Card, cheque, direct debit…"),
+    ("Carte, chèque, prélèvement…", "Card, check, direct debit…"),
     ("Du 1er au 31", "From the 1st to the 31st"),
     (
         "Nombre d'opérations par montant",
@@ -216,7 +216,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Séparer en trois cartes", "Split into three cards"),
     ("{} stable {}", "{} stable {}"),
     ("prévu {} au {}", "forecast {} on {}"),
-    ("{} {} rapproché au {}", "{} {} reconciled as of {}"),
+    ("{} {} rapproché au {}", "{} {} reconciled {}"),
     ("aucun rapprochement", "no reconciliation yet"),
     ("sur 1 mois", "over 1 month"),
     ("sur 6 mois", "over 6 months"),

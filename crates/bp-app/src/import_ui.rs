@@ -871,7 +871,7 @@ impl ImportForm {
             .get(shown)
             .copied()
             .flatten()
-            .map_or("€".to_string(), |t| {
+            .map_or(doc.main_currency().to_string(), |t| {
                 doc.document.accounts[t].currency.clone()
             });
         let mut list_height = height - 110.0 - if self.show_rejected { 140.0 } else { 0.0 };

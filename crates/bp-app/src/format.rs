@@ -65,6 +65,18 @@ pub fn money_compact(amount: Amount, currency: &str) -> String {
     }
 }
 
+/// Icône Phosphor d'une devise (`€`, `$`, `£`…), sinon des billets.
+pub fn currency_icon(currency: &str) -> &'static str {
+    use egui_phosphor::regular as icon;
+    match currency.trim() {
+        "€" | "EUR" => icon::CURRENCY_EUR,
+        "$" | "USD" => icon::CURRENCY_DOLLAR,
+        "£" | "GBP" => icon::CURRENCY_GBP,
+        "¥" | "JPY" => icon::CURRENCY_JPY,
+        _ => icon::MONEY,
+    }
+}
+
 /// Nombre entier avec séparateur des milliers : `159 037`, `159,037`.
 pub fn count(n: usize) -> String {
     group(&n.to_string(), i18n::thousands_separator())

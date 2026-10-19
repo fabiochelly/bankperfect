@@ -472,14 +472,18 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     mode_badge(ui, doc, &op, &pal);
                 });
                 row.col(|ui| {
+                    // Le tiers d'un transfert est enregistré en français (lien
+                    // avec la ligne sœur) ; il s'affiche dans la langue choisie.
                     let (glyph, payee) = if let Some(rest) = op.payee.strip_prefix(AUTO_PREFIX) {
-                        (Some(icon::CLOCK), rest)
+                        (Some(icon::CLOCK), rest.to_string())
                     } else if op.payee.starts_with(TRANSFER_TO) {
-                        (Some(icon::ARROW_UP_RIGHT), op.payee.as_str())
+                        let label = bp_core::split::payee_label(&op.payee);
+                        (Some(icon::ARROW_UP_RIGHT), label.into_owned())
                     } else if op.payee.starts_with(TRANSFER_FROM) {
-                        (Some(icon::ARROW_DOWN_LEFT), op.payee.as_str())
+                        let label = bp_core::split::payee_label(&op.payee);
+                        (Some(icon::ARROW_DOWN_LEFT), label.into_owned())
                     } else {
-                        (None, op.payee.as_str())
+                        (None, op.payee.clone())
                     };
                     if let Some(glyph) = glyph {
                         let transfer = !op.payee.starts_with(AUTO_PREFIX);

@@ -195,7 +195,11 @@ impl SchedulerForm {
                             ui.painter().text(
                                 egui::pos2(rect.right() - 14.0, rect.top() + 16.0),
                                 egui::Align2::RIGHT_CENTER,
-                                money(s.amount, "€"),
+                                money(
+                                    s.amount,
+                                    account_index(doc, &s.account)
+                                        .map_or(doc.main_currency(), |i| &doc.document.accounts[i].currency),
+                                ),
                                 egui::FontId::new(13.5, crate::theme::medium()),
                                 color,
                             );

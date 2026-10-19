@@ -584,7 +584,7 @@ impl GroupForm {
                         ui,
                         &mut self.amount.0,
                         tr!("Montant"),
-                        icon::CURRENCY_EUR,
+                        crate::format::currency_icon(&document.accounts[doc.account].currency),
                         |ui, w| {
                             ui.add(
                                 crate::theme::field(&mut self.amount.1)

@@ -68,10 +68,12 @@ pub struct LoanForm {
     selected: Option<usize>,
     error: Option<String>,
     message: Option<String>,
+    /// Devise des montants (celle du fichier ouvert, sinon l'euro).
+    currency: String,
 }
 
 impl LoanForm {
-    pub fn new() -> Self {
+    pub fn new(currency: &str) -> Self {
         let today = chrono::Local::now().date_naive();
         let (year, month) = if today.month() == 12 {
             (today.year() + 1, 1)
@@ -96,6 +98,7 @@ impl LoanForm {
             selected: None,
             error: None,
             message: None,
+            currency: currency.to_string(),
         };
         form.solve(LoanUnknown::Payment);
         form
@@ -244,7 +247,7 @@ impl LoanForm {
                 self.start_year = y;
                 self.start_month = m;
                 self.loan = Some(next);
-                self.message = Some(tr!("Reprise après l'échéance n° {} : {} restant dû", row.period, money(row.remaining)));
+                self.message = Some(tr!("Reprise après l'échéance n° {} : {} restant dû", row.period, money(row.remaining, &self.currency)));
             }
             if let Some(error) = &self.error {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
@@ -500,7 +503,7 @@ impl LoanForm {
                 ui,
                 tile,
                 tr!("Mensualité"),
-                &money(loan.payment),
+                &money(loan.payment, &self.currency),
                 pal.accent,
                 pal,
             );
@@ -509,7 +512,9 @@ impl LoanForm {
                 ui,
                 tile,
                 tr!("Coût total"),
-                &cost.map(|c| money(c.total_paid)).unwrap_or_default(),
+                &cost
+                    .map(|c| money(c.total_paid, &self.currency))
+                    .unwrap_or_default(),
                 pal.fg,
                 pal,
             );
@@ -517,7 +522,9 @@ impl LoanForm {
                 ui,
                 tile,
                 tr!("Intérêts"),
-                &cost.map(|c| money(c.interest)).unwrap_or_default(),
+                &cost
+                    .map(|c| money(c.interest, &self.currency))
+                    .unwrap_or_default(),
                 pal.warning,
                 pal,
             );
@@ -562,9 +569,9 @@ impl LoanForm {
         ui.add_space(10.0);
         let chart_h = (height * 0.28).clamp(140.0, 240.0);
         let (chart, _) = ui.allocate_exact_size(vec2(width, chart_h), egui::Sense::hover());
-        remaining_chart(ui, chart, &loan, &rows, pal);
+        remaining_chart(ui, chart, &loan, &rows, &self.currency, pal);
         ui.add_space(12.0);
-        amortization_table(ui, &rows, width, pal)
+        amortization_table(ui, &rows, width, &self.currency, pal)
     }
 }
 
@@ -574,6 +581,7 @@ fn remaining_chart(
     rect: egui::Rect,
     loan: &Loan,
     rows: &[AmortizationRow],
+    currency: &str,
     pal: &Palette,
 ) {
     if rows.is_empty() {
@@ -675,13 +683,17 @@ fn remaining_chart(
         );
         let (c, i) = points[k];
         let text = if k == 0 {
-            tr!("Au départ : capital {} · intérêts {}", money(c), money(i))
+            tr!(
+                "Au départ : capital {} · intérêts {}",
+                money(c, currency),
+                money(i, currency)
+            )
         } else {
             tr!(
                 "Après l'échéance {} : capital {} · intérêts {}",
                 k,
-                money(c),
-                money(i)
+                money(c, currency),
+                money(i, currency)
             )
         };
         painter.text(
@@ -698,6 +710,7 @@ fn amortization_table(
     ui: &mut egui::Ui,
     rows: &[AmortizationRow],
     width: f32,
+    currency: &str,
     pal: &Palette,
 ) -> Option<AmortizationRow> {
     const ROW: f32 = 28.0;
@@ -787,25 +800,25 @@ fn amortization_table(
                     ui,
                     amount_w,
                     egui::Align::Max,
-                    RichText::new(money(r.payment)),
+                    RichText::new(money(r.payment, currency)),
                 );
                 ui_kit::cell(
                     ui,
                     amount_w,
                     egui::Align::Max,
-                    RichText::new(money(r.principal)).color(pal.accent),
+                    RichText::new(money(r.principal, currency)).color(pal.accent),
                 );
                 ui_kit::cell(
                     ui,
                     amount_w,
                     egui::Align::Max,
-                    RichText::new(money(r.interest)).color(pal.warning),
+                    RichText::new(money(r.interest, currency)).color(pal.warning),
                 );
                 ui_kit::cell(
                     ui,
                     amount_w,
                     egui::Align::Max,
-                    RichText::new(money(r.remaining)).family(crate::theme::medium()),
+                    RichText::new(money(r.remaining, currency)).family(crate::theme::medium()),
                 );
             }
         });
@@ -962,10 +975,10 @@ fn percent(v: f64) -> String {
     format!("{v:.1}").replace('.', &i18n::decimal_separator().to_string())
 }
 
-fn money(v: f64) -> String {
+fn money(v: f64, currency: &str) -> String {
     crate::format::money(
         bp_core::model::Amount::from_cents((v * 100.0).round() as i64),
-        "€",
+        currency,
     )
 }
 
@@ -1039,7 +1052,7 @@ mod tests {
             assert_eq!(duration(240.0), "20 years");
             assert_eq!(duration(13.0), "1 year 1 month");
             assert_eq!(duration(26.0), "2 years 2 months");
-            let form = LoanForm::new();
+            let form = LoanForm::new("€");
             assert_eq!(form.value(LoanUnknown::Capital), Some(150000.0));
             assert_eq!(form.value(LoanUnknown::Rate), Some(3.5));
             let loan = form.loan.expect("mensualité calculée");
@@ -1050,7 +1063,7 @@ mod tests {
 
     #[test]
     fn default_simulation_computes_the_payment() {
-        let form = LoanForm::new();
+        let form = LoanForm::new("€");
         let loan = form.loan.expect("mensualité calculée");
         assert!((loan.payment - 869.94).abs() < 0.01, "{}", loan.payment);
     }

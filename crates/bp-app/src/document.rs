@@ -452,6 +452,16 @@ impl OpenDoc {
         &self.document.accounts[self.account]
     }
 
+    /// Devise principale du fichier (celle du compte par défaut), pour les
+    /// montants tous comptes confondus.
+    pub fn main_currency(&self) -> &str {
+        let accounts = &self.document.accounts;
+        accounts
+            .get(self.document.default_account)
+            .or_else(|| accounts.first())
+            .map_or("€", |a| a.currency.as_str())
+    }
+
     pub fn operation(&self, index: usize) -> &Operation {
         &self.current_account().operations[index]
     }

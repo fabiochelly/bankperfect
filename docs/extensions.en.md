@@ -4,7 +4,7 @@
 
 Extensions add commands, windows, import formats and automations to BankPerfect. They are written in [Luau](https://luau.org), a modern, fast, typed Lua (the one used by Roblox), and they are displayed with the application's own components: an extension window looks exactly like a BankPerfect window, in every theme.
 
-![An extension window](captures/extensions-doublons.png)
+![An extension window](captures/en/extensions-doublons.png)
 
 - [Getting started](#getting-started)
 - [Installing, enabling, reloading](#installing-enabling-reloading)
@@ -72,7 +72,7 @@ An extension is either:
 
 The extensions folder is in the BankPerfect configuration folder: `~/.config/bankperfect/extensions` on Linux, `~/Library/Application Support/net.chelly.bankperfect/extensions` on macOS, `%APPDATA%\chelly\bankperfect\config\extensions` on Windows.
 
-![Managing extensions](captures/extensions-gestion.png)
+![Managing extensions](captures/en/extensions-gestion.png)
 
 The **Manage extensions** window lists the extensions found, their commands, shortcuts and locations, their import formats, the events they listen to and the permissions they ask for. The **Enabled** checkbox turns an extension off without deleting it. A loading error is shown there, with the offending line; the **log** shows the last lines written by `print`.
 
@@ -159,7 +159,7 @@ bp.command({
 | `"grid"` | right-click on transactions in the grid |
 | `"account"` | right-click on an account in the accounts panel |
 
-![Right-click on transactions](captures/extensions-clic-droit.png)
+![Right-click on transactions](captures/en/extensions-clic-droit.png)
 
 - A list puts the command in several places: `menu = { "reports", "account" }`.
 - The **Extensions** menu only keeps the commands that are placed nowhere else (plus the extension management commands). The command palette (Ctrl+K) always offers every command.
@@ -458,7 +458,7 @@ bp.ui.toast("Done")  -- unobtrusive message at the bottom of the window, without
 
 `bp.ui.form` displays an input window and returns the values, or `nil` if the user cancels:
 
-![Form](captures/extensions-formulaire.png)
+![Form](captures/en/extensions-formulaire.png)
 
 ```lua
 local v = bp.ui.form({
@@ -572,7 +572,7 @@ Colors: `"accent"`, `"positive"`, `"negative"`, `"warning"`, `"muted"` (they fol
 
 `ui.chart` draws a chart like those of **Reports › Charts**, in the theme's colors, with a legend, axis labels and tooltips on hover:
 
-![Chart in an extension window](captures/extensions-synthese.png)
+![Chart in an extension window](captures/en/extensions-synthese.png)
 
 ```lua
 -- Several series: one label per point, one list of values per series.
@@ -681,7 +681,7 @@ end)
 
 An extension can teach BankPerfect to read a bank's statement. The extension reads the file; the preview, duplicate detection and choice of account and categories are those of **File › Import**:
 
-![Import through an extension](captures/extensions-import.png)
+![Import through an extension](captures/en/extensions-import.png)
 
 ```lua
 bp.importer({

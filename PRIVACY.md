@@ -1,3 +1,5 @@
+**Français** · [English](PRIVACY.en.md)
+
 # Confidentialité
 
 BankPerfect est un logiciel installé sur votre ordinateur. Il n'a ni compte
@@ -55,6 +57,8 @@ Fabio Chelly — fabio@chelly.net
 ---
 
 # Privacy
+
+Summary; full English version: [PRIVACY.en.md](PRIVACY.en.md).
 
 BankPerfect is desktop software. It has no user accounts, no server that
 receives your data and no analytics. Your accounts and transactions are

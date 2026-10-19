@@ -6,6 +6,7 @@ use bp_core::FileFormat;
 use bp_core::file;
 use bp_core::format_v6::{Protection, Unlock};
 use bp_core::model::{Amount, Tack};
+use bp_core::{tr, trn};
 use egui::{Align, Key, KeyboardShortcut, Layout, Modifiers, RichText};
 use egui_phosphor::regular as icon;
 
@@ -74,7 +75,10 @@ const SHORTCUT_MARK_DATES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::N
 const SHORTCUT_CUT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::X);
 const SHORTCUT_COPY: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::C);
 const SHORTCUT_PASTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::V);
-const LOCKED_MESSAGE: &str = "Les lignes rapprochées sont verrouillées (menu Opérations)";
+/// Message des lignes rapprochées verrouillées.
+fn locked_message() -> String {
+    tr!("Les lignes rapprochées sont verrouillées (menu Opérations)").to_string()
+}
 const SHORTCUT_CALC: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::C);
 
@@ -287,7 +291,7 @@ impl BankPerfectApp {
         if entry.needs == bp_ext::Needs::Selection
             && self.doc.as_ref().is_none_or(|d| d.selection.is_empty())
         {
-            self.toast = Some(("Sélectionnez d'abord des lignes".into(), now + 3.0));
+            self.toast = Some((tr!("Sélectionnez d'abord des lignes").into(), now + 3.0));
             return;
         }
         let mut context = self.doc.as_mut().map(|d| d.extension_context(None));
@@ -326,7 +330,7 @@ impl BankPerfectApp {
             let data = match std::fs::read(&path) {
                 Ok(data) => data,
                 Err(e) => {
-                    self.error = Some(format!("Lecture impossible : {e}"));
+                    self.error = Some(tr!("Lecture impossible : {}", e));
                     return;
                 }
             };
@@ -446,7 +450,7 @@ impl BankPerfectApp {
                 ManagerAction::Reload => {
                     self.extensions.load_all(&self.settings.disabled_extensions);
                     crate::extensions::refresh(&self.extensions);
-                    self.toast = Some(("Extensions rechargées".into(), now + 3.0));
+                    self.toast = Some((tr!("Extensions rechargées").into(), now + 3.0));
                 }
                 ManagerAction::OpenFolder => {
                     let _ = std::fs::create_dir_all(self.extensions.dir());
@@ -458,9 +462,8 @@ impl BankPerfectApp {
                     crate::extensions::refresh(&self.extensions);
                     self.toast = Some((
                         match n {
-                            0 => "Les exemples sont déjà installés".to_string(),
-                            1 => "1 exemple installé".to_string(),
-                            n => format!("{n} exemples installés"),
+                            0 => tr!("Les exemples sont déjà installés").to_string(),
+                            n => trn!(n, "{} exemple installé", "{} exemples installés"),
                         },
                         now + 4.0,
                     ));
@@ -473,7 +476,7 @@ impl BankPerfectApp {
         if !self.ext_errors.is_empty()
             && dialogs::alert(
                 ctx,
-                "Erreur dans une extension",
+                tr!("Erreur dans une extension"),
                 &self.ext_errors.join("\n\n"),
             )
         {
@@ -494,8 +497,8 @@ impl BankPerfectApp {
             Pending::Open(Some(path)) => self.open_path(path),
             Pending::Open(None) => {
                 let mut dialog = rfd::FileDialog::new()
-                    .set_title("Ouvrir un fichier BankPerfect")
-                    .add_filter("Comptes BankPerfect", &["bp", "bp0"]);
+                    .set_title(tr!("Ouvrir un fichier BankPerfect"))
+                    .add_filter(tr!("Comptes BankPerfect"), &["bp", "bp0"]);
                 if let Some(dir) = &self.settings.files_dir {
                     dialog = dialog.set_directory(dir);
                 }
@@ -519,7 +522,7 @@ impl BankPerfectApp {
         let data = match std::fs::read(&path) {
             Ok(data) => data,
             Err(e) => {
-                return self.error = Some(format!("Impossible de lire {} : {e}", path.display()));
+                return self.error = Some(tr!("Impossible de lire {} : {}", path.display(), e));
             }
         };
         // Ouverture directe : un fichier protégé répond `PasswordRequired`
@@ -592,7 +595,7 @@ impl BankPerfectApp {
             }
             Err(bp_core::Error::WrongPassword) => {
                 if let Some(prompt) = &mut self.prompt {
-                    prompt.error = Some("Mot de passe ou clé de secours incorrect".into());
+                    prompt.error = Some(tr!("Mot de passe ou clé de secours incorrect").into());
                     prompt.input.clear();
                 }
             }
@@ -611,19 +614,20 @@ impl BankPerfectApp {
             &self.settings.backup_dir(),
             self.settings.backup_keep,
         ) {
-            self.error = Some(format!(
-                "Sauvegarde .bp0 impossible : {e}. Fichier non enregistré."
+            self.error = Some(tr!(
+                "Sauvegarde .bp0 impossible : {}. Fichier non enregistré.",
+                e
             ));
             return;
         }
         match save_document(doc) {
             Ok(recovery) => {
                 self.recovery_phrase = recovery;
-                self.toast = Some((format!("{} enregistré", doc.file_name()), now + 3.0));
+                self.toast = Some((tr!("{} enregistré", doc.file_name()), now + 3.0));
                 doc.ext_events
                     .push((bp_ext::Event::AfterSave, Vec::new(), false));
             }
-            Err(e) => self.error = Some(format!("Enregistrement impossible : {e}")),
+            Err(e) => self.error = Some(tr!("Enregistrement impossible : {}", e)),
         }
     }
 
@@ -974,7 +978,7 @@ impl BankPerfectApp {
                 crate::theme::set_translucent(ctx, on);
                 if on && !crate::theme::surface_transparent() {
                     self.toast = Some((
-                        "Le fond translucide sera actif au prochain démarrage".into(),
+                        tr!("Le fond translucide sera actif au prochain démarrage").into(),
                         now + 5.0,
                     ));
                 }
@@ -1033,8 +1037,8 @@ impl BankPerfectApp {
                     }
                 }
                 let mut dialog = rfd::FileDialog::new()
-                    .set_title("Fichier d'opérations à importer")
-                    .add_filter("Relevés bancaires", &statements);
+                    .set_title(tr!("Fichier d'opérations à importer"))
+                    .add_filter(tr!("Relevés bancaires"), &statements);
                 if let Some(dir) = &self.settings.export_dir {
                     dialog = dialog.set_directory(dir);
                 }
@@ -1095,7 +1099,7 @@ impl BankPerfectApp {
             }
             Command::Delete => {
                 if doc.selection_locked() {
-                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                    self.toast = Some((locked_message(), now + 4.0));
                 } else {
                     self.confirm_delete = !doc.selection.is_empty();
                 }
@@ -1118,13 +1122,13 @@ impl BankPerfectApp {
             }
             Command::CutLines => {
                 if doc.selection_locked() {
-                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                    self.toast = Some((locked_message(), now + 4.0));
                 } else if !doc.selection.is_empty() {
                     self.clipboard = doc.copy_selection();
                     doc.delete_selection();
                     self.editor = None;
                     self.toast = Some((
-                        format!("{} ligne(s) coupée(s)", self.clipboard.len()),
+                        trn!(self.clipboard.len(), "{} ligne coupée", "{} lignes coupées"),
                         now + 3.0,
                     ));
                 }
@@ -1133,7 +1137,7 @@ impl BankPerfectApp {
                 if !doc.selection.is_empty() {
                     self.clipboard = doc.copy_selection();
                     self.toast = Some((
-                        format!("{} ligne(s) copiée(s)", self.clipboard.len()),
+                        trn!(self.clipboard.len(), "{} ligne copiée", "{} lignes copiées"),
                         now + 3.0,
                     ));
                 }
@@ -1142,7 +1146,7 @@ impl BankPerfectApp {
                 let n = doc.paste(&self.clipboard);
                 if n > 0 {
                     self.editor = None;
-                    self.toast = Some((format!("{n} ligne(s) collée(s)"), now + 3.0));
+                    self.toast = Some((trn!(n, "{} ligne collée", "{} lignes collées"), now + 3.0));
                 }
             }
             Command::AddToPayees => {
@@ -1152,7 +1156,7 @@ impl BankPerfectApp {
             }
             Command::SetMarkDate => {
                 if doc.selection_locked() {
-                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                    self.toast = Some((locked_message(), now + 4.0));
                 } else if !doc.selection.is_empty() {
                     self.tool = Some(Tool::MarkDate(crate::tools::MarkDateForm::new(doc)));
                 }
@@ -1282,7 +1286,7 @@ impl BankPerfectApp {
             Command::SplitOperation => {
                 if let Some(&index) = doc.selection.iter().next() {
                     if doc.locked && doc.operation(index).tack == Tack::Reconciled {
-                        self.toast = Some((LOCKED_MESSAGE.into(), ctx.input(|i| i.time) + 4.0));
+                        self.toast = Some((locked_message(), ctx.input(|i| i.time) + 4.0));
                     } else {
                         self.tool = Some(Tool::Split(Box::new(
                             crate::transfer_ui::SplitForm::new(doc, index),
@@ -1370,10 +1374,10 @@ impl BankPerfectApp {
     fn save_as(&mut self) {
         let Some(doc) = &self.doc else { return };
         let dialog = rfd::FileDialog::new()
-            .set_title("Enregistrer le fichier de comptes sous…")
+            .set_title(tr!("Enregistrer le fichier de comptes sous…"))
             .set_directory(doc.path.parent().unwrap_or(Path::new(".")))
             .set_file_name(doc.file_name())
-            .add_filter("Comptes BankPerfect", &["bp"]);
+            .add_filter(tr!("Comptes BankPerfect"), &["bp"]);
         self.ask(crate::file_picker::Kind::Save, dialog, Self::save_as_to);
     }
 
@@ -1387,7 +1391,7 @@ impl BankPerfectApp {
         if doc.format == FileFormat::V5
             && let Err(e) = backup_v5_original(&doc.path)
         {
-            self.error = Some(format!("Copie de l'original impossible : {e}"));
+            self.error = Some(tr!("Copie de l'original impossible : {}", e));
             return;
         }
         doc.format = FileFormat::V6;
@@ -1399,7 +1403,7 @@ impl BankPerfectApp {
     /// Enregistre une copie (clé USB, disque externe…) sans changer de
     /// fichier courant : `<nom>_AAAAMMJJ.bp` dans le dossier choisi.
     fn save_copy(&mut self) {
-        let dialog = rfd::FileDialog::new().set_title("Dossier où enregistrer une copie");
+        let dialog = rfd::FileDialog::new().set_title(tr!("Dossier où enregistrer une copie"));
         self.ask(crate::file_picker::Kind::Folder, dialog, Self::save_copy_to);
     }
 
@@ -1426,12 +1430,9 @@ impl BankPerfectApp {
                 if recovery.is_some() {
                     self.recovery_phrase = recovery;
                 }
-                self.toast = Some((
-                    format!("Copie enregistrée : {}", target.display()),
-                    now + 5.0,
-                ));
+                self.toast = Some((tr!("Copie enregistrée : {}", target.display()), now + 5.0));
             }
-            Err(e) => self.error = Some(format!("Copie impossible : {e}")),
+            Err(e) => self.error = Some(tr!("Copie impossible : {}", e)),
         }
     }
 
@@ -1445,7 +1446,7 @@ impl BankPerfectApp {
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
         let dialog = rfd::FileDialog::new()
-            .set_title("Exporter le fichier complet en JSON")
+            .set_title(tr!("Exporter le fichier complet en JSON"))
             .set_directory(crate::settings::shared::export_dir(
                 doc.path.parent().unwrap_or(Path::new(".")),
             ))
@@ -1464,9 +1465,9 @@ impl BankPerfectApp {
             .and_then(|bytes| bp_core::format_v6::write_atomic(&path, &bytes));
         match result {
             Ok(()) => {
-                self.toast = Some((format!("Fichier {} créé", path.display()), now + 4.0));
+                self.toast = Some((tr!("Fichier {} créé", path.display()), now + 4.0));
             }
-            Err(e) => self.error = Some(format!("Export JSON impossible : {e}")),
+            Err(e) => self.error = Some(tr!("Export JSON impossible : {}", e)),
         }
     }
 
@@ -1474,7 +1475,7 @@ impl BankPerfectApp {
     /// de passe) à l'emplacement choisi, puis l'ouvre.
     fn import_json(&mut self) {
         let mut dialog = rfd::FileDialog::new()
-            .set_title("Export JSON à importer")
+            .set_title(tr!("Export JSON à importer"))
             .add_filter("JSON", &["json"]);
         if let Some(dir) = &self.settings.export_dir {
             dialog = dialog.set_directory(dir);
@@ -1492,16 +1493,16 @@ impl BankPerfectApp {
             .and_then(|data| bp_core::json::from_json(&data))
         {
             Ok(document) => document,
-            Err(e) => return self.error = Some(format!("Import impossible : {e}")),
+            Err(e) => return self.error = Some(tr!("Import impossible : {}", e)),
         };
         let stem = source
             .file_stem()
             .map(|s| s.to_string_lossy().into_owned())
             .unwrap_or_default();
         let mut dialog = rfd::FileDialog::new()
-            .set_title("Enregistrer le fichier de comptes importé")
+            .set_title(tr!("Enregistrer le fichier de comptes importé"))
             .set_file_name(format!("{stem}.bp"))
-            .add_filter("Comptes BankPerfect", &["bp"]);
+            .add_filter(tr!("Comptes BankPerfect"), &["bp"]);
         if let Some(dir) = &self.settings.files_dir {
             dialog = dialog.set_directory(dir);
         }
@@ -1515,17 +1516,17 @@ impl BankPerfectApp {
             path.set_extension("bp");
         }
         if path.exists() {
-            self.error = Some("Ce fichier existe déjà : choisissez un autre nom.".into());
+            self.error = Some(tr!("Ce fichier existe déjà : choisissez un autre nom.").into());
             return;
         }
         if let Err(e) = Protection::none().and_then(|p| file::save(&path, &document, &p)) {
-            self.error = Some(format!("Enregistrement impossible : {e}"));
+            self.error = Some(tr!("Enregistrement impossible : {}", e));
             return;
         }
         self.open_path(path);
         if let Some(doc) = &mut self.doc {
             doc.notice = Some(
-                "Export JSON importé. Le fichier n'a pas de mot de passe (Fichier › Protection du fichier)"
+                tr!("Export JSON importé. Le fichier n'a pas de mot de passe (Fichier › Protection du fichier)")
                     .into(),
             );
         }
@@ -1534,8 +1535,8 @@ impl BankPerfectApp {
     /// Supprimer un fichier de comptes : il part à la corbeille du système.
     fn delete_file(&mut self) {
         let mut dialog = rfd::FileDialog::new()
-            .set_title("Fichier de comptes à mettre à la corbeille")
-            .add_filter("Comptes BankPerfect", &["bp"]);
+            .set_title(tr!("Fichier de comptes à mettre à la corbeille"))
+            .add_filter(tr!("Comptes BankPerfect"), &["bp"]);
         if let Some(dir) = self.settings.files_dir.clone().or_else(|| {
             self.doc
                 .as_ref()
@@ -1549,7 +1550,8 @@ impl BankPerfectApp {
     fn trash_file(&mut self, path: PathBuf) {
         let same = |a: &Path, b: &Path| a.canonicalize().ok() == b.canonicalize().ok();
         if self.doc.as_ref().is_some_and(|d| same(&d.path, &path)) {
-            self.error = Some("Ce fichier est actuellement ouvert : fermez-le d'abord.".into());
+            self.error =
+                Some(tr!("Ce fichier est actuellement ouvert : fermez-le d'abord.").into());
             return;
         }
         self.confirm_trash = Some(path);
@@ -1573,18 +1575,23 @@ impl BankPerfectApp {
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
         let titles: &[&str] = if self.doc.is_some() {
             &[
-                "Fichier",
-                "Édition",
-                "Affichage",
-                "Comptes",
-                "Opérations",
-                "Rapports",
-                "Outils",
-                "Extensions",
-                "Aide",
+                tr!("Fichier"),
+                tr!("Édition"),
+                tr!("Affichage"),
+                tr!("Comptes"),
+                tr!("Opérations"),
+                tr!("Rapports"),
+                tr!("Outils"),
+                tr!("Extensions"),
+                tr!("Aide"),
             ]
         } else {
-            &["Fichier", "Outils", "Extensions", "Aide"]
+            &[
+                tr!("Fichier"),
+                tr!("Outils"),
+                tr!("Extensions"),
+                tr!("Aide"),
+            ]
         };
         let (opened, command) = ui
             .horizontal(|ui| {
@@ -1720,7 +1727,7 @@ impl BankPerfectApp {
                 menu::submenu(
                     ui,
                     Some(icon::CLOCK_COUNTER_CLOCKWISE),
-                    "Fichiers récents",
+                    tr!("Fichiers récents"),
                     |ui| {
                         for (i, name) in recent.iter().enumerate() {
                             if menu::item(ui, Some(icon::FILE), name, None).clicked() {
@@ -1743,7 +1750,7 @@ impl BankPerfectApp {
                 menu::separator(ui);
                 self.menu_command(ui, Import);
                 self.menu_command(ui, BankSync);
-                menu::submenu(ui, Some(icon::EXPORT), "Exporter", |ui| {
+                menu::submenu(ui, Some(icon::EXPORT), tr!("Exporter"), |ui| {
                     self.menu_command(ui, ExportXlsx);
                     self.menu_command(ui, ExportCsv);
                     self.menu_command(ui, ExportQif);
@@ -1806,14 +1813,14 @@ impl BankPerfectApp {
                     menu::toggle(
                         ui,
                         &mut doc.filters.hide_old_lines,
-                        "Cacher les lignes inutiles",
+                        tr!("Cacher les lignes inutiles"),
                         Some("Ctrl+H"),
                     );
                     let mut marks = doc.show_mark_dates;
                     if menu::toggle(
                         ui,
                         &mut marks,
-                        "Afficher les dates de pointage",
+                        tr!("Afficher les dates de pointage"),
                         Some("F11"),
                     )
                     .clicked()
@@ -1824,7 +1831,7 @@ impl BankPerfectApp {
                 if menu::toggle(
                     ui,
                     &mut self.settings.entry_at_bottom,
-                    "Saisie en bas de la fenêtre",
+                    tr!("Saisie en bas de la fenêtre"),
                     None,
                 )
                 .clicked()
@@ -1838,44 +1845,46 @@ impl BankPerfectApp {
                 self.menu_command(ui, ClearFilters);
                 menu::separator(ui);
                 let mut panel = self.settings.show_balance_panel;
-                if menu::toggle(ui, &mut panel, "Panneau des soldes", None).clicked() {
+                if menu::toggle(ui, &mut panel, tr!("Panneau des soldes"), None).clicked() {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleBalancePanel);
                 }
                 let mut forecast = self.settings.show_forecast;
-                if menu::toggle(ui, &mut forecast, "Solde prévisionnel", None).clicked() {
+                if menu::toggle(ui, &mut forecast, tr!("Solde prévisionnel"), None).clicked() {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleForecast);
                 }
                 let mut split = self.settings.balance_cards;
-                if menu::toggle(ui, &mut split, "Soldes en trois cartes", None).clicked() {
+                if menu::toggle(ui, &mut split, tr!("Soldes en trois cartes"), None).clicked() {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleBalanceCards);
                 }
                 let mut column_filters = self.settings.show_column_filters;
-                if menu::toggle(ui, &mut column_filters, "Filtres de colonnes", None).clicked() {
+                if menu::toggle(ui, &mut column_filters, tr!("Filtres de colonnes"), None).clicked()
+                {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleColumnFilters);
                 }
                 let mut river = self.settings.balance_river;
-                if menu::toggle(ui, &mut river, "Courbe du solde", None).clicked() {
+                if menu::toggle(ui, &mut river, tr!("Courbe du solde"), None).clicked() {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleBalanceRiver);
                 }
                 menu::separator(ui);
-                menu::heading(ui, "Thème");
+                menu::heading(ui, tr!("Thème"));
                 let current = ui.ctx().options(|o| o.theme_preference);
                 for (preference, label) in [
-                    (egui::ThemePreference::Dark, "Sombre"),
-                    (egui::ThemePreference::Light, "Clair"),
-                    (egui::ThemePreference::System, "Suivre le système"),
+                    (egui::ThemePreference::Dark, tr!("Sombre")),
+                    (egui::ThemePreference::Light, tr!("Clair")),
+                    (egui::ThemePreference::System, tr!("Suivre le système")),
                 ] {
                     if menu::choice(ui, current == preference, label).clicked() {
                         let ctx = ui.ctx().clone();
                         self.execute(&ctx, Theme(preference));
                     }
                 }
-                for (dark, label) in [(true, "Thèmes sombres"), (false, "Thèmes clairs")] {
+                for (dark, label) in [(true, tr!("Thèmes sombres")), (false, tr!("Thèmes clairs"))]
+                {
                     let selected = if dark {
                         self.settings.dark_theme.clone()
                     } else {
@@ -1906,7 +1915,7 @@ impl BankPerfectApp {
                 if menu::toggle(
                     ui,
                     &mut translucent,
-                    "Fond translucide (flou du bureau)",
+                    tr!("Fond translucide (flou du bureau)"),
                     None,
                 )
                 .clicked()
@@ -1916,7 +1925,7 @@ impl BankPerfectApp {
                 }
                 let current = self.settings.language();
                 let mut chosen = None;
-                menu::submenu(ui, Some(icon::TRANSLATE), "Langue", |ui| {
+                menu::submenu(ui, Some(icon::TRANSLATE), tr!("Langue"), |ui| {
                     for lang in bp_core::i18n::Lang::ALL {
                         if menu::choice(ui, current == lang, lang.native_name()).clicked() {
                             chosen = Some(lang);
@@ -1972,8 +1981,13 @@ impl BankPerfectApp {
                 self.menu_command(ui, ReconcileAll);
                 self.menu_command(ui, SmartTack);
                 let mut locked = self.settings.lock_reconciled;
-                if menu::toggle(ui, &mut locked, "Verrouiller les lignes rapprochées", None)
-                    .clicked()
+                if menu::toggle(
+                    ui,
+                    &mut locked,
+                    tr!("Verrouiller les lignes rapprochées"),
+                    None,
+                )
+                .clicked()
                 {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleLock);
@@ -2065,7 +2079,7 @@ impl BankPerfectApp {
     /// portent sur les lignes filtrées, une mention le dit à sa gauche quand
     /// il y a la place, sinon l'infobulle du bouton.
     fn filters_menu(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
-        const NOTICE: &str = "soldes calculés sur les lignes filtrées";
+        let notice_text = tr!("soldes calculés sur les lignes filtrées");
         let mut command = None;
         let pal = palette(ui);
         let active = doc.filters.is_active();
@@ -2078,11 +2092,11 @@ impl BankPerfectApp {
                 .size()
                 .x
         };
-        let full = format!("{}  Filtres  {}", icon::FUNNEL, icon::CARET_DOWN);
+        let full = format!("{}  {}  {}", icon::FUNNEL, tr!("Filtres"), icon::CARET_DOWN);
         let button = measure(ui, &full, egui::TextStyle::Body) + 24.0;
         let notice = measure(
             ui,
-            &format!("{}  {NOTICE}", icon::FUNNEL),
+            &format!("{}  {notice_text}", icon::FUNNEL),
             egui::TextStyle::Small,
         ) + 16.0;
         let room = ui.available_width();
@@ -2094,9 +2108,13 @@ impl BankPerfectApp {
         };
         let show_notice = filtered && room > button + notice;
         let hover = if filtered && !show_notice {
-            format!("Filtres prédéfinis\n{}  {NOTICE}", icon::FUNNEL)
+            format!(
+                "{}\n{}  {notice_text}",
+                tr!("Filtres prédéfinis"),
+                icon::FUNNEL
+            )
         } else {
-            "Filtres prédéfinis".to_string()
+            tr!("Filtres prédéfinis").to_string()
         };
         let response = ui
             .add(egui::Button::new(RichText::new(label).color(color)).frame(false))
@@ -2120,7 +2138,7 @@ impl BankPerfectApp {
                 ui,
                 active,
                 Some(icon::FUNNEL_X),
-                "Retirer les filtres",
+                tr!("Retirer les filtres"),
                 None,
             )
             .clicked()
@@ -2130,15 +2148,20 @@ impl BankPerfectApp {
             if crate::menu::item(
                 ui,
                 Some(icon::FLOPPY_DISK),
-                "Enregistrer le filtre actuel…",
+                tr!("Enregistrer le filtre actuel…"),
                 None,
             )
             .clicked()
             {
                 command = Some(Command::SaveFilter);
             }
-            if crate::menu::item(ui, Some(icon::GEAR_SIX), "Gérer les filtres…", Some("F7"))
-                .clicked()
+            if crate::menu::item(
+                ui,
+                Some(icon::GEAR_SIX),
+                tr!("Gérer les filtres…"),
+                Some("F7"),
+            )
+            .clicked()
             {
                 command = Some(Command::AutoFilters);
             }
@@ -2147,7 +2170,7 @@ impl BankPerfectApp {
         // un filtre s'active.
         if show_notice {
             ui.label(
-                RichText::new(format!("{}  {NOTICE}", icon::FUNNEL))
+                RichText::new(format!("{}  {notice_text}", icon::FUNNEL))
                     .small()
                     .color(pal.pointed),
             );
@@ -2162,11 +2185,26 @@ impl BankPerfectApp {
         if doc.filters.is_active() || doc.filters.hide_old_lines {
             let shown = crate::format::count(doc.visible_len());
             ui.label(
-                RichText::new(format!("{}  {shown} / {total} opérations", icon::FUNNEL))
-                    .color(palette(ui).pointed),
+                RichText::new(format!(
+                    "{}  {}",
+                    icon::FUNNEL,
+                    trn!(
+                        doc.total_count(),
+                        "{1} / {2} opération",
+                        "{1} / {2} opérations",
+                        shown,
+                        total
+                    )
+                ))
+                .color(palette(ui).pointed),
             );
         } else {
-            ui.label(format!("{total} opérations"));
+            ui.label(trn!(
+                doc.total_count(),
+                "{1} opération",
+                "{1} opérations",
+                total
+            ));
         }
     }
 
@@ -2195,13 +2233,17 @@ impl BankPerfectApp {
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 if doc.dirty {
                     ui.label(
-                        RichText::new(format!("{}  Modifications non enregistrées", icon::CIRCLE))
-                            .small()
-                            .color(pal.warning),
+                        RichText::new(format!(
+                            "{}  {}",
+                            icon::CIRCLE,
+                            tr!("Modifications non enregistrées")
+                        ))
+                        .small()
+                        .color(pal.warning),
                     );
                 } else {
                     ui.label(
-                        RichText::new(format!("{}  Enregistré", icon::CHECK))
+                        RichText::new(format!("{}  {}", icon::CHECK, tr!("Enregistré")))
                             .small()
                             .color(pal.muted),
                     );
@@ -2238,7 +2280,12 @@ impl BankPerfectApp {
             ui.add_space(18.0);
             if ui
                 .add(egui::Button::new(
-                    RichText::new(format!("{}  Ouvrir un fichier…", icon::FOLDER_OPEN)).size(15.0),
+                    RichText::new(format!(
+                        "{}  {}",
+                        icon::FOLDER_OPEN,
+                        tr!("Ouvrir un fichier…")
+                    ))
+                    .size(15.0),
                 ))
                 .clicked()
             {
@@ -2246,7 +2293,8 @@ impl BankPerfectApp {
             }
             ui.add_space(8.0);
             ui.label(
-                RichText::new("ou déposez un fichier .bp dans la fenêtre").color(palette(ui).muted),
+                RichText::new(tr!("ou déposez un fichier .bp dans la fenêtre"))
+                    .color(palette(ui).muted),
             );
             let recent: Vec<PathBuf> = self
                 .settings
@@ -2258,7 +2306,7 @@ impl BankPerfectApp {
             if !recent.is_empty() {
                 ui.add_space(28.0);
                 ui.label(
-                    RichText::new("FICHIERS RÉCENTS")
+                    RichText::new(tr!("FICHIERS RÉCENTS"))
                         .small()
                         .family(crate::theme::medium())
                         .color(palette(ui).muted),
@@ -2361,7 +2409,7 @@ impl BankPerfectApp {
                 let locked =
                     doc.locked && target.is_some_and(|i| doc.operation(i).tack == Tack::Reconciled);
                 if locked {
-                    self.toast = Some((LOCKED_MESSAGE.into(), now + 4.0));
+                    self.toast = Some((locked_message(), now + 4.0));
                 } else if let Some(index) = target.filter(|&i| doc.sister_of(i).is_some()) {
                     self.confirm_linked_edit = Some((index, op));
                 } else {
@@ -2418,13 +2466,13 @@ impl BankPerfectApp {
                         crate::theme::set_translucent(ctx, self.settings.translucent());
                         if self.settings.translucent() && !crate::theme::surface_transparent() {
                             self.toast = Some((
-                                "Le fond translucide sera actif au prochain démarrage".into(),
+                                tr!("Le fond translucide sera actif au prochain démarrage").into(),
                                 now + 5.0,
                             ));
                         }
                     }
                     if self.toast.is_none() {
-                        self.toast = Some(("Options enregistrées".into(), now + 3.0));
+                        self.toast = Some((tr!("Options enregistrées").into(), now + 3.0));
                     }
                 }
             }
@@ -2434,11 +2482,16 @@ impl BankPerfectApp {
             dialogs::modal(ctx, "scheduler_notice").show(ctx, |ui| {
                 ui.set_width(560.0);
                 let pal = palette(ui);
-                dialogs::header(ui, icon::CALENDAR_CHECK, pal.accent, "Échéances insérées");
+                dialogs::header(
+                    ui,
+                    icon::CALENDAR_CHECK,
+                    pal.accent,
+                    tr!("Échéances insérées"),
+                );
                 ui.label(
-                    RichText::new(
-                        "Les échéances arrivées à terme ont été ajoutées à vos comptes :",
-                    )
+                    RichText::new(tr!(
+                        "Les échéances arrivées à terme ont été ajoutées à vos comptes :"
+                    ))
                     .color(pal.fg_dark),
                 );
                 ui.add_space(8.0);
@@ -2491,8 +2544,9 @@ impl BankPerfectApp {
                     ui.add_space(10.0);
                     ui.label(
                         RichText::new(format!(
-                            "{}  Logiciel libre — licence MIT",
-                            icon::SEAL_CHECK
+                            "{}  {}",
+                            icon::SEAL_CHECK,
+                            tr!("Logiciel libre — licence MIT")
                         ))
                         .color(pal.positive),
                     );
@@ -2509,14 +2563,14 @@ impl BankPerfectApp {
                     ui.add_space(10.0);
                     if let Ok(exe) = std::env::current_exe() {
                         ui.label(
-                            RichText::new(format!("Emplacement : {}", exe.display()))
+                            RichText::new(tr!("Emplacement : {}", exe.display()))
                                 .size(12.0)
                                 .color(pal.muted),
                         );
                     }
                 });
                 dialogs::footer(ui, |ui| {
-                    if dialogs::primary(ui, "Fermer", true).clicked()
+                    if dialogs::primary(ui, tr!("Fermer"), true).clicked()
                         || ui.input(|i| {
                             i.key_pressed(egui::Key::Escape) || i.key_pressed(egui::Key::Enter)
                         })
@@ -2590,7 +2644,7 @@ impl BankPerfectApp {
                     self.tool = None;
                     self.recovery_phrase = Some(phrase);
                     self.toast = Some((
-                        "Mot de passe défini — enregistrez (Ctrl+S) pour l'appliquer".into(),
+                        tr!("Mot de passe défini — enregistrez (Ctrl+S) pour l'appliquer").into(),
                         now + 6.0,
                     ));
                 }
@@ -2646,10 +2700,12 @@ impl BankPerfectApp {
                 ctx,
                 "linked_edit",
                 icon::ARROWS_LEFT_RIGHT,
-                "Ligne liée",
-                "La ligne modifiée est un transfert lié à une ligne d'un autre compte. Quelles lignes faut-il modifier ? La date, le détail, la catégorie et le montant seront recopiés dans l'autre ligne.",
-                "Les 2 lignes",
-                Some("Uniquement cette ligne"),
+                tr!("Ligne liée"),
+                tr!(
+                    "La ligne modifiée est un transfert lié à une ligne d'un autre compte. Quelles lignes faut-il modifier ? La date, le détail, la catégorie et le montant seront recopiés dans l'autre ligne."
+                ),
+                tr!("Les 2 lignes"),
+                Some(tr!("Uniquement cette ligne")),
                 false,
             ) {
                 Choice::Pending => {}
@@ -2678,10 +2734,12 @@ impl BankPerfectApp {
                 ctx,
                 "delete_linked",
                 icon::TRASH,
-                "Supprimer",
-                "La ligne sélectionnée est un transfert lié à une ligne d'un autre compte. Faut-il supprimer les 2 lignes ? Sinon, l'autre ligne devient un simple virement.",
-                "Les 2 lignes",
-                Some("Uniquement celle-ci"),
+                tr!("Supprimer"),
+                tr!(
+                    "La ligne sélectionnée est un transfert lié à une ligne d'un autre compte. Faut-il supprimer les 2 lignes ? Sinon, l'autre ligne devient un simple virement."
+                ),
+                tr!("Les 2 lignes"),
+                Some(tr!("Uniquement celle-ci")),
                 true,
             ) {
                 Choice::Pending => {}
@@ -2703,18 +2761,18 @@ impl BankPerfectApp {
             && let Some(doc) = &mut self.doc
         {
             let n = doc.selection.len();
-            let message = if n == 1 {
-                "Supprimer l'opération sélectionnée ?".to_string()
-            } else {
-                format!("Supprimer les {n} opérations sélectionnées ?")
-            };
+            let message = trn!(
+                n,
+                "Supprimer l'opération sélectionnée ?",
+                "Supprimer les {} opérations sélectionnées ?"
+            );
             match dialogs::confirm(
                 ctx,
                 "delete",
                 icon::TRASH,
-                "Supprimer",
+                tr!("Supprimer"),
                 &message,
-                "Supprimer",
+                tr!("Supprimer"),
                 None,
                 true,
             ) {
@@ -2731,7 +2789,7 @@ impl BankPerfectApp {
             && let Some(doc) = &mut self.doc
         {
             let op = doc.operation(index).clone();
-            let message = format!(
+            let message = tr!(
                 "Créer le tiers mémorisé « {} » ? La saisie le proposera avec ce mode, ce détail et cette catégorie.",
                 op.payee
             );
@@ -2739,9 +2797,9 @@ impl BankPerfectApp {
                 ctx,
                 "add_payee",
                 icon::USER_PLUS,
-                "Ajouter aux tiers mémorisés",
+                tr!("Ajouter aux tiers mémorisés"),
                 &message,
-                "Créer le tiers",
+                tr!("Créer le tiers"),
                 None,
                 false,
             ) {
@@ -2772,21 +2830,22 @@ impl BankPerfectApp {
             && let Some(doc) = &mut self.doc
         {
             let account = doc.current_account();
-            let message = format!(
+            let decimal = bp_core::i18n::decimal_separator().to_string();
+            let message = tr!(
                 "Toutes les opérations du compte « {} » vont être converties de {} en {} (taux {} → {}). L'historique des annulations sera vidé.",
                 account.name,
                 account.currency,
                 account.secondary_currency,
-                account.currency_rate.to_string().replace('.', ","),
-                account.secondary_rate.to_string().replace('.', ",")
+                account.currency_rate.to_string().replace('.', &decimal),
+                account.secondary_rate.to_string().replace('.', &decimal)
             );
             match dialogs::confirm(
                 ctx,
                 "reverse_currencies",
                 icon::ARROWS_LEFT_RIGHT,
-                "Inverser les monnaies",
+                tr!("Inverser les monnaies"),
                 &message,
-                "Convertir",
+                tr!("Convertir"),
                 None,
                 false,
             ) {
@@ -2796,23 +2855,24 @@ impl BankPerfectApp {
                     let index = doc.account;
                     doc.edit_document(|d| bp_core::manage::reverse_currencies(d, index));
                     let currency = doc.current_account().currency.clone();
-                    self.toast = Some((format!("Compte converti en {currency}"), now + 4.0));
+                    self.toast = Some((tr!("Compte converti en {}", currency), now + 4.0));
                 }
                 Choice::No | Choice::Cancel => self.confirm_reverse = false,
             }
         }
         if self.confirm_json_export {
             let name = self.doc.as_ref().map(|d| d.file_name()).unwrap_or_default();
-            let message = format!(
-                "« {name} » est protégé par un mot de passe, mais l'export JSON n'est pas chiffré : toute personne qui accède au fichier exporté pourra lire vos comptes. Conservez-le en lieu sûr ou supprimez-le après usage."
+            let message = tr!(
+                "« {name} » est protégé par un mot de passe, mais l'export JSON n'est pas chiffré : toute personne qui accède au fichier exporté pourra lire vos comptes. Conservez-le en lieu sûr ou supprimez-le après usage.",
+                name = name
             );
             match dialogs::confirm(
                 ctx,
                 "json_export",
                 icon::LOCK_OPEN,
-                "Export non chiffré",
+                tr!("Export non chiffré"),
                 &message,
-                "Exporter quand même",
+                tr!("Exporter quand même"),
                 None,
                 true,
             ) {
@@ -2829,16 +2889,17 @@ impl BankPerfectApp {
                 .file_name()
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
-            let message = format!(
-                "Mettre « {name} » à la corbeille ? Vous pourrez le récupérer depuis la corbeille du système."
+            let message = tr!(
+                "Mettre « {name} » à la corbeille ? Vous pourrez le récupérer depuis la corbeille du système.",
+                name = name
             );
             match dialogs::confirm(
                 ctx,
                 "trash",
                 icon::TRASH,
-                "Supprimer un fichier de comptes",
+                tr!("Supprimer un fichier de comptes"),
                 &message,
-                "Mettre à la corbeille",
+                tr!("Mettre à la corbeille"),
                 None,
                 true,
             ) {
@@ -2849,9 +2910,9 @@ impl BankPerfectApp {
                         Ok(()) => {
                             self.settings.recent_files.retain(|f| f != &path);
                             self.settings.save();
-                            self.toast = Some((format!("{name} mis à la corbeille"), now + 4.0));
+                            self.toast = Some((tr!("{} mis à la corbeille", name), now + 4.0));
                         }
-                        Err(e) => self.error = Some(format!("Suppression impossible : {e}")),
+                        Err(e) => self.error = Some(tr!("Suppression impossible : {}", e)),
                     }
                 }
                 Choice::No | Choice::Cancel => self.confirm_trash = None,
@@ -2867,25 +2928,30 @@ impl BankPerfectApp {
             dialogs::modal(ctx, "unreadable").show(ctx, |ui| {
                 ui.set_width(520.0);
                 let pal = palette(ui);
-                dialogs::header(ui, icon::WARNING, pal.negative, "Fichier illisible");
+                dialogs::header(ui, icon::WARNING, pal.negative, tr!("Fichier illisible"));
                 ui.label(
-                    RichText::new(format!("« {name} » ne peut pas être ouvert : il semble endommagé."))
+                    RichText::new(tr!(
+                        "« {} » ne peut pas être ouvert : il semble endommagé.",
+                        name
+                    ))
                         .color(pal.fg_dark),
                 );
                 ui.label(RichText::new(reason).small().color(pal.muted));
                 if !backups.is_empty() {
                     ui.add_space(8.0);
                     ui.label(
-                        RichText::new(format!(
-                            "{} sauvegarde(s) de ce fichier sont disponibles ; la plus récente date du {}.",
+                        RichText::new(trn!(
                             backups.len(),
-                            chrono::DateTime::<chrono::Local>::from(backups[0].modified).format("%d/%m/%Y à %H:%M")
+                            "{} sauvegarde de ce fichier est disponible ; elle date du {1}.",
+                            "{} sauvegardes de ce fichier sont disponibles ; la plus récente date du {1}.",
+                            chrono::DateTime::<chrono::Local>::from(backups[0].modified)
+                                .format(tr!("%d/%m/%Y à %H:%M"))
                         ))
                         .color(pal.fg_dark),
                     );
                 }
                 dialogs::footer(ui, |ui| {
-                    if !backups.is_empty() && dialogs::primary(ui, "Voir les sauvegardes", true).clicked() {
+                    if !backups.is_empty() && dialogs::primary(ui, tr!("Voir les sauvegardes"), true).clicked() {
                         self.tool = Some(crate::tools::Tool::Backups(crate::tools::BackupsForm::new(
                             path.clone(),
                             self.settings.backup_dir(),
@@ -2893,7 +2959,7 @@ impl BankPerfectApp {
                         )));
                         close = true;
                     }
-                    if dialogs::button(ui, "Fermer").clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    if dialogs::button(ui, tr!("Fermer")).clicked() || ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                         close = true;
                     }
                 });
@@ -2904,17 +2970,18 @@ impl BankPerfectApp {
         }
         if self.pending.is_some() {
             let name = self.doc.as_ref().map(|d| d.file_name()).unwrap_or_default();
-            let message = format!(
-                "« {name} » contient des modifications non enregistrées. Voulez-vous les enregistrer avant de continuer ?"
+            let message = tr!(
+                "« {name} » contient des modifications non enregistrées. Voulez-vous les enregistrer avant de continuer ?",
+                name = name
             );
             match dialogs::confirm(
                 ctx,
                 "unsaved",
                 icon::FLOPPY_DISK,
-                "Enregistrer les modifications ?",
+                tr!("Enregistrer les modifications ?"),
                 &message,
-                "Enregistrer",
-                Some("Ne pas enregistrer"),
+                tr!("Enregistrer"),
+                Some(tr!("Ne pas enregistrer")),
                 false,
             ) {
                 Choice::Pending => {}
@@ -2936,7 +3003,7 @@ impl BankPerfectApp {
             }
         }
         if let Some(error) = &self.error
-            && dialogs::alert(ctx, "Erreur", error)
+            && dialogs::alert(ctx, tr!("Erreur"), error)
         {
             self.error = None;
         }
@@ -3360,29 +3427,26 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let f = &doc.filters;
     let mut chips: Vec<(String, ClearFilter)> = Vec::new();
     if !f.mode.is_empty() {
-        chips.push((format!("Mode : {}", f.mode), |f| f.mode.clear()));
+        chips.push((tr!("Mode : {}", f.mode), |f| f.mode.clear()));
     }
     if !f.payee.is_empty() {
-        chips.push((format!("Tiers : {}", f.payee), |f| f.payee.clear()));
+        chips.push((tr!("Tiers : {}", f.payee), |f| f.payee.clear()));
     }
     if !f.category.is_empty() {
-        chips.push((format!("Catégorie : {}", f.category), |f| {
-            f.category.clear()
-        }));
+        chips.push((tr!("Catégorie : {}", f.category), |f| f.category.clear()));
     }
     if !f.amount.is_empty() {
-        chips.push((format!("Montant : {}", f.amount), |f| f.amount.clear()));
+        chips.push((tr!("Montant : {}", f.amount), |f| f.amount.clear()));
     }
     if f.tack != bp_core::filter::TackFilter::All {
-        chips.push((
-            format!("Pointage : {}", f.tack.label().to_lowercase()),
-            |f| f.tack = bp_core::filter::TackFilter::All,
-        ));
+        chips.push((tr!("Pointage : {}", f.tack.label().to_lowercase()), |f| {
+            f.tack = bp_core::filter::TackFilter::All
+        }));
     }
     let period = match (f.date_from, f.date_to) {
-        (Some(a), Some(b)) => Some(format!("Période : du {a} au {b}")),
-        (Some(a), None) => Some(format!("Période : à partir du {a}")),
-        (None, Some(b)) => Some(format!("Période : jusqu'au {b}")),
+        (Some(a), Some(b)) => Some(tr!("Période : du {} au {}", a, b)),
+        (Some(a), None) => Some(tr!("Période : à partir du {}", a)),
+        (None, Some(b)) => Some(tr!("Période : jusqu'au {}", b)),
         (None, None) => None,
     };
     if let Some(period) = period {
@@ -3392,7 +3456,7 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         }));
     }
     if f.hide_old_lines {
-        chips.push(("Lignes rapprochées anciennes masquées".into(), |f| {
+        chips.push((tr!("Lignes rapprochées anciennes masquées").into(), |f| {
             f.hide_old_lines = false
         }));
     }
@@ -3434,11 +3498,15 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
             font.clone(),
             if hovered { pal.negative } else { pal.muted },
         );
-        if response.on_hover_text("Retirer ce filtre").clicked() {
+        if response.on_hover_text(tr!("Retirer ce filtre")).clicked() {
             remove = Some(index);
         }
     }
-    if chips.len() > 1 && ui.link(RichText::new("Tout effacer").small()).clicked() {
+    if chips.len() > 1
+        && ui
+            .link(RichText::new(tr!("Tout effacer")).small())
+            .clicked()
+    {
         doc.filters = Default::default();
     }
     if let Some(index) = remove {
@@ -3467,9 +3535,9 @@ fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
                     egui::Id::new("floating_add_button"),
                     egui::Sense::click(),
                 )
-                .on_hover_text("Nouvelle opération (Inser)");
+                .on_hover_text(tr!("Nouvelle opération (Inser)"));
             response.widget_info(|| {
-                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, "Nouvelle opération")
+                egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tr!("Nouvelle opération"))
             });
             let hovered = response.hovered();
             let painter = ui.painter();
@@ -3522,16 +3590,16 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
         0 => {}
         1 => {
             let op = ops[0];
+            let line = tr!("Ligne {} : {}", op.uid, money(op.amount, &currency));
             let tack = match op.tack {
-                Tack::None => "",
-                Tack::Pointed => " · pointée",
-                Tack::Reconciled => " · rapprochée",
+                Tack::None => None,
+                Tack::Pointed => Some(tr!("pointée")),
+                Tack::Reconciled => Some(tr!("rapprochée")),
             };
-            ui.label(format!(
-                "Ligne {} : {}{tack}",
-                op.uid,
-                money(op.amount, &currency)
-            ));
+            ui.label(match tack {
+                Some(tack) => format!("{line} · {tack}"),
+                None => line,
+            });
         }
         n => {
             let total: Amount = ops.iter().map(|op| op.amount).sum();
@@ -3545,7 +3613,7 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
                 .filter(|op| op.amount.is_negative())
                 .map(|op| op.amount)
                 .sum();
-            let mut text = RichText::new(format!("{n} lignes : {}", money(total, &currency)))
+            let mut text = RichText::new(tr!("{} lignes : {}", n, money(total, &currency)))
                 .family(crate::theme::semibold());
             if total.is_negative() {
                 text = text.color(pal.negative);

@@ -1,3 +1,5 @@
+**Français** · [English](extensions.en.md)
+
 # Extensions BankPerfect
 
 Les extensions ajoutent à BankPerfect des commandes, des fenêtres, des formats d'import et des automatismes. Elles s'écrivent en [Luau](https://luau.org), un Lua moderne, rapide et typé (celui de Roblox), et s'affichent avec les composants de l'application : une fenêtre d'extension a exactement l'allure d'une fenêtre de BankPerfect, dans tous les thèmes.
@@ -746,7 +748,7 @@ Sans `permissions = { "network" }`, `bp.http` refuse. `bp.open_url(url)` ouvre u
 - **Erreurs.** Une erreur au chargement (syntaxe, appel refusé) est affichée dans la fenêtre de gestion avec la ligne fautive, et l'extension n'ajoute rien. Une erreur pendant une commande ou une réaction s'affiche dans une fenêtre d'erreur, avec le fichier et la ligne.
 - **Recharger.** Le bouton **Recharger** relit toutes les extensions : leurs fenêtres ouvertes se ferment et leurs variables repartent de zéro. Ce qui doit survivre va dans `bp.store` ou `bp.prefs`. Désactiver puis réactiver une extension la recharge aussi.
 - **Versions.** `bp.version` donne la version de BankPerfect (`"9.8.2"`) ; `requires` dans `bp.extension` refuse proprement une version trop ancienne. `bp.id` est l'identifiant de l'extension (nom de son fichier ou dossier).
-- **Éditeur.** Le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) donne l'auto-complétion et la vérification des types (voir [Référence rapide](#référence-rapide)).
+- **Éditeur.** Le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) (commentaires en français ; [`bankperfect.en.d.luau`](bankperfect.en.d.luau) est le même, commenté en anglais) donne l'auto-complétion et la vérification des types (voir [Référence rapide](#référence-rapide)).
 
 ## Recettes
 
@@ -849,7 +851,7 @@ Une extension a accès à vos comptes : n'installez que des extensions dont vous
 
 ## Référence rapide
 
-Pour l'auto-complétion et la vérification des types dans votre éditeur, installez [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) et indiquez-lui le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) (option `luau-lsp.types.definitionFiles` dans VS Code).
+Pour l'auto-complétion et la vérification des types dans votre éditeur, installez [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) et indiquez-lui le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau), ou [`bankperfect.en.d.luau`](bankperfect.en.d.luau) pour des commentaires en anglais (option `luau-lsp.types.definitionFiles` dans VS Code).
 
 ```text
 bp.extension{ name, description, version, author, permissions, requires }

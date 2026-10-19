@@ -9,7 +9,7 @@ use bp_core::currencies::Rates;
 use bp_core::i18n;
 use bp_core::model::Amount;
 use bp_core::quotes::{self, Quote, StockLine};
-use bp_core::{tr, tr_mark, trn};
+use bp_core::{tr, tr_mark, trc, trn};
 use egui::{Key, RichText, vec2};
 use egui_phosphor::regular as icon;
 
@@ -222,13 +222,13 @@ impl QuotesForm {
         let currency = account.currency.clone();
         let inner = width - 16.0;
         let cols = [
-            (inner * 0.26, egui::Align::Min, tr!("Titre")),
+            (inner * 0.26, egui::Align::Min, trc!("cotation", "Titre")),
             (inner * 0.15, egui::Align::Min, tr!("Code")),
             (inner * 0.09, egui::Align::Max, tr!("Quantité")),
             (inner * 0.13, egui::Align::Max, tr!("Valeur actuelle")),
             (inner * 0.11, egui::Align::Max, tr!("Cours")),
             (inner * 0.13, egui::Align::Max, tr!("Nouvelle valeur")),
-            (inner * 0.13, egui::Align::Max, tr!("Écart")),
+            (inner * 0.13, egui::Align::Max, trc!("cotation", "Écart")),
         ];
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 0.0;

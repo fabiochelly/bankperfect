@@ -270,65 +270,71 @@ impl LoanForm {
     fn inputs_card(&mut self, ui: &mut egui::Ui, width: f32, pal: &Palette) {
         let mut solve = None;
         let mut step = None;
-        ui_kit::section(ui, width, icon::CALCULATOR, tr!("Crédit"), |ui| {
-            let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
-            const LABEL: f32 = 118.0;
-            let field_w = inner - LABEL - 32.0 - 32.0 - 40.0 - 4.0 * 6.0;
-            for field in FIELDS {
-                let computed = field == self.unknown && self.loan.is_some();
-                ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 6.0;
-                    let color = if computed { pal.accent } else { pal.fg_dark };
-                    ui_kit::cell(
-                        ui,
-                        LABEL,
-                        egui::Align::Min,
-                        RichText::new(label(field)).color(color),
-                    );
-                    let text = &mut self.texts[index(field)];
-                    let mut edit = crate::theme::field(text).desired_width(field_w);
-                    if computed {
-                        edit = edit.text_color(pal.accent);
-                    }
-                    let response = ui.add(edit.hint_text(hint(field)));
-                    if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                        solve = Some(self.unknown);
-                    }
-                    if ui
-                        .add_sized(vec2(32.0, 32.0), egui::Button::new(icon::MINUS))
-                        .on_hover_text(tr!("Diminuer"))
-                        .clicked()
-                    {
-                        step = Some((field, false));
-                    }
-                    if ui
-                        .add_sized(vec2(32.0, 32.0), egui::Button::new(icon::PLUS))
-                        .on_hover_text(tr!("Augmenter"))
-                        .clicked()
-                    {
-                        step = Some((field, true));
-                    }
-                    let calc = egui::Button::new(RichText::new(icon::EQUALS).color(if computed {
-                        pal.on_accent
-                    } else {
-                        pal.accent
-                    }))
-                    .fill(if computed {
-                        pal.accent
-                    } else {
-                        pal.accent.gamma_multiply(0.12)
+        ui_kit::section(
+            ui,
+            width,
+            icon::CALCULATOR,
+            trc!("emprunt", "Crédit"),
+            |ui| {
+                let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
+                const LABEL: f32 = 118.0;
+                let field_w = inner - LABEL - 32.0 - 32.0 - 40.0 - 4.0 * 6.0;
+                for field in FIELDS {
+                    let computed = field == self.unknown && self.loan.is_some();
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 6.0;
+                        let color = if computed { pal.accent } else { pal.fg_dark };
+                        ui_kit::cell(
+                            ui,
+                            LABEL,
+                            egui::Align::Min,
+                            RichText::new(label(field)).color(color),
+                        );
+                        let text = &mut self.texts[index(field)];
+                        let mut edit = crate::theme::field(text).desired_width(field_w);
+                        if computed {
+                            edit = edit.text_color(pal.accent);
+                        }
+                        let response = ui.add(edit.hint_text(hint(field)));
+                        if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                            solve = Some(self.unknown);
+                        }
+                        if ui
+                            .add_sized(vec2(32.0, 32.0), egui::Button::new(icon::MINUS))
+                            .on_hover_text(tr!("Diminuer"))
+                            .clicked()
+                        {
+                            step = Some((field, false));
+                        }
+                        if ui
+                            .add_sized(vec2(32.0, 32.0), egui::Button::new(icon::PLUS))
+                            .on_hover_text(tr!("Augmenter"))
+                            .clicked()
+                        {
+                            step = Some((field, true));
+                        }
+                        let calc =
+                            egui::Button::new(RichText::new(icon::EQUALS).color(if computed {
+                                pal.on_accent
+                            } else {
+                                pal.accent
+                            }))
+                            .fill(if computed {
+                                pal.accent
+                            } else {
+                                pal.accent.gamma_multiply(0.12)
+                            });
+                        if ui
+                            .add_sized(vec2(40.0, 32.0), calc)
+                            .on_hover_text(tr!("Calculer : {}", label(field).to_lowercase()))
+                            .clicked()
+                        {
+                            solve = Some(field);
+                        }
                     });
-                    if ui
-                        .add_sized(vec2(40.0, 32.0), calc)
-                        .on_hover_text(tr!("Calculer : {}", label(field).to_lowercase()))
-                        .clicked()
-                    {
-                        solve = Some(field);
-                    }
-                });
-                ui.add_space(8.0);
-            }
-            ui.horizontal(|ui| {
+                    ui.add_space(8.0);
+                }
+                ui.horizontal(|ui| {
                 ui.spacing_mut().item_spacing.x = 6.0;
                 ui_kit::cell(ui, LABEL, egui::Align::Min, RichText::new(tr!("Résiduel")).color(pal.fg_dark));
                 let r = ui
@@ -338,30 +344,31 @@ impl LoanForm {
                     solve = Some(self.unknown);
                 }
             });
-            ui.add_space(8.0);
-            if crate::theme::checkbox(
-                ui,
-                &mut self.start_of_period,
-                tr!("Mensualités versées en début de période"),
-            )
-            .changed()
-            {
-                solve = Some(self.unknown);
-            }
-            ui.add_space(8.0);
-            ui.horizontal(|ui| {
-                ui.label(RichText::new(tr!("Première échéance")).color(pal.fg_dark));
-                egui::ComboBox::from_id_salt("loan_start_month")
-                    .selected_text(month_name(self.start_month))
-                    .width(120.0)
-                    .show_ui(ui, |ui| {
-                        for m in 1..=12 {
-                            ui.selectable_value(&mut self.start_month, m, month_name(m));
-                        }
-                    });
-                ui.add(egui::DragValue::new(&mut self.start_year).range(1950..=2200));
-            });
-        });
+                ui.add_space(8.0);
+                if crate::theme::checkbox(
+                    ui,
+                    &mut self.start_of_period,
+                    tr!("Mensualités versées en début de période"),
+                )
+                .changed()
+                {
+                    solve = Some(self.unknown);
+                }
+                ui.add_space(8.0);
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(tr!("Première échéance")).color(pal.fg_dark));
+                    egui::ComboBox::from_id_salt("loan_start_month")
+                        .selected_text(month_name(self.start_month))
+                        .width(120.0)
+                        .show_ui(ui, |ui| {
+                            for m in 1..=12 {
+                                ui.selectable_value(&mut self.start_month, m, month_name(m));
+                            }
+                        });
+                    ui.add(egui::DragValue::new(&mut self.start_year).range(1950..=2200));
+                });
+            },
+        );
         if let Some((field, up)) = step {
             self.step(field, up);
         }

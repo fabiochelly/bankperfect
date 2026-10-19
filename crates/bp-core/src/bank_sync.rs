@@ -10,6 +10,7 @@ use serde_json::Value;
 
 use crate::import::{ImportedAccount, ImportedOperation, StatementBalance, guess_mode_from_field};
 use crate::model::{Amount, Date, Document, Mode, StandardMode};
+use crate::tr;
 
 /// Adresse de l'API.
 pub const API_URL: &str = "https://api.enablebanking.com";
@@ -138,12 +139,12 @@ pub fn suggest_target(document: &Document, iban: &str) -> Option<String> {
 pub fn authorization_code(pasted: &str, expected_state: &str) -> Result<String, String> {
     let text = pasted.trim();
     if text.is_empty() {
-        return Err("collez l'adresse de la page de retour".into());
+        return Err(tr!("collez l'adresse de la page de retour").into());
     }
     let Some(query) = text.split_once('?').map(|(_, q)| q) else {
         // Le code seul.
         return if text.contains(char::is_whitespace) || text.contains('/') {
-            Err("adresse ou code non reconnu".into())
+            Err(tr!("adresse ou code non reconnu").into())
         } else {
             Ok(text.to_string())
         };
@@ -158,21 +159,23 @@ pub fn authorization_code(pasted: &str, expected_state: &str) -> Result<String, 
     };
     if let Some(error) = param("error") {
         let description = param("error_description").unwrap_or_default();
-        return Err(
-            format!("la banque a refusé l'accès ({error}) {description}")
-                .trim()
-                .to_string(),
-        );
+        return Err(tr!(
+            "la banque a refusé l'accès ({error}) {description}",
+            error = error,
+            description = description
+        )
+        .trim()
+        .to_string());
     }
     if let Some(state) = param("state")
         && !expected_state.is_empty()
         && state != expected_state
     {
-        return Err("cette adresse ne correspond pas à la connexion en cours".into());
+        return Err(tr!("cette adresse ne correspond pas à la connexion en cours").into());
     }
     param("code")
         .filter(|c| !c.is_empty())
-        .ok_or_else(|| "aucun code dans l'adresse collée".into())
+        .ok_or_else(|| tr!("aucun code dans l'adresse collée").into())
 }
 
 fn percent_decode(text: &str) -> String {
@@ -256,7 +259,7 @@ pub fn parse_session_accounts(json: &Value, document: &Document) -> Vec<BankAcco
                                 .and_then(Value::as_str)
                                 .filter(|s| !s.trim().is_empty())
                         })
-                        .unwrap_or("Compte")
+                        .unwrap_or(tr!("Compte"))
                         .to_string();
                     Some(BankAccountLink {
                         target: suggest_target(document, &iban),

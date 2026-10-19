@@ -4,6 +4,7 @@
 use std::cell::Cell;
 
 use bp_core::model::{Amount, Date, Document, Mode, Operation, StandardMode, Tack};
+use bp_core::tr;
 use mlua::{Lua, MetaMethod, Table, UserData, UserDataFields, UserDataMethods, Value};
 
 use crate::date::{date_value, to_date};
@@ -20,8 +21,8 @@ pub(crate) fn with_session<R>(
 ) -> mlua::Result<R> {
     let mut session = lua
         .try_app_data_mut::<Session>()
-        .map_err(|_| runtime("accès au fichier impossible ici"))?
-        .ok_or_else(|| runtime("aucun fichier de comptes n'est ouvert"))?;
+        .map_err(|_| runtime(tr!("accès au fichier impossible ici")))?
+        .ok_or_else(|| runtime(tr!("aucun fichier de comptes n'est ouvert")))?;
     f(&mut session)
 }
 
@@ -44,9 +45,9 @@ pub(crate) fn amount_from_value(value: &Value) -> mlua::Result<Amount> {
         Value::Number(n) if n.is_finite() => Ok(Amount((n * Amount::SCALE as f64).round() as i64)),
         Value::String(s) => {
             let text = s.to_str()?.to_string();
-            Amount::parse(&text).ok_or_else(|| runtime(format!("montant invalide : « {text} »")))
+            Amount::parse(&text).ok_or_else(|| runtime(tr!("montant invalide : « {} »", text)))
         }
-        _ => Err(runtime(format!(
+        _ => Err(runtime(tr!(
             "un montant est attendu (reçu : {})",
             value.type_name()
         ))),
@@ -71,8 +72,9 @@ pub(crate) fn parse_tack(text: &str) -> mlua::Result<Tack> {
         "none" | "" | "aucun" | "non pointée" => Ok(Tack::None),
         "pointed" | "p" | "pointée" => Ok(Tack::Pointed),
         "reconciled" | "r" | "rapprochée" => Ok(Tack::Reconciled),
-        _ => Err(runtime(format!(
-            "pointage inconnu « {text} » (attendu : \"none\", \"pointed\" ou \"reconciled\")"
+        _ => Err(runtime(tr!(
+            "pointage inconnu « {} » (attendu : \"none\", \"pointed\" ou \"reconciled\")",
+            text
         ))),
     }
 }
@@ -87,7 +89,7 @@ pub(crate) fn resolve_mode(document: &Document, name: &str) -> mlua::Result<Mode
         .iter()
         .find(|m| m.name.to_lowercase() == lower)
         .map(|m| Mode::Custom(m.name.clone()))
-        .ok_or_else(|| runtime(format!("mode de paiement inconnu : « {name} »")))
+        .ok_or_else(|| runtime(tr!("mode de paiement inconnu : « {} »", name)))
 }
 
 fn normalize_label(text: &str) -> String {
@@ -106,7 +108,7 @@ pub(crate) fn resolve_category(document: &Document, value: &Value) -> mlua::Resu
         Value::Integer(id) => document
             .category(*id as u32)
             .map(|c| Some(c.id))
-            .ok_or_else(|| runtime(format!("catégorie inconnue : n°{id}"))),
+            .ok_or_else(|| runtime(tr!("catégorie inconnue : n°{}", id))),
         Value::Number(id) => resolve_category(document, &Value::Integer(*id as i64)),
         Value::Table(t) => resolve_category(document, &t.get::<Value>("id")?),
         Value::String(s) => {
@@ -130,13 +132,14 @@ pub(crate) fn resolve_category(document: &Document, value: &Value) -> mlua::Resu
                 .collect();
             match named.as_slice() {
                 [id] => Ok(Some(*id)),
-                [] => Err(runtime(format!("catégorie inconnue : « {text} »"))),
-                _ => Err(runtime(format!(
-                    "plusieurs catégories s'appellent « {text} » : précisez « Parent > {text} »"
+                [] => Err(runtime(tr!("catégorie inconnue : « {} »", text))),
+                _ => Err(runtime(tr!(
+                    "plusieurs catégories s'appellent « {name} » : précisez « Parent > {name} »",
+                    name = text
                 ))),
             }
         }
-        other => Err(runtime(format!(
+        other => Err(runtime(tr!(
             "une catégorie est attendue (reçu : {})",
             other.type_name()
         ))),
@@ -176,10 +179,10 @@ pub(crate) struct AccountRef {
 impl AccountRef {
     pub fn check(&self, s: &Session) -> mlua::Result<usize> {
         if self.file != s.file_id {
-            return Err(runtime("ce compte appartient à un autre fichier"));
+            return Err(runtime(tr!("ce compte appartient à un autre fichier")));
         }
         if self.index >= s.document.accounts.len() {
-            return Err(runtime("ce compte n'existe plus"));
+            return Err(runtime(tr!("ce compte n'existe plus")));
         }
         Ok(self.index)
     }
@@ -190,8 +193,8 @@ pub(crate) fn account_from_value(value: &Value) -> mlua::Result<AccountRef> {
         Value::UserData(ud) => ud
             .borrow::<AccountRef>()
             .map(|a| a.clone())
-            .map_err(|_| runtime("un compte est attendu")),
-        _ => Err(runtime(format!(
+            .map_err(|_| runtime(tr!("un compte est attendu"))),
+        _ => Err(runtime(tr!(
             "un compte est attendu (reçu : {})",
             value.type_name()
         ))),
@@ -208,7 +211,7 @@ pub(crate) fn account_index(s: &Session, value: &Value) -> mlua::Result<usize> {
             .accounts
             .iter()
             .position(|a| a.name.trim().to_lowercase() == lower)
-            .ok_or_else(|| runtime(format!("compte inconnu : « {name} »")));
+            .ok_or_else(|| runtime(tr!("compte inconnu : « {} »", name)));
     }
     account_from_value(value)?.check(s)
 }
@@ -447,7 +450,7 @@ pub(crate) fn new_operation(
     spec: &Table,
 ) -> mlua::Result<Operation> {
     let amount = match spec.get::<Value>("amount")? {
-        Value::Nil => return Err(runtime("le montant (amount) est obligatoire")),
+        Value::Nil => return Err(runtime(tr!("le montant (amount) est obligatoire"))),
         v => amount_from_value(&v)?,
     };
     let date = match spec.get::<Value>("date")? {
@@ -521,14 +524,16 @@ impl OpRef {
     /// (compte, position) de l'opération dans le document.
     pub fn locate(&self, s: &Session) -> mlua::Result<(usize, usize)> {
         if self.file != s.file_id {
-            return Err(runtime("cette opération appartient à un autre fichier"));
+            return Err(runtime(tr!(
+                "cette opération appartient à un autre fichier"
+            )));
         }
         let account = self.account.get();
         let ops = &s
             .document
             .accounts
             .get(account)
-            .ok_or_else(|| runtime("le compte de cette opération n'existe plus"))?
+            .ok_or_else(|| runtime(tr!("le compte de cette opération n'existe plus")))?
             .operations;
         let hint = self.hint.get();
         if ops.get(hint).is_some_and(|o| o.uid == self.uid) {
@@ -537,7 +542,7 @@ impl OpRef {
         let position = ops
             .iter()
             .position(|o| o.uid == self.uid)
-            .ok_or_else(|| runtime("cette opération a été supprimée"))?;
+            .ok_or_else(|| runtime(tr!("cette opération a été supprimée")))?;
         self.hint.set(position);
         Ok((account, position))
     }
@@ -594,7 +599,7 @@ pub(crate) fn operation_copy(
     t.set("payee", op.payee.clone())?;
     t.set("details", op.details.clone())?;
     t.set("amount", amount_to_f64(op.amount))?;
-    t.set("mode", op.mode.label().to_string())?;
+    t.set("mode", op.mode.name().to_string())?;
     let category = op.category.and_then(|id| {
         lua.app_data_ref::<Session>()
             .and_then(|s| s.document.category_label(id))
@@ -657,14 +662,17 @@ fn split_parts(
     let mut rest_at = None;
     for (i, part) in parts.sequence_values::<Table>().enumerate() {
         let part = part.map_err(|_| {
-            runtime("op:split : chaque part est une table { amount, category, details }")
+            runtime(tr!(
+                "op:split : chaque part est une table {}",
+                "{ amount, category, details }"
+            ))
         })?;
         let amount = match part.get::<Value>("amount")? {
             Value::Nil => {
                 if rest_at.replace(i).is_some() {
-                    return Err(runtime(
-                        "op:split : une seule part peut omettre son montant",
-                    ));
+                    return Err(runtime(tr!(
+                        "op:split : une seule part peut omettre son montant"
+                    )));
                 }
                 Amount::ZERO
             }
@@ -684,9 +692,9 @@ fn split_parts(
 
 fn check_unlocked(s: &Session, op: &Operation) -> mlua::Result<()> {
     if s.locked && op.tack == Tack::Reconciled {
-        return Err(runtime(
-            "les lignes rapprochées sont verrouillées (menu Opérations) : modification refusée",
-        ));
+        return Err(runtime(tr!(
+            "les lignes rapprochées sont verrouillées (menu Opérations) : modification refusée"
+        )));
     }
     Ok(())
 }
@@ -696,8 +704,8 @@ pub(crate) fn op_from_value(value: &Value) -> mlua::Result<OpRef> {
         Value::UserData(ud) => ud
             .borrow::<OpRef>()
             .map(|o| o.clone())
-            .map_err(|_| runtime("une opération est attendue")),
-        _ => Err(runtime(format!(
+            .map_err(|_| runtime(tr!("une opération est attendue"))),
+        _ => Err(runtime(tr!(
             "une opération est attendue (reçu : {})",
             value.type_name()
         ))),
@@ -768,7 +776,7 @@ impl UserData for OpRef {
             })
         });
         fields.add_field_method_get("mode", |lua, o| {
-            o.get(lua, |_, op| Ok(op.mode.label().to_string()))
+            o.get(lua, |_, op| Ok(op.mode.name().to_string()))
         });
         fields.add_field_method_set("mode", |lua, o, value: String| {
             o.update(lua, |document, op| {
@@ -825,14 +833,15 @@ impl UserData for OpRef {
         });
         methods.add_method("set_field", |lua, o, (key, value): (String, Value)| {
             if key.starts_with('#') {
-                return Err(runtime(format!(
-                    "le champ « {key} » est réservé à BankPerfect"
+                return Err(runtime(tr!(
+                    "le champ « {} » est réservé à BankPerfect",
+                    key
                 )));
             }
             let text = value_text(&value)?;
             o.update(lua, |_, op| {
                 if !bp_core::split::set_extra(op, &key, &text) {
-                    return Err(runtime(format!("nom de champ refusé : « {key} »")));
+                    return Err(runtime(tr!("nom de champ refusé : « {} »", key)));
                 }
                 Ok(())
             })
@@ -891,7 +900,7 @@ impl UserData for OpRef {
                 let parts = split_parts(&s.document, &original, &parts)?;
                 s.operations_mut(a);
                 let lines = bp_core::split::split_operation(&mut s.document, a, k, &parts)
-                    .map_err(|e| runtime(format!("ventilation impossible : {e}")))?;
+                    .map_err(|e| runtime(tr!("ventilation impossible : {}", e)))?;
                 s.reset_uid();
                 let ops = &s.document.accounts[a].operations;
                 Ok(lines

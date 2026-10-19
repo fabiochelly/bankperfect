@@ -5,6 +5,7 @@
 
 use bp_core::manage;
 use bp_core::model::{Amount, Mode, Payee, StandardMode};
+use bp_core::{tr, trc, trn};
 use egui::{Color32, Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -167,10 +168,10 @@ fn confirm_card(ui: &mut egui::Ui, width: f32, text: &str) -> Option<bool> {
                 egui::Layout::right_to_left(egui::Align::Center),
                 |ui| {
                     ui.spacing_mut().item_spacing.x = 10.0;
-                    if crate::dialogs::danger(ui, "Supprimer").clicked() {
+                    if crate::dialogs::danger(ui, tr!("Supprimer")).clicked() {
                         result = Some(true);
                     }
-                    if crate::dialogs::button(ui, "Annuler").clicked() {
+                    if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                         result = Some(false);
                     }
                 },
@@ -217,7 +218,7 @@ impl ManageForm {
                 ui.allocate_ui_with_layout(
                     egui::vec2(260.0, 36.0),
                     egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| crate::dialogs::header(ui, icon::GEAR_SIX, pal.accent, "Gestion"),
+                    |ui| crate::dialogs::header(ui, icon::GEAR_SIX, pal.accent, tr!("Gestion")),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     let tabs_width = (width - 280.0).min(720.0);
@@ -226,13 +227,18 @@ impl ManageForm {
                         ui,
                         &mut self.tab,
                         &[
-                            (Tab::Accounts, icon::BANK, "Comptes", pal.accent),
-                            (Tab::Categories, icon::TAG, "Catégories", pal.accent),
-                            (Tab::Payees, icon::ADDRESS_BOOK, "Tiers", pal.accent),
+                            (Tab::Accounts, icon::BANK, tr!("Comptes"), pal.accent),
+                            (Tab::Categories, icon::TAG, tr!("Catégories"), pal.accent),
+                            (
+                                Tab::Payees,
+                                icon::ADDRESS_BOOK,
+                                trc!("onglet", "Tiers"),
+                                pal.accent,
+                            ),
                             (
                                 Tab::Modes,
                                 icon::CREDIT_CARD,
-                                "Modes de paiement",
+                                tr!("Modes de paiement"),
                                 pal.accent,
                             ),
                         ],
@@ -285,7 +291,7 @@ impl ManageForm {
                 });
             });
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || (self.confirm.is_none() && ui.input(|i| i.key_pressed(Key::Escape)))
                 {
                     outcome = Outcome::Close;
@@ -386,7 +392,7 @@ impl ManageForm {
                 for &i in &order {
                     let a = &doc.document.accounts[i];
                     let mut title = RichText::new(if a.name.is_empty() {
-                        "(sans nom)"
+                        tr!("(sans nom)")
                     } else {
                         &a.name
                     })
@@ -433,7 +439,7 @@ impl ManageForm {
                 }
             },
             |ui| {
-                if tool_button(ui, icon::PLUS, "Nouveau").clicked() {
+                if tool_button(ui, icon::PLUS, tr!("Nouveau")).clicked() {
                     tool = Some(0);
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -442,21 +448,21 @@ impl ManageForm {
                             egui::Button::new(RichText::new(icon::TRASH).color(pal.negative))
                                 .min_size(egui::vec2(34.0, 34.0)),
                         )
-                        .on_hover_text("Supprimer le compte")
+                        .on_hover_text(tr!("Supprimer le compte"))
                         .clicked()
                     {
                         tool = Some(1);
                     }
                     if ui
                         .add(egui::Button::new(icon::ARROW_DOWN).min_size(egui::vec2(34.0, 34.0)))
-                        .on_hover_text("Descendre")
+                        .on_hover_text(tr!("Descendre"))
                         .clicked()
                     {
                         tool = Some(2);
                     }
                     if ui
                         .add(egui::Button::new(icon::ARROW_UP).min_size(egui::vec2(34.0, 34.0)))
-                        .on_hover_text("Monter")
+                        .on_hover_text(tr!("Monter"))
                         .clicked()
                     {
                         tool = Some(3);
@@ -468,7 +474,7 @@ impl ManageForm {
         match tool {
             Some(0) => {
                 self.new_account = Some((
-                    manage::unique_account_name(&doc.document, "Nouveau compte"),
+                    manage::unique_account_name(&doc.document, tr!("Nouveau compte")),
                     String::new(),
                 ));
                 self.confirm = None;
@@ -495,19 +501,19 @@ impl ManageForm {
         let pal = palette(ui);
         if let Some((name, balance)) = &mut self.new_account {
             let mut create = None;
-            ui_kit::section(ui, width, icon::PLUS_CIRCLE, "Nouveau compte", |ui| {
+            ui_kit::section(ui, width, icon::PLUS_CIRCLE, tr!("Nouveau compte"), |ui| {
                 let w = ui.available_width() - LABEL_WIDTH;
-                ui_kit::row(ui, "Nom du compte", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Nom du compte"), LABEL_WIDTH, |ui| {
                     let r = ui.add(crate::theme::field(name).desired_width(w));
                     if r.ctx.memory(|m| m.focused().is_none()) {
                         r.request_focus();
                     }
                 });
                 ui.add_space(8.0);
-                ui_kit::row(ui, "Solde initial", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Solde initial"), LABEL_WIDTH, |ui| {
                     ui.add(
                         crate::theme::field(balance)
-                            .hint_text("0,00")
+                            .hint_text(tr!("0,00"))
                             .desired_width(180.0),
                     );
                 });
@@ -517,12 +523,16 @@ impl ManageForm {
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         ui.spacing_mut().item_spacing.x = 10.0;
-                        if crate::dialogs::primary(ui, "Créer le compte", !name.trim().is_empty())
-                            .clicked()
+                        if crate::dialogs::primary(
+                            ui,
+                            tr!("Créer le compte"),
+                            !name.trim().is_empty(),
+                        )
+                        .clicked()
                         {
                             create = Some(true);
                         }
-                        if crate::dialogs::button(ui, "Annuler").clicked() {
+                        if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                             create = Some(false);
                         }
                     },
@@ -553,7 +563,12 @@ impl ManageForm {
             match confirm_card(
                 ui,
                 width,
-                &format!("Supprimer le compte « {name} » et ses {count} opérations ?"),
+                &trn!(
+                    count,
+                    "Supprimer le compte « {1} » et {0} opération ?",
+                    "Supprimer le compte « {1} » et ses {0} opérations ?",
+                    name
+                ),
             ) {
                 Some(true) => {
                     match doc.edit_document(|d| manage::delete_account(d, i)) {
@@ -562,7 +577,8 @@ impl ManageForm {
                             doc.select_account(next);
                         }
                         None => {
-                            self.message = Some("Le fichier doit garder au moins un compte.".into())
+                            self.message =
+                                Some(tr!("Le fichier doit garder au moins un compte.").into())
                         }
                     }
                     self.confirm = None;
@@ -585,42 +601,43 @@ impl ManageForm {
         }
         let full = width - 2.0 * ui_kit::CARD_PADDING - 2.0 - LABEL_WIDTH - 8.0;
 
-        ui_kit::section(ui, width, icon::IDENTIFICATION_CARD, "Identité", |ui| {
-            ui_kit::row(ui, "Nom du compte", LABEL_WIDTH, |ui| {
-                field!(
-                    ui,
-                    "name",
-                    a.name,
-                    full,
-                    |d, v| d.accounts[i].name = if v.trim().is_empty() {
-                        format!("Compte {}", i + 1)
-                    } else {
-                        v
-                    }
-                );
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Banque", LABEL_WIDTH, |ui| {
-                field!(ui, "bank", a.bank_name, full, |d, v| d.accounts[i]
-                    .bank_name = v);
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Agence", LABEL_WIDTH, |ui| {
-                field!(ui, "agency", a.agency_name, full, |d, v| d.accounts[i]
-                    .agency_name =
-                    v);
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Adresse", LABEL_WIDTH, |ui| {
-                field!(ui, "address", a.agency_address, full, |d, v| d.accounts
-                    [i]
-                    .agency_address =
-                    v);
-            });
-        });
+        ui_kit::section(
+            ui,
+            width,
+            icon::IDENTIFICATION_CARD,
+            tr!("Identité"),
+            |ui| {
+                ui_kit::row(ui, tr!("Nom du compte"), LABEL_WIDTH, |ui| {
+                    field!(ui, "name", a.name, full, |d, v| d.accounts[i].name =
+                        if v.trim().is_empty() {
+                            tr!("Compte {}", i + 1)
+                        } else {
+                            v
+                        });
+                });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Banque"), LABEL_WIDTH, |ui| {
+                    field!(ui, "bank", a.bank_name, full, |d, v| d.accounts[i]
+                        .bank_name = v);
+                });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Agence"), LABEL_WIDTH, |ui| {
+                    field!(ui, "agency", a.agency_name, full, |d, v| d.accounts[i]
+                        .agency_name =
+                        v);
+                });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Adresse"), LABEL_WIDTH, |ui| {
+                    field!(ui, "address", a.agency_address, full, |d, v| d.accounts
+                        [i]
+                        .agency_address =
+                        v);
+                });
+            },
+        );
 
-        ui_kit::section(ui, width, icon::BANK, "Coordonnées bancaires", |ui| {
-            ui_kit::row(ui, "Banque · guichet", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::BANK, tr!("Coordonnées bancaires"), |ui| {
+            ui_kit::row(ui, tr!("Banque · guichet"), LABEL_WIDTH, |ui| {
                 field!(ui, "bank_code", a.bank_code, 110.0, |d, v| d.accounts[i]
                     .bank_code =
                     v);
@@ -630,13 +647,16 @@ impl ManageForm {
                     v);
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "N° de compte", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("N° de compte"), LABEL_WIDTH, |ui| {
                 field!(ui, "number", a.number, 240.0, |d, v| d.accounts[i].number =
                     v.to_uppercase());
-                if !a.number.is_empty() {
+                // Clé RIB (comptes français) : seulement si un code banque
+                // ou guichet est saisi.
+                let rib = !(a.bank_code.is_empty() && a.agency_code.is_empty());
+                if !a.number.is_empty() && rib {
                     match bp_core::calc::rib_key(&a.bank_code, &a.agency_code, &a.number) {
-                        Some(key) => ui_kit::pill(ui, &format!("clé RIB {key}"), pal.accent),
-                        None => ui_kit::pill(ui, "clé RIB incalculable", pal.warning),
+                        Some(key) => ui_kit::pill(ui, &tr!("clé RIB {}", key), pal.accent),
+                        None => ui_kit::pill(ui, tr!("clé RIB incalculable"), pal.warning),
                     }
                 }
             });
@@ -652,57 +672,57 @@ impl ManageForm {
                 });
                 if !a.iban.trim().is_empty() {
                     if bp_core::calc::iban_is_valid(&a.iban) {
-                        ui_kit::pill(ui, &format!("{}  valide", icon::CHECK), pal.positive);
+                        ui_kit::pill(
+                            ui,
+                            &format!("{}  {}", icon::CHECK, tr!("valide")),
+                            pal.positive,
+                        );
                     } else {
-                        ui_kit::pill(ui, &format!("{}  invalide", icon::WARNING), pal.negative);
+                        ui_kit::pill(
+                            ui,
+                            &format!("{}  {}", icon::WARNING, tr!("invalide")),
+                            pal.negative,
+                        );
                     }
                 }
             });
         });
 
-        ui_kit::section(ui, width, icon::CURRENCY_CIRCLE_DOLLAR, "Devises", |ui| {
-            ui_kit::row(ui, "Devise principale", LABEL_WIDTH, |ui| {
-                field!(ui, "curr1", a.currency, 70.0, |d, v| d.accounts[i]
-                    .currency =
-                    if v.trim().is_empty() { "€".into() } else { v });
-                ui.label(RichText::new("taux").color(pal.muted));
-                field!(
-                    ui,
-                    "rate1",
-                    a.currency_rate.to_string().replace('.', ","),
-                    120.0,
-                    |d, v| {
-                        d.accounts[i].currency_rate =
-                            v.replace(',', ".").trim().parse().unwrap_or(1.0)
-                    }
-                );
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Devise secondaire", LABEL_WIDTH, |ui| {
-                field!(ui, "curr2", a.secondary_currency, 70.0, |d, v| d.accounts
-                    [i]
-                    .secondary_currency =
-                    if v.trim().is_empty() { "F".into() } else { v });
-                ui.label(RichText::new("taux").color(pal.muted));
-                field!(
-                    ui,
-                    "rate2",
-                    a.secondary_rate.to_string().replace('.', ","),
-                    120.0,
-                    |d, v| {
-                        d.accounts[i].secondary_rate =
-                            v.replace(',', ".").trim().parse().unwrap_or(6.55957)
-                    }
-                );
-            });
-        });
+        ui_kit::section(
+            ui,
+            width,
+            icon::CURRENCY_CIRCLE_DOLLAR,
+            tr!("Devises"),
+            |ui| {
+                ui_kit::row(ui, tr!("Devise principale"), LABEL_WIDTH, |ui| {
+                    field!(ui, "curr1", a.currency, 70.0, |d, v| d.accounts[i]
+                        .currency =
+                        if v.trim().is_empty() { "€".into() } else { v });
+                    ui.label(RichText::new(tr!("taux")).color(pal.muted));
+                    field!(ui, "rate1", show_rate(a.currency_rate), 120.0, |d, v| {
+                        d.accounts[i].currency_rate = parse_rate(&v).unwrap_or(1.0)
+                    });
+                });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Devise secondaire"), LABEL_WIDTH, |ui| {
+                    field!(ui, "curr2", a.secondary_currency, 70.0, |d, v| d.accounts
+                        [i]
+                        .secondary_currency =
+                        if v.trim().is_empty() { "F".into() } else { v });
+                    ui.label(RichText::new(tr!("taux")).color(pal.muted));
+                    field!(ui, "rate2", show_rate(a.secondary_rate), 120.0, |d, v| {
+                        d.accounts[i].secondary_rate = parse_rate(&v).unwrap_or(6.55957)
+                    });
+                });
+            },
+        );
 
-        ui_kit::section(ui, width, icon::TOGGLE_LEFT, "Options", |ui| {
+        ui_kit::section(ui, width, icon::TOGGLE_LEFT, tr!("Options"), |ui| {
             let mut is_virtual = a.is_virtual;
             if crate::theme::checkbox(
                 ui,
                 &mut is_virtual,
-                "Compte virtuel : exclu des totaux et statistiques",
+                tr!("Compte virtuel : exclu des totaux et statistiques"),
             )
             .changed()
             {
@@ -713,7 +733,7 @@ impl ManageForm {
             if crate::theme::checkbox(
                 ui,
                 &mut disabled,
-                "Compte inactif : masqué de la liste des comptes",
+                tr!("Compte inactif : masqué de la liste des comptes"),
             )
             .changed()
             {
@@ -761,10 +781,10 @@ impl ManageForm {
                 }
             },
             |ui| {
-                if tool_button(ui, icon::PLUS, "Catégorie").clicked() {
+                if tool_button(ui, icon::PLUS, tr!("Catégorie")).clicked() {
                     self.new_category = Some((String::new(), false));
                 }
-                if tool_button(ui, icon::PLUS, "Sous-catégorie").clicked() {
+                if tool_button(ui, icon::PLUS, tr!("Sous-catégorie")).clicked() {
                     self.new_category = Some((String::new(), true));
                 }
             },
@@ -780,14 +800,18 @@ impl ManageForm {
         let pal = palette(ui);
         if let Some((name, child)) = &mut self.new_category {
             let kind = if *child {
-                "Nouvelle sous-catégorie"
+                tr!("Nouvelle sous-catégorie")
             } else {
-                "Nouvelle catégorie"
+                tr!("Nouvelle catégorie")
             };
             let mut done = None;
             ui_kit::section(ui, width, icon::PLUS_CIRCLE, kind, |ui| {
                 let w = ui.available_width();
-                let response = ui.add(crate::theme::field(name).hint_text("Nom").desired_width(w));
+                let response = ui.add(
+                    crate::theme::field(name)
+                        .hint_text(tr!("Nom"))
+                        .desired_width(w),
+                );
                 if response.ctx.memory(|m| m.focused().is_none()) {
                     response.request_focus();
                 }
@@ -796,7 +820,7 @@ impl ManageForm {
                 }
                 ui.add_space(6.0);
                 ui.label(
-                    RichText::new("Elle sera placée après la catégorie sélectionnée.")
+                    RichText::new(tr!("Elle sera placée après la catégorie sélectionnée."))
                         .color(pal.muted)
                         .size(12.5),
                 );
@@ -806,11 +830,12 @@ impl ManageForm {
                     egui::Layout::right_to_left(egui::Align::Center),
                     |ui| {
                         ui.spacing_mut().item_spacing.x = 10.0;
-                        if crate::dialogs::primary(ui, "Ajouter", !name.trim().is_empty()).clicked()
+                        if crate::dialogs::primary(ui, tr!("Ajouter"), !name.trim().is_empty())
+                            .clicked()
                         {
                             done = Some(true);
                         }
-                        if crate::dialogs::button(ui, "Annuler").clicked() {
+                        if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                             done = Some(false);
                         }
                     },
@@ -842,13 +867,17 @@ impl ManageForm {
 
         let Some(pos) = self.category.filter(|&p| p < doc.document.categories.len()) else {
             if self.new_category.is_none() {
-                empty_state(ui, icon::TAG, "Sélectionnez une catégorie dans la liste.");
+                empty_state(
+                    ui,
+                    icon::TAG,
+                    tr!("Sélectionnez une catégorie dans la liste."),
+                );
             }
             ui_kit::section(
                 ui,
                 width,
                 icon::ARROWS_DOWN_UP,
-                "Import, export et tri",
+                tr!("Import, export et tri"),
                 |ui| {
                     self.category_tools(ui, doc);
                 },
@@ -859,19 +888,22 @@ impl ManageForm {
         let usage = manage::category_usage(&doc.document, pos);
 
         if let Some(ConfirmDelete::Category(p)) = self.confirm {
-            let children = if c.is_child {
-                ""
-            } else {
-                " et ses sous-catégories"
-            };
-            match confirm_card(
-                ui,
-                width,
-                &format!(
-                    "Supprimer « {} »{children} ? {usage} opération(s) perdront leur catégorie.",
+            let question = if c.is_child {
+                trn!(
+                    usage,
+                    "Supprimer « {1} » ? {0} opération perdra sa catégorie.",
+                    "Supprimer « {1} » ? {0} opérations perdront leur catégorie.",
                     c.name
-                ),
-            ) {
+                )
+            } else {
+                trn!(
+                    usage,
+                    "Supprimer « {1} » et ses sous-catégories ? {0} opération perdra sa catégorie.",
+                    "Supprimer « {1} » et ses sous-catégories ? {0} opérations perdront leur catégorie.",
+                    c.name
+                )
+            };
+            match confirm_card(ui, width, &question) {
                 Some(true) => {
                     doc.edit_document(|d| manage::delete_category(d, p));
                     self.confirm = None;
@@ -883,26 +915,26 @@ impl ManageForm {
             }
         }
 
-        ui_kit::section(ui, width, icon::TAG, "Catégorie", |ui| {
+        ui_kit::section(ui, width, icon::TAG, tr!("Catégorie"), |ui| {
             let full = ui.available_width() - LABEL_WIDTH - 8.0;
-            ui_kit::row(ui, "Nom", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Nom"), LABEL_WIDTH, |ui| {
                 self.text_field(ui, "cat_name", &c.name, full, |v| {
                     doc.edit_document(|d| manage::rename_category(d, pos, &v));
                 });
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Niveau", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Niveau"), LABEL_WIDTH, |ui| {
                 let mut child = c.is_child;
                 ui.add_enabled_ui(pos > 0, |ui| {
                     if ui_kit::segmented(
                         ui,
                         &mut child,
                         &[
-                            (false, icon::FOLDER, "Catégorie", pal.accent),
+                            (false, icon::FOLDER, tr!("Catégorie"), pal.accent),
                             (
                                 true,
                                 icon::ARROW_ELBOW_DOWN_RIGHT,
-                                "Sous-catégorie",
+                                tr!("Sous-catégorie"),
                                 pal.accent,
                             ),
                         ],
@@ -914,38 +946,47 @@ impl ManageForm {
                 });
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Utilisation", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Utilisation"), LABEL_WIDTH, |ui| {
                 let text = match usage {
-                    0 => "aucune opération".to_string(),
-                    1 => "1 opération".to_string(),
-                    n => format!("{n} opérations"),
+                    0 => tr!("aucune opération").to_string(),
+                    n => trn!(n, "{} opération", "{} opérations"),
                 };
                 ui_kit::pill(ui, &text, if usage == 0 { pal.muted } else { pal.accent });
             });
         });
 
-        ui_kit::section(ui, width, icon::ARROWS_DOWN_UP, "Position", |ui| {
+        ui_kit::section(ui, width, icon::ARROWS_DOWN_UP, tr!("Position"), |ui| {
             ui.horizontal(|ui| {
-                if tool_button(ui, icon::ARROW_UP, "Monter").clicked() {
+                if tool_button(ui, icon::ARROW_UP, tr!("Monter")).clicked() {
                     let with = self.with_children;
                     self.category = doc
                         .edit_document(|d| manage::move_category(d, pos, true, with))
                         .or(Some(pos));
                 }
-                if tool_button(ui, icon::ARROW_DOWN, "Descendre").clicked() {
+                if tool_button(ui, icon::ARROW_DOWN, tr!("Descendre")).clicked() {
                     let with = self.with_children;
                     self.category = doc
                         .edit_document(|d| manage::move_category(d, pos, false, with))
                         .or(Some(pos));
                 }
                 ui.add_space(12.0);
-                crate::theme::checkbox(ui, &mut self.with_children, "Avec les sous-catégories");
+                crate::theme::checkbox(
+                    ui,
+                    &mut self.with_children,
+                    tr!("Avec les sous-catégories"),
+                );
             });
         });
 
-        ui_kit::section(ui, width, icon::ARCHIVE, "Import, export et tri", |ui| {
-            self.category_tools(ui, doc);
-        });
+        ui_kit::section(
+            ui,
+            width,
+            icon::ARCHIVE,
+            tr!("Import, export et tri"),
+            |ui| {
+                self.category_tools(ui, doc);
+            },
+        );
 
         ui.allocate_ui_with_layout(
             egui::vec2(width, 36.0),
@@ -953,8 +994,12 @@ impl ManageForm {
             |ui| {
                 if crate::dialogs::button(
                     ui,
-                    RichText::new(format!("{}  Supprimer la catégorie", icon::TRASH))
-                        .color(pal.negative),
+                    RichText::new(format!(
+                        "{}  {}",
+                        icon::TRASH,
+                        tr!("Supprimer la catégorie")
+                    ))
+                    .color(pal.negative),
                 )
                 .clicked()
                 {
@@ -966,7 +1011,7 @@ impl ManageForm {
 
     fn category_tools(&mut self, ui: &mut egui::Ui, doc: &mut OpenDoc) {
         ui.horizontal(|ui| {
-            if tool_button(ui, icon::SORT_ASCENDING, "Trier par nom").clicked() {
+            if tool_button(ui, icon::SORT_ASCENDING, tr!("Trier par nom")).clicked() {
                 doc.edit_document(manage::sort_categories);
                 self.category = None;
             }
@@ -974,21 +1019,21 @@ impl ManageForm {
                 egui::Id::new("categories_export"),
                 egui::Id::new("categories_import"),
             );
-            if tool_button(ui, icon::EXPORT, "Exporter…").clicked() {
+            if tool_button(ui, icon::EXPORT, tr!("Exporter…")).clicked() {
                 let dialog = rfd::FileDialog::new()
                     .set_file_name("categories.txt")
-                    .add_filter("Texte", &["txt"]);
+                    .add_filter(tr!("Texte"), &["txt"]);
                 crate::file_picker::open(ui.ctx(), export, crate::file_picker::Kind::Save, dialog);
             }
             if let Some(path) = crate::file_picker::chosen(ui.ctx(), export) {
                 let text = manage::export_categories(&doc.document);
                 self.message = Some(match std::fs::write(&path, text) {
-                    Ok(()) => format!("Catégories exportées dans {}", path.display()),
-                    Err(e) => format!("Export impossible : {e}"),
+                    Ok(()) => tr!("Catégories exportées dans {}", path.display()),
+                    Err(e) => tr!("Export impossible : {}", e),
                 });
             }
-            if tool_button(ui, icon::DOWNLOAD_SIMPLE, "Importer…").clicked() {
-                let dialog = rfd::FileDialog::new().add_filter("Texte", &["txt"]);
+            if tool_button(ui, icon::DOWNLOAD_SIMPLE, tr!("Importer…")).clicked() {
+                let dialog = rfd::FileDialog::new().add_filter(tr!("Texte"), &["txt"]);
                 crate::file_picker::open(ui.ctx(), import, crate::file_picker::Kind::File, dialog);
             }
             if let Some(path) = crate::file_picker::chosen(ui.ctx(), import) {
@@ -997,9 +1042,9 @@ impl ManageForm {
                     .unwrap_or_default();
                 let n = doc.edit_document(|d| manage::import_categories(d, &text));
                 self.message = Some(if n > 0 {
-                    format!("{n} catégories importées")
+                    trn!(n, "{} catégorie importée", "{} catégories importées")
                 } else {
-                    "Aucune catégorie lue dans ce fichier".into()
+                    tr!("Aucune catégorie lue dans ce fichier").into()
                 });
                 self.category = None;
             }
@@ -1014,7 +1059,7 @@ impl ManageForm {
             ui,
             icon::MAGNIFYING_GLASS,
             &mut self.payee_search,
-            "Rechercher un tiers",
+            tr!("Rechercher un tiers"),
             width,
         );
         ui.add_space(10.0);
@@ -1065,7 +1110,7 @@ impl ManageForm {
                 }
             },
             |ui| {
-                if tool_button(ui, icon::PLUS, "Nouveau tiers").clicked() {
+                if tool_button(ui, icon::PLUS, tr!("Nouveau tiers")).clicked() {
                     create = true;
                 }
                 if let Some(i) = selected {
@@ -1075,7 +1120,7 @@ impl ManageForm {
                                 egui::Button::new(RichText::new(icon::TRASH).color(pal.negative))
                                     .min_size(egui::vec2(34.0, 34.0)),
                             )
-                            .on_hover_text("Supprimer le tiers")
+                            .on_hover_text(tr!("Supprimer le tiers"))
                             .clicked()
                         {
                             delete = Some(i);
@@ -1087,7 +1132,7 @@ impl ManageForm {
         if create {
             let index = doc.edit_document(|d| {
                 d.payees.push(Payee {
-                    caption: "Nouveau tiers".into(),
+                    caption: tr!("Nouveau tiers").into(),
                     mode: Mode::default(),
                     category: None,
                     payee: String::new(),
@@ -1114,7 +1159,9 @@ impl ManageForm {
             empty_state(
                 ui,
                 icon::ADDRESS_BOOK,
-                "Les tiers mémorisés remplissent la saisie : tapez le début de leur nom dans le champ Tiers d'une nouvelle opération.",
+                tr!(
+                    "Les tiers mémorisés remplissent la saisie : tapez le début de leur nom dans le champ Tiers d'une nouvelle opération."
+                ),
             );
             return;
         };
@@ -1128,8 +1175,9 @@ impl ManageForm {
             match confirm_card(
                 ui,
                 width,
-                &format!(
-                    "Supprimer le tiers mémorisé « {name} » ? Les opérations ne changent pas."
+                &tr!(
+                    "Supprimer le tiers mémorisé « {} » ? Les opérations ne changent pas.",
+                    name
                 ),
             ) {
                 Some(true) => {
@@ -1147,47 +1195,53 @@ impl ManageForm {
             }
         }
         let p = doc.document.payees[i].clone();
-        ui_kit::section(ui, width, icon::ADDRESS_BOOK, "Tiers mémorisé", |ui| {
-            let full = ui.available_width() - LABEL_WIDTH - 8.0;
-            ui_kit::row(ui, "Nom dans la liste", LABEL_WIDTH, |ui| {
-                self.text_field(ui, "payee_caption", &p.caption, full, |v| {
-                    doc.edit_document(|d| d.payees[i].caption = manage::clean(&v));
+        ui_kit::section(
+            ui,
+            width,
+            icon::ADDRESS_BOOK,
+            tr!("Tiers mémorisé"),
+            |ui| {
+                let full = ui.available_width() - LABEL_WIDTH - 8.0;
+                ui_kit::row(ui, tr!("Nom dans la liste"), LABEL_WIDTH, |ui| {
+                    self.text_field(ui, "payee_caption", &p.caption, full, |v| {
+                        doc.edit_document(|d| d.payees[i].caption = manage::clean(&v));
+                    });
                 });
-            });
-        });
+            },
+        );
         ui_kit::section(
             ui,
             width,
             icon::MAGIC_WAND,
-            "Valeurs remplies à la saisie",
+            tr!("Valeurs remplies à la saisie"),
             |ui| {
                 let full = ui.available_width() - LABEL_WIDTH - 8.0;
-                ui_kit::row(ui, "Mode de paiement", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Mode de paiement"), LABEL_WIDTH, |ui| {
                     let mut mode = p.mode.clone();
                     if ui_kit::mode_combo(ui, "payee_mode", &doc.document, &mut mode, full) {
                         doc.edit_document(|d| d.payees[i].mode = mode);
                     }
                 });
                 ui.add_space(8.0);
-                ui_kit::row(ui, "Tiers", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Tiers"), LABEL_WIDTH, |ui| {
                     self.text_field(ui, "payee_payee", &p.payee, full, |v| {
                         doc.edit_document(|d| d.payees[i].payee = manage::clean(&v));
                     });
                 });
                 ui.add_space(8.0);
-                ui_kit::row(ui, "Détail", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Détail"), LABEL_WIDTH, |ui| {
                     self.text_field(ui, "payee_details", &p.details, full, |v| {
                         doc.edit_document(|d| d.payees[i].details = manage::clean(&v));
                     });
                 });
                 ui.add_space(8.0);
-                ui_kit::row(ui, "Montant", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Montant"), LABEL_WIDTH, |ui| {
                     self.text_field(ui, "payee_amount", &p.amount, 180.0, |v| {
                         doc.edit_document(|d| d.payees[i].amount = manage::clean(&v));
                     });
                 });
                 ui.add_space(8.0);
-                ui_kit::row(ui, "Catégorie", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Catégorie"), LABEL_WIDTH, |ui| {
                     let mut category = p.category;
                     let styles = doc.category_styles.clone();
                     if ui_kit::category_combo(
@@ -1204,9 +1258,11 @@ impl ManageForm {
             },
         );
         ui.label(
-            RichText::new("Les champs vides ne sont pas remplis lors de la saisie.")
-                .color(pal.muted)
-                .size(12.5),
+            RichText::new(tr!(
+                "Les champs vides ne sont pas remplis lors de la saisie."
+            ))
+            .color(pal.muted)
+            .size(12.5),
         );
     }
 
@@ -1224,14 +1280,18 @@ impl ManageForm {
             |ui| {
                 ui.add_space(4.0);
                 ui.label(
-                    RichText::new("   MODES STANDARD")
+                    RichText::new(format!("   {}", tr!("MODES STANDARD")))
                         .size(11.0)
                         .color(pal.muted),
                 );
                 for m in StandardMode::ALL {
                     let mode = Mode::Standard(m);
                     let (glyph, color) = crate::grid::mode_style(&doc.document, &mode, &pal);
-                    let sign = if m.is_debit() { "dépense" } else { "recette" };
+                    let sign = if m.is_debit() {
+                        tr!("dépense")
+                    } else {
+                        tr!("recette")
+                    };
                     let right = RichText::new(format!("{}  {sign}", icon::LOCK_SIMPLE))
                         .size(12.0)
                         .color(pal.muted);
@@ -1245,21 +1305,28 @@ impl ManageForm {
                         None,
                         Some(right),
                     )
-                    .on_hover_text("Mode standard, non modifiable");
+                    .on_hover_text(tr!("Mode standard, non modifiable"));
                 }
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new("   MODES PERSONNALISÉS")
+                    RichText::new(format!("   {}", tr!("MODES PERSONNALISÉS")))
                         .size(11.0)
                         .color(pal.muted),
                 );
                 if doc.document.custom_modes.is_empty() {
-                    ui.label(RichText::new("   Aucun pour l'instant.").color(pal.muted));
+                    ui.label(
+                        RichText::new(format!("   {}", tr!("Aucun pour l'instant.")))
+                            .color(pal.muted),
+                    );
                 }
                 for (i, m) in doc.document.custom_modes.iter().enumerate() {
                     let mode = Mode::Custom(m.name.clone());
                     let (glyph, color) = crate::grid::mode_style(&doc.document, &mode, &pal);
-                    let sign = if m.debit { "dépense" } else { "recette" };
+                    let sign = if m.debit {
+                        tr!("dépense")
+                    } else {
+                        tr!("recette")
+                    };
                     let right = RichText::new(sign).size(12.0).color(color);
                     let title = RichText::new(&m.name).family(crate::theme::medium());
                     if list_row(
@@ -1279,13 +1346,13 @@ impl ManageForm {
                 }
             },
             |ui| {
-                if tool_button(ui, icon::PLUS, "Nouveau mode").clicked() {
+                if tool_button(ui, icon::PLUS, tr!("Nouveau mode")).clicked() {
                     add = true;
                 }
             },
         );
         if add {
-            doc.edit_document(|d| manage::add_mode(d, "Nouveau mode", true));
+            doc.edit_document(|d| manage::add_mode(d, tr!("Nouveau mode"), true));
             clicked = Some(doc.document.custom_modes.len() - 1);
         }
         if let Some(i) = clicked {
@@ -1301,7 +1368,9 @@ impl ManageForm {
             empty_state(
                 ui,
                 icon::CREDIT_CARD,
-                "Sélectionnez un mode personnalisé, ou créez-en un (carte d'une autre banque, chèque-restaurant…).",
+                tr!(
+                    "Sélectionnez un mode personnalisé, ou créez-en un (carte d'une autre banque, chèque-restaurant…)."
+                ),
             );
             return;
         };
@@ -1316,8 +1385,10 @@ impl ManageForm {
             match confirm_card(
                 ui,
                 width,
-                &format!(
-                    "Supprimer « {} » ? {usage} opération(s) passeront en « {} ».",
+                &trn!(
+                    usage,
+                    "Supprimer « {1} » ? {0} opération passera en « {2} ».",
+                    "Supprimer « {1} » ? {0} opérations passeront en « {2} ».",
                     m.name,
                     replacement.label()
                 ),
@@ -1332,53 +1403,78 @@ impl ManageForm {
                 None => {}
             }
         }
-        ui_kit::section(ui, width, icon::CREDIT_CARD, "Mode de paiement", |ui| {
-            let full = ui.available_width() - LABEL_WIDTH - 8.0;
-            let mut refused = false;
-            ui_kit::row(ui, "Nom", LABEL_WIDTH, |ui| {
-                self.text_field(ui, "mode_name", &m.name, full, |v| {
-                    refused = !doc.edit_document(|d| manage::rename_mode(d, i, &v));
+        ui_kit::section(
+            ui,
+            width,
+            icon::CREDIT_CARD,
+            tr!("Mode de paiement"),
+            |ui| {
+                let full = ui.available_width() - LABEL_WIDTH - 8.0;
+                let mut refused = false;
+                ui_kit::row(ui, tr!("Nom"), LABEL_WIDTH, |ui| {
+                    self.text_field(ui, "mode_name", &m.name, full, |v| {
+                        refused = !doc.edit_document(|d| manage::rename_mode(d, i, &v));
+                    });
                 });
-            });
-            if refused {
-                self.message =
-                    Some("Nom refusé : vide, déjà utilisé ou nom d'un mode standard.".into());
-            }
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Sens", LABEL_WIDTH, |ui| {
-                let mut credit = !m.debit;
-                if ui_kit::segmented(
-                    ui,
-                    &mut credit,
-                    &[
-                        (false, icon::ARROW_UP_RIGHT, "Dépense", pal.negative),
-                        (true, icon::ARROW_DOWN_LEFT, "Recette", pal.positive),
-                    ],
-                    34.0,
-                    Some(full.min(360.0)),
-                ) {
-                    doc.edit_document(|d| d.custom_modes[i].debit = !credit);
+                if refused {
+                    self.message = Some(
+                        tr!("Nom refusé : vide, déjà utilisé ou nom d'un mode standard.").into(),
+                    );
                 }
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, "Utilisation", LABEL_WIDTH, |ui| {
-                let text = match usage {
-                    0 => "aucune opération".to_string(),
-                    1 => "1 opération".to_string(),
-                    n => format!("{n} opérations"),
-                };
-                ui_kit::pill(ui, &text, if usage == 0 { pal.muted } else { pal.accent });
-            });
-        });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Sens"), LABEL_WIDTH, |ui| {
+                    let mut credit = !m.debit;
+                    if ui_kit::segmented(
+                        ui,
+                        &mut credit,
+                        &[
+                            (false, icon::ARROW_UP_RIGHT, tr!("Dépense"), pal.negative),
+                            (true, icon::ARROW_DOWN_LEFT, tr!("Recette"), pal.positive),
+                        ],
+                        34.0,
+                        Some(full.min(360.0)),
+                    ) {
+                        doc.edit_document(|d| d.custom_modes[i].debit = !credit);
+                    }
+                });
+                ui.add_space(8.0);
+                ui_kit::row(ui, tr!("Utilisation"), LABEL_WIDTH, |ui| {
+                    let text = match usage {
+                        0 => tr!("aucune opération").to_string(),
+                        n => trn!(n, "{} opération", "{} opérations"),
+                    };
+                    ui_kit::pill(ui, &text, if usage == 0 { pal.muted } else { pal.accent });
+                });
+            },
+        );
         if crate::dialogs::button(
             ui,
-            RichText::new(format!("{}  Supprimer le mode", icon::TRASH)).color(pal.negative),
+            RichText::new(format!("{}  {}", icon::TRASH, tr!("Supprimer le mode")))
+                .color(pal.negative),
         )
         .clicked()
         {
             self.confirm = Some(ConfirmDelete::Mode(i));
         }
     }
+}
+
+/// Taux de change affiché avec le séparateur décimal de la langue.
+fn show_rate(rate: f64) -> String {
+    rate.to_string()
+        .replace('.', &bp_core::i18n::decimal_separator().to_string())
+}
+
+/// Taux saisi : virgule ou point décimal ; avec les deux (« 1,234.5 »,
+/// « 1.234,5 »), le dernier est la décimale et l'autre sépare les milliers.
+fn parse_rate(text: &str) -> Option<f64> {
+    let text: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    let normalized = match (text.rfind(','), text.rfind('.')) {
+        (Some(comma), Some(dot)) if dot > comma => text.replace(',', ""),
+        (Some(_), Some(_)) => text.replace('.', "").replace(',', "."),
+        _ => text.replace(',', "."),
+    };
+    normalized.parse().ok()
 }
 
 /// Message centré quand rien n'est sélectionné.
@@ -1396,4 +1492,22 @@ fn empty_state(ui: &mut egui::Ui, glyph: &str, text: &str) {
         ui.label(RichText::new(text).color(pal.muted));
     });
     ui.add_space(40.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bp_core::i18n::{Lang, with_lang};
+
+    #[test]
+    fn rates_in_both_formats() {
+        assert_eq!(parse_rate("6,55957"), Some(6.55957));
+        assert_eq!(parse_rate("6.55957"), Some(6.55957));
+        assert_eq!(parse_rate("1,234.5"), Some(1234.5));
+        assert_eq!(parse_rate("1.234,5"), Some(1234.5));
+        assert_eq!(parse_rate(" 1 234,5 "), Some(1234.5));
+        assert_eq!(parse_rate("abc"), None);
+        assert_eq!(show_rate(1.5), "1,5");
+        with_lang(Lang::En, || assert_eq!(show_rate(1.5), "1.5"));
+    }
 }

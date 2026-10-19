@@ -3,6 +3,7 @@
 use bp_core::edit::GroupEdit;
 use bp_core::export::{CsvField, CsvOptions};
 use bp_core::model::{Amount, Date, Mode, Tack};
+use bp_core::{tr, tr_mark, trc, trn};
 use egui::text::{LayoutJob, TextFormat};
 use egui::{Color32, Key, RichText};
 use egui_phosphor::regular as icon;
@@ -107,7 +108,7 @@ fn buttons(ui: &mut egui::Ui, ok: &str, enabled: bool) -> Option<bool> {
         if crate::dialogs::primary(ui, ok, enabled).clicked() {
             result = Some(true);
         }
-        if crate::dialogs::button(ui, "Annuler").clicked() {
+        if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
             result = Some(false);
         }
     });
@@ -147,19 +148,21 @@ impl PrintForm {
         crate::dialogs::modal(ctx, "tool_print").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            title(ui, icon::PRINTER, "Imprimer le relevé");
+            title(ui, icon::PRINTER, tr!("Imprimer le relevé"));
             let n = doc.visible_len();
             ui_kit::subtitle(
                 ui,
-                format!(
-                    "Relevé du compte « {} » : {n} ligne(s) affichée(s), dans l'ordre et avec les filtres de la grille.",
+                trn!(
+                    n,
+                    "Relevé du compte « {1} » : {0} ligne affichée, dans l'ordre et avec les filtres de la grille.",
+                    "Relevé du compte « {1} » : {0} lignes affichées, dans l'ordre et avec les filtres de la grille.",
                     doc.current_account().name
                 ),
             );
-            ui_kit::section(ui, width, icon::SLIDERS_HORIZONTAL, "Présentation", |ui| {
-                crate::theme::checkbox(ui, &mut self.details, "Afficher le détail sous le tiers");
+            ui_kit::section(ui, width, icon::SLIDERS_HORIZONTAL, tr!("Présentation"), |ui| {
+                crate::theme::checkbox(ui, &mut self.details, tr!("Afficher le détail sous le tiers"));
                 ui.add_space(8.0);
-                crate::theme::checkbox(ui, &mut self.black_and_white, "Noir et blanc");
+                crate::theme::checkbox(ui, &mut self.black_and_white, tr!("Noir et blanc"));
             });
             if let Some(error) = &self.error {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
@@ -169,14 +172,14 @@ impl PrintForm {
                 details: self.details,
             };
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, &format!("{}  Ouvrir pour imprimer", icon::PRINTER), n > 0).clicked() {
+                if crate::dialogs::primary(ui, &format!("{}  {}", icon::PRINTER, tr!("Ouvrir pour imprimer")), n > 0).clicked() {
                     match open_statement(doc, options) {
                         Ok(message) => outcome = Outcome::Done(message),
                         Err(e) => self.error = Some(e),
                     }
                 }
                 let pick = egui::Id::new("statement_pdf");
-                if crate::dialogs::button(ui, format!("{}  Enregistrer en PDF…", icon::FILE_PDF)).clicked() {
+                if crate::dialogs::button(ui, format!("{}  {}", icon::FILE_PDF, tr!("Enregistrer en PDF…"))).clicked() {
                     crate::file_picker::open(ui.ctx(), pick, crate::file_picker::Kind::Save, statement_dialog(doc));
                 }
                 if let Some(path) = crate::file_picker::chosen(ui.ctx(), pick) {
@@ -185,7 +188,7 @@ impl PrintForm {
                         Err(e) => self.error = Some(e),
                     }
                 }
-                if crate::dialogs::button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
             });
@@ -195,7 +198,7 @@ impl PrintForm {
 }
 
 fn statement_name(doc: &OpenDoc) -> String {
-    format!(
+    tr!(
         "Relevé {} {}.pdf",
         bp_core::manage::clean(&doc.current_account().name).replace(['/', '\\'], "-"),
         chrono::Local::now().format("%Y-%m-%d")
@@ -212,8 +215,8 @@ fn open_statement(
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(statement_name(doc));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
-    open::that_detached(&path).map_err(|e| format!("Impossible d'ouvrir le PDF : {e}"))?;
-    Ok("Relevé ouvert dans la visionneuse PDF".into())
+    open::that_detached(&path).map_err(|e| tr!("Impossible d'ouvrir le PDF : {}", e))?;
+    Ok(tr!("Relevé ouvert dans la visionneuse PDF").into())
 }
 
 /// Choix de l'emplacement du relevé.
@@ -221,7 +224,7 @@ fn statement_dialog(doc: &OpenDoc) -> rfd::FileDialog {
     let dir =
         crate::settings::shared::export_dir(doc.path.parent().unwrap_or(std::path::Path::new(".")));
     rfd::FileDialog::new()
-        .set_title("Enregistrer le relevé en PDF")
+        .set_title(tr!("Enregistrer le relevé en PDF"))
         .set_directory(dir)
         .set_file_name(statement_name(doc))
         .add_filter("PDF", &["pdf"])
@@ -235,7 +238,7 @@ fn save_statement(
 ) -> Result<String, String> {
     let bytes = crate::statement_pdf::build(doc, options)?;
     std::fs::write(path, bytes).map_err(|e| e.to_string())?;
-    Ok(format!("Relevé enregistré : {}", path.display()))
+    Ok(tr!("Relevé enregistré : {}", path.display()))
 }
 
 // ─────────────────────────────── Date de pointage ───────────────────────────────
@@ -266,15 +269,12 @@ impl MarkDateForm {
         crate::dialogs::modal(ctx, "tool_mark_date").show(ctx, |ui| {
             ui.set_width(460.0);
             let pal = palette(ui);
-            title(ui, icon::CALENDAR_CHECK, "Date de pointage");
-            let text = if self.lines == 1 {
-                "Date à laquelle la ligne sélectionnée a été pointée.".to_string()
-            } else {
-                format!(
-                    "Date à laquelle les {} lignes sélectionnées ont été pointées.",
-                    self.lines
-                )
-            };
+            title(ui, icon::CALENDAR_CHECK, tr!("Date de pointage"));
+            let text = trn!(
+                self.lines,
+                "Date à laquelle la ligne sélectionnée a été pointée.",
+                "Date à laquelle les {} lignes sélectionnées ont été pointées."
+            );
             ui_kit::subtitle(ui, text);
             let field = crate::datepicker::date_field(
                 ui,
@@ -290,7 +290,7 @@ impl MarkDateForm {
             if let Some(error) = &self.error {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
-            let mut result = buttons(ui, &format!("{}  Appliquer", icon::CHECK), true);
+            let mut result = buttons(ui, &format!("{}  {}", icon::CHECK, tr!("Appliquer")), true);
             if enter {
                 result = Some(true);
             }
@@ -298,9 +298,9 @@ impl MarkDateForm {
                 Some(true) => match Date::parse_fr(&self.date, Date::today()) {
                     Some(date) => {
                         doc.set_mark_date(date);
-                        outcome = Outcome::Done(format!("Date de pointage : {date}"));
+                        outcome = Outcome::Done(tr!("Date de pointage : {}", date));
                     }
-                    None => self.error = Some("Date invalide (jj/mm/aaaa)".into()),
+                    None => self.error = Some(tr!("Date invalide (jj/mm/aaaa)").into()),
                 },
                 Some(false) => outcome = Outcome::Close,
                 None => {}
@@ -342,18 +342,20 @@ impl ReplaceForm {
         crate::dialogs::modal(ctx, "tool_replace").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            title(ui, icon::SWAP, "Remplacer");
+            title(ui, icon::SWAP, tr!("Remplacer"));
             ui_kit::subtitle(
                 ui,
-                "Remplace un texte dans le tiers et le détail des lignes affichées. La casse est respectée.",
+                tr!(
+                    "Remplace un texte dans le tiers et le détail des lignes affichées. La casse est respectée."
+                ),
             );
-            ui_kit::section(ui, width, icon::TEXT_AA, "Texte", |ui| {
+            ui_kit::section(ui, width, icon::TEXT_AA, tr!("Texte"), |ui| {
                 let field_width = ui.available_width();
                 let find = ui_kit::icon_field(
                     ui,
                     icon::MAGNIFYING_GLASS,
                     &mut self.find,
-                    "Texte à rechercher",
+                    tr!("Texte à rechercher"),
                     field_width,
                 );
                 if find.ctx.memory(|m| m.focused().is_none()) {
@@ -364,7 +366,7 @@ impl ReplaceForm {
                     ui,
                     icon::ARROW_BEND_DOWN_RIGHT,
                     &mut self.replacement,
-                    "Remplacer par (vide pour effacer)",
+                    tr!("Remplacer par (vide pour effacer)"),
                     field_width,
                 );
             });
@@ -382,19 +384,15 @@ impl ReplaceForm {
                     .take(4)
                     .collect()
             };
-            ui_kit::caption(ui, icon::EYE, "Aperçu");
+            ui_kit::caption(ui, icon::EYE, tr!("Aperçu"));
             ui_kit::card(ui, width, |ui| {
                 ui.horizontal(|ui| {
                     if self.find.is_empty() {
-                        ui.label(RichText::new("Tapez le texte à rechercher.").color(pal.muted));
+                        ui.label(RichText::new(tr!("Tapez le texte à rechercher.")).color(pal.muted));
                     } else if count == 0 {
-                        ui_kit::pill(ui, "Aucune occurrence", pal.muted);
+                        ui_kit::pill(ui, tr!("Aucune occurrence"), pal.muted);
                     } else {
-                        let text = if count == 1 {
-                            "1 occurrence".to_string()
-                        } else {
-                            format!("{count} occurrences")
-                        };
+                        let text = trn!(count, "{} occurrence", "{} occurrences");
                         ui_kit::pill(ui, &text, pal.accent);
                     }
                 });
@@ -420,10 +418,10 @@ impl ReplaceForm {
                     }
                 }
             });
-            match buttons(ui, &format!("{}  Remplacer", icon::SWAP), count > 0) {
+            match buttons(ui, &format!("{}  {}", icon::SWAP, tr!("Remplacer")), count > 0) {
                 Some(true) => {
                     let n = doc.replace_in_visible(&self.find, &self.replacement);
-                    outcome = Outcome::Done(format!("{n} remplacement(s) effectué(s)"));
+                    outcome = Outcome::Done(trn!(n, "{} remplacement effectué", "{} remplacements effectués"));
                 }
                 Some(false) => outcome = Outcome::Close,
                 None => {}
@@ -509,18 +507,16 @@ impl GroupForm {
             title(
                 ui,
                 icon::PENCIL_SIMPLE_LINE,
-                "Modifier le groupe d'opérations",
+                tr!("Modifier le groupe d'opérations"),
             );
             ui.horizontal(|ui| {
-                let text = if lines == 1 {
-                    "1 ligne sélectionnée".to_string()
-                } else {
-                    format!("{lines} lignes sélectionnées")
-                };
+                let text = trn!(lines, "{} ligne sélectionnée", "{} lignes sélectionnées");
                 ui_kit::pill(ui, &text, pal.accent);
                 ui.label(
-                    RichText::new("Cochez les champs à modifier ; les autres restent inchangés.")
-                        .color(pal.fg_dark),
+                    RichText::new(tr!(
+                        "Cochez les champs à modifier ; les autres restent inchangés."
+                    ))
+                    .color(pal.fg_dark),
                 );
             });
             ui.add_space(16.0);
@@ -530,12 +526,12 @@ impl GroupForm {
                 ui,
                 width,
                 icon::SLIDERS_HORIZONTAL,
-                "Champs à modifier",
+                tr!("Champs à modifier"),
                 |ui| {
                     toggle_row(
                         ui,
                         &mut self.date.0,
-                        "Date",
+                        tr!("Date"),
                         icon::CALENDAR_BLANK,
                         |ui, w| {
                             crate::datepicker::date_field(
@@ -547,16 +543,22 @@ impl GroupForm {
                             );
                         },
                     );
-                    toggle_row(ui, &mut self.mode.0, "Mode", icon::CREDIT_CARD, |ui, w| {
-                        ui_kit::mode_combo(ui, "group_mode", document, &mut self.mode.1, w);
-                    });
-                    toggle_row(ui, &mut self.payee.0, "Tiers", icon::USER, |ui, w| {
+                    toggle_row(
+                        ui,
+                        &mut self.mode.0,
+                        tr!("Mode"),
+                        icon::CREDIT_CARD,
+                        |ui, w| {
+                            ui_kit::mode_combo(ui, "group_mode", document, &mut self.mode.1, w);
+                        },
+                    );
+                    toggle_row(ui, &mut self.payee.0, tr!("Tiers"), icon::USER, |ui, w| {
                         ui.add(crate::theme::field(&mut self.payee.1).desired_width(w));
                     });
                     toggle_row(
                         ui,
                         &mut self.details.0,
-                        "Détail",
+                        tr!("Détail"),
                         icon::NOTE_PENCIL,
                         |ui, w| {
                             ui.add(crate::theme::field(&mut self.details.1).desired_width(w));
@@ -565,7 +567,7 @@ impl GroupForm {
                     toggle_row(
                         ui,
                         &mut self.category.0,
-                        "Catégorie",
+                        tr!("Catégorie"),
                         icon::TAG,
                         |ui, w| {
                             ui_kit::category_combo(
@@ -581,12 +583,12 @@ impl GroupForm {
                     toggle_row(
                         ui,
                         &mut self.amount.0,
-                        "Montant",
-                        icon::CURRENCY_EUR,
+                        tr!("Montant"),
+                        crate::format::currency_icon(&document.accounts[doc.account].currency),
                         |ui, w| {
                             ui.add(
                                 crate::theme::field(&mut self.amount.1)
-                                    .hint_text("0,00 — signe selon le mode")
+                                    .hint_text(tr!("0,00 — signe selon le mode"))
                                     .desired_width(w.min(240.0)),
                             );
                         },
@@ -594,16 +596,21 @@ impl GroupForm {
                     toggle_row(
                         ui,
                         &mut self.tack.0,
-                        "Pointage",
+                        tr!("Pointage"),
                         icon::CHECK_CIRCLE,
                         |ui, w| {
                             ui_kit::segmented(
                                 ui,
                                 &mut self.tack.1,
                                 &[
-                                    (Tack::None, icon::CIRCLE_DASHED, "À pointer", pal.fg),
-                                    (Tack::Pointed, icon::CHECK, "Pointée", pal.pointed),
-                                    (Tack::Reconciled, icon::CHECKS, "Rapprochée", pal.reconciled),
+                                    (Tack::None, icon::CIRCLE_DASHED, tr!("À pointer"), pal.fg),
+                                    (Tack::Pointed, icon::CHECK, tr!("Pointée"), pal.pointed),
+                                    (
+                                        Tack::Reconciled,
+                                        icon::CHECKS,
+                                        tr!("Rapprochée"),
+                                        pal.reconciled,
+                                    ),
                                 ],
                                 34.0,
                                 Some(w),
@@ -622,11 +629,16 @@ impl GroupForm {
                 || self.category.0
                 || self.amount.0
                 || self.tack.0;
-            match buttons(ui, &format!("{}  Appliquer", icon::CHECK), any && lines > 0) {
+            match buttons(
+                ui,
+                &format!("{}  {}", icon::CHECK, tr!("Appliquer")),
+                any && lines > 0,
+            ) {
                 Some(true) => match self.edit() {
                     Ok(edit) => {
                         let n = doc.apply_group_edit(&edit);
-                        outcome = Outcome::Done(format!("{n} ligne(s) modifiée(s)"));
+                        outcome =
+                            Outcome::Done(trn!(n, "{} ligne modifiée", "{} lignes modifiées"));
                     }
                     Err(e) => self.error = Some(e),
                 },
@@ -639,12 +651,12 @@ impl GroupForm {
 
     fn edit(&self) -> Result<GroupEdit, String> {
         let date = if self.date.0 {
-            Some(Date::parse_fr(&self.date.1, Date::today()).ok_or("Date invalide")?)
+            Some(Date::parse_fr(&self.date.1, Date::today()).ok_or(tr!("Date invalide"))?)
         } else {
             None
         };
         let amount = if self.amount.0 {
-            Some(Amount::parse(&self.amount.1).ok_or("Montant invalide")?)
+            Some(Amount::parse(&self.amount.1).ok_or(tr!("Montant invalide"))?)
         } else {
             None
         };
@@ -675,9 +687,9 @@ pub struct CsvForm {
 }
 
 const SEPARATORS: [(char, &str); 3] = [
-    (';', "Point-virgule"),
-    (',', "Virgule"),
-    ('\t', "Tabulation"),
+    (';', tr_mark!("Point-virgule")),
+    (',', tr_mark!("Virgule")),
+    ('\t', tr_mark!("Tabulation")),
 ];
 
 impl CsvForm {
@@ -690,7 +702,16 @@ impl CsvForm {
             cheque_as_mode: false,
             group: false,
             group_separator: " > ".into(),
-            tack_symbols: ["-".into(), "P".into(), "R".into()],
+            tack_symbols: [
+                "-".into(),
+                // « P » pour pointée ; « C » (cleared) en anglais.
+                match bp_core::i18n::lang() {
+                    bp_core::i18n::Lang::En => "C",
+                    _ => "P",
+                }
+                .into(),
+                "R".into(),
+            ],
         }
     }
 
@@ -716,10 +737,12 @@ impl CsvForm {
         crate::dialogs::modal(ctx, "tool_csv").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            title(ui, icon::FILE_CSV, "Exporter vers un fichier CSV");
+            title(ui, icon::FILE_CSV, tr!("Exporter vers un fichier CSV"));
             ui_kit::subtitle(
                 ui,
-                "Fichier lisible par Excel, LibreOffice ou Numbers. Choisissez les colonnes, leur ordre et le format.",
+                tr!(
+                    "Fichier lisible par Excel, LibreOffice ou Numbers. Choisissez les colonnes, leur ordre et le format."
+                ),
             );
             let gap = 18.0;
             let left = (width - gap) * 0.38;
@@ -728,7 +751,7 @@ impl CsvForm {
                 ui.spacing_mut().item_spacing.x = gap;
                 ui.vertical(|ui| {
                     ui.set_width(left);
-                    ui_kit::section(ui, left, icon::COLUMNS, "Colonnes, dans l'ordre", |ui| {
+                    ui_kit::section(ui, left, icon::COLUMNS, tr!("Colonnes, dans l'ordre"), |ui| {
                         let mut swap = None;
                         let count = self.fields.len();
                         for (i, (field, on)) in self.fields.iter_mut().enumerate() {
@@ -737,11 +760,11 @@ impl CsvForm {
                                 crate::theme::checkbox(ui, on, field.label());
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     let down = egui::Button::new(RichText::new(icon::CARET_DOWN).color(pal.muted)).frame(false);
-                                    if ui.add_enabled(i + 1 < count, down).on_hover_text("Descendre").clicked() {
+                                    if ui.add_enabled(i + 1 < count, down).on_hover_text(tr!("Descendre")).clicked() {
                                         swap = Some((i, i + 1));
                                     }
                                     let up = egui::Button::new(RichText::new(icon::CARET_UP).color(pal.muted)).frame(false);
-                                    if ui.add_enabled(i > 0, up).on_hover_text("Monter").clicked() {
+                                    if ui.add_enabled(i > 0, up).on_hover_text(tr!("Monter")).clicked() {
                                         swap = Some((i - 1, i));
                                     }
                                 });
@@ -754,13 +777,13 @@ impl CsvForm {
                 });
                 ui.vertical(|ui| {
                     ui.set_width(right);
-                    ui_kit::section(ui, right, icon::STACK, "Contenu", |ui| {
+                    ui_kit::section(ui, right, icon::STACK, tr!("Contenu"), |ui| {
                         ui_kit::segmented(
                             ui,
                             &mut self.all_accounts,
                             &[
-                                (false, icon::FUNNEL, "Lignes affichées", pal.accent),
-                                (true, icon::BANK, "Tous les comptes", pal.accent),
+                                (false, icon::FUNNEL, tr!("Lignes affichées"), pal.accent),
+                                (true, icon::BANK, tr!("Tous les comptes"), pal.accent),
                             ],
                             34.0,
                             None,
@@ -768,44 +791,44 @@ impl CsvForm {
                         ui.add_space(8.0);
                         ui.label(
                             RichText::new(if self.all_accounts {
-                                "Toutes les opérations de chaque compte, un fichier par compte."
+                                tr!("Toutes les opérations de chaque compte, un fichier par compte.")
                             } else {
-                                "Les lignes affichées du compte courant, filtres appliqués."
+                                tr!("Les lignes affichées du compte courant, filtres appliqués.")
                             })
                             .color(pal.muted),
                         );
                     });
-                    ui_kit::section(ui, right, icon::GEAR_SIX, "Format", |ui| {
+                    ui_kit::section(ui, right, icon::GEAR_SIX, tr!("Format"), |ui| {
                         let label_width = 170.0;
-                        ui_kit::row(ui, "Séparateur", label_width, |ui| {
+                        ui_kit::row(ui, tr!("Séparateur"), label_width, |ui| {
                             let w = ui.available_width();
                             ui_kit::segmented(
                                 ui,
                                 &mut self.separator,
                                 &[
-                                    (0, "", SEPARATORS[0].1, pal.accent),
-                                    (1, "", SEPARATORS[1].1, pal.accent),
-                                    (2, "", SEPARATORS[2].1, pal.accent),
+                                    (0, "", bp_core::i18n::tr(SEPARATORS[0].1), pal.accent),
+                                    (1, "", bp_core::i18n::tr(SEPARATORS[1].1), pal.accent),
+                                    (2, "", bp_core::i18n::tr(SEPARATORS[2].1), pal.accent),
                                 ],
                                 32.0,
                                 Some(w),
                             );
                         });
                         ui.add_space(6.0);
-                        ui_kit::row(ui, "Symboles de pointage", label_width, |ui| {
-                            for (symbol, hint) in self.tack_symbols.iter_mut().zip(["non", "pointée", "rapprochée"]) {
+                        ui_kit::row(ui, tr!("Symboles de pointage"), label_width, |ui| {
+                            for (symbol, hint) in self.tack_symbols.iter_mut().zip([tr!("non pointée"), tr!("pointée"), tr!("rapprochée")]) {
                                 ui.add(crate::theme::field(symbol).desired_width(46.0).horizontal_align(egui::Align::Center))
                                     .on_hover_text(hint);
                             }
-                            ui.label(RichText::new("non · pointée · rapprochée").color(pal.muted).size(12.5));
+                            ui.label(RichText::new(tr!("non · pointée · rapprochée")).color(pal.muted).size(12.5));
                         });
                         ui.add_space(10.0);
-                        crate::theme::checkbox(ui, &mut self.header, "Inclure la ligne d'en-tête");
+                        crate::theme::checkbox(ui, &mut self.header, tr!("Inclure la ligne d'en-tête"));
                         ui.add_space(6.0);
-                        crate::theme::checkbox(ui, &mut self.cheque_as_mode, "Remplacer « Chq XXX » par « Chèque émis »");
+                        crate::theme::checkbox(ui, &mut self.cheque_as_mode, tr!("Remplacer « Chq XXX » par « Chèque émis »"));
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
-                            crate::theme::checkbox(ui, &mut self.group, "Catégorie et sous-catégorie dans une colonne, séparées par");
+                            crate::theme::checkbox(ui, &mut self.group, tr!("Catégorie et sous-catégorie dans une colonne, séparées par"));
                             ui.add_enabled(self.group, crate::theme::field(&mut self.group_separator).desired_width(50.0));
                         });
                     });
@@ -822,9 +845,9 @@ impl CsvForm {
             } else {
                 bp_core::export::csv(&doc.document, account, &sample, &options)
             };
-            ui_kit::section(ui, width, icon::EYE, "Aperçu", |ui| {
+            ui_kit::section(ui, width, icon::EYE, tr!("Aperçu"), |ui| {
                 if text.is_empty() {
-                    ui.label(RichText::new("Aucune colonne choisie.").color(pal.muted));
+                    ui.label(RichText::new(tr!("Aucune colonne choisie.")).color(pal.muted));
                 } else {
                     egui::ScrollArea::horizontal().show(ui, |ui| {
                         for line in text.lines().take(5) {
@@ -839,7 +862,7 @@ impl CsvForm {
                 }
             });
             let any = self.fields.iter().any(|(_, on)| *on);
-            match buttons(ui, &format!("{}  Exporter…", icon::EXPORT), any) {
+            match buttons(ui, &format!("{}  {}", icon::EXPORT, tr!("Exporter…")), any) {
                 Some(true) => self.choose_destination(ui.ctx(), doc),
                 Some(false) => outcome = Outcome::Close,
                 None => {}
@@ -868,7 +891,7 @@ impl CsvForm {
         );
         let dialog = rfd::FileDialog::new().set_directory(&start_dir);
         if self.all_accounts {
-            let dialog = dialog.set_title("Dossier des fichiers CSV");
+            let dialog = dialog.set_title(tr!("Dossier des fichiers CSV"));
             let id = egui::Id::new("csv_folder");
             crate::file_picker::open(ctx, id, crate::file_picker::Kind::Folder, dialog);
         } else {
@@ -878,7 +901,7 @@ impl CsvForm {
                 "csv",
             );
             let dialog = dialog
-                .set_title("Exporter vers un fichier CSV")
+                .set_title(tr!("Exporter vers un fichier CSV"))
                 .set_file_name(name)
                 .add_filter("CSV", &["csv"]);
             let id = egui::Id::new("csv_file");
@@ -904,7 +927,12 @@ impl CsvForm {
                 written += 1;
             }
         }
-        format!("{written} fichier(s) CSV créé(s) dans {}", folder.display())
+        trn!(
+            written,
+            "{0} fichier CSV créé dans {1}",
+            "{0} fichiers CSV créés dans {1}",
+            folder.display()
+        )
     }
 
     /// Lignes affichées du compte courant dans `path`.
@@ -913,8 +941,8 @@ impl CsvForm {
         let account = doc.current_account();
         let text = bp_core::export::csv(&doc.document, account, &doc.visible(), &options);
         match Self::write(path, text) {
-            Ok(()) => format!("Fichier {} créé", path.display()),
-            Err(e) => format!("Impossible de créer {} : {e}", path.display()),
+            Ok(()) => tr!("Fichier {} créé", path.display()),
+            Err(e) => tr!("Impossible de créer {} : {}", path.display(), e),
         }
     }
 }
@@ -927,7 +955,7 @@ pub fn qif_dialog(doc: &OpenDoc) -> rfd::FileDialog {
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_default();
     rfd::FileDialog::new()
-        .set_title("Exporter vers un fichier QIF")
+        .set_title(tr!("Exporter vers un fichier QIF"))
         .set_directory(crate::settings::shared::export_dir(
             doc.path.parent().unwrap_or(std::path::Path::new(".")),
         ))
@@ -946,8 +974,8 @@ pub fn export_qif(doc: &OpenDoc, path: &std::path::Path) -> String {
     // Les logiciels qui lisent le QIF attendent de l'ANSI (Windows-1252).
     let (bytes, _, _) = encoding_rs::WINDOWS_1252.encode(&text);
     match std::fs::write(path, bytes) {
-        Ok(()) => format!("Fichier {} créé", path.display()),
-        Err(e) => format!("Impossible de créer {} : {e}", path.display()),
+        Ok(()) => tr!("Fichier {} créé", path.display()),
+        Err(e) => tr!("Impossible de créer {} : {}", path.display(), e),
     }
 }
 
@@ -969,11 +997,11 @@ fn ago(time: std::time::SystemTime) -> String {
         .duration_since(time)
         .map_or(0, |d| d.as_secs());
     match seconds {
-        0..60 => "à l'instant".into(),
-        60..3600 => format!("il y a {} min", seconds / 60),
-        3600..86_400 => format!("il y a {} h", seconds / 3600),
-        86_400..172_800 => "hier".into(),
-        _ => format!("il y a {} jours", seconds / 86_400),
+        0..60 => tr!("à l'instant").into(),
+        60..3600 => tr!("il y a {} min", seconds / 60),
+        3600..86_400 => tr!("il y a {} h", seconds / 3600),
+        86_400..172_800 => tr!("hier").into(),
+        _ => tr!("il y a {} jours", seconds / 86_400),
     }
 }
 
@@ -996,10 +1024,10 @@ impl BackupsForm {
         crate::dialogs::modal(ctx, "tool_backups").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            title(ui, icon::CLOCK_COUNTER_CLOCKWISE, "Sauvegardes");
+            title(ui, icon::CLOCK_COUNTER_CLOCKWISE, tr!("Sauvegardes"));
             ui_kit::subtitle(
                 ui,
-                format!(
+                tr!(
                     "Une copie du fichier est faite avant chaque enregistrement ; les {} plus récentes sont gardées.",
                     self.keep
                 ),
@@ -1009,14 +1037,14 @@ impl BackupsForm {
                 ui.label(RichText::new(self.dir.display().to_string()).color(pal.muted).size(12.5));
             });
             ui.add_space(12.0);
-            ui_kit::caption(ui, icon::LIST, &format!("{} sauvegarde(s)", backups.len()));
+            ui_kit::caption(ui, icon::LIST, &trn!(backups.len(), "{} sauvegarde", "{} sauvegardes"));
             ui_kit::card(ui, width, |ui| {
                 if backups.is_empty() {
                     ui.add_space(20.0);
                     ui.vertical_centered(|ui| {
                         ui.label(RichText::new(icon::CLOCK_COUNTER_CLOCKWISE).size(32.0).color(pal.muted));
                         ui.add_space(6.0);
-                        ui.label(RichText::new("Aucune sauvegarde pour ce fichier pour l'instant.").color(pal.muted));
+                        ui.label(RichText::new(tr!("Aucune sauvegarde pour ce fichier pour l'instant.")).color(pal.muted));
                     });
                     ui.add_space(20.0);
                     return;
@@ -1045,21 +1073,21 @@ impl BackupsForm {
                                 ui.vertical(|ui| {
                                     ui.horizontal(|ui| {
                                         ui.label(
-                                            RichText::new(when.format("%d/%m/%Y à %H:%M").to_string())
+                                            RichText::new(when.format(tr!("%d/%m/%Y à %H:%M")).to_string())
                                                 .family(crate::theme::semibold()),
                                         );
                                         if k == 0 {
-                                            ui_kit::pill(ui, "la plus récente", pal.positive);
+                                            ui_kit::pill(ui, tr!("la plus récente"), pal.positive);
                                         }
                                     });
                                     ui.label(
-                                        RichText::new(format!("{} · {} Ko", ago(backup.modified), backup.size.div_ceil(1024)))
+                                        RichText::new(tr!("{} · {} Ko", ago(backup.modified), backup.size.div_ceil(1024)))
                                             .color(pal.muted)
                                             .size(12.5),
                                     );
                                 });
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    if crate::dialogs::button(ui, format!("{}  Restaurer", icon::ARROW_COUNTER_CLOCKWISE)).clicked() {
+                                    if crate::dialogs::button(ui, format!("{}  {}", icon::ARROW_COUNTER_CLOCKWISE, tr!("Restaurer"))).clicked() {
                                         self.confirm = Some(backup.path.clone());
                                     }
                                 });
@@ -1074,7 +1102,11 @@ impl BackupsForm {
             }
             if let Some(path) = self.confirm.clone() {
                 ui.add_space(14.0);
-                let unsaved = if dirty { " Les modifications non enregistrées seront perdues." } else { "" };
+                let question = if dirty {
+                    tr!("Restaurer cette sauvegarde ? La version actuelle sera elle-même sauvegardée. Les modifications non enregistrées seront perdues.")
+                } else {
+                    tr!("Restaurer cette sauvegarde ? La version actuelle sera elle-même sauvegardée.")
+                };
                 egui::Frame::new()
                     .fill(pal.warning.gamma_multiply(0.10))
                     .stroke(egui::Stroke::new(1.0, pal.warning.gamma_multiply(0.4)))
@@ -1083,27 +1115,24 @@ impl BackupsForm {
                     .show(ui, |ui| {
                         ui.set_width(width - 34.0);
                         ui.label(
-                            RichText::new(format!(
-                                "{}  Restaurer cette sauvegarde ? La version actuelle sera elle-même sauvegardée.{unsaved}",
-                                icon::WARNING
-                            ))
+                            RichText::new(format!("{}  {question}", icon::WARNING))
                             .color(pal.warning),
                         );
                         crate::dialogs::footer(ui, |ui| {
-                            if crate::dialogs::primary(ui, "Restaurer", true).clicked() {
+                            if crate::dialogs::primary(ui, tr!("Restaurer"), true).clicked() {
                                 match bp_core::backup::restore(&path, &self.path, &self.dir, self.keep) {
-                                    Ok(()) => outcome = Outcome::Reopen(self.path.clone(), "Sauvegarde restaurée".into()),
-                                    Err(e) => self.error = Some(format!("Restauration impossible : {e}")),
+                                    Ok(()) => outcome = Outcome::Reopen(self.path.clone(), tr!("Sauvegarde restaurée").into()),
+                                    Err(e) => self.error = Some(tr!("Restauration impossible : {}", e)),
                                 }
                             }
-                            if crate::dialogs::button(ui, "Annuler").clicked() {
+                            if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                                 self.confirm = None;
                             }
                         });
                     });
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || (self.confirm.is_none() && ui.input(|i| i.key_pressed(Key::Escape)))
                 {
                     outcome = Outcome::Close;
@@ -1150,7 +1179,7 @@ impl ExtraForm {
         crate::dialogs::modal(ctx, "tool_extra").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            title(ui, icon::LIST_PLUS, "Champs supplémentaires");
+            title(ui, icon::LIST_PLUS, tr!("Champs supplémentaires"));
             // L'opération concernée.
             ui.horizontal(|ui| {
                 ui.label(RichText::new(op.date.to_string()).color(pal.muted));
@@ -1165,10 +1194,10 @@ impl ExtraForm {
             ui.add_space(16.0);
             let label_width = 170.0;
             let mut remove = None;
-            ui_kit::section(ui, width, icon::LIST_BULLETS, "Champs", |ui| {
+            ui_kit::section(ui, width, icon::LIST_BULLETS, tr!("Champs"), |ui| {
                 if self.entries.is_empty() {
                     ui.label(
-                        RichText::new("Aucun champ supplémentaire pour cette opération.")
+                        RichText::new(tr!("Aucun champ supplémentaire pour cette opération."))
                             .color(pal.muted),
                     );
                 }
@@ -1200,7 +1229,7 @@ impl ExtraForm {
                                     )
                                     .frame(false),
                                 )
-                                .on_hover_text("Supprimer ce champ")
+                                .on_hover_text(tr!("Supprimer ce champ"))
                                 .clicked()
                         {
                             remove = Some(i);
@@ -1211,28 +1240,40 @@ impl ExtraForm {
             if let Some(i) = remove {
                 self.entries.remove(i);
             }
-            ui_kit::section(ui, width, icon::PLUS_CIRCLE, "Ajouter un champ", |ui| {
-                ui.horizontal(|ui| {
-                    ui.add(
-                        crate::theme::field(&mut self.new_key)
-                            .hint_text("Nom")
-                            .desired_width(label_width - 8.0),
-                    );
-                    let w = ui.available_width() - 110.0;
-                    ui.add(
-                        crate::theme::field(&mut self.new_value)
-                            .hint_text("Valeur")
-                            .desired_width(w),
-                    );
-                    if crate::dialogs::button(ui, format!("{}  Ajouter", icon::PLUS)).clicked() {
-                        self.add();
-                    }
-                });
-            });
+            ui_kit::section(
+                ui,
+                width,
+                icon::PLUS_CIRCLE,
+                tr!("Ajouter un champ"),
+                |ui| {
+                    ui.horizontal(|ui| {
+                        ui.add(
+                            crate::theme::field(&mut self.new_key)
+                                .hint_text(tr!("Nom"))
+                                .desired_width(label_width - 8.0),
+                        );
+                        let w = ui.available_width() - 110.0;
+                        ui.add(
+                            crate::theme::field(&mut self.new_value)
+                                .hint_text(tr!("Valeur"))
+                                .desired_width(w),
+                        );
+                        if crate::dialogs::button(ui, format!("{}  {}", icon::PLUS, tr!("Ajouter")))
+                            .clicked()
+                        {
+                            self.add();
+                        }
+                    });
+                },
+            );
             if let Some(error) = &self.error {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
-            match buttons(ui, &format!("{}  Enregistrer", icon::CHECK), true) {
+            match buttons(
+                ui,
+                &format!("{}  {}", icon::CHECK, tr!("Enregistrer")),
+                true,
+            ) {
                 Some(true) => {
                     if !self.new_key.trim().is_empty() {
                         self.add();
@@ -1245,7 +1286,7 @@ impl ExtraForm {
                             .cloned()
                             .collect();
                         doc.set_extra(self.index, entries);
-                        outcome = Outcome::Done("Champs supplémentaires enregistrés".into());
+                        outcome = Outcome::Done(tr!("Champs supplémentaires enregistrés").into());
                     }
                 }
                 Some(false) => outcome = Outcome::Close,
@@ -1258,7 +1299,7 @@ impl ExtraForm {
     fn add(&mut self) {
         let key = self.new_key.trim().replace([';', '='], " ");
         if key.is_empty() || key == "UId" || is_internal(&key) {
-            self.error = Some("Nom de champ invalide ou réservé".into());
+            self.error = Some(tr!("Nom de champ invalide ou réservé").into());
             return;
         }
         match self
@@ -1317,9 +1358,9 @@ impl NotesForm {
                 ui,
                 icon::NOTE,
                 if self.on_open {
-                    "Notes à l'ouverture"
+                    tr!("Notes à l'ouverture")
                 } else {
-                    "Notes"
+                    tr!("Notes")
                 },
             );
             let pal = palette(ui);
@@ -1336,7 +1377,7 @@ impl NotesForm {
                             .show(ui, |ui| {
                                 for (i, note) in self.notes.iter().enumerate() {
                                     let label = if note.title.is_empty() {
-                                        "(sans titre)"
+                                        tr!("(sans titre)")
                                     } else {
                                         note.title.as_str()
                                     };
@@ -1351,9 +1392,12 @@ impl NotesForm {
                         if !self.on_open {
                             ui.add_space(6.0);
                             ui.horizontal(|ui| {
-                                if ui.button(format!("{}  Nouvelle", icon::PLUS)).clicked() {
+                                if ui
+                                    .button(format!("{}  {}", icon::PLUS, tr!("Nouvelle")))
+                                    .clicked()
+                                {
                                     self.notes.push(crate::notes::Note {
-                                        title: "Nouvelle note".into(),
+                                        title: tr!("Nouvelle note").into(),
                                         ..Default::default()
                                     });
                                     self.current = Some(self.notes.len() - 1);
@@ -1361,7 +1405,7 @@ impl NotesForm {
                                 if let Some(i) = self.current
                                     && ui
                                         .button(icon::TRASH)
-                                        .on_hover_text("Supprimer la note")
+                                        .on_hover_text(tr!("Supprimer la note"))
                                         .clicked()
                                 {
                                     self.notes.remove(i);
@@ -1386,7 +1430,7 @@ impl NotesForm {
                             Some(note) => {
                                 ui.add(
                                     crate::theme::field(&mut note.title)
-                                        .hint_text("Titre")
+                                        .hint_text(trc!("note", "Titre"))
                                         .desired_width(f32::INFINITY),
                                 );
                                 ui.add(
@@ -1397,13 +1441,15 @@ impl NotesForm {
                                 crate::theme::checkbox(
                                     ui,
                                     &mut note.show_on_open,
-                                    "Afficher à l'ouverture d'un fichier",
+                                    tr!("Afficher à l'ouverture d'un fichier"),
                                 );
                             }
                             None => {
                                 ui.label(
-                                    RichText::new("Aucune note. Créez-en une avec « Nouvelle ».")
-                                        .color(pal.muted),
+                                    RichText::new(tr!(
+                                        "Aucune note. Créez-en une avec « Nouvelle »."
+                                    ))
+                                    .color(pal.muted),
                                 );
                             }
                         },
@@ -1411,9 +1457,9 @@ impl NotesForm {
                 },
             );
             let label = if self.on_open {
-                "Fermer"
+                tr!("Fermer")
             } else {
-                "Enregistrer et fermer"
+                tr!("Enregistrer et fermer")
             };
             let close =
                 crate::dialogs::footer(ui, |ui| crate::dialogs::primary(ui, label, true).clicked());
@@ -1422,8 +1468,8 @@ impl NotesForm {
                     outcome = Outcome::Close;
                 } else {
                     outcome = match crate::notes::save(&self.notes) {
-                        Ok(()) => Outcome::Done("Notes enregistrées".into()),
-                        Err(e) => Outcome::Done(format!("Notes non enregistrées : {e}")),
+                        Ok(()) => Outcome::Done(tr!("Notes enregistrées").into()),
+                        Err(e) => Outcome::Done(tr!("Notes non enregistrées : {}", e)),
                     };
                 }
             }
@@ -1487,6 +1533,8 @@ impl CalcForm {
                 self.expression.push_str(k);
                 self.expression.push('(');
             }
+            // Touche décimale : le séparateur de la langue (la saisie accepte les deux).
+            "," => self.expression.push(bp_core::i18n::decimal_separator()),
             k => self.expression.push_str(k),
         }
         self.focus = true;
@@ -1504,7 +1552,7 @@ impl CalcForm {
         let mut outcome = Outcome::Keep;
         crate::dialogs::modal(ctx, "tool_calc").show(ctx, |ui| {
             ui.set_width(600.0);
-            title(ui, icon::CALCULATOR, "Calculatrice");
+            title(ui, icon::CALCULATOR, tr!("Calculatrice"));
             let pal = palette(ui);
             if let Some(previous) = &self.result {
                 ui.label(RichText::new(previous).small().color(pal.muted));
@@ -1548,7 +1596,9 @@ impl CalcForm {
                 .num_columns(8)
                 .spacing([8.0, 8.0])
                 .show(ui, |ui| {
+                    let decimal = bp_core::i18n::decimal_separator().to_string();
                     for (i, key) in KEYS.iter().enumerate() {
+                        let text = if *key == "," { decimal.as_str() } else { key };
                         let color = match *key {
                             "AC" | "⌫" => pal.negative,
                             "+" | "-" | "*" | "/" | "^" | "%" | "(" | ")" | "√" | "DMS" | "EE" => {
@@ -1559,7 +1609,7 @@ impl CalcForm {
                         };
                         let button = if *key == "=" {
                             egui::Button::new(
-                                RichText::new(*key)
+                                RichText::new(text)
                                     .size(17.0)
                                     .color(pal.on_accent)
                                     .family(crate::theme::semibold()),
@@ -1567,7 +1617,7 @@ impl CalcForm {
                             .fill(pal.accent)
                         } else {
                             egui::Button::new(
-                                RichText::new(*key)
+                                RichText::new(text)
                                     .size(15.0)
                                     .color(color)
                                     .family(crate::theme::medium()),
@@ -1585,7 +1635,7 @@ impl CalcForm {
                 self.press(key);
             }
             let close = crate::dialogs::footer(ui, |ui| {
-                crate::dialogs::primary(ui, "Fermer", true).clicked()
+                crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
             });
             if close || ui.input(|i| i.key_pressed(Key::Escape)) {
                 outcome = Outcome::Close;

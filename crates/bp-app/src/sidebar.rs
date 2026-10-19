@@ -2,6 +2,7 @@
 //! avec leur solde, le total, l'état de protection.
 
 use bp_core::model::Amount;
+use bp_core::tr;
 use egui::text::{LayoutJob, TextWrapping};
 use egui::{Align, Align2, Color32, FontId, Layout, Pos2, Rect, RichText, Sense, pos2, vec2};
 use egui_phosphor::regular as icon;
@@ -41,7 +42,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
         .collect();
     if !others.is_empty() {
         ui.label(
-            RichText::new("AUTRES COMPTES")
+            RichText::new(tr!("AUTRES COMPTES"))
                 .small()
                 .family(crate::theme::medium())
                 .color(pal.muted),
@@ -65,20 +66,24 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
         .collect();
     if !disabled.is_empty() {
         ui.add_space(4.0);
-        egui::CollapsingHeader::new(RichText::new("Comptes désactivés").small().color(pal.muted))
-            .default_open(false)
-            .show(ui, |ui| {
-                for i in disabled {
-                    let account = &doc.document.accounts[i];
-                    let balance = doc.account_balance(i);
-                    let (pressed, response) =
-                        account_row(ui, account, balance, i == doc.account, &pal);
-                    if pressed || response.secondary_clicked() {
-                        clicked = Some(i);
-                    }
-                    response.context_menu(|ui| command = account_menu(ui, doc));
+        egui::CollapsingHeader::new(
+            RichText::new(tr!("Comptes désactivés"))
+                .small()
+                .color(pal.muted),
+        )
+        .id_salt("Comptes désactivés")
+        .default_open(false)
+        .show(ui, |ui| {
+            for i in disabled {
+                let account = &doc.document.accounts[i];
+                let balance = doc.account_balance(i);
+                let (pressed, response) = account_row(ui, account, balance, i == doc.account, &pal);
+                if pressed || response.secondary_clicked() {
+                    clicked = Some(i);
                 }
-            });
+                response.context_menu(|ui| command = account_menu(ui, doc));
+            }
+        });
     }
     if let Some(i) = clicked {
         doc.select_account(i);
@@ -87,7 +92,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
     ui.add_space(8.0);
     ui.separator();
     ui.horizontal(|ui| {
-        ui.label(RichText::new("Total").family(crate::theme::semibold()));
+        ui.label(RichText::new(tr!("Total")).family(crate::theme::semibold()));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             let color = if total.is_negative() {
                 pal.negative
@@ -95,14 +100,14 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
                 ui.visuals().strong_text_color()
             };
             ui.label(
-                RichText::new(money(total, "€"))
+                RichText::new(money(total, doc.main_currency()))
                     .family(crate::theme::semibold())
                     .color(color),
             );
         });
     });
     ui.label(
-        RichText::new("comptes réels uniquement")
+        RichText::new(tr!("comptes réels uniquement"))
             .small()
             .color(pal.muted),
     );
@@ -179,7 +184,7 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
         painter.galley(rect.min, galley, color);
     };
     let bank = if account.bank_name.trim().is_empty() {
-        "Compte"
+        tr!("Compte")
     } else {
         account.bank_name.trim()
     };
@@ -193,7 +198,7 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
         Align2::LEFT_TOP,
     );
     let name = if account.name.is_empty() {
-        "(sans nom)"
+        tr!("(sans nom)")
     } else {
         &account.name
     };
@@ -235,7 +240,7 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
     if let Some(date) = doc.totals().last_reconciled {
         let d = date.to_string();
         text(
-            &format!("rapproché {}", &d[..5.min(d.len())]),
+            &tr!("rapproché {}", &d[..5.min(d.len())]),
             inner.right_bottom(),
             10.5,
             crate::theme::medium(),
@@ -330,7 +335,7 @@ fn account_row(
             };
             ui.label(RichText::new(glyph).color(pal.muted));
             let mut name = RichText::new(if account.name.is_empty() {
-                "(sans nom)"
+                tr!("(sans nom)")
             } else {
                 &account.name
             });
@@ -349,15 +354,21 @@ fn account_row(
 fn protection_badge(ui: &mut egui::Ui, doc: &OpenDoc) {
     let pal = palette(ui);
     let (glyph, text, color) = match (&doc.protection, &doc.legacy_password) {
-        (Some(p), _) if p.is_password_protected() => {
-            (icon::SHIELD_CHECK, "Chiffré par mot de passe", pal.positive)
-        }
+        (Some(p), _) if p.is_password_protected() => (
+            icon::SHIELD_CHECK,
+            tr!("Chiffré par mot de passe"),
+            pal.positive,
+        ),
         (None, Some(_)) => (
             icon::LOCK_SIMPLE,
-            "Sera chiffré à l'enregistrement",
+            tr!("Sera chiffré à l'enregistrement"),
             pal.pointed,
         ),
-        _ => (icon::LOCK_SIMPLE_OPEN, "Fichier non protégé", pal.negative),
+        _ => (
+            icon::LOCK_SIMPLE_OPEN,
+            tr!("Fichier non protégé"),
+            pal.negative,
+        ),
     };
     ui.label(
         RichText::new(format!("{glyph}  {text}"))

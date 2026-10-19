@@ -11,12 +11,26 @@
 
 use crate::edit::mode_is_debit;
 use crate::model::{Amount, Date, Document, Mode, Operation, StandardMode, Tack};
+use crate::tr;
 use crate::view::payee_without_ventilation;
 
 /// Début du tiers d'un transfert sortant.
 pub const TRANSFER_TO: &str = "Transfert vers le compte ";
 /// Début du tiers d'un transfert entrant.
 pub const TRANSFER_FROM: &str = "Transfert depuis le compte ";
+/// Tiers tel qu'affiché : celui d'un transfert est enregistré en français
+/// (« Transfert vers le compte Épargne », lien avec la ligne sœur et
+/// compatibilité des fichiers) et s'affiche dans la langue de l'interface.
+pub fn payee_label(payee: &str) -> std::borrow::Cow<'_, str> {
+    if let Some(account) = payee.strip_prefix(TRANSFER_TO) {
+        tr!("Transfert vers le compte {}", account).into()
+    } else if let Some(account) = payee.strip_prefix(TRANSFER_FROM) {
+        tr!("Transfert depuis le compte {}", account).into()
+    } else {
+        payee.into()
+    }
+}
+
 /// Champ supplémentaire : UID du compte de la ligne sœur.
 pub const SISTER_ACCOUNT_KEY: &str = "#sisterAccUid";
 /// Champ supplémentaire : UId de la ligne sœur.
@@ -26,24 +40,41 @@ pub const SISTER_LINE_KEY: &str = "#sisterLineUid";
 /// quand une erreur est renvoyée.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SplitError {
-    #[error("compte introuvable")]
     AccountNotFound,
-    #[error("opération introuvable")]
     LineNotFound,
-    #[error("aucune part à ventiler")]
     NoParts,
-    #[error("la part n°{0} a un montant nul ou négatif")]
     InvalidPart(usize),
-    #[error("le montant d'origine n'a pas été totalement ventilé (reste {})", .0.format(2, ','))]
     Unbalanced(Amount),
-    #[error("les deux comptes liés au transfert doivent être différents")]
     SameAccount,
-    #[error("le montant est incorrect (il ne doit pas être nul)")]
     ZeroAmount,
-    #[error("le mode de paiement de la ligne ne permet pas de créer un transfert")]
     ModeNotConvertible,
-    #[error("la ligne est déjà un transfert")]
     AlreadyTransfer,
+}
+
+impl std::fmt::Display for SplitError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            Self::AccountNotFound => tr!("compte introuvable").to_string(),
+            Self::LineNotFound => tr!("opération introuvable").to_string(),
+            Self::NoParts => tr!("aucune part à ventiler").to_string(),
+            Self::InvalidPart(n) => tr!("la part n°{} a un montant nul ou négatif", n),
+            Self::Unbalanced(rest) => tr!(
+                "le montant d'origine n'a pas été totalement ventilé (reste {})",
+                rest.format(2, crate::i18n::decimal_separator())
+            ),
+            Self::SameAccount => {
+                tr!("les deux comptes liés au transfert doivent être différents").to_string()
+            }
+            Self::ZeroAmount => {
+                tr!("le montant est incorrect (il ne doit pas être nul)").to_string()
+            }
+            Self::ModeNotConvertible => {
+                tr!("le mode de paiement de la ligne ne permet pas de créer un transfert")
+                    .to_string()
+            }
+            Self::AlreadyTransfer => tr!("la ligne est déjà un transfert").to_string(),
+        })
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -145,7 +176,7 @@ pub fn split_operation(
     let sign = if original.amount.is_negative() { -1 } else { 1 };
     // Une ligne déjà ventilée ne cumule pas les préfixes « [1/2] [1/3] ».
     let payee = payee_without_ventilation(&original.payee).trim_start();
-    let total = original.amount.format(2, ',');
+    let total = original.amount.format(2, crate::i18n::decimal_separator());
     let n = parts.len();
     let mut uid = document.next_operation_uid();
     let new_ops: Vec<Operation> = parts
@@ -216,9 +247,9 @@ impl TransferKind {
 
     pub fn label(self) -> &'static str {
         match self {
-            Self::Transfer => "Virement",
-            Self::Cheque => "Chèque",
-            Self::Cash => "Espèces",
+            Self::Transfer => tr!("Virement"),
+            Self::Cheque => tr!("Chèque"),
+            Self::Cash => tr!("Espèces"),
         }
     }
 
@@ -717,6 +748,34 @@ mod tests {
         assert_eq!(find_sister(&doc, 0, 2), Some((1, 1)));
         assert_eq!(find_sister(&doc, 1, 1), Some((0, 2)));
         assert_eq!(find_sister(&doc, 0, 0), None, "pas un transfert");
+    }
+
+    #[test]
+    fn error_messages_follow_the_language() {
+        use crate::i18n::{Lang, with_lang};
+        let error = SplitError::Unbalanced(Amount::from_cents(150));
+        assert_eq!(
+            error.to_string(),
+            "le montant d'origine n'a pas été totalement ventilé (reste 1,50)"
+        );
+        assert_eq!(
+            SplitError::InvalidPart(2).to_string(),
+            "la part n°2 a un montant nul ou négatif"
+        );
+        with_lang(Lang::En, || {
+            assert_eq!(
+                error.to_string(),
+                "the original amount has not been fully split (1.50 remaining)"
+            );
+            assert_eq!(
+                crate::Error::WrongPassword.to_string(),
+                "incorrect password or recovery phrase"
+            );
+        });
+        assert_eq!(
+            crate::Error::UnsupportedVersion(7).to_string(),
+            "version du format v6 non prise en charge : 7"
+        );
     }
 
     #[test]

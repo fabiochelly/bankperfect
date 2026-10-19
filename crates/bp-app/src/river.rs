@@ -4,6 +4,7 @@
 //! solde un mois avant et après l'opération.
 
 use bp_core::model::{Amount, Date};
+use bp_core::tr;
 use egui::{Color32, Pos2, Rangef, Stroke};
 
 use crate::format::money;
@@ -260,7 +261,7 @@ pub fn tooltip(ui: &mut egui::Ui, points: &[Point], marked: usize, currency: &st
         return;
     };
     ui.label(
-        egui::RichText::new(format!(
+        egui::RichText::new(tr!(
             "Solde du {} au {}",
             crate::settings::shared::date(first.date),
             crate::settings::shared::date(last.date)
@@ -374,20 +375,26 @@ pub fn tooltip(ui: &mut egui::Ui, points: &[Point], marked: usize, currency: &st
     ui.horizontal(|ui| {
         ui.label(small(
             format!(
-                "{} {} le {}",
+                "{} {}",
                 egui_phosphor::regular::ARROW_DOWN,
-                money(points[min_i].balance, currency),
-                crate::settings::shared::date(points[min_i].date)
+                tr!(
+                    "{} le {}",
+                    money(points[min_i].balance, currency),
+                    crate::settings::shared::date(points[min_i].date)
+                )
             ),
             pal.negative,
         ));
         ui.add_space(10.0);
         ui.label(small(
             format!(
-                "{} {} le {}",
+                "{} {}",
                 egui_phosphor::regular::ARROW_UP,
-                money(points[max_i].balance, currency),
-                crate::settings::shared::date(points[max_i].date)
+                tr!(
+                    "{} le {}",
+                    money(points[max_i].balance, currency),
+                    crate::settings::shared::date(points[max_i].date)
+                )
             ),
             pal.positive,
         ));

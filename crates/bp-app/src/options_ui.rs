@@ -1,6 +1,7 @@
 //! Fenêtre « Options » : saisie et calculs, fichiers et sauvegardes,
 //! affichage. Les modifications ne sont appliquées qu'avec « Enregistrer ».
 
+use bp_core::{tr, trc};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -51,7 +52,7 @@ impl OptionsForm {
                 ui.allocate_ui_with_layout(
                     egui::vec2(220.0, 36.0),
                     egui::Layout::left_to_right(egui::Align::Center),
-                    |ui| crate::dialogs::header(ui, icon::SLIDERS, pal.accent, "Options"),
+                    |ui| crate::dialogs::header(ui, icon::SLIDERS, pal.accent, tr!("Options")),
                 );
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                     ui_kit::segmented(
@@ -61,11 +62,16 @@ impl OptionsForm {
                             (
                                 Tab::Entry,
                                 icon::PENCIL_SIMPLE,
-                                "Saisie et calculs",
+                                tr!("Saisie et calculs"),
                                 pal.accent,
                             ),
-                            (Tab::Files, icon::FOLDER_SIMPLE, "Fichiers", pal.accent),
-                            (Tab::Display, icon::PAINT_BRUSH, "Affichage", pal.accent),
+                            (Tab::Files, icon::FOLDER_SIMPLE, tr!("Fichiers"), pal.accent),
+                            (
+                                Tab::Display,
+                                icon::PAINT_BRUSH,
+                                tr!("Affichage"),
+                                pal.accent,
+                            ),
                         ],
                         38.0,
                         Some((width - 240.0).min(560.0)),
@@ -88,10 +94,10 @@ impl OptionsForm {
                     }
                 });
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Enregistrer", true).clicked() {
+                if crate::dialogs::primary(ui, tr!("Enregistrer"), true).clicked() {
                     outcome = OptionsOutcome::Apply(Box::new(self.draft.clone()), self.theme);
                 }
-                if crate::dialogs::button(ui, "Annuler").clicked()
+                if crate::dialogs::button(ui, tr!("Annuler")).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = OptionsOutcome::Cancel;
@@ -104,13 +110,18 @@ impl OptionsForm {
     fn entry(&mut self, ui: &mut egui::Ui, width: f32) {
         let pal = palette(ui);
         let d = &mut self.draft;
-        ui_kit::section(ui, width, icon::PENCIL_SIMPLE, "Saisie", |ui| {
+        ui_kit::section(ui, width, icon::PENCIL_SIMPLE, tr!("Saisie"), |ui| {
             ui_kit::segmented(
                 ui,
                 &mut d.entry_at_bottom,
                 &[
-                    (false, icon::SIDEBAR_SIMPLE, "Panneau à droite", pal.accent),
-                    (true, icon::ROWS, "Barre en bas", pal.accent),
+                    (
+                        false,
+                        icon::SIDEBAR_SIMPLE,
+                        tr!("Panneau à droite"),
+                        pal.accent,
+                    ),
+                    (true, icon::ROWS, tr!("Barre en bas"), pal.accent),
                 ],
                 34.0,
                 Some(420.0),
@@ -119,47 +130,49 @@ impl OptionsForm {
             crate::theme::checkbox(
                 ui,
                 &mut d.autocomplete,
-                "Proposer les tiers déjà utilisés pendant la saisie",
+                tr!("Proposer les tiers déjà utilisés pendant la saisie"),
             );
             ui.add_space(8.0);
             crate::theme::checkbox(
                 ui,
                 &mut d.amounts_in_cents,
-                "Montants tapés en centimes (1250 donne 12,50)",
+                tr!("Montants tapés en centimes (1250 donne 12,50)"),
             );
             ui.add_space(8.0);
             crate::theme::checkbox(
                 ui,
                 &mut d.keep_entry_open,
-                "Saisie en série : le formulaire reste ouvert et vidé après chaque ajout",
+                tr!("Saisie en série : le formulaire reste ouvert et vidé après chaque ajout"),
             );
         });
         ui_kit::section(
             ui,
             width,
             icon::MAGIC_WAND,
-            "Catégorisation automatique",
+            tr!("Catégorisation automatique"),
             |ui| {
                 crate::theme::checkbox(
                     ui,
                     &mut d.categorize_in_entry,
-                    "Pendant la saisie, remplir la catégorie quand la suggestion est sûre",
+                    tr!("Pendant la saisie, remplir la catégorie quand la suggestion est sûre"),
                 );
                 ui.add_space(8.0);
                 crate::theme::checkbox(
                     ui,
                     &mut d.categorize_on_import,
-                    "À l'import, catégoriser les opérations que les règles laissent sans catégorie",
+                    tr!(
+                        "À l'import, catégoriser les opérations que les règles laissent sans catégorie"
+                    ),
                 );
                 ui.add_space(8.0);
                 crate::theme::checkbox(
                     ui,
                     &mut d.ai_categorize,
-                    "Proposer de demander à l'IA (Claude) pour les libellés inconnus",
+                    tr!("Proposer de demander à l'IA (Claude) pour les libellés inconnus"),
                 );
                 if d.ai_categorize {
                     ui.add_space(10.0);
-                    ui_kit::row(ui, "Clé d'API Anthropic", LABEL_WIDTH, |ui| {
+                    ui_kit::row(ui, tr!("Clé d'API Anthropic"), LABEL_WIDTH, |ui| {
                         ui.add(
                             crate::theme::field(&mut d.ai_api_key)
                                 .password(true)
@@ -168,61 +181,71 @@ impl OptionsForm {
                         );
                     });
                     ui.add_space(8.0);
-                    ui_kit::row(ui, "Modèle", LABEL_WIDTH, |ui| {
+                    ui_kit::row(ui, tr!("Modèle"), LABEL_WIDTH, |ui| {
                         let current = bp_core::categorize::ai::MODELS
                             .iter()
                             .find(|(id, _)| *id == d.ai_model)
-                            .map_or(d.ai_model.as_str(), |(_, label)| label);
+                            .map_or(d.ai_model.as_str(), |(_, label)| bp_core::i18n::tr(label));
                         egui::ComboBox::from_id_salt("ai_model")
                             .selected_text(current)
                             .width(ui.available_width().min(380.0))
                             .show_ui(ui, |ui| {
                                 for (id, label) in bp_core::categorize::ai::MODELS {
-                                    ui.selectable_value(&mut d.ai_model, id.to_string(), label);
+                                    ui.selectable_value(
+                                        &mut d.ai_model,
+                                        id.to_string(),
+                                        bp_core::i18n::tr(label),
+                                    );
                                 }
                             });
                     });
                     ui.add_space(8.0);
                     ui.label(
-                        RichText::new(
+                        RichText::new(tr!(
                             "Seulement quand vous cliquez sur « Demander à l'IA » : les libellés \
                          inconnus sont envoyés à Anthropic sans numéros ni références, avec \
                          le sens et un ordre de grandeur du montant et vos noms de \
-                         catégories. La clé reste dans les réglages de cet ordinateur.",
-                        )
+                         catégories. La clé reste dans les réglages de cet ordinateur."
+                        ))
                         .color(pal.muted)
                         .size(12.5),
                     );
                 }
             },
         );
-        ui_kit::section(ui, width, icon::CALCULATOR, "Pointage et soldes", |ui| {
-            crate::theme::checkbox(
-                ui,
-                &mut d.disable_reconcile,
-                "Pointage simple, sans rapprochement (une ligne est pointée ou non)",
-            );
-            ui.add_space(8.0);
-            crate::theme::checkbox(
-                ui,
-                &mut d.ignore_filter_totals,
-                "Soldes calculés sur toutes les lignes, même quand un filtre est actif",
-            );
-        });
+        ui_kit::section(
+            ui,
+            width,
+            icon::CALCULATOR,
+            tr!("Pointage et soldes"),
+            |ui| {
+                crate::theme::checkbox(
+                    ui,
+                    &mut d.disable_reconcile,
+                    tr!("Pointage simple, sans rapprochement (une ligne est pointée ou non)"),
+                );
+                ui.add_space(8.0);
+                crate::theme::checkbox(
+                    ui,
+                    &mut d.ignore_filter_totals,
+                    tr!("Soldes calculés sur toutes les lignes, même quand un filtre est actif"),
+                );
+            },
+        );
         ui_kit::section(
             ui,
             width,
             icon::ARROW_U_UP_LEFT,
-            "Historique et tri",
+            tr!("Historique et tri"),
             |ui| {
-                ui_kit::row(ui, "Niveaux d'annulation", LABEL_WIDTH, |ui| {
+                ui_kit::row(ui, tr!("Niveaux d'annulation"), LABEL_WIDTH, |ui| {
                     ui.add(egui::Slider::new(&mut d.max_undo, 1..=100));
                 });
                 ui.add_space(8.0);
                 crate::theme::checkbox(
                     ui,
                     &mut d.remember_sort,
-                    "Retrouver la colonne de tri à l'ouverture",
+                    tr!("Retrouver la colonne de tri à l'ouverture"),
                 );
             },
         );
@@ -232,14 +255,16 @@ impl OptionsForm {
     fn files(&mut self, ui: &mut egui::Ui, width: f32) {
         let pal = palette(ui);
         let d = &mut self.draft;
-        ui_kit::section(ui, width, icon::FLOPPY_DISK, "Enregistrement", |ui| {
+        ui_kit::section(ui, width, icon::FLOPPY_DISK, tr!("Enregistrement"), |ui| {
             crate::theme::checkbox(
                 ui,
                 &mut d.autosave_on_close,
-                "Enregistrer automatiquement à la fermeture, sans demander",
+                tr!("Enregistrer automatiquement à la fermeture, sans demander"),
             );
         });
+        // `key` : sel stable de l'identifiant du sélecteur de dossier.
         let folder_row = |ui: &mut egui::Ui,
+                          key: &str,
                           label: &str,
                           value: &mut Option<std::path::PathBuf>,
                           default: &str| {
@@ -254,9 +279,9 @@ impl OptionsForm {
                     [w, 34.0],
                     egui::Label::new(RichText::new(text).color(color)).truncate(),
                 );
-                let pick = egui::Id::new(("options_folder", label));
+                let pick = egui::Id::new(("options_folder", key));
                 if ui
-                    .button(format!("{}  Choisir…", icon::FOLDER_OPEN))
+                    .button(format!("{}  {}", icon::FOLDER_OPEN, tr!("Choisir…")))
                     .clicked()
                 {
                     let kind = crate::file_picker::Kind::Folder;
@@ -270,46 +295,54 @@ impl OptionsForm {
                         .add(
                             egui::Button::new(RichText::new(icon::X).color(pal.muted)).frame(false),
                         )
-                        .on_hover_text("Revenir au dossier par défaut")
+                        .on_hover_text(tr!("Revenir au dossier par défaut"))
                         .clicked()
                 {
                     *value = None;
                 }
             });
         };
-        ui_kit::section(ui, width, icon::FOLDERS, "Dossiers", |ui| {
+        ui_kit::section(ui, width, icon::FOLDERS, tr!("Dossiers"), |ui| {
             folder_row(
                 ui,
-                "Fichiers de comptes",
+                "files",
+                tr!("Fichiers de comptes"),
                 &mut d.files_dir,
-                "Dernier dossier utilisé",
+                tr!("Dernier dossier utilisé"),
             );
             ui.add_space(8.0);
             folder_row(
                 ui,
-                "Exports (CSV, QIF…)",
+                "exports",
+                tr!("Exports (CSV, QIF…)"),
                 &mut d.export_dir,
-                "Dossier du fichier de comptes",
+                tr!("Dossier du fichier de comptes"),
             );
             ui.add_space(8.0);
             folder_row(
                 ui,
-                "Sauvegardes (.bp0)",
+                "backups",
+                tr!("Sauvegardes (.bp0)"),
                 &mut d.backup_dir,
-                "Dossier de données de l'application",
+                tr!("Dossier de données de l'application"),
             );
         });
         ui_kit::section(
             ui,
             width,
             icon::CLOCK_COUNTER_CLOCKWISE,
-            "Sauvegardes",
+            tr!("Sauvegardes"),
             |ui| {
-                ui_kit::row(ui, "Sauvegardes gardées par fichier", LABEL_WIDTH, |ui| {
-                    ui.add(egui::Slider::new(&mut d.backup_keep, 1..=100));
-                });
+                ui_kit::row(
+                    ui,
+                    tr!("Sauvegardes gardées par fichier"),
+                    LABEL_WIDTH,
+                    |ui| {
+                        ui.add(egui::Slider::new(&mut d.backup_keep, 1..=100));
+                    },
+                );
                 ui.label(
-                RichText::new("Une copie est faite avant chaque enregistrement ; les plus anciennes sont supprimées.")
+                RichText::new(tr!("Une copie est faite avant chaque enregistrement ; les plus anciennes sont supprimées."))
                     .color(pal.muted)
                     .size(12.5),
             );
@@ -321,8 +354,25 @@ impl OptionsForm {
         let pal = palette(ui);
         let d = &mut self.draft;
         let theme = &mut self.theme;
-        ui_kit::section(ui, width, icon::PALETTE, "Apparence", |ui| {
-            ui_kit::row(ui, "Mode", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::TRANSLATE, tr!("Langue"), |ui| {
+            ui_kit::row(ui, tr!("Langue de l'interface"), LABEL_WIDTH, |ui| {
+                let current = d.language();
+                let mut chosen = current;
+                egui::ComboBox::from_id_salt("language")
+                    .selected_text(current.native_name())
+                    .width(240.0)
+                    .show_ui(ui, |ui| {
+                        for lang in bp_core::i18n::Lang::ALL {
+                            ui.selectable_value(&mut chosen, lang, lang.native_name());
+                        }
+                    });
+                if chosen != current {
+                    d.language = Some(chosen.code().into());
+                }
+            });
+        });
+        ui_kit::section(ui, width, icon::PALETTE, tr!("Apparence"), |ui| {
+            ui_kit::row(ui, trc!("theme", "Mode"), LABEL_WIDTH, |ui| {
                 let w = ui.available_width().min(460.0);
                 let changed = ui_kit::segmented(
                     ui,
@@ -331,14 +381,19 @@ impl OptionsForm {
                         (
                             egui::ThemePreference::Dark,
                             icon::MOON,
-                            "Sombre",
+                            tr!("Sombre"),
                             pal.accent,
                         ),
-                        (egui::ThemePreference::Light, icon::SUN, "Clair", pal.accent),
+                        (
+                            egui::ThemePreference::Light,
+                            icon::SUN,
+                            tr!("Clair"),
+                            pal.accent,
+                        ),
                         (
                             egui::ThemePreference::System,
                             icon::DESKTOP,
-                            "Système",
+                            tr!("Système"),
                             pal.accent,
                         ),
                     ],
@@ -350,23 +405,27 @@ impl OptionsForm {
                 }
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Taille du texte", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Taille du texte"), LABEL_WIDTH, |ui| {
                 ui.add(
                     egui::Slider::new(&mut d.text_scale, 0.8..=1.5)
-                        .custom_formatter(|v, _| format!("{:.0} %", v * 100.0))
+                        .custom_formatter(|v, _| tr!("{} %", format!("{:.0}", v * 100.0)))
                         .step_by(0.05),
                 );
             });
             ui.add_space(8.0);
             let mut translucent = d.translucent();
-            if crate::theme::checkbox(ui, &mut translucent, "Fond translucide (flou du bureau)")
-                .changed()
+            if crate::theme::checkbox(
+                ui,
+                &mut translucent,
+                tr!("Fond translucide (flou du bureau)"),
+            )
+            .changed()
             {
                 d.translucent = Some(translucent);
             }
         });
-        ui_kit::section(ui, width, icon::SWATCHES, "Thèmes", |ui| {
-            for (dark, title) in [(true, "Sombres"), (false, "Clairs")] {
+        ui_kit::section(ui, width, icon::SWATCHES, tr!("Thèmes"), |ui| {
+            for (dark, title) in [(true, tr!("Sombres")), (false, tr!("Clairs"))] {
                 ui.label(RichText::new(title).color(pal.muted).size(12.5));
                 ui.add_space(4.0);
                 if let Some(id) = theme_gallery(ui, d, dark) {
@@ -397,8 +456,8 @@ impl OptionsForm {
                 ui.add_space(10.0);
             }
         });
-        ui_kit::section(ui, width, icon::CALENDAR_BLANK, "Dates", |ui| {
-            ui_kit::row(ui, "Format des dates", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::CALENDAR_BLANK, tr!("Dates"), |ui| {
+            ui_kit::row(ui, tr!("Format des dates"), LABEL_WIDTH, |ui| {
                 let sample = bp_core::model::Date::today();
                 egui::ComboBox::from_id_salt("date_format")
                     .selected_text(d.date_format.format(sample))
@@ -455,7 +514,12 @@ fn theme_card(
     let (rect, response) = ui.allocate_exact_size(vec2(width, 112.0), egui::Sense::click());
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
     response.widget_info(|| {
-        egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, selected, theme.name)
+        egui::WidgetInfo::selected(
+            egui::WidgetType::RadioButton,
+            true,
+            selected,
+            bp_core::i18n::tr(theme.name),
+        )
     });
     if !ui.is_rect_visible(rect) {
         return response;
@@ -563,7 +627,7 @@ fn theme_card(
     painter.text(
         pos2(rect.left() + 12.0, name_y),
         egui::Align2::LEFT_CENTER,
-        theme.name,
+        bp_core::i18n::tr(theme.name),
         egui::FontId::new(13.0, family),
         if selected { ui_pal.fg } else { ui_pal.fg_dark },
     );

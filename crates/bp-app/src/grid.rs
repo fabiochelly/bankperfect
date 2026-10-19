@@ -4,6 +4,7 @@
 
 use bp_core::filter::TackFilter;
 use bp_core::model::{Amount, Date, Tack};
+use bp_core::tr;
 use bp_core::view::SortColumn;
 use chrono::Datelike;
 use egui::emath::GuiRounding as _;
@@ -38,7 +39,7 @@ fn month_separator(
     let d = date.to_naive();
     let label = format!(
         "{} {}",
-        crate::datepicker::MONTHS[d.month0() as usize].to_uppercase(),
+        bp_core::i18n::month_title(d.month0() as usize).to_uppercase(),
         d.year()
     );
     let mut job = egui::text::LayoutJob::default();
@@ -190,8 +191,8 @@ impl ColumnMinima {
             // Badge réduit à son icône.
             mode: 44.0,
             payee: 90.0,
-            category: (width("Catégorie", &bold) + 16.0).max(70.0),
-            amount: (width(money, &body) + 8.0).max(width("Montant", &bold) + 24.0),
+            category: (width(tr!("Catégorie"), &bold) + 16.0).max(70.0),
+            amount: (width(money, &body) + 8.0).max(width(tr!("Montant"), &bold) + 24.0),
             balance: width(money, &bold) + SCROLLBAR_GUTTER + 8.0,
         }
     }
@@ -348,10 +349,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui,
                     doc,
                     open,
-                    "Mode",
+                    tr!("Mode"),
                     SortColumn::Mode,
                     |f| &mut f.mode,
-                    "carte, chq…",
+                    tr!("carte, chq…"),
                 )
             });
             header.col(|ui| {
@@ -359,10 +360,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui,
                     doc,
                     open,
-                    "Tiers",
+                    tr!("Tiers"),
                     SortColumn::Payee,
                     |f| &mut f.payee,
-                    "Filtrer tiers et détail",
+                    tr!("Filtrer tiers et détail"),
                 )
             });
             header.col(|ui| {
@@ -370,10 +371,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui,
                     doc,
                     open,
-                    "Catégorie",
+                    tr!("Catégorie"),
                     SortColumn::Category,
                     |f| &mut f.category,
-                    "Filtrer",
+                    tr!("Filtrer"),
                 )
             });
             header.col(|ui| {
@@ -381,7 +382,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     ui,
                     doc,
                     open,
-                    "Montant",
+                    tr!("Montant"),
                     SortColumn::Amount,
                     |f| &mut f.amount,
                     "<0, -50>50…",
@@ -396,7 +397,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     let layout = Layout::right_to_left(Align::Center);
                     ui.allocate_ui_with_layout(row, layout, |ui| {
                         ui.add_space(SCROLLBAR_GUTTER);
-                        ui.label(RichText::new("Solde").family(crate::theme::semibold()));
+                        ui.label(RichText::new(tr!("Solde")).family(crate::theme::semibold()));
                     });
                     if open {
                         ui.add_space(34.0 + ui.spacing().item_spacing.y);
@@ -459,7 +460,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                                         .size(11.5)
                                         .color(pal.future),
                                     )
-                                    .on_hover_text("Date de pointage");
+                                    .on_hover_text(tr!("Date de pointage"));
                                 });
                             });
                         } else {
@@ -471,14 +472,18 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     mode_badge(ui, doc, &op, &pal);
                 });
                 row.col(|ui| {
+                    // Le tiers d'un transfert est enregistré en français (lien
+                    // avec la ligne sœur) ; il s'affiche dans la langue choisie.
                     let (glyph, payee) = if let Some(rest) = op.payee.strip_prefix(AUTO_PREFIX) {
-                        (Some(icon::CLOCK), rest)
+                        (Some(icon::CLOCK), rest.to_string())
                     } else if op.payee.starts_with(TRANSFER_TO) {
-                        (Some(icon::ARROW_UP_RIGHT), op.payee.as_str())
+                        let label = bp_core::split::payee_label(&op.payee);
+                        (Some(icon::ARROW_UP_RIGHT), label.into_owned())
                     } else if op.payee.starts_with(TRANSFER_FROM) {
-                        (Some(icon::ARROW_DOWN_LEFT), op.payee.as_str())
+                        let label = bp_core::split::payee_label(&op.payee);
+                        (Some(icon::ARROW_DOWN_LEFT), label.into_owned())
                     } else {
-                        (None, op.payee.as_str())
+                        (None, op.payee.clone())
                     };
                     if let Some(glyph) = glyph {
                         let transfer = !op.payee.starts_with(AUTO_PREFIX);
@@ -490,7 +495,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                                         .sense(egui::Sense::click()),
                                 )
                                 .on_hover_cursor(egui::CursorIcon::PointingHand)
-                                .on_hover_text("Aller à la ligne liée");
+                                .on_hover_text(tr!("Aller à la ligne liée"));
                             if link.clicked() {
                                 doc.selection.clear();
                                 doc.selection.insert(index);
@@ -1101,13 +1106,12 @@ fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortCol
                 font,
                 color,
             );
-            let order = if next_ascending {
-                "croissant"
+            let hint = if next_ascending {
+                tr!("Trier par ordre croissant")
             } else {
-                "décroissant"
+                tr!("Trier par ordre décroissant")
             };
-            let hint = format!("Trier par ordre {order}");
-            let title = title.on_hover_text(&hint);
+            let title = title.on_hover_text(hint);
             let arrow = arrow.on_hover_text(hint);
             if hovered {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
@@ -1124,26 +1128,27 @@ fn sort_title(ui: &mut egui::Ui, doc: &mut OpenDoc, title: &str, column: SortCol
 fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc, open: bool) {
     ui.vertical(|ui| {
         ui.add_space(2.0);
-        sort_title(ui, doc, "Date", SortColumn::Date);
+        sort_title(ui, doc, tr!("Date"), SortColumn::Date);
         if !open {
             return;
         }
         let active = doc.filters.date_from.is_some() || doc.filters.date_to.is_some();
-        let label = if active {
-            format!("{} Période", icon::FUNNEL)
+        let glyph = if active {
+            icon::FUNNEL
         } else {
-            format!("{} Période", icon::CALENDAR_BLANK)
+            icon::CALENDAR_BLANK
         };
+        let label = format!("{glyph} {}", tr!("Période"));
         let button = egui::Button::new(label).selected(active);
         let response = ui.add_sized([ui.available_width(), 34.0], button);
         egui::Popup::menu(&response)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| {
                 ui.set_width(290.0);
-                date_bound(ui, "Du", &mut doc.filters.date_from);
-                date_bound(ui, "Au", &mut doc.filters.date_to);
+                date_bound(ui, "Du", tr!("Du"), &mut doc.filters.date_from);
+                date_bound(ui, "Au", tr!("Au"), &mut doc.filters.date_to);
                 ui.horizontal(|ui| {
-                    if ui.button("Ce mois").clicked() {
+                    if ui.button(tr!("Ce mois")).clicked() {
                         let d = Date::today().to_naive();
                         let first = Date::from_ymd(d.year(), d.month(), 1);
                         let next = if d.month() == 12 {
@@ -1154,12 +1159,12 @@ fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc, open: bool) {
                         doc.filters.date_from = first;
                         doc.filters.date_to = next.map(|n| Date(n.0 - 1));
                     }
-                    if ui.button("Cette année").clicked() {
+                    if ui.button(tr!("Cette année")).clicked() {
                         let y = Date::today().to_naive().year();
                         doc.filters.date_from = Date::from_ymd(y, 1, 1);
                         doc.filters.date_to = Date::from_ymd(y, 12, 31);
                     }
-                    if ui.button("Effacer").clicked() {
+                    if ui.button(tr!("Effacer")).clicked() {
                         doc.filters.date_from = None;
                         doc.filters.date_to = None;
                     }
@@ -1171,16 +1176,16 @@ fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc, open: bool) {
 /// Borne de date : champ `jj/mm/aaaa` avec calendrier, appliquée dès qu'elle
 /// est valide. Le texte saisi est conservé tant que la borne ne change pas
 /// par ailleurs (boutons « Ce mois », « Cette année »…).
-fn date_bound(ui: &mut egui::Ui, label: &str, bound: &mut Option<Date>) {
+fn date_bound(ui: &mut egui::Ui, salt: &str, label: &str, bound: &mut Option<Date>) {
     ui.label(RichText::new(label).small().color(palette(ui).muted));
-    let id = ui.id().with(("date_bound", label));
+    let id = ui.id().with(("date_bound", salt));
     let (mut text, last) = ui
         .data(|d| d.get_temp::<(String, Option<Date>)>(id))
         .filter(|(_, last)| last == bound)
         .unwrap_or_else(|| (bound.map(|d| d.to_string()).unwrap_or_default(), *bound));
     let response = crate::datepicker::date_field(
         ui,
-        label,
+        salt,
         &mut text,
         266.0,
         crate::datepicker::Placement::Inline,
@@ -1228,7 +1233,12 @@ fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
         let (rect, response) =
             ui.allocate_exact_size(galley.size() + egui::vec2(6.0, 4.0), Sense::click());
         response.widget_info(|| {
-            egui::WidgetInfo::selected(egui::WidgetType::Button, true, open, "Filtres de colonnes")
+            egui::WidgetInfo::selected(
+                egui::WidgetType::Button,
+                true,
+                open,
+                tr!("Filtres de colonnes"),
+            )
         });
         let color = if open {
             pal.accent
@@ -1242,11 +1252,11 @@ fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
         ui.painter()
             .galley(rect.center() - galley.size() / 2.0, galley, color);
         let tip = if open {
-            "Masquer les filtres de colonnes"
+            tr!("Masquer les filtres de colonnes")
         } else if hidden_filters {
-            "Afficher les filtres de colonnes (des filtres sont actifs)"
+            tr!("Afficher les filtres de colonnes (des filtres sont actifs)")
         } else {
-            "Afficher les filtres de colonnes"
+            tr!("Afficher les filtres de colonnes")
         };
         clicked = response
             .on_hover_cursor(egui::CursorIcon::PointingHand)
@@ -1268,11 +1278,11 @@ fn tack_filter_button(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let glyph = if active { icon::FUNNEL } else { icon::CHECKS };
     let response = ui
         .add(egui::Button::new(glyph).selected(active).frame(active))
-        .on_hover_text("Filtrer par pointage");
+        .on_hover_text(tr!("Filtrer par pointage"));
     egui::Popup::menu(&response).show(|ui| {
         crate::menu::popup_style(ui.style_mut());
         crate::menu::begin(ui);
-        crate::menu::heading(ui, "Afficher les lignes");
+        crate::menu::heading(ui, tr!("Afficher les lignes"));
         for filter in TackFilter::ALL {
             if crate::menu::choice(ui, doc.filters.tack == filter, filter.label()).clicked() {
                 doc.filters.tack = filter;

@@ -6,6 +6,7 @@ use bp_core::import::{
     ImportedAccount, ImportedOperation, ParsedImport, RejectReason, RejectedLine,
 };
 use bp_core::model::{Document, Mode};
+use bp_core::tr;
 use mlua::{Function, Lua, Table, Value};
 
 use crate::date::to_date;
@@ -25,14 +26,15 @@ impl ImporterSpec {
     pub fn parse_spec(spec: &Table) -> mlua::Result<Self> {
         let name: String = spec
             .get::<Option<String>>("name")?
-            .ok_or_else(|| runtime("bp.importer : name est obligatoire"))?;
+            .ok_or_else(|| runtime(tr!("bp.importer : name est obligatoire")))?;
         let extensions: Vec<String> = match spec.get::<Value>("extensions")? {
             Value::String(s) => vec![s.to_str()?.to_string()],
             Value::Table(t) => t.sequence_values::<String>().collect::<mlua::Result<_>>()?,
             _ => {
-                return Err(runtime(
-                    "bp.importer : extensions est obligatoire ({ \"csv\" }, { \"txt\", \"tsv\" }…)",
-                ));
+                return Err(runtime(tr!(
+                    "bp.importer : extensions est obligatoire ({}…)",
+                    "{ \"csv\" }, { \"txt\", \"tsv\" }"
+                )));
             }
         };
         let extensions: Vec<String> = extensions
@@ -41,7 +43,7 @@ impl ImporterSpec {
             .filter(|e| !e.is_empty())
             .collect();
         if extensions.is_empty() {
-            return Err(runtime("bp.importer : extensions est vide"));
+            return Err(runtime(tr!("bp.importer : extensions est vide")));
         }
         Ok(Self {
             name,
@@ -49,7 +51,7 @@ impl ImporterSpec {
             detect: spec.get("detect")?,
             parse: spec
                 .get::<Option<Function>>("parse")?
-                .ok_or_else(|| runtime("bp.importer : parse (fonction) est obligatoire"))?,
+                .ok_or_else(|| runtime(tr!("bp.importer : parse (fonction) est obligatoire")))?,
         })
     }
 }
@@ -71,7 +73,7 @@ fn text(t: &Table, key: &str) -> mlua::Result<String> {
     Ok(match t.get::<Value>(key)? {
         Value::Nil => String::new(),
         Value::String(s) => s.to_str()?.trim().to_string(),
-        v => crate::ui::display(&v)?,
+        v => crate::ui::data_text(&v)?,
     })
 }
 
@@ -88,9 +90,10 @@ pub(crate) fn parsed_import(
     value: Value,
 ) -> mlua::Result<ParsedImport> {
     let Value::Table(t) = value else {
-        return Err(runtime(
-            "parse doit renvoyer une liste d'opérations ou { accounts = … }",
-        ));
+        return Err(runtime(tr!(
+            "parse doit renvoyer une liste d'opérations ou {}",
+            "{ accounts = … }"
+        )));
     };
     let mut parsed = ParsedImport::default();
     let mut line = 0;
@@ -115,7 +118,7 @@ pub(crate) fn parsed_import(
         };
         let ops: Table = a
             .get::<Option<Table>>("operations")?
-            .ok_or_else(|| runtime("parse : un compte sans liste operations"))?;
+            .ok_or_else(|| runtime(tr!("parse : un compte sans liste operations")))?;
         for op in ops.sequence_values::<Table>() {
             let op = op?;
             line += 1;
@@ -195,7 +198,7 @@ fn imported_operation(
     };
     let fitid = match t.get::<Value>("id")? {
         Value::Nil => None,
-        v => Some(number(&v).map_or_else(|| crate::ui::display(&v), |n| Ok(format!("{n}")))?),
+        v => Some(number(&v).map_or_else(|| crate::ui::data_text(&v), |n| Ok(format!("{n}")))?),
     };
     Ok(Ok(ImportedOperation {
         line,

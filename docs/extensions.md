@@ -1,3 +1,5 @@
+**Français** · [English](extensions.en.md)
+
 # Extensions BankPerfect
 
 Les extensions ajoutent à BankPerfect des commandes, des fenêtres, des formats d'import et des automatismes. Elles s'écrivent en [Luau](https://luau.org), un Lua moderne, rapide et typé (celui de Roblox), et s'affichent avec les composants de l'application : une fenêtre d'extension a exactement l'allure d'une fenêtre de BankPerfect, dans tous les thèmes.
@@ -107,7 +109,7 @@ Ajoute une commande au menu **Extensions** (ou aux menus choisis par `menu`) et 
 
 ### `bp.importer{ … }`
 
-Ajoute un format de fichier à **Fichier › Importer**. Voir [Formats d'import](#formats-dimport).
+Ajoute un format de fichier à **Fichier › Importer des opérations…**. Voir [Formats d'import](#formats-dimport).
 
 ### `bp.on(évènement, fonction)`
 
@@ -152,7 +154,7 @@ bp.command({
 | `"accounts"` | menu **Comptes** |
 | `"operations"` | menu **Opérations** |
 | `"reports"` | menu **Rapports** |
-| `"tools"` | menu **Outils**, avant **Options** |
+| `"tools"` | menu **Outils**, avant **Options…** |
 | `"extensions"` | menu **Extensions** (par défaut) |
 | `"grid"` | clic droit sur les opérations de la grille |
 | `"account"` | clic droit sur un compte du panneau des comptes |
@@ -257,7 +259,7 @@ local op = bp.current_account():add({
 
 ### Ventiler
 
-Comme **Opérations › Ventiler l'opération** (F6), `op:split` remplace une opération par une ligne par part :
+Comme **Opérations › Ventiler l'opération…** (F6), `op:split` remplace une opération par une ligne par part :
 
 ```lua
 local parts = op:split({
@@ -358,7 +360,7 @@ bp.delete_schedule(loyer.index)
 
 `bp.add_schedule{ … }` crée l'échéance sur le compte affiché, à la date du jour, en prélèvement mensuel à insertion automatique, sauf indication contraire (`payee` est obligatoire). `bp.update_schedule(index, { … })` ne change que les champs donnés.
 
-`bp.forecast(compte, date_limite, { monthly = true }?)` renvoie le prévisionnel d'un compte, comme **Comptes › Prévisionnel** : des lignes `{ date, payee, amount, balance, kind, count }` où `kind` vaut `"balance"` (solde actuel), `"pending"` (opération à venir), `"schedule"` (échéance) ou `"month"` (regroupement mensuel avec `monthly`).
+`bp.forecast(compte, date_limite, { monthly = true }?)` renvoie le prévisionnel d'un compte, comme **Comptes › Solde prévisionnel…** : des lignes `{ date, payee, amount, balance, kind, count }` où `kind` vaut `"balance"` (solde actuel), `"pending"` (opération à venir), `"schedule"` (échéance) ou `"month"` (regroupement mensuel avec `monthly`).
 
 ### Budget mensuel
 
@@ -547,7 +549,7 @@ Couleurs : `"accent"`, `"positive"`, `"negative"`, `"warning"`, `"muted"` (elles
 
 ### Graphiques
 
-`ui.chart` dessine un graphique comme ceux de **Rapports › Graphiques**, aux couleurs du thème, avec légende, graduations et bulles d'information au survol :
+`ui.chart` dessine un graphique comme ceux de **Rapports › Graphiques…**, aux couleurs du thème, avec légende, graduations et bulles d'information au survol :
 
 ![Graphique dans une fenêtre d'extension](captures/extensions-synthese.png)
 
@@ -656,7 +658,7 @@ end)
 
 ## Formats d'import
 
-Une extension peut apprendre à BankPerfect à lire le relevé d'une banque. Le fichier est lu par l'extension ; l'aperçu, la détection des doublons, le choix du compte et des catégories sont ceux de **Fichier › Importer** :
+Une extension peut apprendre à BankPerfect à lire le relevé d'une banque. Le fichier est lu par l'extension ; l'aperçu, la détection des doublons, le choix du compte et des catégories sont ceux de **Fichier › Importer des opérations…** :
 
 ![Import par une extension](captures/extensions-import.png)
 
@@ -746,7 +748,19 @@ Sans `permissions = { "network" }`, `bp.http` refuse. `bp.open_url(url)` ouvre u
 - **Erreurs.** Une erreur au chargement (syntaxe, appel refusé) est affichée dans la fenêtre de gestion avec la ligne fautive, et l'extension n'ajoute rien. Une erreur pendant une commande ou une réaction s'affiche dans une fenêtre d'erreur, avec le fichier et la ligne.
 - **Recharger.** Le bouton **Recharger** relit toutes les extensions : leurs fenêtres ouvertes se ferment et leurs variables repartent de zéro. Ce qui doit survivre va dans `bp.store` ou `bp.prefs`. Désactiver puis réactiver une extension la recharge aussi.
 - **Versions.** `bp.version` donne la version de BankPerfect (`"9.8.2"`) ; `requires` dans `bp.extension` refuse proprement une version trop ancienne. `bp.id` est l'identifiant de l'extension (nom de son fichier ou dossier).
-- **Éditeur.** Le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) donne l'auto-complétion et la vérification des types (voir [Référence rapide](#référence-rapide)).
+- **Langue.** `bp.language` vaut `"fr"` ou `"en"`, la langue de l'interface. Les extensions sont rechargées quand l'utilisateur change de langue : on peut donc choisir le nom de l'extension, ceux des commandes et les textes dès le chargement. Les exemples fournis le font avec une petite fonction :
+
+  ```lua
+  local function tr(fr, en)
+  	return if bp.language == "en" then en else fr
+  end
+
+  bp.extension{ name = tr("Synthèse du mois", "Monthly summary") }
+  bp.command{ id = "synthese", title = tr("Synthèse du mois…", "Monthly summary…"), run = function() … end }
+  ```
+
+  Donnez alors un `id` à la commande (sinon il vaut le titre, qui change avec la langue), et gardez dans une seule langue ce qui est enregistré : clés de `bp.store` et `bp.prefs`, noms des modes de paiement standard (toujours en français dans l'API).
+- **Éditeur.** Le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) (commentaires en français ; [`bankperfect.en.d.luau`](bankperfect.en.d.luau) est le même, commenté en anglais) donne l'auto-complétion et la vérification des types (voir [Référence rapide](#référence-rapide)).
 
 ## Recettes
 
@@ -849,7 +863,7 @@ Une extension a accès à vos comptes : n'installez que des extensions dont vous
 
 ## Référence rapide
 
-Pour l'auto-complétion et la vérification des types dans votre éditeur, installez [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) et indiquez-lui le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau) (option `luau-lsp.types.definitionFiles` dans VS Code).
+Pour l'auto-complétion et la vérification des types dans votre éditeur, installez [luau-lsp](https://github.com/JohnnyMorganz/luau-lsp) et indiquez-lui le fichier de définitions [`bankperfect.d.luau`](bankperfect.d.luau), ou [`bankperfect.en.d.luau`](bankperfect.en.d.luau) pour des commentaires en anglais (option `luau-lsp.types.definitionFiles` dans VS Code).
 
 ```text
 bp.extension{ name, description, version, author, permissions, requires }
@@ -876,7 +890,7 @@ ui.chart{ style, labels, series | data, unit, currency, height }
 
 bp.store.get/set   bp.prefs.get/set   bp.json.encode/decode
 bp.files.open{…}   bp.files.save{…}   bp.http.get(url, opts)   bp.http.post(url, corps, opts)   bp.open_url(url)
-print(…) | bp.log(…)   require("module")   bp.version   bp.id
+print(…) | bp.log(…)   require("module")   bp.version   bp.id   bp.language
 
 Menus : file  export  edit  view  accounts  operations  reports  tools  extensions  grid  account
 Évènements : operation_added  operation_changed  operation_deleted  account_selected  selection_changed

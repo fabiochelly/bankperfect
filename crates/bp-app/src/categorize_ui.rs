@@ -7,6 +7,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use bp_core::categorize::{AUTO_THRESHOLD, Suggestion, ai, propose};
+use bp_core::{tr, tr_mark, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -132,7 +133,7 @@ impl CategorizeForm {
             .map(|r| &doc.document.accounts[r.account].operations[r.index]);
         let items = ai::items(&doc.document, ops);
         if items.is_empty() {
-            self.message = Some("Rien de nouveau à demander à l'IA.".into());
+            self.message = Some(tr!("Rien de nouveau à demander à l'IA.").into());
             return;
         }
         let bodies: Vec<(serde_json::Value, Vec<ai::Item>)> = items
@@ -156,9 +157,10 @@ impl CategorizeForm {
             }
             ctx.request_repaint();
         });
-        self.message = Some(format!(
-            "Question posée à l'IA pour {} libellé(s)…",
-            items.len()
+        self.message = Some(trn!(
+            items.len(),
+            "Question posée à l'IA pour {} libellé…",
+            "Question posée à l'IA pour {} libellés…"
         ));
         self.ai_job = Some(job);
     }
@@ -178,13 +180,15 @@ impl CategorizeForm {
                     .filter(|(_, label)| !label.is_empty())
                     .count();
                 doc.store_ai_answers(&answers);
-                self.message = Some(format!(
-                    "L'IA a proposé une catégorie pour {found} libellé(s) sur {}.",
+                self.message = Some(trn!(
+                    found,
+                    "L'IA a proposé une catégorie pour {0} libellé sur {1}.",
+                    "L'IA a proposé une catégorie pour {0} libellés sur {1}.",
                     answers.len()
                 ));
                 self.stale = true;
             }
-            Err(e) => self.message = Some(format!("IA : {e}")),
+            Err(e) => self.message = Some(tr!("IA : {}", e)),
         }
     }
 
@@ -205,7 +209,7 @@ impl CategorizeForm {
                 ui,
                 icon::MAGIC_WAND,
                 pal.accent,
-                "Catégoriser les opérations",
+                tr!("Catégoriser les opérations"),
             );
 
             ui.horizontal(|ui| {
@@ -214,8 +218,13 @@ impl CategorizeForm {
                     ui,
                     &mut self.scope,
                     &[
-                        (Scope::Visible, icon::FUNNEL, "Lignes affichées", pal.accent),
-                        (Scope::File, icon::FILES, "Tout le fichier", pal.accent),
+                        (
+                            Scope::Visible,
+                            icon::FUNNEL,
+                            tr!("Lignes affichées"),
+                            pal.accent,
+                        ),
+                        (Scope::File, icon::FILES, tr!("Tout le fichier"), pal.accent),
                     ],
                     34.0,
                     Some(380.0),
@@ -230,18 +239,14 @@ impl CategorizeForm {
                     .filter(|r| r.suggestion.confident().is_some())
                     .count();
                 let none = self.rows.iter().filter(|r| r.suggestion.is_empty()).count();
+                ui_kit::pill(ui, &tr!("{} sans catégorie", self.rows.len()), pal.accent);
+                ui_kit::pill(ui, &trn!(sure, "{} sûre", "{} sûres"), pal.positive);
                 ui_kit::pill(
                     ui,
-                    &format!("{} sans catégorie", self.rows.len()),
-                    pal.accent,
-                );
-                ui_kit::pill(ui, &format!("{sure} sûre(s)"), pal.positive);
-                ui_kit::pill(
-                    ui,
-                    &format!("{} à confirmer", self.rows.len() - sure - none),
+                    &tr!("{} à confirmer", self.rows.len() - sure - none),
                     pal.warning,
                 );
-                ui_kit::pill(ui, &format!("{none} sans proposition"), pal.muted);
+                ui_kit::pill(ui, &tr!("{} sans proposition", none), pal.muted);
             });
             ui.add_space(12.0);
 
@@ -257,7 +262,7 @@ impl CategorizeForm {
                         );
                         ui.add_space(8.0);
                         ui.label(
-                            RichText::new("Toutes ces opérations ont déjà une catégorie.")
+                            RichText::new(tr!("Toutes ces opérations ont déjà une catégorie."))
                                 .color(pal.fg_dark),
                         );
                     });
@@ -272,7 +277,15 @@ impl CategorizeForm {
                 .filter(|r| r.apply && r.choice.is_some())
                 .count();
             crate::dialogs::footer(ui, |ui| {
-                let label = format!("{}  Appliquer à {count} opération(s)", icon::CHECK);
+                let label = format!(
+                    "{}  {}",
+                    icon::CHECK,
+                    trn!(
+                        count,
+                        "Appliquer à {} opération",
+                        "Appliquer à {} opérations"
+                    )
+                );
                 if crate::dialogs::primary(ui, &label, count > 0).clicked() {
                     let changes: Vec<(usize, usize, u32)> = self
                         .rows
@@ -280,10 +293,14 @@ impl CategorizeForm {
                         .filter(|r| r.apply)
                         .filter_map(|r| r.choice.map(|c| (r.account, r.index, c)))
                         .collect();
-                    let n = doc.set_categories(&changes, "catégoriser");
-                    outcome = Outcome::Done(format!("{n} opération(s) catégorisée(s)"));
+                    let n = doc.set_categories(&changes, tr_mark!("catégoriser"));
+                    outcome = Outcome::Done(trn!(
+                        n,
+                        "{} opération catégorisée",
+                        "{} opérations catégorisées"
+                    ));
                 }
-                if crate::dialogs::button(ui, "Fermer").clicked()
+                if crate::dialogs::button(ui, tr!("Fermer")).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
@@ -293,22 +310,27 @@ impl CategorizeForm {
                     let busy = self.ai_job.is_some();
                     let ready = !self.ai.api_key.trim().is_empty();
                     let text = if busy {
-                        format!("{}  L'IA réfléchit…", icon::HOURGLASS)
+                        format!("{}  {}", icon::HOURGLASS, tr!("L'IA réfléchit…"))
                     } else {
-                        format!("{}  Demander à l'IA ({unknown})", icon::SPARKLE)
+                        format!(
+                            "{}  {}",
+                            icon::SPARKLE,
+                            tr!("Demander à l'IA ({})", unknown)
+                        )
                     };
                     let response = ui.add_enabled(
                         !busy && ready && unknown > 0,
                         egui::Button::new(text).min_size(egui::vec2(100.0, 36.0)),
                     );
                     let response = if ready {
-                        response.on_hover_text(
+                        response.on_hover_text(tr!(
                             "Envoie à Anthropic les libellés inconnus (sans numéros ni \
                              références), le sens et l'ordre de grandeur des montants et vos \
-                             noms de catégories",
-                        )
+                             noms de catégories"
+                        ))
                     } else {
-                        response.on_disabled_hover_text("Indiquez une clé d'API dans les options")
+                        response
+                            .on_disabled_hover_text(tr!("Indiquez une clé d'API dans les options"))
                     };
                     if response.clicked() {
                         self.start_ai(ui.ctx(), doc);
@@ -319,17 +341,17 @@ impl CategorizeForm {
                 }
                 // À gauche du pied (disposition de droite à gauche).
                 ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
-                    if ui.button("Cocher les sûres").clicked() {
+                    if ui.button(tr!("Cocher les sûres")).clicked() {
                         for r in &mut self.rows {
                             r.apply = r.edited || r.suggestion.confident().is_some();
                         }
                     }
-                    if ui.button("Tout cocher").clicked() {
+                    if ui.button(tr!("Tout cocher")).clicked() {
                         for r in &mut self.rows {
                             r.apply = r.choice.is_some();
                         }
                     }
-                    if ui.button("Tout décocher").clicked() {
+                    if ui.button(tr!("Tout décocher")).clicked() {
                         self.rows.iter_mut().for_each(|r| r.apply = false);
                     }
                 });
@@ -442,7 +464,7 @@ fn confidence_cell(ui: &mut egui::Ui, row: &Row, width: f32) {
         match candidate {
             _ if row.edited => {
                 ui.label(RichText::new(icon::USER).color(pal.muted))
-                    .on_hover_text("Choisie à la main");
+                    .on_hover_text(tr!("Choisie à la main"));
             }
             Some(c) => {
                 let color = if c.confidence >= AUTO_THRESHOLD {
@@ -458,16 +480,17 @@ fn confidence_cell(ui: &mut egui::Ui, row: &Row, width: f32) {
                     .candidates
                     .iter()
                     .skip(1)
-                    .map(|o| format!("{} %", (o.confidence * 100.0).round()))
+                    .map(|o| tr!("{} %", (o.confidence * 100.0).round()))
                     .collect();
-                let mut hover = format!("D'après : {} ({})", c.reason, c.source.label());
+                let mut hover = tr!("D'après : {} ({})", c.reason, c.source.label());
                 if !others.is_empty() {
-                    hover.push_str(&format!(
-                        "\nAutres propositions dans la liste : {}",
+                    hover.push('\n');
+                    hover.push_str(&tr!(
+                        "Autres propositions dans la liste : {}",
                         others.join(", ")
                     ));
                 }
-                ui_kit::pill(ui, &format!("{percent} %"), color);
+                ui_kit::pill(ui, &tr!("{} %", percent), color);
                 ui.interact(
                     ui.min_rect(),
                     ui.id().with("confidence"),
@@ -505,7 +528,7 @@ fn ask_ai(
         }
         let mut response = request
             .send(body.to_string().as_str())
-            .map_err(|e| format!("connexion impossible : {e}"))?;
+            .map_err(|e| tr!("connexion impossible : {}", e))?;
         let status = response.status().as_u16();
         let text = response
             .body_mut()

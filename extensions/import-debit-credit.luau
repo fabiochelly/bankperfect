@@ -7,9 +7,18 @@
 -- reconnaît le fichier, l'aperçu habituel s'ouvre avec les opérations lues
 -- ici (choix du compte, doublons, catégories).
 
+-- Texte dans la langue de l'interface : bp.language vaut "fr" ou "en" (les
+-- extensions sont rechargées quand l'utilisateur change de langue).
+local function tr(fr, en)
+	return if bp.language == "en" then en else fr
+end
+
 bp.extension({
-	name = "Import Débit/Crédit",
-	description = "Lit les relevés CSV à colonnes Date ; Libellé ; Débit ; Crédit.",
+	name = tr("Import Débit/Crédit", "Debit/Credit import"),
+	description = tr(
+		"Lit les relevés CSV à colonnes Date ; Libellé ; Débit ; Crédit.",
+		"Reads CSV statements with Date; Description; Debit; Credit columns."
+	),
 	version = "1.0",
 	author = "BankPerfect",
 })
@@ -33,12 +42,14 @@ local function cells(line)
 end
 
 -- Rang des colonnes d'après l'en-tête, ou nil si ce n'est pas ce format.
+-- La reconnaissance ne dépend pas de la langue de l'interface : un relevé
+-- reste dans la langue de la banque (« Libellé » ou « Description »).
 local function columns(header)
 	local c = {}
 	for i, name in cells(plain(header)) do
 		if name:find("^date") and not c.date then
 			c.date = i
-		elseif name:find("libelle") then
+		elseif name:find("libelle") or name:find("description") then
 			c.label = i
 		elseif name:find("debit") then
 			c.debit = i
@@ -53,7 +64,7 @@ local function columns(header)
 end
 
 bp.importer({
-	name = "Débit/Crédit",
+	name = tr("Débit/Crédit", "Debit/Credit"),
 	extensions = { "csv", "txt" },
 	detect = function(file)
 		local header = file.text:match("^[^\r\n]*")

@@ -21,18 +21,47 @@ use crate::pyvalue::{LegacyError, PyValue};
 /// Erreur de lecture ou d'écriture des données d'une fonctionnalité.
 #[derive(Debug, thiserror::Error)]
 pub enum FeatureError {
-    #[error("données « {key} » illisibles : {message}")]
-    Decode { key: String, message: String },
-    #[error("données « {key} » impossibles à enregistrer : {message}")]
-    Encode { key: String, message: String },
-    #[error("ancienne donnée « {key} » : pickle illisible")]
-    LegacyPickle { key: String },
-    #[error("ancienne donnée « {key} » : {source}")]
+    Decode {
+        key: String,
+        message: String,
+    },
+    Encode {
+        key: String,
+        message: String,
+    },
+    LegacyPickle {
+        key: String,
+    },
     Legacy {
         key: String,
         #[source]
         source: LegacyError,
     },
+}
+
+impl std::fmt::Display for FeatureError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&match self {
+            Self::Decode { key, message } => crate::tr!(
+                "données « {key} » illisibles : {message}",
+                key = key,
+                message = message
+            ),
+            Self::Encode { key, message } => crate::tr!(
+                "données « {key} » impossibles à enregistrer : {message}",
+                key = key,
+                message = message
+            ),
+            Self::LegacyPickle { key } => {
+                crate::tr!("ancienne donnée « {key} » : pickle illisible", key = key)
+            }
+            Self::Legacy { key, source } => crate::tr!(
+                "ancienne donnée « {key} » : {source}",
+                key = key,
+                source = source
+            ),
+        })
+    }
 }
 
 /// Octets bruts rangés sous `key`.

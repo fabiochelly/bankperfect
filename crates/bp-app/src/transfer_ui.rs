@@ -3,6 +3,7 @@
 
 use bp_core::model::{Amount, Date};
 use bp_core::split::{self, SplitPart, TransferKind, TransferRequest};
+use bp_core::{tr, tr_mark};
 use egui::{Key, RichText, vec2};
 use egui_phosphor::regular as icon;
 use serde::{Deserialize, Serialize};
@@ -112,33 +113,33 @@ impl TransferForm {
         crate::dialogs::modal(ctx, "transfer").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::ARROWS_LEFT_RIGHT, pal.accent, "Transfert de compte à compte");
-            ui_kit::subtitle(ui, "Deux lignes liées sont créées : une sortie dans le compte débité, une entrée dans le compte crédité.");
+            crate::dialogs::header(ui, icon::ARROWS_LEFT_RIGHT, pal.accent, tr!("Transfert de compte à compte"));
+            ui_kit::subtitle(ui, tr!("Deux lignes liées sont créées : une sortie dans le compte débité, une entrée dans le compte crédité."));
             let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
-            ui_kit::section(ui, width, icon::BANK, "Comptes", |ui| {
+            ui_kit::section(ui, width, icon::BANK, tr!("Comptes"), |ui| {
                 let half = (inner - 60.0) / 2.0;
                 ui.horizontal(|ui| {
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("Débité").color(pal.negative));
+                        ui.label(RichText::new(tr!("Débité")).color(pal.negative));
                         account_combo(ui, "transfer_from", doc, &mut self.from, half, None);
                     });
                     ui.vertical(|ui| {
                         ui.add_space(20.0);
-                        if ui.add_sized(vec2(40.0, 32.0), egui::Button::new(icon::ARROWS_LEFT_RIGHT)).on_hover_text("Inverser").clicked() {
+                        if ui.add_sized(vec2(40.0, 32.0), egui::Button::new(icon::ARROWS_LEFT_RIGHT)).on_hover_text(tr!("Inverser")).clicked() {
                             std::mem::swap(&mut self.from, &mut self.to);
                         }
                     });
                     ui.vertical(|ui| {
-                        ui.label(RichText::new("Crédité").color(pal.positive));
+                        ui.label(RichText::new(tr!("Crédité")).color(pal.positive));
                         account_combo(ui, "transfer_to", doc, &mut self.to, half, Some(self.from));
                     });
                 });
             });
-            ui_kit::section(ui, width, icon::CURRENCY_EUR, "Transfert", |ui| {
+            ui_kit::section(ui, width, crate::format::currency_icon(doc.main_currency()), tr!("Transfert"), |ui| {
                 ui.horizontal(|ui| {
                     crate::datepicker::date_field(ui, "transfer_date", &mut self.date, 200.0, crate::datepicker::Placement::Popup);
                     ui.add_space(12.0);
-                    let amount = ui.add(crate::theme::field(&mut self.amount).hint_text("Montant").desired_width(inner - 200.0 - 12.0 - 8.0));
+                    let amount = ui.add(crate::theme::field(&mut self.amount).hint_text(tr!("Montant")).desired_width(inner - 200.0 - 12.0 - 8.0));
                     if amount.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
                         submit = true;
                     }
@@ -162,7 +163,7 @@ impl TransferForm {
                 ui.add_space(4.0);
                 let (out_mode, in_mode) = self.kind.modes();
                 ui.label(
-                    RichText::new(format!(
+                    RichText::new(tr!(
                         "Modes : « {} » dans le compte débité, « {} » dans le compte crédité",
                         bp_core::model::Mode::Standard(out_mode).label(),
                         bp_core::model::Mode::Standard(in_mode).label()
@@ -171,8 +172,8 @@ impl TransferForm {
                     .color(pal.muted),
                 );
             });
-            ui_kit::section(ui, width, icon::TAG, "Détail et catégorie", |ui| {
-                ui.add(crate::theme::field(&mut self.details).hint_text("Détail (facultatif)").desired_width(inner));
+            ui_kit::section(ui, width, icon::TAG, tr!("Détail et catégorie"), |ui| {
+                ui.add(crate::theme::field(&mut self.details).hint_text(tr!("Détail (facultatif)")).desired_width(inner));
                 ui.add_space(8.0);
                 ui_kit::category_combo(ui, "transfer_category", &doc.document, &doc.category_styles, &mut self.category, inner);
             });
@@ -180,10 +181,10 @@ impl TransferForm {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, &format!("{}  Créer le transfert", icon::CHECK), true).clicked() {
+                if crate::dialogs::primary(ui, &format!("{}  {}", icon::CHECK, tr!("Créer le transfert")), true).clicked() {
                     submit = true;
                 }
-                if crate::dialogs::button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
             });
@@ -198,10 +199,10 @@ impl TransferForm {
     }
 
     fn submit(&mut self, doc: &mut OpenDoc) -> Result<Outcome, String> {
-        let date = Date::parse_fr(&self.date, Date::today()).ok_or("Date invalide")?;
+        let date = Date::parse_fr(&self.date, Date::today()).ok_or(tr!("Date invalide"))?;
         let amount = Amount::parse(&self.amount)
             .filter(|a| a.0 != 0)
-            .ok_or("Montant invalide")?;
+            .ok_or(tr!("Montant invalide"))?;
         let request = TransferRequest {
             date,
             kind: self.kind,
@@ -212,7 +213,7 @@ impl TransferForm {
             to: self.to,
         };
         let lines = doc
-            .edit_accounts("transfert", &[self.from, self.to], |d| {
+            .edit_accounts(tr_mark!("transfert"), &[self.from, self.to], |d| {
                 split::create_transfer(d, &request)
             })
             .map_err(|e| capitalize(&e.to_string()))?;
@@ -232,7 +233,7 @@ impl TransferForm {
                 doc.select_lines(&[line]);
             }
         }
-        Ok(Outcome::Done(format!(
+        Ok(Outcome::Done(tr!(
             "Transfert de {} de « {} » vers « {} »",
             money(amount.abs(), &doc.document.accounts[self.from].currency),
             doc.document.accounts[self.from].name,
@@ -273,10 +274,10 @@ impl ConvertForm {
         crate::dialogs::modal(ctx, "convert_transfer").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::ARROWS_LEFT_RIGHT, pal.accent, "Convertir en transfert");
-            ui_kit::subtitle(ui, "La ligne devient un transfert lié : sa contrepartie est créée dans le compte choisi.");
+            crate::dialogs::header(ui, icon::ARROWS_LEFT_RIGHT, pal.accent, tr!("Convertir en transfert"));
+            ui_kit::subtitle(ui, tr!("La ligne devient un transfert lié : sa contrepartie est créée dans le compte choisi."));
             let inner = width - 2.0 * ui_kit::CARD_PADDING - 2.0;
-            ui_kit::section(ui, width, icon::LIST_BULLETS, "Ligne", |ui| {
+            ui_kit::section(ui, width, icon::LIST_BULLETS, tr!("Ligne"), |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(op.date.to_string()).color(pal.fg_dark));
                     ui.add_space(8.0);
@@ -287,13 +288,13 @@ impl ConvertForm {
                     });
                 });
             });
-            let label = if op.amount.is_negative() { "Compte crédité" } else { "Compte débité" };
+            let label = if op.amount.is_negative() { tr!("Compte crédité") } else { tr!("Compte débité") };
             ui_kit::section(ui, width, icon::BANK, label, |ui| {
                 account_combo(ui, "convert_other", doc, &mut self.other, inner, Some(doc.account));
                 ui.add_space(4.0);
                 if let Some(mode) = split::reciprocal_mode(&op.mode) {
                     ui.label(
-                        RichText::new(format!("Mode de la contrepartie : « {} »", bp_core::model::Mode::Standard(mode).label()))
+                        RichText::new(tr!("Mode de la contrepartie : « {} »", bp_core::model::Mode::Standard(mode).label()))
                             .size(12.5)
                             .color(pal.muted),
                     );
@@ -303,22 +304,24 @@ impl ConvertForm {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, &format!("{}  Convertir", icon::CHECK), true).clicked() {
+                if crate::dialogs::primary(ui, &format!("{}  {}", icon::CHECK, tr!("Convertir")), true).clicked() {
                     submit = true;
                 }
-                if crate::dialogs::button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
             });
         });
         if submit {
             let (account, line, other) = (doc.account, self.line, self.other);
-            match doc.edit_accounts("conversion en transfert", &[account, other], |d| {
-                split::convert_to_transfer(d, account, line, other)
-            }) {
+            match doc.edit_accounts(
+                tr_mark!("conversion en transfert"),
+                &[account, other],
+                |d| split::convert_to_transfer(d, account, line, other),
+            ) {
                 Ok(_) => {
                     doc.select_lines(&[line]);
-                    outcome = Outcome::Done(format!(
+                    outcome = Outcome::Done(tr!(
                         "Ligne liée au compte « {} »",
                         doc.document.accounts[other].name
                     ));
@@ -384,8 +387,8 @@ impl SplitForm {
         crate::dialogs::modal(ctx, "split").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::ARROWS_SPLIT, pal.accent, "Ventiler l'opération");
-            ui_kit::subtitle(ui, "L'opération est remplacée par une ligne par part, chacune avec son détail, sa catégorie et son montant.");
+            crate::dialogs::header(ui, icon::ARROWS_SPLIT, pal.accent, tr!("Ventiler l'opération"));
+            ui_kit::subtitle(ui, tr!("L'opération est remplacée par une ligne par part, chacune avec son détail, sa catégorie et son montant."));
             ui_kit::card(ui, width, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(op.date.to_string()).color(pal.fg_dark));
@@ -404,14 +407,14 @@ impl SplitForm {
             let remaining = Amount(op.amount.0.abs() - total.0);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(format!("{}  Ajouter une part", icon::PLUS)).clicked() {
+                if ui.button(format!("{}  {}", icon::PLUS, tr!("Ajouter une part"))).clicked() {
                     self.parts.push(PartDraft {
                         details: String::new(),
                         category: None,
                         amount: if remaining.0 > 0 { money(remaining, "") } else { String::new() },
                     });
                 }
-                if ui.button(format!("{}  Répartir également", icon::EQUALS)).on_hover_text("Même montant pour chaque part").clicked() {
+                if ui.button(format!("{}  {}", icon::EQUALS, tr!("Répartir également"))).on_hover_text(tr!("Même montant pour chaque part")).clicked() {
                     let shares = split::split_evenly(op.amount.abs(), self.parts.len());
                     for (p, a) in self.parts.iter_mut().zip(shares) {
                         p.amount = money(a, "");
@@ -419,9 +422,9 @@ impl SplitForm {
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                     let (text, color) = match remaining.0.cmp(&0) {
-                        std::cmp::Ordering::Equal => (format!("{}  Tout est ventilé", icon::CHECK_CIRCLE), pal.positive),
-                        std::cmp::Ordering::Greater => (format!("Reste à ventiler : {}", money(remaining, &currency)), pal.warning),
-                        std::cmp::Ordering::Less => (format!("Dépassement : {}", money(Amount(-remaining.0), &currency)), pal.negative),
+                        std::cmp::Ordering::Equal => (format!("{}  {}", icon::CHECK_CIRCLE, tr!("Tout est ventilé")), pal.positive),
+                        std::cmp::Ordering::Greater => (tr!("Reste à ventiler : {}", money(remaining, &currency)), pal.warning),
+                        std::cmp::Ordering::Less => (tr!("Dépassement : {}", money(Amount(-remaining.0), &currency)), pal.negative),
                     };
                     ui.label(RichText::new(text).family(crate::theme::medium()).color(color));
                 });
@@ -431,10 +434,10 @@ impl SplitForm {
             }
             crate::dialogs::footer(ui, |ui| {
                 let ready = remaining.0 == 0 && amounts.iter().all(|a| a.is_some_and(|a| a.0 > 0)) && self.parts.len() >= 2;
-                if crate::dialogs::primary(ui, &format!("{}  Ventiler en {} lignes", icon::CHECK, self.parts.len()), ready).clicked() {
+                if crate::dialogs::primary(ui, &format!("{}  {}", icon::CHECK, tr!("Ventiler en {} lignes", self.parts.len())), ready).clicked() {
                     submit = true;
                 }
-                if crate::dialogs::button(ui, "Annuler").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, tr!("Annuler")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
             });
@@ -451,13 +454,12 @@ impl SplitForm {
                 })
                 .collect();
             let (account, line) = (doc.account, self.line);
-            match doc.edit_accounts("ventilation", &[account], |d| {
+            match doc.edit_accounts(tr_mark!("ventilation"), &[account], |d| {
                 split::split_operation(d, account, line, &parts)
             }) {
                 Ok(lines) => {
                     doc.select_lines(&lines);
-                    outcome =
-                        Outcome::Done(format!("Opération ventilée en {} lignes", lines.len()));
+                    outcome = Outcome::Done(tr!("Opération ventilée en {} lignes", lines.len()));
                 }
                 Err(e) => self.error = Some(capitalize(&e.to_string())),
             }
@@ -479,13 +481,13 @@ impl SplitForm {
                 ui,
                 30.0,
                 egui::Align::Max,
-                RichText::new("N°").color(pal.fg_dark),
+                RichText::new(tr!("N°")).color(pal.fg_dark),
             );
             ui_kit::cell(
                 ui,
                 details_w,
                 egui::Align::Min,
-                RichText::new("Détail")
+                RichText::new(tr!("Détail"))
                     .family(crate::theme::semibold())
                     .color(pal.fg_dark),
             );
@@ -493,7 +495,7 @@ impl SplitForm {
                 ui,
                 category_w,
                 egui::Align::Min,
-                RichText::new("Catégorie")
+                RichText::new(tr!("Catégorie"))
                     .family(crate::theme::semibold())
                     .color(pal.fg_dark),
             );
@@ -501,7 +503,7 @@ impl SplitForm {
                 ui,
                 amount_w,
                 egui::Align::Max,
-                RichText::new("Montant")
+                RichText::new(tr!("Montant"))
                     .family(crate::theme::semibold())
                     .color(pal.fg_dark),
             );
@@ -522,7 +524,7 @@ impl SplitForm {
                         );
                         ui.add(
                             crate::theme::field(&mut part.details)
-                                .hint_text("Détail")
+                                .hint_text(tr!("Détail"))
                                 .desired_width(details_w),
                         );
                         ui_kit::category_combo(
@@ -536,7 +538,7 @@ impl SplitForm {
                         ui.add(
                             crate::theme::field(&mut part.amount)
                                 .horizontal_align(egui::Align::Max)
-                                .hint_text("0,00")
+                                .hint_text(tr!("0,00"))
                                 .desired_width(amount_w),
                         );
                         if can_remove
@@ -545,7 +547,7 @@ impl SplitForm {
                                     egui::Button::new(RichText::new(icon::TRASH).color(pal.muted))
                                         .frame(false),
                                 )
-                                .on_hover_text("Retirer cette part")
+                                .on_hover_text(tr!("Retirer cette part"))
                                 .clicked()
                         {
                             remove = Some(k);

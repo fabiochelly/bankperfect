@@ -1,14 +1,25 @@
 -- Synthèse du mois : dépenses, recettes et répartition par catégorie du
 -- compte affiché, mois par mois.
 
+-- Texte dans la langue de l'interface : bp.language vaut "fr" ou "en" (les
+-- extensions sont rechargées quand l'utilisateur change de langue).
+local function tr(fr, en)
+	return if bp.language == "en" then en else fr
+end
+
 bp.extension({
-	name = "Synthèse du mois",
-	description = "Tableau de bord mensuel du compte affiché : dépenses, recettes, plus grosses dépenses, répartition par catégorie et six derniers mois.",
+	name = tr("Synthèse du mois", "Monthly summary"),
+	description = tr(
+		"Tableau de bord mensuel du compte affiché : dépenses, recettes, plus grosses dépenses, répartition par catégorie et six derniers mois.",
+		"Monthly dashboard for the account shown: expenses, income, largest expenses, breakdown by category and the last six months."
+	),
 	version = "1.0",
 	author = "BankPerfect",
 })
 
 local ui = bp.ui
+
+local UNCATEGORIZED = tr("Sans catégorie", "Uncategorized")
 
 local function summary(account, month)
 	local from, to = month:start_of_month(), month:end_of_month()
@@ -18,7 +29,7 @@ local function summary(account, month)
 	for _, op in account:operations({ from = from, to = to }) do
 		if op.amount < 0 then
 			spent += -op.amount
-			local family = (op.category or "Sans catégorie"):match("^[^>]+") or "Sans catégorie"
+			local family = (op.category or UNCATEGORIZED):match("^[^>]+") or UNCATEGORIZED
 			family = family:gsub("%s+$", "")
 			by_category[family] = (by_category[family] or 0) + -op.amount
 			table.insert(biggest, op)
@@ -39,7 +50,10 @@ local function summary(account, month)
 	return spent, earned, bars, biggest
 end
 
-local SHORT_MONTHS = { "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." }
+local SHORT_MONTHS = tr(
+	{ "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.", "nov.", "déc." },
+	{ "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" }
+)
 
 -- Dépenses et recettes des six mois qui finissent par `month`, pour ui.chart.
 local function six_months(account, month)
@@ -54,9 +68,20 @@ local function six_months(account, month)
 	return labels, spent, earned
 end
 
+-- Tiers à afficher : pour un transfert, le compte de l'autre ligne (le tiers
+-- enregistré, « Transfert vers le compte … », reste en français).
+local function payee(op)
+	local sister = if op.is_transfer then op:sister() else nil
+	if sister then
+		local to = if op.amount < 0 then tr("Vers ", "To ") else tr("Depuis ", "From ")
+		return to .. sister.account.name
+	end
+	return op.payee
+end
+
 bp.command({
 	id = "synthese",
-	title = "Synthèse du mois…",
+	title = tr("Synthèse du mois…", "Monthly summary…"),
 	icon = "chart-pie-slice",
 	menu = { "reports", "account" }, -- menu Rapports et clic droit sur un compte
 	shortcut = "Ctrl+Alt+M",
@@ -69,35 +94,46 @@ bp.command({
 			start = past[#past].date
 		end
 		ui.window({
-			title = "Synthèse — " .. account.name,
+			title = tr("Synthèse — ", "Monthly summary — ") .. account.name,
 			icon = "chart-pie-slice",
 			size = "large",
 			state = { month = start:start_of_month() },
 			view = function(s)
+				local cur = { currency = account.currency }
 				local spent, earned, bars, biggest = summary(account, s.month)
 				local top = {}
 				for i = 1, math.min(5, #biggest) do
 					local op = biggest[i]
-					table.insert(top, { op.date, op.payee, ui.cell(op.category or "—", { color = "muted" }), ui.money(op.amount), id = op })
+					table.insert(top, { op.date, payee(op), ui.cell(op.category or "—", { color = "muted" }), ui.money(op.amount, cur), id = op })
 				end
-				local name = s.month.month_name
+				local name = s.month.month_name -- dans la langue de l'interface
 				return {
 					ui.row({
-						ui.button({ "Mois précédent", icon = "caret-left", on_click = function(st)
+						ui.button({ tr("Mois précédent", "Previous month"), icon = "caret-left", on_click = function(st)
 							st.month = st.month:add_months(-1)
 						end }),
 						ui.heading(name:sub(1, 1):upper() .. name:sub(2) .. " " .. s.month.year),
-						ui.button({ "Mois suivant", icon = "caret-right", on_click = function(st)
+						ui.button({ tr("Mois suivant", "Next month"), icon = "caret-right", on_click = function(st)
 							st.month = st.month:add_months(1)
 						end }),
 					}),
 					ui.space(6),
 					ui.row({
-						ui.stat({ label = "Dépenses", value = ui.money(-spent), icon = "arrow-down-right", color = "negative" }),
-						ui.stat({ label = "Recettes", value = ui.money(earned), icon = "arrow-up-right", color = "positive" }),
 						ui.stat({
-							label = "Solde du mois",
-							value = ui.money(earned - spent),
+							label = tr("Dépenses", "Expenses"),
+							value = ui.money(-spent, cur),
+							icon = "arrow-down-right",
+							color = "negative",
+						}),
+						ui.stat({
+							label = tr("Recettes", "Income"),
+							value = ui.money(earned, cur),
+							icon = "arrow-up-right",
+							color = "positive",
+						}),
+						ui.stat({
+							label = tr("Solde du mois", "Net for the month"),
+							value = ui.money(earned - spent, cur),
 							icon = "scales",
 							color = if earned >= spent then "positive" else "negative",
 						}),
@@ -105,26 +141,39 @@ bp.command({
 					ui.space(8),
 					ui.columns({
 						ui.section({
-							title = "Par catégorie",
+							title = tr("Par catégorie", "By category"),
 							icon = "chart-bar-horizontal",
-							if #bars > 0 then ui.bars({ data = bars }) else ui.muted("Aucune dépense ce mois-ci."),
+							if #bars > 0
+								then ui.bars({ data = bars, currency = account.currency })
+								else ui.muted(tr("Aucune dépense ce mois-ci.", "No expenses this month.")),
 						}),
 						ui.section({
-							title = "Plus grosses dépenses",
+							title = tr("Plus grosses dépenses", "Largest expenses"),
 							icon = "receipt",
 							ui.table({
-								columns = { { "Date", width = 96 }, "Tiers", "Catégorie", { "Montant", align = "right", width = 110 } },
+								columns = {
+									{ "Date", width = 96 },
+									tr("Tiers", "Payee"),
+									tr("Catégorie", "Category"),
+									{ tr("Montant", "Amount"), align = "right", width = 110 },
+								},
 								rows = top,
 								on_activate = function(_, op)
 									bp.select({ op })
 								end,
-								empty = "Rien à afficher",
+								empty = tr("Rien à afficher", "Nothing to show"),
 							}),
-							ui.text("Double-cliquez pour retrouver l'opération dans la grille.", { style = "small" }),
+							ui.text(
+								tr(
+									"Double-cliquez pour retrouver l'opération dans la grille.",
+									"Double-click to find the transaction in the grid."
+								),
+								{ style = "small" }
+							),
 						}),
 					}),
 					ui.section({
-						title = "Sur six mois",
+						title = tr("Sur six mois", "Last six months"),
 						icon = "chart-bar",
 						(function()
 							local labels, spent6, earned6 = six_months(account, s.month)
@@ -132,8 +181,8 @@ bp.command({
 								style = "columns",
 								labels = labels,
 								series = {
-									{ name = "Dépenses", values = spent6 },
-									{ name = "Recettes", values = earned6 },
+									{ name = tr("Dépenses", "Expenses"), values = spent6 },
+									{ name = tr("Recettes", "Income"), values = earned6 },
 								},
 								height = 220,
 							})

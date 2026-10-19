@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use bp_core::i18n::{self, Lang};
 use serde::{Deserialize, Serialize};
 
 const MAX_RECENT: usize = 10;
@@ -10,6 +11,8 @@ const MAX_RECENT: usize = 10;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
+    /// Langue de l'interface (`fr`, `en`) ; `None` : celle du système.
+    pub language: Option<String>,
     /// « sombre », « clair » ou « système ».
     pub theme: String,
     /// Thème utilisé en mode sombre (identifiant, voir `theme::THEMES`).
@@ -87,6 +90,7 @@ pub struct Settings {
 impl Default for Settings {
     fn default() -> Self {
         Self {
+            language: None,
             theme: "sombre".into(),
             dark_theme: crate::theme::DEFAULT_DARK.into(),
             light_theme: crate::theme::DEFAULT_LIGHT.into(),
@@ -138,7 +142,7 @@ pub fn config_file(name: &str) -> Option<PathBuf> {
 
 /// Écrit `json` dans le fichier de configuration `name`.
 pub fn write_config_file(name: &str, json: &[u8]) -> Result<(), String> {
-    let path = config_file(name).ok_or("dossier de configuration introuvable")?;
+    let path = config_file(name).ok_or(bp_core::tr!("dossier de configuration introuvable"))?;
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
@@ -190,6 +194,24 @@ impl Settings {
         self.save();
     }
 
+    /// Langue choisie, sinon celle du système (les réglages par défaut des
+    /// tests restent en français, quel que soit le système).
+    pub fn language(&self) -> Lang {
+        self.language
+            .as_deref()
+            .and_then(Lang::from_code)
+            .unwrap_or_else(|| {
+                if self.persist {
+                    static SYSTEM: std::sync::OnceLock<Lang> = std::sync::OnceLock::new();
+                    *SYSTEM.get_or_init(|| {
+                        sys_locale::get_locale().map_or(Lang::Fr, |l| Lang::from_locale(&l))
+                    })
+                } else {
+                    Lang::Fr
+                }
+            })
+    }
+
     pub fn translucent(&self) -> bool {
         self.translucent.unwrap_or(cfg!(target_os = "linux"))
     }
@@ -236,11 +258,6 @@ impl DateFormat {
     ];
 
     pub fn format(self, date: bp_core::model::Date) -> String {
-        const DAYS: [&str; 7] = ["lun.", "mar.", "mer.", "jeu.", "ven.", "sam.", "dim."];
-        const MONTHS: [&str; 12] = [
-            "janv.", "févr.", "mars", "avr.", "mai", "juin", "juil.", "août", "sept.", "oct.",
-            "nov.", "déc.",
-        ];
         use chrono::Datelike;
         let d = date.to_naive();
         match self {
@@ -248,10 +265,22 @@ impl DateFormat {
             DateFormat::Short => d.format("%d/%m/%y").to_string(),
             DateFormat::WithDay => format!(
                 "{} {}",
-                DAYS[d.weekday().num_days_from_monday() as usize],
+                i18n::weekday_abbr(d.weekday().num_days_from_monday() as usize),
                 d.format("%d/%m/%y")
             ),
-            DateFormat::Text => format!("{} {} {}", d.day(), MONTHS[d.month0() as usize], d.year()),
+            // « 31 janv. 2026 », « Jan 31, 2026 ».
+            DateFormat::Text if i18n::lang() == Lang::En => format!(
+                "{} {}, {}",
+                i18n::month_abbr_in_date(d.month0() as usize),
+                d.day(),
+                d.year()
+            ),
+            DateFormat::Text => format!(
+                "{} {} {}",
+                d.day(),
+                i18n::month_abbr_in_date(d.month0() as usize),
+                d.year()
+            ),
         }
     }
 }
@@ -272,6 +301,7 @@ pub mod shared {
     static CATEGORIZE_ENTRY: AtomicBool = AtomicBool::new(true);
 
     pub fn set(settings: &super::Settings) {
+        bp_core::i18n::set_lang(settings.language());
         if let Ok(mut state) = STATE.lock()
             && (state.0 != settings.export_dir || state.1 != settings.date_format)
         {

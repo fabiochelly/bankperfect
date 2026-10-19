@@ -23,7 +23,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Estonie", "Estonia"),
     ("clé privée illisible : {}", "unreadable private key: {}"),
     ("signature impossible : {}", "could not sign: {}"),
-    ("connexion impossible : {}", "could not connect: {}"),
+    ("connexion impossible : {}", "connection failed: {}"),
     (
         "accès refusé par Enable Banking ({status}) : {detail}",
         "access denied by Enable Banking ({status}): {detail}",
@@ -212,7 +212,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{} compte", "{} account"),
     ("{} comptes", "{} accounts"),
     ("Saisie :", "Apply to:"),
-    ("Ligne", "Line"),
+    ("budget|Ligne", "Line"),
     (
         "Réel calculé d'après les catégories — cliquer pour modifier la ligne",
         "Actual computed from categories — click to edit the line",

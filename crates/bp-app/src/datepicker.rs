@@ -1,27 +1,14 @@
 //! Champ de date avec bouton calendrier et sélecteur de date.
 
+use bp_core::i18n;
 use bp_core::model::Date;
+use bp_core::tr;
 use chrono::{Datelike, NaiveDate};
 use egui::{Align2, Id, Response, Sense, Ui, vec2};
 use egui_phosphor::regular as icon;
 
 use crate::theme::palette;
 
-pub(crate) const MONTHS: [&str; 12] = [
-    "Janvier",
-    "Février",
-    "Mars",
-    "Avril",
-    "Mai",
-    "Juin",
-    "Juillet",
-    "Août",
-    "Septembre",
-    "Octobre",
-    "Novembre",
-    "Décembre",
-];
-const WEEKDAYS: [&str; 7] = ["L", "M", "M", "J", "V", "S", "D"];
 const CELL: egui::Vec2 = egui::Vec2::new(38.0, 34.0);
 
 /// Où s'affiche le calendrier.
@@ -50,7 +37,7 @@ pub fn date_field(
         let button_width = 34.0;
         let mut field = ui.add(
             crate::theme::field(text)
-                .hint_text("jj/mm/aaaa")
+                .hint_text(tr!("jj/mm/aaaa"))
                 .desired_width(width - button_width - 4.0),
         );
         let open_id = id.with("open");
@@ -60,7 +47,7 @@ pub fn date_field(
                 [button_width, field.rect.height()],
                 egui::Button::new(icon::CALENDAR_DOTS).selected(open),
             )
-            .on_hover_text("Choisir dans le calendrier");
+            .on_hover_text(tr!("Choisir dans le calendrier"));
         if button.clicked() {
             ui.data_mut(|d| d.insert_temp(open_id, !open));
             if !open {
@@ -149,7 +136,7 @@ pub fn calendar(ui: &mut Ui, id: Id, selected: Option<Date>) -> Option<Date> {
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 2.0;
         ui.label(
-            egui::RichText::new(format!("{} {year}", MONTHS[month as usize - 1]))
+            egui::RichText::new(format!("{} {year}", i18n::month_title(month as usize - 1)))
                 .size(15.0)
                 .family(crate::theme::semibold())
                 .color(pal.fg),
@@ -164,24 +151,24 @@ pub fn calendar(ui: &mut Ui, id: Id, selected: Option<Date>) -> Option<Date> {
                 .on_hover_text(tip)
                 .clicked()
             };
-            if nav(ui, icon::CARET_DOUBLE_RIGHT, "Année suivante") {
+            if nav(ui, icon::CARET_DOUBLE_RIGHT, tr!("Année suivante")) {
                 year += 1;
             }
-            if nav(ui, icon::CARET_RIGHT, "Mois suivant") {
+            if nav(ui, icon::CARET_RIGHT, tr!("Mois suivant")) {
                 (year, month) = if month == 12 {
                     (year + 1, 1)
                 } else {
                     (year, month + 1)
                 };
             }
-            if nav(ui, icon::CARET_LEFT, "Mois précédent") {
+            if nav(ui, icon::CARET_LEFT, tr!("Mois précédent")) {
                 (year, month) = if month == 1 {
                     (year - 1, 12)
                 } else {
                     (year, month - 1)
                 };
             }
-            if nav(ui, icon::CARET_DOUBLE_LEFT, "Année précédente") {
+            if nav(ui, icon::CARET_DOUBLE_LEFT, tr!("Année précédente")) {
                 year -= 1;
             }
         });
@@ -190,7 +177,7 @@ pub fn calendar(ui: &mut Ui, id: Id, selected: Option<Date>) -> Option<Date> {
 
     // Jours de la semaine.
     ui.horizontal(|ui| {
-        for (i, day) in WEEKDAYS.iter().enumerate() {
+        for i in 0..7 {
             let (rect, _) = ui.allocate_exact_size(vec2(CELL.x, 22.0), Sense::hover());
             let color = if i >= 5 {
                 pal.muted.gamma_multiply(0.8)
@@ -200,7 +187,7 @@ pub fn calendar(ui: &mut Ui, id: Id, selected: Option<Date>) -> Option<Date> {
             ui.painter().text(
                 rect.center(),
                 Align2::CENTER_CENTER,
-                *day,
+                i18n::weekday_letter(i),
                 egui::TextStyle::Small.resolve(ui.style()),
                 color,
             );
@@ -264,7 +251,10 @@ pub fn calendar(ui: &mut Ui, id: Id, selected: Option<Date>) -> Option<Date> {
     ui.add_space(6.0);
     ui.horizontal(|ui| {
         if ui
-            .add(egui::Button::new(format!("{}  Aujourd'hui", icon::CALENDAR_CHECK)).frame(false))
+            .add(
+                egui::Button::new(format!("{}  {}", icon::CALENDAR_CHECK, tr!("Aujourd'hui")))
+                    .frame(false),
+            )
             .clicked()
         {
             picked = Some(Date::from_naive(today));

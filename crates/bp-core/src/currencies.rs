@@ -12,67 +12,76 @@ use serde::{Deserialize, Serialize};
 /// Adresse du flux quotidien des cours de référence de la BCE.
 pub const ECB_DAILY_URL: &str = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml";
 
-/// Devises nommées en français : celles du flux de la BCE et quelques
-/// autres courantes (convertibles seulement avec un cours saisi à la main).
+/// Devises connues (noms en français, à traduire par [`currency_name`] ou
+/// [`currency_list`]) : celles du flux de la BCE et quelques autres courantes
+/// (convertibles seulement avec un cours saisi à la main).
 pub const CURRENCIES: &[(&str, &str)] = &[
-    ("EUR", "Euro"),
-    ("USD", "Dollar américain"),
-    ("GBP", "Livre sterling"),
-    ("CHF", "Franc suisse"),
-    ("JPY", "Yen japonais"),
-    ("CAD", "Dollar canadien"),
-    ("AUD", "Dollar australien"),
-    ("NZD", "Dollar néo-zélandais"),
-    ("CNY", "Yuan chinois"),
-    ("HKD", "Dollar de Hong Kong"),
-    ("SGD", "Dollar de Singapour"),
-    ("KRW", "Won sud-coréen"),
-    ("INR", "Roupie indienne"),
-    ("IDR", "Roupie indonésienne"),
-    ("MYR", "Ringgit malaisien"),
-    ("PHP", "Peso philippin"),
-    ("THB", "Baht thaïlandais"),
-    ("ILS", "Shekel israélien"),
-    ("TRY", "Livre turque"),
-    ("ZAR", "Rand sud-africain"),
-    ("BRL", "Réal brésilien"),
-    ("MXN", "Peso mexicain"),
-    ("SEK", "Couronne suédoise"),
-    ("NOK", "Couronne norvégienne"),
-    ("DKK", "Couronne danoise"),
-    ("ISK", "Couronne islandaise"),
-    ("CZK", "Couronne tchèque"),
-    ("PLN", "Zloty polonais"),
-    ("HUF", "Forint hongrois"),
-    ("RON", "Leu roumain"),
-    ("BGN", "Lev bulgare"),
-    ("RUB", "Rouble russe"),
-    ("UAH", "Hryvnia ukrainienne"),
-    ("RSD", "Dinar serbe"),
-    ("MAD", "Dirham marocain"),
-    ("TND", "Dinar tunisien"),
-    ("DZD", "Dinar algérien"),
-    ("XOF", "Franc CFA (BCEAO)"),
-    ("XAF", "Franc CFA (BEAC)"),
-    ("XPF", "Franc Pacifique"),
-    ("EGP", "Livre égyptienne"),
-    ("AED", "Dirham des Émirats"),
-    ("SAR", "Riyal saoudien"),
-    ("QAR", "Riyal qatari"),
-    ("ARS", "Peso argentin"),
-    ("CLP", "Peso chilien"),
-    ("COP", "Peso colombien"),
-    ("PEN", "Sol péruvien"),
-    ("VND", "Dong vietnamien"),
-    ("TWD", "Dollar taïwanais"),
+    ("EUR", crate::tr_mark!("Euro")),
+    ("USD", crate::tr_mark!("Dollar américain")),
+    ("GBP", crate::tr_mark!("Livre sterling")),
+    ("CHF", crate::tr_mark!("Franc suisse")),
+    ("JPY", crate::tr_mark!("Yen japonais")),
+    ("CAD", crate::tr_mark!("Dollar canadien")),
+    ("AUD", crate::tr_mark!("Dollar australien")),
+    ("NZD", crate::tr_mark!("Dollar néo-zélandais")),
+    ("CNY", crate::tr_mark!("Yuan chinois")),
+    ("HKD", crate::tr_mark!("Dollar de Hong Kong")),
+    ("SGD", crate::tr_mark!("Dollar de Singapour")),
+    ("KRW", crate::tr_mark!("Won sud-coréen")),
+    ("INR", crate::tr_mark!("Roupie indienne")),
+    ("IDR", crate::tr_mark!("Roupie indonésienne")),
+    ("MYR", crate::tr_mark!("Ringgit malaisien")),
+    ("PHP", crate::tr_mark!("Peso philippin")),
+    ("THB", crate::tr_mark!("Baht thaïlandais")),
+    ("ILS", crate::tr_mark!("Shekel israélien")),
+    ("TRY", crate::tr_mark!("Livre turque")),
+    ("ZAR", crate::tr_mark!("Rand sud-africain")),
+    ("BRL", crate::tr_mark!("Réal brésilien")),
+    ("MXN", crate::tr_mark!("Peso mexicain")),
+    ("SEK", crate::tr_mark!("Couronne suédoise")),
+    ("NOK", crate::tr_mark!("Couronne norvégienne")),
+    ("DKK", crate::tr_mark!("Couronne danoise")),
+    ("ISK", crate::tr_mark!("Couronne islandaise")),
+    ("CZK", crate::tr_mark!("Couronne tchèque")),
+    ("PLN", crate::tr_mark!("Zloty polonais")),
+    ("HUF", crate::tr_mark!("Forint hongrois")),
+    ("RON", crate::tr_mark!("Leu roumain")),
+    ("BGN", crate::tr_mark!("Lev bulgare")),
+    ("RUB", crate::tr_mark!("Rouble russe")),
+    ("UAH", crate::tr_mark!("Hryvnia ukrainienne")),
+    ("RSD", crate::tr_mark!("Dinar serbe")),
+    ("MAD", crate::tr_mark!("Dirham marocain")),
+    ("TND", crate::tr_mark!("Dinar tunisien")),
+    ("DZD", crate::tr_mark!("Dinar algérien")),
+    ("XOF", crate::tr_mark!("Franc CFA (BCEAO)")),
+    ("XAF", crate::tr_mark!("Franc CFA (BEAC)")),
+    ("XPF", crate::tr_mark!("Franc Pacifique")),
+    ("EGP", crate::tr_mark!("Livre égyptienne")),
+    ("AED", crate::tr_mark!("Dirham des Émirats")),
+    ("SAR", crate::tr_mark!("Riyal saoudien")),
+    ("QAR", crate::tr_mark!("Riyal qatari")),
+    ("ARS", crate::tr_mark!("Peso argentin")),
+    ("CLP", crate::tr_mark!("Peso chilien")),
+    ("COP", crate::tr_mark!("Peso colombien")),
+    ("PEN", crate::tr_mark!("Sol péruvien")),
+    ("VND", crate::tr_mark!("Dong vietnamien")),
+    ("TWD", crate::tr_mark!("Dollar taïwanais")),
 ];
 
-/// Nom français d'une devise (le code lui-même si elle est inconnue).
+/// Nom d'une devise dans la langue de l'interface (le code lui-même si elle
+/// est inconnue).
 pub fn currency_name(code: &str) -> &str {
     CURRENCIES
         .iter()
         .find(|(c, _)| *c == code)
-        .map_or(code, |(_, n)| n)
+        .map_or(code, |(_, n)| crate::i18n::tr(n))
+}
+
+/// Les devises connues, (code, nom dans la langue de l'interface).
+pub fn currency_list() -> impl Iterator<Item = (&'static str, &'static str)> {
+    CURRENCIES
+        .iter()
+        .map(|&(code, name)| (code, crate::i18n::tr(name)))
 }
 
 /// Cours de référence : valeur d'un euro dans chaque devise.
@@ -87,8 +96,15 @@ pub struct Rates {
 /// Échec de lecture du flux de la BCE.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RatesError {
-    #[error("le flux de la BCE ne contient aucun cours")]
     Empty,
+}
+
+impl std::fmt::Display for RatesError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Empty => f.write_str(crate::tr!("le flux de la BCE ne contient aucun cours")),
+        }
+    }
 }
 
 /// Valeur de l'attribut `name='…'` (ou `"…"`) dans une balise.
@@ -221,5 +237,9 @@ mod tests {
         assert_eq!(currency_name("CHF"), "Franc suisse");
         assert_eq!(currency_name("ABC"), "ABC");
         assert_eq!(search_key("Réal BRÉSILIEN"), "real bresilien");
+        crate::i18n::with_lang(crate::i18n::Lang::En, || {
+            assert_eq!(currency_name("CHF"), "Swiss franc");
+            assert!(currency_list().any(|(c, n)| c == "USD" && n == "US dollar"));
+        });
     }
 }

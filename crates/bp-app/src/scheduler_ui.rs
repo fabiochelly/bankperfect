@@ -3,6 +3,7 @@
 
 use bp_core::model::{Amount, Date, Mode, StandardMode};
 use bp_core::scheduler::{self, ForecastKind, Period, PeriodUnit, Schedule, Selection};
+use bp_core::{tr, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -40,7 +41,7 @@ impl SchedulerForm {
     pub fn new(doc: &OpenDoc, select: Option<usize>) -> Self {
         let (schedules, warnings) = match scheduler::load(&doc.document) {
             Ok(loaded) => (loaded.schedules, loaded.warnings),
-            Err(e) => (Vec::new(), vec![format!("Échéances illisibles : {e}")]),
+            Err(e) => (Vec::new(), vec![tr!("Échéances illisibles : {}", e)]),
         };
         let mut form = Self {
             schedules,
@@ -64,7 +65,7 @@ impl SchedulerForm {
         self.selected = index.filter(|&i| i < self.schedules.len());
         self.confirm_delete = false;
         if let Some(s) = self.selected.map(|i| &self.schedules[i]) {
-            self.amount = s.amount.abs().format(2, ',');
+            self.amount = s.amount.abs().format(2, bp_core::i18n::decimal_separator());
             self.next_date = s.next_date.to_string();
             self.end_date = s.end_date.map(|d| d.to_string()).unwrap_or_default();
         }
@@ -84,7 +85,7 @@ impl SchedulerForm {
             ui.set_width(width);
             ui.set_height(height);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::CALENDAR_DOTS, pal.accent, "Échéancier");
+            crate::dialogs::header(ui, icon::CALENDAR_DOTS, pal.accent, tr!("Échéancier"));
             let body = height - 36.0 - 14.0 - 120.0;
             let gap = 22.0;
             let list_width = (width * 0.36).clamp(320.0, 520.0);
@@ -143,14 +144,14 @@ impl SchedulerForm {
                                 ui.label(RichText::new(icon::CALENDAR_DOTS).size(34.0).color(pal.muted));
                                 ui.add_space(6.0);
                                 ui.label(
-                                    RichText::new("Aucune échéance. Créez-en une, ou ajoutez une opération récurrente depuis la grille (clic droit).")
+                                    RichText::new(tr!("Aucune échéance. Créez-en une, ou ajoutez une opération récurrente depuis la grille (clic droit)."))
                                         .color(pal.muted),
                                 );
                             });
                         }
                         for (k, s) in self.schedules.iter().enumerate() {
                             let account = account_index(doc, &s.account)
-                                .map_or("compte inexistant".to_string(), |i| doc.document.accounts[i].name.clone());
+                                .map_or(tr!("compte inexistant").to_string(), |i| doc.document.accounts[i].name.clone());
                             let selected = self.selected == Some(k);
                             let (rect, response) =
                                 ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::click());
@@ -172,16 +173,16 @@ impl SchedulerForm {
                             ui.painter().text(
                                 egui::pos2(left, rect.top() + 16.0),
                                 egui::Align2::LEFT_CENTER,
-                                if s.payee.is_empty() { "(sans tiers)" } else { &s.payee },
+                                if s.payee.is_empty() { tr!("(sans tiers)") } else { &s.payee },
                                 egui::FontId::new(14.0, crate::theme::medium()),
                                 title_color,
                             );
                             let mut sub = format!("{} · {} · {}", s.next_date, s.interval_label(), account);
                             if s.transfer.is_some() {
-                                sub.push_str(" · transfert");
+                                sub = tr!("{} · transfert", sub);
                             }
                             if s.is_finished() {
-                                sub = format!("terminée · {sub}");
+                                sub = tr!("terminée · {}", sub);
                             }
                             ui.painter().text(
                                 egui::pos2(left, rect.bottom() - 14.0),
@@ -214,7 +215,7 @@ impl SchedulerForm {
                     });
                 ui.add_space(6.0);
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(format!("{}  Nouvelle échéance", icon::PLUS)).min_size(egui::vec2(0.0, 34.0))).clicked() {
+                    if ui.add(egui::Button::new(format!("{}  {}", icon::PLUS, tr!("Nouvelle échéance"))).min_size(egui::vec2(0.0, 34.0))).clicked() {
                         let account = doc.current_account();
                         let schedule = Schedule {
                             account: account.uid.clone(),
@@ -230,14 +231,14 @@ impl SchedulerForm {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                             if ui
                                 .add(egui::Button::new(RichText::new(icon::TRASH).color(pal.negative)).min_size(egui::vec2(34.0, 34.0)))
-                                .on_hover_text("Supprimer l'échéance")
+                                .on_hover_text(tr!("Supprimer l'échéance"))
                                 .clicked()
                             {
                                 self.confirm_delete = true;
                             }
                             if ui
                                 .add(egui::Button::new(icon::COPY).min_size(egui::vec2(34.0, 34.0)))
-                                .on_hover_text("Dupliquer")
+                                .on_hover_text(tr!("Dupliquer"))
                                 .clicked()
                             {
                                 let copy = self.schedules[i].clone();
@@ -262,7 +263,7 @@ impl SchedulerForm {
             ui.add_space(60.0);
             ui.vertical_centered(|ui| {
                 ui.label(
-                    RichText::new("Sélectionnez une échéance dans la liste.").color(pal.muted),
+                    RichText::new(tr!("Sélectionnez une échéance dans la liste.")).color(pal.muted),
                 );
             });
             return false;
@@ -278,9 +279,12 @@ impl SchedulerForm {
                     ui.set_width(width - 34.0);
                     ui.label(
                         RichText::new(format!(
-                            "{}  Supprimer l'échéance « {} » ? Les opérations déjà insérées restent.",
+                            "{}  {}",
                             icon::WARNING,
-                            self.schedules[i].payee
+                            tr!(
+                                "Supprimer l'échéance « {} » ? Les opérations déjà insérées restent.",
+                                self.schedules[i].payee
+                            )
                         ))
                         .color(pal.negative),
                     );
@@ -290,10 +294,10 @@ impl SchedulerForm {
                         egui::Layout::right_to_left(egui::Align::Center),
                         |ui| {
                             ui.spacing_mut().item_spacing.x = 10.0;
-                            if crate::dialogs::danger(ui, "Supprimer").clicked() {
+                            if crate::dialogs::danger(ui, tr!("Supprimer")).clicked() {
                                 done = Some(true);
                             }
-                            if crate::dialogs::button(ui, "Annuler").clicked() {
+                            if crate::dialogs::button(ui, tr!("Annuler")).clicked() {
                                 done = Some(false);
                             }
                         },
@@ -317,47 +321,47 @@ impl SchedulerForm {
         let full = width - 2.0 * ui_kit::CARD_PADDING - 2.0 - LABEL_WIDTH - 8.0;
         let s = &mut self.schedules[i];
 
-        ui_kit::section(ui, width, icon::RECEIPT, "Opération", |ui| {
-            ui_kit::row(ui, "Tiers", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::RECEIPT, tr!("Opération"), |ui| {
+            ui_kit::row(ui, tr!("Tiers"), LABEL_WIDTH, |ui| {
                 changed |= ui
                     .add(crate::theme::field(&mut s.payee).desired_width(full))
                     .changed();
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Détail", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Détail"), LABEL_WIDTH, |ui| {
                 changed |= ui
                     .add(crate::theme::field(&mut s.details).desired_width(full))
                     .changed();
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Mode de paiement", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Mode de paiement"), LABEL_WIDTH, |ui| {
                 if ui_kit::mode_combo(ui, "sched_mode", document, &mut s.mode, full) {
                     changed = true;
                 }
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Catégorie", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Catégorie"), LABEL_WIDTH, |ui| {
                 if ui_kit::category_combo(ui, "sched_cat", document, styles, &mut s.category, full)
                 {
                     changed = true;
                 }
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Montant", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Montant"), LABEL_WIDTH, |ui| {
                 let r = ui.add(
                     crate::theme::field(&mut self.amount)
-                        .hint_text("0,00")
+                        .hint_text(tr!("0,00"))
                         .desired_width(160.0),
                 );
                 let debit = bp_core::edit::mode_is_debit(document, &s.mode);
                 let sign = if debit {
-                    "dépense (selon le mode)"
+                    tr!("dépense (selon le mode)")
                 } else {
-                    "recette (selon le mode)"
+                    tr!("recette (selon le mode)")
                 };
                 ui.label(RichText::new(sign).color(pal.muted));
                 if (r.changed() || changed)
-                    && let Some(a) = Amount::parse(&self.amount)
+                    && let Some(a) = Amount::parse(&crate::budget_ui::amount_input(&self.amount))
                 {
                     let a = if debit { -a.abs() } else { a.abs() };
                     if a != s.amount {
@@ -368,12 +372,12 @@ impl SchedulerForm {
             });
         });
 
-        ui_kit::section(ui, width, icon::BANK, "Comptes", |ui| {
-            ui_kit::row(ui, "Compte", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::BANK, tr!("Comptes"), |ui| {
+            ui_kit::row(ui, tr!("Compte"), LABEL_WIDTH, |ui| {
                 let current = account_index(doc, &s.account);
                 let mut chosen = current;
                 egui::ComboBox::from_id_salt("sched_account")
-                    .selected_text(chosen.map_or("Compte inexistant".to_string(), |k| {
+                    .selected_text(chosen.map_or(tr!("Compte inexistant").to_string(), |k| {
                         document.accounts[k].name.clone()
                     }))
                     .width(full - 12.0)
@@ -390,16 +394,18 @@ impl SchedulerForm {
                 }
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Transfert vers", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Transfert vers"), LABEL_WIDTH, |ui| {
                 let current = s.transfer.as_ref().and_then(|uid| account_index(doc, uid));
                 let mut chosen = current;
                 egui::ComboBox::from_id_salt("sched_transfer")
-                    .selected_text(chosen.map_or("Aucun (opération simple)".to_string(), |k| {
-                        document.accounts[k].name.clone()
-                    }))
+                    .selected_text(
+                        chosen.map_or(tr!("Aucun (opération simple)").to_string(), |k| {
+                            document.accounts[k].name.clone()
+                        }),
+                    )
                     .width(full - 12.0)
                     .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut chosen, None, "Aucun (opération simple)");
+                        ui.selectable_value(&mut chosen, None, tr!("Aucun (opération simple)"));
                         for &k in &document.account_order {
                             ui.selectable_value(&mut chosen, Some(k), &document.accounts[k].name);
                         }
@@ -411,8 +417,8 @@ impl SchedulerForm {
             });
         });
 
-        ui_kit::section(ui, width, icon::ARROWS_CLOCKWISE, "Récurrence", |ui| {
-            ui_kit::row(ui, "Prochaine échéance", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::ARROWS_CLOCKWISE, tr!("Récurrence"), |ui| {
+            ui_kit::row(ui, tr!("Prochaine échéance"), LABEL_WIDTH, |ui| {
                 let r = crate::datepicker::date_field(
                     ui,
                     "sched_next",
@@ -428,7 +434,7 @@ impl SchedulerForm {
                 }
                 if ui
                     .button(icon::CARET_LEFT)
-                    .on_hover_text("Échéance précédente")
+                    .on_hover_text(tr!("Échéance précédente"))
                     .clicked()
                     && s.rewind()
                 {
@@ -437,7 +443,7 @@ impl SchedulerForm {
                 }
                 if ui
                     .button(icon::CARET_RIGHT)
-                    .on_hover_text("Échéance suivante")
+                    .on_hover_text(tr!("Échéance suivante"))
                     .clicked()
                     && s.advance()
                 {
@@ -446,7 +452,7 @@ impl SchedulerForm {
                 }
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Tous les", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Tous les"), LABEL_WIDTH, |ui| {
                 let mut every = s.period.every.max(1);
                 if ui
                     .add(egui::DragValue::new(&mut every).range(1..=99))
@@ -460,10 +466,10 @@ impl SchedulerForm {
                     ui,
                     &mut unit,
                     &[
-                        (PeriodUnit::Days, "", "jours", pal.accent),
-                        (PeriodUnit::Weeks, "", "semaines", pal.accent),
-                        (PeriodUnit::Months, "", "mois", pal.accent),
-                        (PeriodUnit::Years, "", "ans", pal.accent),
+                        (PeriodUnit::Days, "", tr!("jours"), pal.accent),
+                        (PeriodUnit::Weeks, "", tr!("semaines"), pal.accent),
+                        (PeriodUnit::Months, "", tr!("mois"), pal.accent),
+                        (PeriodUnit::Years, "", tr!("ans"), pal.accent),
                     ],
                     32.0,
                     Some((full - 80.0).min(380.0)),
@@ -476,7 +482,7 @@ impl SchedulerForm {
                 }
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Dernière échéance", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Dernière échéance"), LABEL_WIDTH, |ui| {
                 let r = crate::datepicker::date_field(
                     ui,
                     "sched_end",
@@ -491,20 +497,23 @@ impl SchedulerForm {
                         changed = true;
                     }
                 }
-                ui.label(RichText::new("vide = sans fin").color(pal.muted));
+                ui.label(RichText::new(tr!("vide = sans fin")).color(pal.muted));
             });
             ui.add_space(8.0);
-            ui_kit::row(ui, "Si jour non ouvré", LABEL_WIDTH, |ui| {
-                changed |= crate::theme::checkbox(ui, &mut s.postpone.saturday, "samedi").changed();
-                changed |= crate::theme::checkbox(ui, &mut s.postpone.sunday, "dimanche").changed();
-                changed |= crate::theme::checkbox(ui, &mut s.postpone.holiday, "férié").changed();
-                ui.label(RichText::new("→ jour ouvré suivant").color(pal.muted));
+            ui_kit::row(ui, tr!("Si jour non ouvré"), LABEL_WIDTH, |ui| {
+                changed |=
+                    crate::theme::checkbox(ui, &mut s.postpone.saturday, tr!("samedi")).changed();
+                changed |=
+                    crate::theme::checkbox(ui, &mut s.postpone.sunday, tr!("dimanche")).changed();
+                changed |=
+                    crate::theme::checkbox(ui, &mut s.postpone.holiday, tr!("férié")).changed();
+                ui.label(RichText::new(tr!("→ jour ouvré suivant")).color(pal.muted));
             });
             ui.add_space(8.0);
             changed |= crate::theme::checkbox(
                 ui,
                 &mut s.auto_insert,
-                "Insérer automatiquement à l'ouverture du fichier quand l'échéance est passée",
+                tr!("Insérer automatiquement à l'ouverture du fichier quand l'échéance est passée"),
             )
             .changed();
         });
@@ -517,22 +526,28 @@ impl SchedulerForm {
             .take(6)
             .map(|o| {
                 if o.date != o.due {
-                    format!("{} (reportée du {})", o.date, o.due)
+                    tr!("{} (reportée du {})", o.date, o.due)
                 } else {
                     o.date.to_string()
                 }
             })
             .collect();
-        ui_kit::section(ui, width, icon::CALENDAR_CHECK, "Prochaines dates", |ui| {
-            if upcoming.is_empty() {
-                ui.label(RichText::new("Aucune (échéance terminée).").color(pal.muted));
-            }
-            ui.horizontal_wrapped(|ui| {
-                for date in upcoming {
-                    ui_kit::pill(ui, &date, pal.accent);
+        ui_kit::section(
+            ui,
+            width,
+            icon::CALENDAR_CHECK,
+            tr!("Prochaines dates"),
+            |ui| {
+                if upcoming.is_empty() {
+                    ui.label(RichText::new(tr!("Aucune (échéance terminée).")).color(pal.muted));
                 }
-            });
-        });
+                ui.horizontal_wrapped(|ui| {
+                    for date in upcoming {
+                        ui_kit::pill(ui, &date, pal.accent);
+                    }
+                });
+            },
+        );
         changed
     }
 
@@ -540,7 +555,7 @@ impl SchedulerForm {
         let pal = palette(ui);
         ui.add_space(10.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Insérer les échéances jusqu'au").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Insérer les échéances jusqu'au")).color(pal.fg_dark));
             crate::datepicker::date_field(
                 ui,
                 "sched_until",
@@ -551,7 +566,7 @@ impl SchedulerForm {
             crate::theme::checkbox(
                 ui,
                 &mut self.only_manual,
-                "seulement celles sans insertion automatique",
+                tr!("seulement celles sans insertion automatique"),
             );
             let until = Date::parse_fr(&self.until, Date::today());
             let pending: usize = until.map_or(0, |u| {
@@ -561,7 +576,11 @@ impl SchedulerForm {
                     .map(|s| s.occurrences(u).len())
                     .sum()
             });
-            let label = format!("{}  Insérer ({pending})", icon::DOWNLOAD_SIMPLE);
+            let label = format!(
+                "{}  {}",
+                icon::DOWNLOAD_SIMPLE,
+                tr!("Insérer ({})", pending)
+            );
             if ui
                 .add_enabled(
                     pending > 0,
@@ -590,11 +609,16 @@ impl SchedulerForm {
                     })
                     .collect();
                 doc.apply_auto_rules(&changes);
-                let mut summary = format!("{} opération(s) insérée(s)", report.inserted.len());
+                let mut summary = trn!(
+                    report.inserted.len(),
+                    "{} opération insérée",
+                    "{} opérations insérées"
+                );
                 if !report.refused.is_empty() {
-                    summary.push_str(&format!(
-                        ", {} échéance(s) refusée(s)",
-                        report.refused.len()
+                    summary.push_str(&trn!(
+                        report.refused.len(),
+                        ", {} échéance refusée",
+                        ", {} échéances refusées"
                     ));
                 }
                 self.schedules = schedules;
@@ -606,13 +630,17 @@ impl SchedulerForm {
             ui.horizontal(|ui| {
                 ui.label(
                     RichText::new(format!(
-                        "{}  Ce fichier contient aussi {} échéance(s) du tout premier échéancier.",
+                        "{}  {}",
                         icon::CLOCK_COUNTER_CLOCKWISE,
-                        self.oldest
+                        trn!(
+                            self.oldest,
+                            "Ce fichier contient aussi {} échéance du tout premier échéancier.",
+                            "Ce fichier contient aussi {} échéances du tout premier échéancier."
+                        )
                     ))
                     .color(pal.muted),
                 );
-                if ui.link("Les reprendre").clicked()
+                if ui.link(tr!("Les reprendre")).clicked()
                     && let Some((old, warnings)) = scheduler::oldest_schedules(&doc.document)
                 {
                     let n = old.len();
@@ -620,8 +648,10 @@ impl SchedulerForm {
                     self.save(doc);
                     self.warnings.extend(warnings);
                     self.oldest = 0;
-                    self.message = Some(format!(
-                        "{n} ancienne(s) échéance(s) reprise(s) : vérifiez leur prochaine date avant d'insérer."
+                    self.message = Some(trn!(
+                        n,
+                        "{} ancienne échéance reprise : vérifiez sa prochaine date avant d'insérer.",
+                        "{} anciennes échéances reprises : vérifiez leur prochaine date avant d'insérer."
                     ));
                     self.select(Some(self.schedules.len() - n));
                 }
@@ -634,13 +664,16 @@ impl SchedulerForm {
             ui.label(RichText::new(format!("{}  {warning}", icon::WARNING)).color(pal.warning));
         }
         crate::dialogs::footer(ui, |ui| {
-            if crate::dialogs::primary(ui, "Fermer", true).clicked()
+            if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                 || (!self.confirm_delete && ui.input(|i| i.key_pressed(Key::Escape)))
             {
                 *outcome = Outcome::Close;
             }
-            if crate::dialogs::button(ui, format!("{}  Solde prévisionnel", icon::CHART_LINE_UP))
-                .clicked()
+            if crate::dialogs::button(
+                ui,
+                format!("{}  {}", icon::CHART_LINE_UP, tr!("Solde prévisionnel")),
+            )
+            .clicked()
             {
                 *outcome =
                     Outcome::Switch(Box::new(crate::tools::Tool::Forecast(ForecastForm::new())));
@@ -674,13 +707,17 @@ impl ForecastForm {
             ui.set_width(width);
             ui.set_height(height);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::CHART_LINE_UP, pal.accent, "Solde prévisionnel");
+            crate::dialogs::header(
+                ui,
+                icon::CHART_LINE_UP,
+                pal.accent,
+                tr!("Solde prévisionnel"),
+            );
             let account = doc.current_account();
             let currency = account.currency.clone();
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(format!("Compte « {} », jusqu'au", account.name))
-                        .color(pal.fg_dark),
+                    RichText::new(tr!("Compte « {} », jusqu'au", account.name)).color(pal.fg_dark),
                 );
                 crate::datepicker::date_field(
                     ui,
@@ -690,13 +727,18 @@ impl ForecastForm {
                     crate::datepicker::Placement::Popup,
                 );
                 for months in [1, 3, 6, 12] {
-                    if ui.small_button(format!("+{months} mois")).clicked()
+                    let label = if months == 1 {
+                        tr!("+1 mois").to_string()
+                    } else {
+                        tr!("+{} mois", months)
+                    };
+                    if ui.small_button(label).clicked()
                         && let Some(d) = scheduler::add_months(Date::today(), months, None)
                     {
                         self.until = d.to_string();
                     }
                 }
-                crate::theme::checkbox(ui, &mut self.monthly, "une ligne par mois");
+                crate::theme::checkbox(ui, &mut self.monthly, tr!("une ligne par mois"));
             });
             ui.add_space(12.0);
             let until = Date::parse_fr(&self.until, Date::today()).unwrap_or_else(Date::today);
@@ -715,9 +757,10 @@ impl ForecastForm {
                 ui.horizontal(|ui| {
                     ui_kit::pill(
                         ui,
-                        &format!(
-                            "Solde prévu au {until} : {}",
-                            money(last.balance, &currency)
+                        &tr!(
+                            "Solde prévu au {date} : {amount}",
+                            date = until,
+                            amount = money(last.balance, &currency)
                         ),
                         if last.balance.is_negative() {
                             pal.negative
@@ -729,10 +772,10 @@ impl ForecastForm {
                     if let Some(low) = lowest {
                         ui_kit::pill(
                             ui,
-                            &format!(
-                                "Point bas : {} le {}",
-                                money(low.balance, &currency),
-                                low.date
+                            &tr!(
+                                "Point bas : {amount} le {date}",
+                                amount = money(low.balance, &currency),
+                                date = low.date
                             ),
                             pal.warning,
                         );
@@ -769,7 +812,7 @@ impl ForecastForm {
                             };
                             ui.label(RichText::new(glyph).color(color));
                             let text = if line.kind == ForecastKind::Month && line.count > 1 {
-                                format!("{} opérations", line.count)
+                                trn!(line.count, "{} opération", "{} opérations")
                             } else {
                                 line.payee.clone()
                             };
@@ -819,13 +862,16 @@ impl ForecastForm {
                     }
                 });
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, "Fermer", true).clicked()
+                if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))
                 {
                     outcome = Outcome::Close;
                 }
-                if crate::dialogs::button(ui, format!("{}  Échéancier", icon::CALENDAR_DOTS))
-                    .clicked()
+                if crate::dialogs::button(
+                    ui,
+                    format!("{}  {}", icon::CALENDAR_DOTS, tr!("Échéancier")),
+                )
+                .clicked()
                 {
                     outcome = Outcome::Switch(Box::new(crate::tools::Tool::Scheduler(Box::new(
                         SchedulerForm::new(doc, None),

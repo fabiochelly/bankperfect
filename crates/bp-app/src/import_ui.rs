@@ -10,6 +10,7 @@ use bp_core::import::{
     qif::{QifField, QifOptions},
 };
 use bp_core::model::Tack;
+use bp_core::{tr, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -78,17 +79,17 @@ impl CsvField {
     fn label(self) -> &'static str {
         match self {
             CsvField::Ignore => "—",
-            CsvField::Date => "Date",
-            CsvField::ValueDate => "Date de valeur",
-            CsvField::Mode => "Mode",
-            CsvField::Payee => "Tiers",
-            CsvField::Details => "Détail",
-            CsvField::Category => "Catégorie",
-            CsvField::Subcategory => "Sous-catégorie",
-            CsvField::Amount => "Montant",
-            CsvField::Debit => "Débit",
-            CsvField::Credit => "Crédit",
-            CsvField::Tack => "Pointage",
+            CsvField::Date => tr!("Date"),
+            CsvField::ValueDate => tr!("Date de valeur"),
+            CsvField::Mode => tr!("Mode"),
+            CsvField::Payee => tr!("Tiers"),
+            CsvField::Details => tr!("Détail"),
+            CsvField::Category => tr!("Catégorie"),
+            CsvField::Subcategory => tr!("Sous-catégorie"),
+            CsvField::Amount => tr!("Montant"),
+            CsvField::Debit => tr!("Débit"),
+            CsvField::Credit => tr!("Crédit"),
+            CsvField::Tack => tr!("Pointage"),
         }
     }
 }
@@ -146,7 +147,7 @@ pub struct ImportForm {
 
 impl ImportForm {
     pub fn new(path: PathBuf) -> Result<Self, String> {
-        let data = std::fs::read(&path).map_err(|e| format!("Lecture impossible : {e}"))?;
+        let data = std::fs::read(&path).map_err(|e| tr!("Lecture impossible : {}", e))?;
         let format = match path
             .extension()
             .and_then(|e| e.to_str())
@@ -483,7 +484,7 @@ impl ImportForm {
             let pal = palette(ui);
             let format_label = match self.format {
                 _ if self.format_name.is_some() => self.format_name.as_deref().unwrap_or_default(),
-                _ if self.source.is_some() => "Banque",
+                _ if self.source.is_some() => tr!("Banque"),
                 ImportFormat::Qif => "QIF",
                 ImportFormat::Ofx => "OFX",
                 ImportFormat::Csv => "CSV",
@@ -497,7 +498,7 @@ impl ImportForm {
                             ui,
                             icon::DOWNLOAD_SIMPLE,
                             pal.accent,
-                            "Importer des opérations",
+                            tr!("Importer des opérations"),
                         )
                     },
                 );
@@ -555,12 +556,12 @@ impl ImportForm {
     fn qif_settings(&mut self, ui: &mut egui::Ui, width: f32) {
         let pal = palette(ui);
         let mut changed = false;
-        ui_kit::section(ui, width, icon::CALENDAR_BLANK, "Dates", |ui| {
+        ui_kit::section(ui, width, icon::CALENDAR_BLANK, tr!("Dates"), |ui| {
             changed |= date_order(ui, &mut self.qif.date_order);
             if !self.qif_samples.is_empty() {
                 ui.add_space(6.0);
                 ui.label(
-                    RichText::new(format!(
+                    RichText::new(tr!(
                         "Exemples : {}",
                         self.qif_samples
                             .iter()
@@ -574,42 +575,50 @@ impl ImportForm {
                 );
             }
         });
-        ui_kit::section(ui, width, icon::LIST_BULLETS, "Lettres du fichier", |ui| {
-            for &letter in &self.qif_letters.clone() {
-                let current = self
-                    .qif
-                    .fields
-                    .iter()
-                    .find(|(l, _)| *l == letter)
-                    .map(|(_, f)| *f);
-                let mut chosen = current;
-                ui.horizontal(|ui| {
-                    ui.add_sized(
-                        [40.0, 30.0],
-                        egui::Label::new(RichText::new(letter.to_string()).monospace().size(15.0)),
-                    );
-                    egui::ComboBox::from_id_salt(("qif_letter", letter))
-                        .selected_text(chosen.map_or("Ignorer", |f| f.label()))
-                        .width(ui.available_width() - 16.0)
-                        .show_ui(ui, |ui| {
-                            for f in QIF_FIELDS {
-                                ui.selectable_value(
-                                    &mut chosen,
-                                    f,
-                                    f.map_or("Ignorer", |f| f.label()),
-                                );
-                            }
-                        });
-                });
-                if chosen != current {
-                    self.qif.fields.retain(|(l, _)| *l != letter);
-                    if let Some(f) = chosen {
-                        self.qif.fields.push((letter, f));
+        ui_kit::section(
+            ui,
+            width,
+            icon::LIST_BULLETS,
+            tr!("Lettres du fichier"),
+            |ui| {
+                for &letter in &self.qif_letters.clone() {
+                    let current = self
+                        .qif
+                        .fields
+                        .iter()
+                        .find(|(l, _)| *l == letter)
+                        .map(|(_, f)| *f);
+                    let mut chosen = current;
+                    ui.horizontal(|ui| {
+                        ui.add_sized(
+                            [40.0, 30.0],
+                            egui::Label::new(
+                                RichText::new(letter.to_string()).monospace().size(15.0),
+                            ),
+                        );
+                        egui::ComboBox::from_id_salt(("qif_letter", letter))
+                            .selected_text(chosen.map_or(tr!("Ignorer"), |f| f.label()))
+                            .width(ui.available_width() - 16.0)
+                            .show_ui(ui, |ui| {
+                                for f in QIF_FIELDS {
+                                    ui.selectable_value(
+                                        &mut chosen,
+                                        f,
+                                        f.map_or(tr!("Ignorer"), |f| f.label()),
+                                    );
+                                }
+                            });
+                    });
+                    if chosen != current {
+                        self.qif.fields.retain(|(l, _)| *l != letter);
+                        if let Some(f) = chosen {
+                            self.qif.fields.push((letter, f));
+                        }
+                        changed = true;
                     }
-                    changed = true;
                 }
-            }
-        });
+            },
+        );
         if changed {
             self.reparse = true;
         }
@@ -619,16 +628,16 @@ impl ImportForm {
         let pal = palette(ui);
         let mut changed = false;
         let mut separator_changed = false;
-        ui_kit::section(ui, width, icon::TABLE, "Format", |ui| {
-            ui.label(RichText::new("Séparateur").color(pal.fg_dark));
+        ui_kit::section(ui, width, icon::TABLE, tr!("Format"), |ui| {
+            ui.label(RichText::new(tr!("Séparateur")).color(pal.fg_dark));
             let mut sep = self.csv.separator;
             if ui_kit::segmented(
                 ui,
                 &mut sep,
                 &[
-                    (';', "", "Point-virgule", pal.accent),
-                    (',', "", "Virgule", pal.accent),
-                    ('\t', "", "Tabulation", pal.accent),
+                    (';', "", tr!("Point-virgule"), pal.accent),
+                    (',', "", tr!("Virgule"), pal.accent),
+                    ('\t', "", tr!("Tabulation"), pal.accent),
                 ],
                 32.0,
                 None,
@@ -638,24 +647,24 @@ impl ImportForm {
             }
             ui.add_space(10.0);
             ui.horizontal(|ui| {
-                ui.label(RichText::new("Lignes d'en-tête ignorées").color(pal.fg_dark));
+                ui.label(RichText::new(tr!("Lignes d'en-tête ignorées")).color(pal.fg_dark));
                 changed |= ui
                     .add(egui::DragValue::new(&mut self.csv.skip_rows).range(0..=50))
                     .changed();
             });
             ui.add_space(10.0);
-            ui.label(RichText::new("Ordre des dates").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Ordre des dates")).color(pal.fg_dark));
             changed |= date_order(ui, &mut self.csv.date_order);
             ui.add_space(10.0);
-            ui.label(RichText::new("Séparateur décimal").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Séparateur décimal")).color(pal.fg_dark));
             let mut decimal = self.csv.decimal_separator;
             if ui_kit::segmented(
                 ui,
                 &mut decimal,
                 &[
-                    (None, "", "Automatique", pal.accent),
-                    (Some(','), "", "Virgule", pal.accent),
-                    (Some('.'), "", "Point", pal.accent),
+                    (None, "", tr!("Automatique"), pal.accent),
+                    (Some(','), "", tr!("Virgule"), pal.accent),
+                    (Some('.'), "", tr!("Point"), pal.accent),
                 ],
                 32.0,
                 None,
@@ -664,9 +673,9 @@ impl ImportForm {
                 changed = true;
             }
         });
-        ui_kit::section(ui, width, icon::COLUMNS, "Colonnes", |ui| {
+        ui_kit::section(ui, width, icon::COLUMNS, tr!("Colonnes"), |ui| {
             ui.label(
-                RichText::new("Indiquez ce que contient chaque colonne du fichier. Montant, ou bien Débit et Crédit.")
+                RichText::new(tr!("Indiquez ce que contient chaque colonne du fichier. Montant, ou bien Débit et Crédit."))
                     .size(12.5)
                     .color(pal.muted),
             );
@@ -758,7 +767,8 @@ impl ImportForm {
                 ui.label(RichText::new(icon::FILE_DASHED).size(36.0).color(pal.muted));
                 ui.add_space(8.0);
                 ui.label(
-                    RichText::new("Aucune opération lisible avec ces réglages.").color(pal.fg_dark),
+                    RichText::new(tr!("Aucune opération lisible avec ces réglages."))
+                        .color(pal.fg_dark),
                 );
             });
             self.rejected(ui, &parsed, width);
@@ -775,7 +785,7 @@ impl ImportForm {
                     (
                         k,
                         if name.is_empty() {
-                            format!("Compte {}", k + 1)
+                            tr!("Compte {}", k + 1)
                         } else {
                             name
                         },
@@ -795,16 +805,16 @@ impl ImportForm {
         let shown = self.shown;
         let account = &parsed.accounts[shown];
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Vers le compte").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Vers le compte")).color(pal.fg_dark));
             let mut target = self.targets.get(shown).copied().flatten();
-            let label = target.map_or("Ne pas importer".to_string(), |t| {
+            let label = target.map_or(tr!("Ne pas importer").to_string(), |t| {
                 doc.document.accounts[t].name.clone()
             });
             egui::ComboBox::from_id_salt(("import_target", shown))
                 .selected_text(label)
                 .width(260.0)
                 .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut target, None, "Ne pas importer");
+                    ui.selectable_value(&mut target, None, tr!("Ne pas importer"));
                     for &i in &doc.document.account_order {
                         ui.selectable_value(&mut target, Some(i), &doc.document.accounts[i].name);
                     }
@@ -814,7 +824,7 @@ impl ImportForm {
                 self.recheck = true;
             }
             if let (Some(a), Some(b)) = (account.min_date(), account.max_date()) {
-                ui.label(RichText::new(format!("du {a} au {b}")).color(pal.muted));
+                ui.label(RichText::new(tr!("du {} au {}", a, b)).color(pal.muted));
             }
         });
         ui.add_space(8.0);
@@ -822,30 +832,34 @@ impl ImportForm {
         let statuses = self.statuses.get(shown).cloned().unwrap_or_default();
         let duplicates = statuses.iter().filter(|s| !s.is_new()).count();
         ui.horizontal(|ui| {
-            ui_kit::pill(
-                ui,
-                &import::operation_count_label(account.operations.len()),
-                pal.accent,
-            );
+            ui_kit::pill(ui, &operation_count(account.operations.len()), pal.accent);
             if duplicates > 0 {
                 ui_kit::pill(
                     ui,
-                    &format!("{duplicates} doublon(s) probable(s), décoché(s)"),
+                    &trn!(
+                        duplicates,
+                        "{} doublon probable, décoché",
+                        "{} doublons probables, décochés"
+                    ),
                     pal.warning,
                 );
             }
             if !parsed.rejected.is_empty() {
                 ui_kit::pill(
                     ui,
-                    &format!("{} ligne(s) rejetée(s)", parsed.rejected.len()),
+                    &trn!(
+                        parsed.rejected.len(),
+                        "{} ligne rejetée",
+                        "{} lignes rejetées"
+                    ),
                     pal.negative,
                 );
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                if ui.small_button("Tout décocher").clicked() {
+                if ui.small_button(tr!("Tout décocher")).clicked() {
                     self.include[shown].iter_mut().for_each(|b| *b = false);
                 }
-                if ui.small_button("Tout cocher").clicked() {
+                if ui.small_button(tr!("Tout cocher")).clicked() {
                     self.include[shown].iter_mut().for_each(|b| *b = true);
                 }
             });
@@ -926,21 +940,21 @@ impl ImportForm {
                         let status_cell = egui::vec2(STATUS_WIDTH, 30.0);
                         let layout = egui::Layout::left_to_right(egui::Align::Center);
                         ui.allocate_ui_with_layout(status_cell, layout, |ui| match status {
-                            ImportStatus::New => ui_kit::pill(ui, "Nouvelle", pal.positive),
+                            ImportStatus::New => ui_kit::pill(ui, tr!("Nouvelle"), pal.positive),
                             ImportStatus::ProbableDuplicate {
                                 existing,
                                 same_fitid,
                             } => {
                                 let label = if same_fitid {
-                                    "Déjà importée"
+                                    tr!("Déjà importée")
                                 } else {
-                                    "Doublon probable"
+                                    tr!("Doublon probable")
                                 };
                                 ui_kit::pill(ui, label, pal.warning);
                                 if let Some(t) = self.targets.get(shown).copied().flatten() {
                                     let e = &doc.document.accounts[t].operations[existing];
                                     ui.label(RichText::new(icon::INFO).color(pal.muted))
-                                        .on_hover_text(format!(
+                                        .on_hover_text(tr!(
                                             "Ressemble à : {} · {} · {}",
                                             e.date,
                                             e.payee,
@@ -976,11 +990,11 @@ impl ImportForm {
             LineCategory::None => (RichText::new("—").color(pal.muted), None),
             LineCategory::File(name) => (
                 RichText::new(name).color(pal.fg_dark),
-                Some("Catégorie lue dans le fichier".to_string()),
+                Some(tr!("Catégorie lue dans le fichier").to_string()),
             ),
             LineCategory::Rule(id) => (
                 RichText::new(format!("{}  {}", icon::LIGHTNING, label(id))).color(pal.fg_dark),
-                Some(format!("{} : imposée par une règle automatique", full(id))),
+                Some(tr!("{} : imposée par une règle automatique", full(id))),
             ),
             LineCategory::Suggested {
                 category,
@@ -992,17 +1006,21 @@ impl ImportForm {
                     (
                         RichText::new(format!("{}  {}", icon::MAGIC_WAND, label(category)))
                             .color(pal.accent),
-                        Some(format!(
-                            "Catégorie devinée ({reason}, confiance {percent} %)"
+                        Some(tr!(
+                            "Catégorie devinée ({reason}, confiance {percent} %)",
+                            reason = reason,
+                            percent = percent
                         )),
                     )
                 } else {
                     (
-                        RichText::new(format!("{} ?", label(category))).color(pal.muted),
-                        Some(format!(
-                            "{} : suggestion à confirmer ({reason}, confiance {percent} %), \
+                        RichText::new(tr!("{} ?", label(category))).color(pal.muted),
+                        Some(tr!(
+                            "{category} : suggestion à confirmer ({reason}, confiance {percent} %), \
                              non appliquée ; « Catégoriser les opérations… » permet de la valider",
-                            full(category)
+                            category = full(category),
+                            reason = reason,
+                            percent = percent
                         )),
                     )
                 }
@@ -1037,14 +1055,11 @@ impl ImportForm {
                 balance.date,
             )
         });
-        let kind = if balance.booked {
-            "Solde en banque"
-        } else {
-            "Solde disponible"
-        };
-        let title = match balance.date {
-            Some(d) => format!("{kind} au {}", crate::settings::shared::date(d)),
-            None => kind.to_string(),
+        let title = match (balance.date, balance.booked) {
+            (Some(d), true) => tr!("Solde en banque au {}", crate::settings::shared::date(d)),
+            (Some(d), false) => tr!("Solde disponible au {}", crate::settings::shared::date(d)),
+            (None, true) => tr!("Solde en banque").to_string(),
+            (None, false) => tr!("Solde disponible").to_string(),
         };
         egui::Frame::new()
             .fill(pal.bg)
@@ -1057,31 +1072,35 @@ impl ImportForm {
                     ui.label(RichText::new(icon::BANK).size(18.0).color(pal.accent));
                     let response = ui.label(RichText::new(title).color(pal.fg_dark));
                     if !balance.booked {
-                        response.on_hover_text(
+                        response.on_hover_text(tr!(
                             "La banque ne donne que le solde disponible : il compte aussi \
-                             les opérations en attente, qui ne sont pas importées.",
-                        );
+                             les opérations en attente, qui ne sont pas importées."
+                        ));
                     }
                     ui.label(RichText::new(money(balance.amount, currency)).strong());
                     let Some(mine) = mine else {
                         return;
                     };
                     ui.add_space(24.0);
-                    ui.label(RichText::new("En banque après import").color(pal.fg_dark))
-                        .on_hover_text(
+                    ui.label(RichText::new(tr!("En banque après import")).color(pal.fg_dark))
+                        .on_hover_text(tr!(
                             "Opérations pointées ou rapprochées du compte, plus les lignes \
-                             cochées ici et les opérations déjà saisies qu'elles recouvrent.",
-                        );
+                             cochées ici et les opérations déjà saisies qu'elles recouvrent."
+                        ));
                     ui.label(RichText::new(money(mine, currency)).strong());
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                         let gap = mine + -balance.amount;
                         if gap == bp_core::model::Amount::ZERO {
-                            ui_kit::pill(ui, &format!("{}  Concorde", icon::CHECK), pal.positive);
+                            ui_kit::pill(
+                                ui,
+                                &format!("{}  {}", icon::CHECK, tr!("Concorde")),
+                                pal.positive,
+                            );
                         } else {
                             let sign = if gap.is_negative() { "" } else { "+" };
                             ui_kit::pill(
                                 ui,
-                                &format!("Écart {sign}{}", money(gap, currency)),
+                                &tr!("Écart {}", format!("{sign}{}", money(gap, currency))),
                                 if balance.booked {
                                     pal.warning
                                 } else {
@@ -1102,9 +1121,9 @@ impl ImportForm {
         let pal = palette(ui);
         ui.add_space(6.0);
         let label = if self.show_rejected {
-            "Masquer les lignes rejetées"
+            tr!("Masquer les lignes rejetées")
         } else {
-            "Voir les lignes rejetées"
+            tr!("Voir les lignes rejetées")
         };
         if ui.link(label).clicked() {
             self.show_rejected = !self.show_rejected;
@@ -1116,7 +1135,7 @@ impl ImportForm {
                 .show(ui, |ui| {
                     for r in &parsed.rejected {
                         ui.horizontal(|ui| {
-                            ui.label(RichText::new(format!("Ligne {}", r.line)).color(pal.muted));
+                            ui.label(RichText::new(tr!("Ligne {}", r.line)).color(pal.muted));
                             ui.label(RichText::new(r.reason.to_string()).color(pal.negative));
                             ui.add_sized(
                                 [width - 300.0, 20.0],
@@ -1139,14 +1158,14 @@ impl ImportForm {
         );
         ui.add_space(12.0);
         ui.horizontal(|ui| {
-            ui.label(RichText::new("Pointage").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Pointage")).color(pal.fg_dark));
             ui_kit::segmented(
                 ui,
                 &mut self.default_tack,
                 &[
-                    (Tack::None, "", "À pointer", pal.fg),
-                    (Tack::Pointed, "", "Pointées", pal.pointed),
-                    (Tack::Reconciled, "", "Rapprochées", pal.reconciled),
+                    (Tack::None, "", tr!("À pointer"), pal.fg),
+                    (Tack::Pointed, "", tr!("Pointées"), pal.pointed),
+                    (Tack::Reconciled, "", tr!("Rapprochées"), pal.reconciled),
                 ],
                 30.0,
                 Some(330.0),
@@ -1155,43 +1174,40 @@ impl ImportForm {
             crate::theme::checkbox(
                 ui,
                 &mut self.create_categories,
-                "Créer les catégories manquantes",
+                tr!("Créer les catégories manquantes"),
             );
             ui.add_space(16.0);
-            crate::theme::checkbox(ui, &mut self.categorize, "Deviner les catégories")
-                .on_hover_text(
+            crate::theme::checkbox(ui, &mut self.categorize, tr!("Deviner les catégories"))
+                .on_hover_text(tr!(
                     "Applique les suggestions sûres (historique, commerçants connus) aux \
-                     opérations que le fichier et les règles laissent sans catégorie",
-                );
+                     opérations que le fichier et les règles laissent sans catégorie"
+                ));
             ui.add_space(16.0);
             let before = (self.tolerance, self.match_mode);
-            ui.label(RichText::new("Doublons : écart toléré").color(pal.fg_dark));
+            ui.label(RichText::new(tr!("Doublons : écart toléré")).color(pal.fg_dark));
             ui.add(
                 egui::DragValue::new(&mut self.tolerance)
                     .range(0..=10)
-                    .suffix(" j"),
+                    .suffix(tr!(" j")),
             );
-            crate::theme::checkbox(ui, &mut self.match_mode, "même mode");
+            crate::theme::checkbox(ui, &mut self.match_mode, tr!("même mode"));
             if before != (self.tolerance, self.match_mode) {
                 self.recheck = true;
             }
         });
         let count = self.selected_count();
         crate::dialogs::footer(ui, |ui| {
-            let label = format!(
-                "{}  Importer {}",
-                icon::DOWNLOAD_SIMPLE,
-                import::operation_count_label(count)
-            );
+            let action = match count {
+                0 => tr!("Importer aucune opération").to_string(),
+                1 => tr!("Importer une opération").to_string(),
+                n => tr!("Importer {} opérations", n),
+            };
+            let label = format!("{}  {action}", icon::DOWNLOAD_SIMPLE);
             if crate::dialogs::primary(ui, &label, count > 0).clicked() {
                 let (n, guessed) = self.import(doc);
-                let mut message = format!("{} importée(s)", import::operation_count_label(n));
-                if guessed > 0 {
-                    message.push_str(&format!(", {guessed} catégorisée(s) automatiquement"));
-                }
-                *outcome = Outcome::Done(message);
+                *outcome = Outcome::Done(import_summary(n, guessed));
             }
-            if crate::dialogs::button(ui, "Annuler").clicked()
+            if crate::dialogs::button(ui, tr!("Annuler")).clicked()
                 || ui.input(|i| i.key_pressed(Key::Escape))
             {
                 *outcome = Outcome::Close;
@@ -1258,6 +1274,32 @@ impl ImportForm {
     }
 }
 
+/// « 3 opérations » (aucune, une, sinon le nombre).
+fn operation_count(count: usize) -> String {
+    match count {
+        0 => tr!("aucune opération").to_string(),
+        1 => tr!("une opération").to_string(),
+        n => tr!("{} opérations", n),
+    }
+}
+
+/// Message de fin d'import : opérations importées et catégories devinées.
+fn import_summary(imported: usize, guessed: usize) -> String {
+    let mut message = match imported {
+        0 => tr!("Aucune opération importée").to_string(),
+        1 => tr!("Une opération importée").to_string(),
+        n => tr!("{} opérations importées", n),
+    };
+    if guessed > 0 {
+        message.push_str(&trn!(
+            guessed,
+            ", {} catégorisée automatiquement",
+            ", {} catégorisées automatiquement"
+        ));
+    }
+    message
+}
+
 fn date_order(ui: &mut egui::Ui, order: &mut DateOrder) -> bool {
     let pal = palette(ui);
     ui_kit::segmented(
@@ -1267,14 +1309,14 @@ fn date_order(ui: &mut egui::Ui, order: &mut DateOrder) -> bool {
             (
                 DateOrder::DayMonthYear,
                 "",
-                "Jour / mois / année",
+                tr!("Jour / mois / année"),
                 pal.accent,
             ),
-            (DateOrder::MonthDayYear, "", "Mois / jour", pal.accent),
+            (DateOrder::MonthDayYear, "", tr!("Mois / jour"), pal.accent),
             (
                 DateOrder::YearMonthDay,
                 "",
-                "Année / mois / jour",
+                tr!("Année / mois / jour"),
                 pal.accent,
             ),
         ],

@@ -480,7 +480,7 @@ impl BankPerfectApp {
                     ));
                 }
                 ManagerAction::Docs => {
-                    ctx.open_url(egui::OpenUrl::new_tab(crate::extensions::DOCS_URL));
+                    ctx.open_url(egui::OpenUrl::new_tab(crate::extensions::docs_url()));
                 }
             }
         }
@@ -916,7 +916,7 @@ impl BankPerfectApp {
                 return;
             }
             Command::ExtensionsDocs => {
-                ctx.open_url(egui::OpenUrl::new_tab(crate::extensions::DOCS_URL));
+                ctx.open_url(egui::OpenUrl::new_tab(crate::extensions::docs_url()));
                 return;
             }
             Command::Help => {
@@ -1908,7 +1908,7 @@ impl BankPerfectApp {
                             if menu::choice(
                                 ui,
                                 crate::theme::find(&selected, dark).id == theme.id,
-                                theme.name,
+                                bp_core::i18n::tr(theme.name),
                             )
                             .clicked()
                             {

@@ -185,13 +185,17 @@ impl OptionsForm {
                         let current = bp_core::categorize::ai::MODELS
                             .iter()
                             .find(|(id, _)| *id == d.ai_model)
-                            .map_or(d.ai_model.as_str(), |(_, label)| label);
+                            .map_or(d.ai_model.as_str(), |(_, label)| bp_core::i18n::tr(label));
                         egui::ComboBox::from_id_salt("ai_model")
                             .selected_text(current)
                             .width(ui.available_width().min(380.0))
                             .show_ui(ui, |ui| {
                                 for (id, label) in bp_core::categorize::ai::MODELS {
-                                    ui.selectable_value(&mut d.ai_model, id.to_string(), label);
+                                    ui.selectable_value(
+                                        &mut d.ai_model,
+                                        id.to_string(),
+                                        bp_core::i18n::tr(label),
+                                    );
                                 }
                             });
                     });
@@ -510,7 +514,12 @@ fn theme_card(
     let (rect, response) = ui.allocate_exact_size(vec2(width, 112.0), egui::Sense::click());
     let response = response.on_hover_cursor(egui::CursorIcon::PointingHand);
     response.widget_info(|| {
-        egui::WidgetInfo::selected(egui::WidgetType::RadioButton, true, selected, theme.name)
+        egui::WidgetInfo::selected(
+            egui::WidgetType::RadioButton,
+            true,
+            selected,
+            bp_core::i18n::tr(theme.name),
+        )
     });
     if !ui.is_rect_visible(rect) {
         return response;
@@ -618,7 +627,7 @@ fn theme_card(
     painter.text(
         pos2(rect.left() + 12.0, name_y),
         egui::Align2::LEFT_CENTER,
-        theme.name,
+        bp_core::i18n::tr(theme.name),
         egui::FontId::new(13.0, family),
         if selected { ui_pal.fg } else { ui_pal.fg_dark },
     );

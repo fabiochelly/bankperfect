@@ -14,8 +14,17 @@ use crate::theme::palette;
 use crate::ui_kit;
 
 /// Adresse de la documentation des extensions.
-pub const DOCS_URL: &str =
-    "https://github.com/fabiochelly/bankperfect/blob/main/docs/extensions.md";
+/// Documentation des extensions, dans la langue de l'interface.
+pub fn docs_url() -> &'static str {
+    match bp_core::i18n::lang() {
+        bp_core::i18n::Lang::Fr => {
+            "https://github.com/fabiochelly/bankperfect/blob/main/docs/extensions.md"
+        }
+        bp_core::i18n::Lang::En => {
+            "https://github.com/fabiochelly/bankperfect/blob/main/docs/extensions.en.md"
+        }
+    }
+}
 
 /// Exemples livrés avec l'application (installables depuis la fenêtre de
 /// gestion).

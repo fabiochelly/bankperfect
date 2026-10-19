@@ -886,7 +886,7 @@ impl Command {
                 let theme = crate::theme::by_id(id).unwrap_or(&crate::theme::THEMES[0]);
                 info(
                     VIEW,
-                    &tr!("Thème : {}", theme.name),
+                    &tr!("Thème : {}", bp_core::i18n::tr(theme.name)),
                     icon::PALETTE,
                     None,
                     if theme.dark {

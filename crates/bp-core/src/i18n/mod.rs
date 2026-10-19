@@ -247,6 +247,23 @@ pub fn weekday_abbr(from_monday: usize) -> &'static str {
     pick(&FR, &EN, from_monday)
 }
 
+/// Nom du jour (`from_monday` de 0 à 6) : « lundi », « Monday ».
+pub fn weekday_name(from_monday: usize) -> &'static str {
+    const FR: [&str; 7] = [
+        "lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche",
+    ];
+    const EN: [&str; 7] = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+        "Saturday",
+        "Sunday",
+    ];
+    pick(&FR, &EN, from_monday)
+}
+
 /// Initiale du jour pour un calendrier : « L », « M ».
 pub fn weekday_letter(from_monday: usize) -> &'static str {
     const FR: [&str; 7] = ["L", "M", "M", "J", "V", "S", "D"];

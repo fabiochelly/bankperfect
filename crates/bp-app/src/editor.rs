@@ -4,7 +4,9 @@
 use std::collections::BTreeSet;
 
 use bp_core::categorize::{Query, Suggestion};
+use bp_core::i18n::{self, Lang};
 use bp_core::model::{Amount, Date, Document, Mode, Operation, Tack};
+use bp_core::tr;
 use chrono::Months;
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
@@ -90,7 +92,7 @@ impl Editor {
             payee: op.payee.clone(),
             details: op.details.clone(),
             category: op.category,
-            amount: op.amount.abs().format(2, ','),
+            amount: op.amount.abs().format(2, i18n::decimal_separator()),
             tack: op.tack,
             credit: !op.amount.is_negative(),
             original_tack: Some(op.tack),
@@ -140,9 +142,9 @@ impl Editor {
         ui.horizontal(|ui| {
             ui.vertical(|ui| {
                 let title = if self.target.is_some() {
-                    "Modifier l'opération"
+                    tr!("Modifier l'opération")
                 } else {
-                    "Nouvelle opération"
+                    tr!("Nouvelle opération")
                 };
                 ui.label(
                     RichText::new(title)
@@ -157,7 +159,7 @@ impl Editor {
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
                 if ui
                     .add(egui::Button::new(RichText::new(icon::X).size(16.0)).frame(false))
-                    .on_hover_text("Fermer (Échap)")
+                    .on_hover_text(tr!("Fermer (Échap)"))
                     .clicked()
                 {
                     action = EditorAction::Close;
@@ -182,7 +184,7 @@ impl Editor {
                     ui,
                     card_width,
                     icon::CALENDAR_BLANK,
-                    "Quand et comment",
+                    tr!("Quand et comment"),
                     |ui| {
                         let half = (ui.available_width() - 12.0) / 2.0;
                         ui.horizontal_top(|ui| {
@@ -213,7 +215,7 @@ impl Editor {
                                 width,
                                 crate::datepicker::Placement::Popup,
                             );
-                            let date = date.on_hover_text(format!(
+                            let date = date.on_hover_text(tr!(
                                 "{up}/{down} : ±1 jour   Ctrl+{up}/{down} : ±1 mois",
                                 up = icon::ARROW_UP,
                                 down = icon::ARROW_DOWN
@@ -235,10 +237,10 @@ impl Editor {
                     },
                 );
 
-                section(ui, card_width, icon::USER, "Qui et pourquoi", |ui| {
+                section(ui, card_width, icon::USER, tr!("Qui et pourquoi"), |ui| {
                     let response = ui.add(
                         crate::theme::field(&mut self.payee)
-                            .hint_text("Commerçant, organisme, personne…")
+                            .hint_text(tr!("Commerçant, organisme, personne…"))
                             .desired_width(f32::INFINITY),
                     );
                     if response.has_focus()
@@ -250,12 +252,12 @@ impl Editor {
                     ui.add_space(14.0);
                     ui.add(
                         crate::theme::field(&mut self.details)
-                            .hint_text("Note, référence, n° de chèque…")
+                            .hint_text(tr!("Note, référence, n° de chèque…"))
                             .desired_width(f32::INFINITY),
                     );
                 });
 
-                section(ui, card_width, icon::TAG, "Classement", |ui| {
+                section(ui, card_width, icon::TAG, tr!("Classement"), |ui| {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 8.0;
                         let width = ui.available_width() - WAND_WIDTH - 8.0;
@@ -275,9 +277,14 @@ impl Editor {
                         ui,
                         &mut self.tack,
                         &[
-                            (Tack::None, icon::CIRCLE_DASHED, "À pointer", pal.fg),
-                            (Tack::Pointed, icon::CHECK, "Pointée", pal.pointed),
-                            (Tack::Reconciled, icon::CHECKS, "Rapprochée", pal.reconciled),
+                            (Tack::None, icon::CIRCLE_DASHED, tr!("À pointer"), pal.fg),
+                            (Tack::Pointed, icon::CHECK, tr!("Pointée"), pal.pointed),
+                            (
+                                Tack::Reconciled,
+                                icon::CHECKS,
+                                tr!("Rapprochée"),
+                                pal.reconciled,
+                            ),
                         ],
                         32.0,
                         None,
@@ -294,7 +301,7 @@ impl Editor {
                         ui,
                         card_width,
                         icon::LIST_PLUS,
-                        "Champs supplémentaires",
+                        tr!("Champs supplémentaires"),
                         |ui| {
                             egui::Grid::new("editor_extra")
                                 .num_columns(2)
@@ -316,14 +323,16 @@ impl Editor {
         ui.with_layout(egui::Layout::bottom_up(egui::Align::Max), |ui| {
             ui.horizontal(|ui| {
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    let save =
-                        crate::theme::primary_button(ui, format!("{}  Enregistrer", icon::CHECK))
-                            .min_size(egui::vec2(140.0, 38.0));
-                    if ui.add(save).on_hover_text("Ctrl+Entrée").clicked() {
+                    let save = crate::theme::primary_button(
+                        ui,
+                        format!("{}  {}", icon::CHECK, tr!("Enregistrer")),
+                    )
+                    .min_size(egui::vec2(140.0, 38.0));
+                    if ui.add(save).on_hover_text(tr!("Ctrl+Entrée")).clicked() {
                         action = self.validate();
                     }
                     if ui
-                        .add(egui::Button::new("Annuler").min_size(egui::vec2(90.0, 38.0)))
+                        .add(egui::Button::new(tr!("Annuler")).min_size(egui::vec2(90.0, 38.0)))
                         .clicked()
                     {
                         action = EditorAction::Close;
@@ -408,9 +417,9 @@ impl Editor {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
             let title = if self.target.is_some() {
-                "Modifier l'opération"
+                tr!("Modifier l'opération")
             } else {
-                "Nouvelle opération"
+                tr!("Nouvelle opération")
             };
             ui.label(RichText::new(title).family(crate::theme::semibold()));
             ui.label(
@@ -423,27 +432,27 @@ impl Editor {
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let label = if self.target.is_some() {
-                    "Enregistrer"
+                    tr!("Enregistrer")
                 } else {
-                    "Ajouter"
+                    tr!("Ajouter")
                 };
                 let save = crate::theme::primary_button(ui, format!("{}  {label}", icon::CHECK))
                     .min_size(egui::vec2(120.0, 30.0));
                 if ui
                     .add(save)
-                    .on_hover_text("Entrée (dans le montant) ou Ctrl+Entrée")
+                    .on_hover_text(tr!("Entrée (dans le montant) ou Ctrl+Entrée"))
                     .clicked()
                 {
                     action = self.validate();
                 }
                 let reset = if self.target.is_some() {
-                    "Annuler"
+                    tr!("Annuler")
                 } else {
-                    "Effacer"
+                    tr!("Effacer")
                 };
                 if ui
                     .add(egui::Button::new(reset).min_size(egui::vec2(80.0, 30.0)))
-                    .on_hover_text("Échap")
+                    .on_hover_text(tr!("Échap"))
                     .clicked()
                 {
                     action = EditorAction::Close;
@@ -490,7 +499,7 @@ impl Editor {
             let text_w = ((ui.available_width() - after - GAP) / 2.0).max(120.0);
             let payee = ui.add(
                 crate::theme::field(&mut this.payee)
-                    .hint_text("Tiers")
+                    .hint_text(tr!("Tiers"))
                     .desired_width(text_w),
             );
             *focused |= payee.has_focus();
@@ -498,7 +507,7 @@ impl Editor {
             payee_rect = Some(payee.rect);
             let details = ui.add(
                 crate::theme::field(&mut this.details)
-                    .hint_text("Détail")
+                    .hint_text(tr!("Détail"))
                     .desired_width(text_w),
             );
             *focused |= details.has_focus();
@@ -519,7 +528,7 @@ impl Editor {
                     egui::vec2(sign_w, 32.0),
                     egui::Button::new(RichText::new(sign).size(18.0).color(color)),
                 )
-                .on_hover_text("Dépense ou recette (ou tapez - ou + dans le montant)")
+                .on_hover_text(tr!("Dépense ou recette (ou tapez - ou + dans le montant)"))
                 .clicked()
             {
                 this.credit = !this.credit;
@@ -528,7 +537,7 @@ impl Editor {
                 crate::theme::field(&mut this.amount)
                     .text_color(color)
                     .horizontal_align(egui::Align::Max)
-                    .hint_text("0,00")
+                    .hint_text(zero_hint())
                     .desired_width(amount_w),
             );
             if amount.changed() {
@@ -626,8 +635,8 @@ impl Editor {
                     ui,
                     &mut self.credit,
                     &[
-                        (false, icon::ARROW_UP_RIGHT, "Dépense", pal.negative),
-                        (true, icon::ARROW_DOWN_LEFT, "Recette", pal.positive),
+                        (false, icon::ARROW_UP_RIGHT, tr!("Dépense"), pal.negative),
+                        (true, icon::ARROW_DOWN_LEFT, tr!("Recette"), pal.positive),
                     ],
                     28.0,
                     None,
@@ -647,7 +656,7 @@ impl Editor {
                         .font(egui::FontId::new(30.0, crate::theme::semibold()))
                         .text_color(color)
                         .hint_text(
-                            RichText::new("0,00")
+                            RichText::new(zero_hint())
                                 .size(30.0)
                                 .color(color.gamma_multiply(0.35)),
                         )
@@ -716,7 +725,7 @@ impl Editor {
             self.details = p.details.clone();
         }
         if let Some(a) = Amount::parse(&p.amount).filter(|&a| a != Amount::ZERO) {
-            self.amount = a.abs().format(2, ',');
+            self.amount = a.abs().format(2, i18n::decimal_separator());
         }
     }
 
@@ -727,7 +736,7 @@ impl Editor {
         let needle = bp_core::filter::normalize(&self.payee);
         let needle = needle.trim();
         if needle.is_empty() {
-            self.error = Some("Saisissez du texte dans le champ Tiers, puis F10".into());
+            self.error = Some(tr!("Saisissez du texte dans le champ Tiers, puis F10").into());
             return;
         }
         if let Some(p) = doc
@@ -757,10 +766,10 @@ impl Editor {
                 self.details = op.details;
                 self.category = op.category;
                 self.credit = !op.amount.is_negative();
-                self.amount = op.amount.abs().format(2, ',');
+                self.amount = op.amount.abs().format(2, i18n::decimal_separator());
                 self.error = None;
             }
-            None => self.error = Some("Aucun tiers ne contient ce texte".into()),
+            None => self.error = Some(tr!("Aucun tiers ne contient ce texte").into()),
         }
     }
 
@@ -840,9 +849,9 @@ impl Editor {
                 let text = format!("{}  {}", icon::ADDRESS_BOOK, p.caption);
                 if ui
                     .selectable_label(false, text)
-                    .on_hover_text(
-                        "Tiers mémorisé : remplit aussi mode, catégorie, détail et montant",
-                    )
+                    .on_hover_text(tr!(
+                        "Tiers mémorisé : remplit aussi mode, catégorie, détail et montant"
+                    ))
                     .clicked()
                 {
                     self.fill_from_payee(document, &p);
@@ -858,7 +867,7 @@ impl Editor {
 
     /// Montant signé saisi (zéro s'il est vide ou illisible).
     fn typed_amount(&self) -> Amount {
-        let amount = Amount::parse(self.amount.trim())
+        let amount = parse_amount(self.amount.trim())
             .unwrap_or(Amount::ZERO)
             .abs();
         if self.credit {
@@ -935,9 +944,9 @@ impl Editor {
             }
             None => {
                 self.category_hint = Some(if self.payee.trim().is_empty() {
-                    "Saisissez d'abord le tiers".into()
+                    tr!("Saisissez d'abord le tiers").into()
                 } else {
-                    "Aucune catégorie à proposer pour ce libellé".into()
+                    tr!("Aucune catégorie à proposer pour ce libellé").into()
                 });
             }
         }
@@ -951,7 +960,9 @@ impl Editor {
                 .min_size(egui::vec2(WAND_WIDTH, 32.0));
         if ui
             .add(button)
-            .on_hover_text("Deviner la catégorie d'après le tiers, le détail et le montant (F9)")
+            .on_hover_text(tr!(
+                "Deviner la catégorie d'après le tiers, le détail et le montant (F9)"
+            ))
             .clicked()
         {
             self.guess_category(doc);
@@ -977,10 +988,9 @@ impl Editor {
             ui.add_space(6.0);
             ui.label(
                 RichText::new(format!(
-                    "{}  Devinée : {} · {} %",
+                    "{}  {}",
                     icon::SPARKLE,
-                    c.reason,
-                    percent(c.confidence)
+                    tr!("Devinée : {} · {} %", c.reason, percent(c.confidence))
                 ))
                 .color(pal.muted)
                 .size(12.5),
@@ -998,10 +1008,11 @@ impl Editor {
             for c in &suggestion.candidates {
                 let label = doc.document.category_label(c.category).unwrap_or_default();
                 let text =
-                    RichText::new(format!("{label}  {} %", percent(c.confidence))).size(12.5);
+                    RichText::new(format!("{label}  {}", tr!("{} %", percent(c.confidence))))
+                        .size(12.5);
                 if ui
                     .add(egui::Button::new(text).small())
-                    .on_hover_text(format!("D'après : {}", c.reason))
+                    .on_hover_text(tr!("D'après : {}", c.reason))
                     .clicked()
                 {
                     chosen = Some(c.category);
@@ -1017,12 +1028,12 @@ impl Editor {
     fn validate(&mut self) -> EditorAction {
         let today = Date::today();
         let Some(date) = Date::parse_fr(&self.date, today) else {
-            self.error = Some("Date invalide (jj/mm/aaaa)".into());
+            self.error = Some(tr!("Date invalide (jj/mm/aaaa)").into());
             return EditorAction::None;
         };
         let text = self.amount.trim();
-        let Some(mut amount) = Amount::parse(text) else {
-            self.error = Some("Montant invalide".into());
+        let Some(mut amount) = parse_amount(text) else {
+            self.error = Some(tr!("Montant invalide").into());
             return EditorAction::None;
         };
         // Option « montants en centimes » : 1250 tapé donne 12,50.
@@ -1056,6 +1067,36 @@ impl Editor {
             },
         )
     }
+}
+
+/// Indication d'un montant vide : `0,00`, `0.00` en anglais.
+fn zero_hint() -> String {
+    format!("0{}00", i18n::decimal_separator())
+}
+
+/// Montant tapé par l'utilisateur. En français, comme `Amount::parse` (la
+/// virgule ou le point est décimal). En anglais, le point est décimal et la
+/// virgule sépare les milliers (« 1,234.56 ») ; une virgule seule reste
+/// décimale quand elle l'est clairement (« 12,5 », « 12,50 », « 0,125 ») :
+/// suivie de trois chiffres après un entier non nul (« 1,234 »), elle
+/// sépare les milliers.
+pub fn parse_amount(text: &str) -> Option<Amount> {
+    if i18n::lang() == Lang::En {
+        let kept: String = text
+            .chars()
+            .filter(|c| matches!(c, '.' | ',' | '0'..='9'))
+            .collect();
+        if !kept.contains('.')
+            && let Some((int, frac)) = kept.split_once(',')
+            && !frac.contains(',')
+            && frac.len() == 3
+            && (1..=3).contains(&int.len())
+            && int.trim_start_matches('0') == int
+        {
+            return Amount::parse(&text.replace(',', ""));
+        }
+    }
+    Amount::parse(text)
 }
 
 fn mode_is_debit(document: &Document, mode: &Mode) -> bool {
@@ -1108,4 +1149,104 @@ fn section(
             content(ui);
         });
     ui.add_space(12.0);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use bp_core::i18n::with_lang;
+
+    fn cents(text: &str) -> Option<i64> {
+        parse_amount(text).map(|a| a.0 / 100)
+    }
+
+    #[test]
+    fn french_amounts_unchanged() {
+        with_lang(Lang::Fr, || {
+            assert_eq!(cents("12,50"), Some(1250));
+            assert_eq!(cents("12.5"), Some(1250));
+            assert_eq!(cents("1 234,56"), Some(123_456));
+            assert_eq!(cents("1.234.567"), Some(123_456_700));
+            // Virgule décimale, comme avant.
+            assert_eq!(cents("1,234"), Some(123));
+            assert_eq!(zero_hint(), "0,00");
+        });
+    }
+
+    #[test]
+    fn english_amounts() {
+        with_lang(Lang::En, || {
+            assert_eq!(cents("1,234.56"), Some(123_456));
+            assert_eq!(cents("1,234"), Some(123_400));
+            assert_eq!(cents("12,345,678"), Some(1_234_567_800));
+            assert_eq!(cents("12.50"), Some(1250));
+            assert_eq!(cents("€1,234.50"), Some(123_450));
+            // Virgule clairement décimale.
+            assert_eq!(cents("12,5"), Some(1250));
+            assert_eq!(cents("12,50"), Some(1250));
+            assert_eq!(cents("0,125"), Some(12));
+            assert_eq!(cents("1234,5678"), Some(123_456));
+            assert_eq!(cents("abc"), None);
+            assert_eq!(zero_hint(), "0.00");
+        });
+    }
+
+    #[test]
+    fn edited_amount_reads_back() {
+        let account = bp_core::model::Account {
+            uid: "a".into(),
+            name: "Courant".into(),
+            bank_name: String::new(),
+            agency_name: String::new(),
+            agency_address: String::new(),
+            number: String::new(),
+            bank_code: String::new(),
+            agency_code: String::new(),
+            bic: String::new(),
+            iban: String::new(),
+            logo: String::new(),
+            currency: "€".into(),
+            currency_rate: 1.0,
+            secondary_currency: String::new(),
+            secondary_rate: 1.0,
+            is_virtual: false,
+            disabled: false,
+            operations: vec![Operation {
+                uid: 1,
+                date: Date(45000),
+                mark_date: Date(45000),
+                tack: Tack::None,
+                mode: Mode::default(),
+                payee: "Fnac".into(),
+                details: String::new(),
+                category: None,
+                amount: Amount::from_cents(-123_456),
+                extra: Vec::new(),
+            }],
+        };
+        let document = Document {
+            group_name: String::new(),
+            guid: String::new(),
+            user_name: String::new(),
+            custom_modes: Vec::new(),
+            accounts: vec![account],
+            account_order: vec![0],
+            default_account: 0,
+            categories: Vec::new(),
+            payees: Vec::new(),
+            feature_data: Vec::new(),
+            unknown_header: Vec::new(),
+        };
+        for lang in Lang::ALL {
+            with_lang(lang, || {
+                let mut editor = Editor::edit(&document, 0, 0);
+                match editor.submit() {
+                    EditorAction::Save(Some(0), op) => {
+                        assert_eq!(op.amount, Amount::from_cents(-123_456), "{lang:?}")
+                    }
+                    _ => panic!("saisie refusée en {lang:?}"),
+                }
+            });
+        }
+    }
 }

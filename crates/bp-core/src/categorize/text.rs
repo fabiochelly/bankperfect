@@ -1,6 +1,7 @@
 //! Découpage et nettoyage des libellés bancaires.
 
 use crate::filter::normalize;
+use crate::i18n::{Lang, lang};
 use crate::model::{Mode, StandardMode};
 
 /// Mots d'un texte : minuscules, sans accents, lettres et chiffres seulement.
@@ -83,14 +84,139 @@ const NOISE: &[&str] = &[
     "retrait",
 ];
 
+/// Mots ajoutés par les banques anglophones (Royaume-Uni, États-Unis,
+/// Canada, Irlande, Australie) ou sans valeur pour reconnaître un tiers,
+/// retirés en plus des précédents quand l'interface est en anglais.
+const NOISE_EN: &[&str] = &[
+    // Nature de l'opération.
+    "card",
+    "cards",
+    "payment",
+    "payments",
+    "pmt",
+    "pmts",
+    "pymt",
+    "pymnt",
+    "purchase",
+    "purchases",
+    "debit",
+    "debits",
+    "contactless",
+    "direct",
+    "standing",
+    "order",
+    "faster",
+    "transfer",
+    "transfers",
+    "tfr",
+    "trf",
+    "xfer",
+    "bill",
+    "withdrawal",
+    "withdrawals",
+    "atm",
+    "pos",
+    "dda",
+    "ach",
+    "ppd",
+    "ccd",
+    "web",
+    "zelle",
+    "fpi",
+    "fpo",
+    "bgc",
+    "sto",
+    "ddr",
+    "chq",
+    "chk",
+    "cheque",
+    "check",
+    "checkcard",
+    "recurring",
+    "preauthorized",
+    "authorized",
+    "online",
+    "ending",
+    "txn",
+    "trx",
+    "ref",
+    "id",
+    "conf",
+    "confirmation",
+    // Formes de société.
+    "ltd",
+    "limited",
+    "inc",
+    "llc",
+    "llp",
+    "plc",
+    "corp",
+    "co",
+    "company",
+    "pty",
+    // Mots outils.
+    "the",
+    "of",
+    "and",
+    "to",
+    "on",
+    "at",
+    "from",
+    "for",
+    "by",
+    "via",
+    // Mois des dates écrites.
+    "jan",
+    "feb",
+    "mar",
+    "apr",
+    "may",
+    "jun",
+    "jul",
+    "aug",
+    "sep",
+    "sept",
+    "oct",
+    "nov",
+    "dec",
+    // Pays et sites.
+    "uk",
+    "gb",
+    "gbr",
+    "usa",
+    "us",
+    "ca",
+    "au",
+    "aus",
+    "ie",
+    "irl",
+    "net",
+    "org",
+];
+
+/// Codes de nature en tête des relevés anglophones (« DD » : direct debit,
+/// « DEB » : débit, « CR » : crédit), trop courts pour être retirés
+/// ailleurs. « BP » (bill payment, mais aussi la marque de carburant) et
+/// « SO » (standing order, mais aussi So Energy) restent : ce sont des noms
+/// au moins aussi souvent.
+const LEADING_EN: &[&str] = &["dd", "vis", "deb", "dr", "cr", "cd"];
+
 /// Mots significatifs d'un libellé (sans les préfixes bancaires, références,
 /// dates et numéros de carte).
 pub fn significant_words(text: &str) -> Vec<String> {
+    let english = lang() == Lang::En;
     words(text)
         .into_iter()
-        .filter(|w| {
-            w.len() >= 2 && !w.chars().any(|c| c.is_ascii_digit()) && !NOISE.contains(&w.as_str())
+        .enumerate()
+        .filter(|(i, w)| {
+            w.len() >= 2
+                && !w.chars().any(|c| c.is_ascii_digit())
+                && !NOISE.contains(&w.as_str())
+                && !(english
+                    && (NOISE_EN.contains(&w.as_str())
+                        || (*i == 0 && LEADING_EN.contains(&w.as_str()))))
         })
+        .map(|(_, w)| w)
         .collect()
 }
 
@@ -132,6 +258,13 @@ impl Nature {
             }
             _ => None,
         };
+        let from_text = from_text.or_else(|| {
+            if lang() == Lang::En {
+                Self::from_english_label(first, second)
+            } else {
+                None
+            }
+        });
         from_text.or(match mode {
             Some(Mode::Standard(m)) => match m {
                 StandardMode::Carte => Some(Self::Card),
@@ -142,6 +275,35 @@ impl Nature {
                 StandardMode::Versement | StandardMode::Titre => None,
             },
             _ => None,
+        })
+    }
+
+    /// Préfixes des relevés anglophones (« CARD PAYMENT TO », « DD »,
+    /// « STANDING ORDER », « FPO », « ATM WITHDRAWAL », « CHQ »…). Seulement
+    /// en anglais : « SO BIO » est une enseigne française, pas un ordre
+    /// permanent.
+    fn from_english_label(first: &str, second: &str) -> Option<Self> {
+        Some(match (first, second) {
+            ("pos" | "vis" | "card" | "contactless" | "checkcard" | "purchase", _) => Self::Card,
+            ("debit" | "visa" | "mastercard" | "interac", "card" | "purchase" | "pos") => {
+                Self::Card
+            }
+            ("dd" | "ddr", _) => Self::DirectDebit,
+            ("direct", "debit") => Self::DirectDebit,
+            ("ach", "credit") => Self::Transfer,
+            ("ach", _) => Self::DirectDebit,
+            ("direct", "deposit" | "dep") => Self::Transfer,
+            (
+                "so" | "sto" | "bgc" | "fpi" | "fpo" | "tfr" | "trf" | "xfer" | "transfer"
+                | "zelle" | "wire" | "interac",
+                _,
+            ) => Self::Transfer,
+            ("standing", "order") | ("faster", "payment" | "payments") => Self::Transfer,
+            ("bill", "payment" | "pay" | "pmt") | ("bank", "giro" | "transfer") => Self::Transfer,
+            ("online", "transfer" | "banking") => Self::Transfer,
+            ("atm" | "withdrawal", _) | ("cash", "withdrawal" | "machine") => Self::Withdrawal,
+            ("chq" | "cheque" | "check" | "chk", _) => Self::Cheque,
+            _ => return None,
         })
     }
 }
@@ -197,5 +359,64 @@ mod tests {
             Some(Nature::Card)
         );
         assert_eq!(Nature::from_label("Remise Ventes", None), None);
+        // Les préfixes anglais ne valent qu'en anglais.
+        assert_eq!(Nature::from_label("SO BIO", None), None);
+    }
+
+    #[test]
+    fn english_statements() {
+        use crate::i18n::with_lang;
+        with_lang(Lang::En, || {
+            assert_eq!(
+                keys("CARD PAYMENT TO TESCO STORES 2345 ON 12 MAR", ""),
+                Some(("tesco stores".into(), "tesco stores".into()))
+            );
+            assert_eq!(
+                keys("POS DEBIT STARBUCKS #1234 SEATTLE WA", ""),
+                Some(("starbucks seattle wa".into(), "starbucks seattle wa".into()))
+            );
+            assert_eq!(
+                keys("DIRECT DEBIT BRITISH GAS", ""),
+                Some(("british gas".into(), "british gas".into()))
+            );
+            assert_eq!(
+                keys("SALARY ACME LTD", ""),
+                Some(("salary acme".into(), "salary acme".into()))
+            );
+            assert_eq!(
+                keys("DD THAMES WATER", "").map(|k| k.0),
+                Some("thames water".into())
+            );
+            assert_eq!(
+                keys("CARD PAYMENT TO BP CONNECT", "").map(|k| k.0),
+                Some("bp connect".into())
+            );
+            let cases = [
+                ("CARD PAYMENT TO TESCO", Some(Nature::Card)),
+                ("POS DEBIT STARBUCKS", Some(Nature::Card)),
+                ("DEBIT CARD PURCHASE AMAZON", Some(Nature::Card)),
+                ("CONTACTLESS PRET A MANGER", Some(Nature::Card)),
+                ("DD BRITISH GAS", Some(Nature::DirectDebit)),
+                ("DIRECT DEBIT THAMES WATER", Some(Nature::DirectDebit)),
+                ("ACH DEBIT GEICO", Some(Nature::DirectDebit)),
+                ("STANDING ORDER LANDLORD", Some(Nature::Transfer)),
+                ("FASTER PAYMENT J SMITH", Some(Nature::Transfer)),
+                ("BGC ACME LTD", Some(Nature::Transfer)),
+                ("ZELLE TO JOHN", Some(Nature::Transfer)),
+                ("ATM WITHDRAWAL", Some(Nature::Withdrawal)),
+                ("CASH WITHDRAWAL HSBC", Some(Nature::Withdrawal)),
+                ("CHEQUE 000123", Some(Nature::Cheque)),
+                ("CHECK 1042", Some(Nature::Cheque)),
+                ("NETFLIX.COM", None),
+            ];
+            for (label, nature) in cases {
+                assert_eq!(Nature::from_label(label, None), nature, "{label}");
+            }
+        });
+        // En français, les mots anglais restent des mots du tiers.
+        assert_eq!(
+            keys("CARD PAYMENT TO TESCO", "").map(|k| k.0),
+            Some("card payment to tesco".into())
+        );
     }
 }

@@ -14,7 +14,9 @@ use serde_json::{Value, json};
 
 use super::text::{keys, significant_words};
 use crate::feature_store;
+use crate::i18n::{Lang, lang};
 use crate::model::{Amount, Document, Operation};
+use crate::{tr, tr_mark};
 
 /// Clé des réponses rangées dans le fichier : clé du tiers → libellé de la
 /// catégorie (`Parent > Enfant`), ou chaîne vide si l'IA n'a pas su.
@@ -24,11 +26,18 @@ pub const API_URL: &str = "https://api.anthropic.com/v1/messages";
 pub const API_VERSION: &str = "2023-06-01";
 /// Modèle par défaut ; l'utilisateur peut en choisir un moins cher.
 pub const DEFAULT_MODEL: &str = "claude-opus-5-5";
-/// Modèles proposés dans les options : (identifiant, libellé).
+/// Modèles proposés dans les options : (identifiant, libellé à passer à
+/// [`crate::i18n::tr`]).
 pub const MODELS: [(&str, &str); 3] = [
-    ("claude-opus-5-5", "Claude Opus 5.5 (le plus fiable)"),
+    (
+        "claude-opus-5-5",
+        tr_mark!("Claude Opus 5.5 (le plus fiable)"),
+    ),
     ("claude-sonnet-5-5", "Claude Sonnet 5.5"),
-    ("claude-haiku-5-5", "Claude Haiku 5.5 (le moins cher)"),
+    (
+        "claude-haiku-5-5",
+        tr_mark!("Claude Haiku 5.5 (le moins cher)"),
+    ),
 ];
 /// Libellés envoyés par requête.
 pub const BATCH: usize = 60;
@@ -96,23 +105,48 @@ pub fn items<'a>(
     out
 }
 
-/// Ordre de grandeur du montant (pour ne pas transmettre la valeur exacte).
-fn magnitude(amount: Amount) -> String {
-    let euros = amount.abs().as_f64();
-    let sign = if amount.is_negative() {
-        "dépense"
-    } else {
-        "recette"
+/// Ordre de grandeur du montant (pour ne pas transmettre la valeur exacte),
+/// dans la langue de la requête (celle de l'interface). En anglais, la
+/// devise n'est pas supposée.
+fn magnitude(amount: Amount, lang: Lang) -> String {
+    let value = amount.abs().as_f64();
+    let rank = [10.0, 30.0, 100.0, 300.0, 1000.0]
+        .iter()
+        .position(|&limit| value < limit)
+        .unwrap_or(5);
+    let (sign, buckets) = match lang {
+        Lang::Fr => (
+            if amount.is_negative() {
+                "dépense"
+            } else {
+                "recette"
+            },
+            [
+                "moins de 10 €",
+                "10 à 30 €",
+                "30 à 100 €",
+                "100 à 300 €",
+                "300 à 1 000 €",
+                "plus de 1 000 €",
+            ],
+        ),
+        Lang::En => (
+            if amount.is_negative() {
+                "expense"
+            } else {
+                "income"
+            },
+            [
+                "under 10",
+                "10 to 30",
+                "30 to 100",
+                "100 to 300",
+                "300 to 1,000",
+                "over 1,000",
+            ],
+        ),
     };
-    let bucket = match euros {
-        e if e < 10.0 => "moins de 10 €",
-        e if e < 30.0 => "10 à 30 €",
-        e if e < 100.0 => "30 à 100 €",
-        e if e < 300.0 => "100 à 300 €",
-        e if e < 1000.0 => "300 à 1 000 €",
-        _ => "plus de 1 000 €",
-    };
-    format!("{sign}, {bucket}")
+    format!("{sign}, {}", buckets[rank])
 }
 
 fn category_labels(document: &Document) -> Vec<String> {
@@ -123,26 +157,43 @@ fn category_labels(document: &Document) -> Vec<String> {
         .collect()
 }
 
-/// Corps de la requête `POST /v1/messages` pour un lot de libellés.
+/// Corps de la requête `POST /v1/messages` pour un lot de libellés. La
+/// consigne suit la langue de l'interface : en anglais, les relevés et les
+/// catégories sont a priori anglophones et le foyer n'est pas supposé
+/// français.
 pub fn request_body(model: &str, document: &Document, items: &[Item]) -> Value {
     let labels = category_labels(document);
     let mut choices = labels.clone();
     choices.push(String::new());
+    let lang = lang();
     let lines: Vec<String> = items
         .iter()
         .enumerate()
-        .map(|(i, item)| format!("{i}. {} ({})", item.text, magnitude(item.amount)))
+        .map(|(i, item)| format!("{i}. {} ({})", item.text, magnitude(item.amount, lang)))
         .collect();
-    let prompt = format!(
-        "Voici des opérations du compte bancaire d'une famille française (libellés \
-         bancaires nettoyés, sens et ordre de grandeur du montant). Range chacune dans \
-         l'une des catégories de la liste, en recopiant exactement le libellé de la \
-         catégorie. Si le libellé ne permet pas de deviner raisonnablement (nom de \
-         personne sans indice, référence opaque), réponds par une chaîne vide plutôt \
-         que de deviner.\n\nCatégories :\n{}\n\nOpérations :\n{}",
-        labels.join("\n"),
-        lines.join("\n")
-    );
+    let prompt = match lang {
+        Lang::Fr => format!(
+            "Voici des opérations du compte bancaire d'une famille française (libellés \
+             bancaires nettoyés, sens et ordre de grandeur du montant). Range chacune dans \
+             l'une des catégories de la liste, en recopiant exactement le libellé de la \
+             catégorie. Si le libellé ne permet pas de deviner raisonnablement (nom de \
+             personne sans indice, référence opaque), réponds par une chaîne vide plutôt \
+             que de deviner.\n\nCatégories :\n{}\n\nOpérations :\n{}",
+            labels.join("\n"),
+            lines.join("\n")
+        ),
+        Lang::En => format!(
+            "Here are transactions from a household's bank account (cleaned-up bank \
+             descriptions, with the direction and order of magnitude of the amount, in the \
+             account's currency). Assign each one to one of the categories in the list, \
+             copying the category label exactly. If the description does not allow a \
+             reasonable guess (a person's name with no other clue, an opaque reference), \
+             answer with an empty string rather than guessing.\n\nCategories:\n{}\n\n\
+             Transactions:\n{}",
+            labels.join("\n"),
+            lines.join("\n")
+        ),
+    };
     let mut body = json!({
         "model": model,
         "max_tokens": 4096,
@@ -193,7 +244,7 @@ pub const FALLBACK_BETA: &str = "server-side-fallback-2026-07-01";
 /// libellé du lot.
 pub fn parse_response(response: &Value, items: &[Item]) -> Result<Vec<(String, String)>, String> {
     if response.get("stop_reason").and_then(Value::as_str) == Some("refusal") {
-        return Err("l'IA a refusé de répondre".into());
+        return Err(tr!("l'IA a refusé de répondre").into());
     }
     let text: String = response
         .get("content")
@@ -204,11 +255,11 @@ pub fn parse_response(response: &Value, items: &[Item]) -> Result<Vec<(String, S
         .filter_map(|block| block.get("text").and_then(Value::as_str))
         .collect();
     let parsed: Value =
-        serde_json::from_str(&text).map_err(|_| "réponse de l'IA illisible".to_string())?;
+        serde_json::from_str(&text).map_err(|_| tr!("réponse de l'IA illisible").to_string())?;
     let results = parsed
         .get("results")
         .and_then(Value::as_array)
-        .ok_or("réponse de l'IA incomplète")?;
+        .ok_or_else(|| tr!("réponse de l'IA incomplète").to_string())?;
     let mut out: Vec<(String, String)> = Vec::new();
     for r in results {
         let (Some(id), Some(category)) = (
@@ -231,10 +282,14 @@ pub fn error_message(status: u16, response: &Value) -> String {
         .and_then(Value::as_str)
         .unwrap_or("");
     match status {
-        401 | 403 => "clé d'API refusée".to_string(),
-        429 => "trop de demandes, réessayez dans un instant".to_string(),
-        _ if detail.is_empty() => format!("erreur {status}"),
-        _ => format!("erreur {status} : {detail}"),
+        401 | 403 => tr!("clé d'API refusée").to_string(),
+        429 => tr!("trop de demandes, réessayez dans un instant").to_string(),
+        _ if detail.is_empty() => tr!("erreur {status}", status = status),
+        _ => tr!(
+            "erreur {status} : {detail}",
+            status = status,
+            detail = detail
+        ),
     }
 }
 
@@ -309,6 +364,29 @@ mod tests {
         assert!(!text.contains("99887766") && !text.contains("60"));
         assert!(text.contains("Santé > Kiné"));
         assert_eq!(body["fallbacks"], "default");
+    }
+
+    #[test]
+    fn request_and_errors_in_english() {
+        crate::i18n::with_lang(Lang::En, || {
+            let d = doc();
+            let ops = [op("ZELLE TO MARTIN", "Physio")];
+            let items = items(&d, ops.iter());
+            let body = request_body(DEFAULT_MODEL, &d, &items);
+            let text = body["messages"][0]["content"].as_str().unwrap();
+            assert!(text.starts_with("Here are transactions"), "{text}");
+            assert!(
+                text.contains("martin physio (expense, 30 to 100)"),
+                "{text}"
+            );
+            assert_eq!(error_message(401, &json!({})), "API key rejected");
+            assert_eq!(error_message(500, &json!({})), "error 500");
+            let refused = json!({ "stop_reason": "refusal", "content": [] });
+            assert_eq!(
+                parse_response(&refused, &items).unwrap_err(),
+                "the AI declined to answer"
+            );
+        });
     }
 
     #[test]

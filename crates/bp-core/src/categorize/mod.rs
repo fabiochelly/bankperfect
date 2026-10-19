@@ -25,9 +25,11 @@ pub mod mcc;
 pub mod taxonomy;
 pub mod text;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
+use crate::i18n::Lang;
 use crate::model::{Amount, Category, Document, Mode, Operation};
+use crate::{tr, trn};
 use dictionary::Dictionary;
 use taxonomy::{Flow, GENERICS, Generic};
 use text::{Nature, keys, significant_words, words};
@@ -52,11 +54,11 @@ pub enum Source {
 impl Source {
     pub fn label(self) -> &'static str {
         match self {
-            Self::History => "historique",
-            Self::Words => "mots du libellé",
-            Self::MerchantCode => "code commerçant",
-            Self::Merchant => "commerçant reconnu",
-            Self::Ai => "IA",
+            Self::History => tr!("historique"),
+            Self::Words => tr!("mots du libellé"),
+            Self::MerchantCode => tr!("code commerçant"),
+            Self::Merchant => tr!("commerçant reconnu"),
+            Self::Ai => tr!("IA"),
         }
     }
 
@@ -160,11 +162,18 @@ pub struct Categorizer {
 
 impl Categorizer {
     /// Index vide (aucun historique) : seuls les noms des catégories servent.
+    ///
+    /// Les noms appartiennent au fichier, pas à l'interface : un fichier
+    /// français ouvert en anglais garde ses rapprochements. On compare donc
+    /// les noms aux synonymes de la langue qu'ils semblent parler, ou des
+    /// deux faute d'indice (les mots communs aux deux langues ne comptent
+    /// pas) ; on évite ainsi les faux amis (« fuel », fioul en français).
     pub fn without_history(document: &Document) -> Self {
         let categories = category_names(&document.categories);
+        let langs = name_languages(&document.categories);
         let by_name = GENERICS
             .iter()
-            .filter_map(|g| best_by_name(g, &document.categories).map(|m| (g.slug, m)))
+            .filter_map(|g| best_by_name(g, &document.categories, &langs).map(|m| (g.slug, m)))
             .collect();
         let ai_answers = ai::answers(document);
         Self {
@@ -311,7 +320,7 @@ impl Categorizer {
                 category,
                 confidence: 0.8 * mapping * generic_weight(category),
                 source: Source::MerchantCode,
-                reason: format!("code commerçant {code}"),
+                reason: tr!("code commerçant {}", code),
                 generic: Some(slug),
             });
         }
@@ -329,7 +338,7 @@ impl Categorizer {
                     * generic_weight(category)
                     * if m.slug.contains('.') { 1.0 } else { 0.8 },
                 source: Source::Merchant,
-                reason: format!("« {} » reconnu", m.pattern),
+                reason: tr!("« {} » reconnu", m.pattern),
                 generic: Some(credit_slug(m.slug, query.amount)),
             });
         }
@@ -340,7 +349,7 @@ impl Categorizer {
                 category,
                 confidence: 0.7,
                 source: Source::Ai,
-                reason: "proposé par l'IA".into(),
+                reason: tr!("proposé par l'IA").into(),
                 generic: None,
             });
         }
@@ -358,14 +367,19 @@ impl Categorizer {
                     if !votes.is_empty() {
                         let n = list.len().min(40) as f32;
                         let support = n / (n + support_bias) * scale;
-                        let plural = if list.len() > 1 { "s" } else { "" };
+                        let reason = trn!(
+                            list.len(),
+                            "{} opération « {1} »",
+                            "{} opérations « {1} »",
+                            wanted
+                        );
                         return votes
                             .into_iter()
                             .map(|(category, share)| Candidate {
                                 category,
                                 confidence: share * support,
                                 source: Source::History,
-                                reason: format!("{} opération{plural} « {wanted} »", list.len()),
+                                reason: reason.clone(),
                                 generic: None,
                             })
                             .collect();
@@ -443,7 +457,7 @@ impl Categorizer {
                 category,
                 confidence: share * weight * sign_factor,
                 source: Source::Words,
-                reason: "mots déjà vus".into(),
+                reason: tr!("mots déjà vus").into(),
                 generic: None,
             })
             .collect()
@@ -544,8 +558,11 @@ fn category_names(categories: &[Category]) -> HashMap<u32, (String, Option<Strin
     out
 }
 
+/// Mots vides des noms de catégories, français et anglais (aucun n'est un
+/// mot plein de l'autre langue ; « the » reste, c'est aussi le thé).
 const NAME_STOP: &[&str] = &[
-    "de", "des", "du", "la", "le", "les", "et", "d", "l", "a", "en", "au", "aux",
+    "de", "des", "du", "la", "le", "les", "et", "d", "l", "a", "en", "au", "aux", "and", "of",
+    "for", "to", "in", "on", "an", "s",
 ];
 
 fn name_words(text: &str) -> Vec<String> {
@@ -593,20 +610,39 @@ fn name_score(synonym: &[String], name: &[String]) -> f32 {
     0.5 + 0.35 * coverage_name
 }
 
+/// Langues des synonymes à comparer aux noms des catégories : celle dont les
+/// synonymes reprennent exactement le plus de noms, ou les deux à égalité.
+fn name_languages(categories: &[Category]) -> Vec<Lang> {
+    let names: Vec<Vec<String>> = categories.iter().map(|c| name_words(&c.name)).collect();
+    let hits = |lang: Lang| {
+        let synonyms: HashSet<Vec<String>> = GENERICS
+            .iter()
+            .flat_map(|g| g.names_in(lang))
+            .map(name_words)
+            .collect();
+        names.iter().filter(|n| synonyms.contains(*n)).count()
+    };
+    match hits(Lang::Fr).cmp(&hits(Lang::En)) {
+        std::cmp::Ordering::Greater => vec![Lang::Fr],
+        std::cmp::Ordering::Less => vec![Lang::En],
+        std::cmp::Ordering::Equal => vec![Lang::Fr, Lang::En],
+    }
+}
+
 /// Catégorie du fichier dont le nom ressemble le plus à une catégorie
 /// générique.
-fn best_by_name(generic: &Generic, categories: &[Category]) -> Option<(u32, f32)> {
+fn best_by_name(generic: &Generic, categories: &[Category], langs: &[Lang]) -> Option<(u32, f32)> {
     let is_child_generic = generic.slug.contains('.');
     let parent_generic = taxonomy::generic(taxonomy::parent_slug(generic.slug));
-    let mut synonyms: Vec<Vec<String>> = generic.synonyms.iter().map(|s| name_words(s)).collect();
-    synonyms.push(name_words(generic.name));
-    let parent_synonyms: Vec<Vec<String>> = parent_generic
-        .map(|p| {
-            let mut list: Vec<Vec<String>> = p.synonyms.iter().map(|s| name_words(s)).collect();
-            list.push(name_words(p.name));
-            list
-        })
-        .unwrap_or_default();
+    let names_of = |g: &Generic| -> Vec<Vec<String>> {
+        langs
+            .iter()
+            .flat_map(|&lang| g.names_in(lang))
+            .map(name_words)
+            .collect()
+    };
+    let synonyms = names_of(generic);
+    let parent_synonyms: Vec<Vec<String>> = parent_generic.map(names_of).unwrap_or_default();
     let mut parent_name: Option<Vec<String>> = None;
     let mut best: Option<(u32, f32)> = None;
     for c in categories {

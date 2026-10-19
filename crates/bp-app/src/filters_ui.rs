@@ -4,6 +4,7 @@
 use bp_core::autofilters::{AutoFilter, AutoFilters};
 use bp_core::filter::TackFilter;
 use bp_core::model::Date;
+use bp_core::tr;
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
 
@@ -61,7 +62,7 @@ impl FiltersForm {
             filters,
         };
         if save_current {
-            form.draft = from_current(doc, "Nouveau filtre");
+            form.draft = from_current(doc, tr!("Nouveau filtre"));
         } else if let Some(first) = form.filters.names().first().map(|s| s.to_string()) {
             form.select(&first);
         }
@@ -82,10 +83,10 @@ impl FiltersForm {
         crate::dialogs::modal(ctx, "auto_filters").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            crate::dialogs::header(ui, icon::FUNNEL, pal.accent, "Filtres prédéfinis");
+            crate::dialogs::header(ui, icon::FUNNEL, pal.accent, tr!("Filtres prédéfinis"));
             ui_kit::subtitle(
                 ui,
-                "Des jeux de critères à appliquer en un clic à la grille. Les dates peuvent suivre le calendrier.",
+                tr!("Des jeux de critères à appliquer en un clic à la grille. Les dates peuvent suivre le calendrier."),
             );
             let gap = 22.0;
             let list_width = (width * 0.32).clamp(240.0, 340.0);
@@ -113,23 +114,23 @@ impl FiltersForm {
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
             }
             crate::dialogs::footer(ui, |ui| {
-                if crate::dialogs::primary(ui, &format!("{}  Appliquer", icon::FUNNEL), true).clicked() {
+                if crate::dialogs::primary(ui, &format!("{}  {}", icon::FUNNEL, tr!("Appliquer")), true).clicked() {
                     match self.draft.validate() {
                         Ok(()) => {
                             apply(doc, &self.draft);
                             outcome = Outcome::Done(if self.draft.name.is_empty() {
-                                "Filtre appliqué".into()
+                                tr!("Filtre appliqué").into()
                             } else {
-                                format!("Filtre « {} » appliqué", self.draft.name)
+                                tr!("Filtre « {} » appliqué", self.draft.name)
                             });
                         }
                         Err(e) => self.error = Some(e.to_string()),
                     }
                 }
-                if crate::dialogs::button(ui, format!("{}  Enregistrer", icon::FLOPPY_DISK)).clicked() {
+                if crate::dialogs::button(ui, format!("{}  {}", icon::FLOPPY_DISK, tr!("Enregistrer"))).clicked() {
                     self.save(doc);
                 }
-                if crate::dialogs::button(ui, "Fermer").clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
+                if crate::dialogs::button(ui, tr!("Fermer")).clicked() || ui.input(|i| i.key_pressed(Key::Escape)) {
                     outcome = Outcome::Close;
                 }
             });
@@ -140,7 +141,7 @@ impl FiltersForm {
     fn save(&mut self, doc: &mut OpenDoc) {
         let name = bp_core::autofilters::clean_name(&self.draft.name);
         if name.is_empty() {
-            self.error = Some("Donnez un nom au filtre.".into());
+            self.error = Some(tr!("Donnez un nom au filtre.").into());
             return;
         }
         self.draft.name = name.clone();
@@ -167,7 +168,7 @@ impl FiltersForm {
         let mut clicked = None;
         ui_kit::card(ui, width, |ui| {
             if names.is_empty() {
-                ui.label(RichText::new("Aucun filtre enregistré.").color(pal.muted));
+                ui.label(RichText::new(tr!("Aucun filtre enregistré.")).color(pal.muted));
             }
             for name in &names {
                 let selected = self.selected.as_deref() == Some(name.as_str());
@@ -180,16 +181,19 @@ impl FiltersForm {
             }
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                if ui.button(format!("{}  Nouveau", icon::PLUS)).clicked() {
-                    self.draft = AutoFilter::new("Nouveau filtre");
+                if ui
+                    .button(format!("{}  {}", icon::PLUS, tr!("Nouveau")))
+                    .clicked()
+                {
+                    self.draft = AutoFilter::new(tr!("Nouveau filtre"));
                     self.selected = None;
                 }
                 if ui
-                    .button(format!("{}  Filtre actuel", icon::COPY))
-                    .on_hover_text("Reprendre les critères de la grille")
+                    .button(format!("{}  {}", icon::COPY, tr!("Filtre actuel")))
+                    .on_hover_text(tr!("Reprendre les critères de la grille"))
                     .clicked()
                 {
-                    self.draft = from_current(doc, "Nouveau filtre");
+                    self.draft = from_current(doc, tr!("Nouveau filtre"));
                     self.selected = None;
                 }
                 if let Some(name) = self.selected.clone()
@@ -197,7 +201,7 @@ impl FiltersForm {
                         .add(egui::Button::new(
                             RichText::new(icon::TRASH).color(pal.negative),
                         ))
-                        .on_hover_text("Supprimer")
+                        .on_hover_text(tr!("Supprimer"))
                         .clicked()
                 {
                     self.filters.remove(&name);
@@ -218,44 +222,44 @@ impl FiltersForm {
         let pal = palette(ui);
         let full = width - 2.0 * ui_kit::CARD_PADDING - 2.0 - LABEL_WIDTH - 8.0;
         let d = &mut self.draft;
-        ui_kit::section(ui, width, icon::TAG, "Filtre", |ui| {
-            ui_kit::row(ui, "Nom", LABEL_WIDTH, |ui| {
+        ui_kit::section(ui, width, icon::TAG, tr!("Filtre"), |ui| {
+            ui_kit::row(ui, tr!("Nom"), LABEL_WIDTH, |ui| {
                 ui.add(crate::theme::field(&mut d.name).desired_width(full));
             });
         });
-        ui_kit::section(ui, width, icon::CALENDAR_BLANK, "Période", |ui| {
+        ui_kit::section(ui, width, icon::CALENDAR_BLANK, tr!("Période"), |ui| {
             let today = Date::today();
-            for (label, value) in [("Du", &mut d.date_from), ("Au", &mut d.date_to)] {
+            for (label, value) in [(tr!("Du"), &mut d.date_from), (tr!("Au"), &mut d.date_to)] {
                 ui_kit::row(ui, label, LABEL_WIDTH, |ui| {
                     ui.add(
                         crate::theme::field(value)
-                            .hint_text("vide, 15/01/2026 ou 1/m/a")
+                            .hint_text(tr!("vide, 15/01/2026 ou 1/m/a"))
                             .desired_width(150.0),
                     );
                     match bp_core::autofilters::eval_dynamic_date(value, today) {
                         Ok(Some(date)) => {
-                            ui_kit::pill(ui, &format!("aujourd'hui : {date}"), pal.accent)
+                            ui_kit::pill(ui, &tr!("aujourd'hui : {}", date), pal.accent)
                         }
                         Ok(None) => {}
-                        Err(_) => ui_kit::pill(ui, "date incorrecte", pal.negative),
+                        Err(_) => ui_kit::pill(ui, tr!("date incorrecte"), pal.negative),
                     }
                 });
                 ui.add_space(6.0);
             }
             ui.label(
-                RichText::new(
-                    "Dates dynamiques jour/mois/année avec j, m, a (aujourd'hui) et dj (dernier jour du mois) : 1/m/a = début du mois, dj/m-1/a = fin du mois dernier, j-30/m/a = il y a 30 jours.",
-                )
+                RichText::new(tr!(
+                    "Dates dynamiques jour/mois/année avec j, m, a (aujourd'hui) et dj (dernier jour du mois) : 1/m/a = début du mois, dj/m-1/a = fin du mois dernier, j-30/m/a = il y a 30 jours."
+                ))
                 .size(12.5)
                 .color(pal.muted),
             );
             ui.add_space(8.0);
             ui.horizontal_wrapped(|ui| {
                 for (label, from, to) in [
-                    ("Ce mois", "1/m/a", "dj/m/a"),
-                    ("Mois dernier", "1/m-1/a", "dj/m-1/a"),
-                    ("Cette année", "1/1/a", "31/12/a"),
-                    ("30 derniers jours", "j-30/m/a", "j/m/a"),
+                    (tr!("Ce mois"), "1/m/a", "dj/m/a"),
+                    (tr!("Mois dernier"), "1/m-1/a", "dj/m-1/a"),
+                    (tr!("Cette année"), "1/1/a", "31/12/a"),
+                    (tr!("30 derniers jours"), "j-30/m/a", "j/m/a"),
                 ] {
                     if ui.small_button(label).clicked() {
                         d.date_from = from.into();
@@ -264,12 +268,12 @@ impl FiltersForm {
                 }
             });
         });
-        ui_kit::section(ui, width, icon::SLIDERS_HORIZONTAL, "Critères", |ui| {
+        ui_kit::section(ui, width, icon::SLIDERS_HORIZONTAL, tr!("Critères"), |ui| {
             for (label, value, hint) in [
-                ("Mode", &mut d.mode, "carte, chq…"),
-                ("Tiers ou détail", &mut d.payee, "texte cherché"),
-                ("Catégorie", &mut d.category, "nom de catégorie"),
-                ("Montant", &mut d.amount, "<0, -50>50…"),
+                (tr!("Mode"), &mut d.mode, tr!("carte, chq…")),
+                (tr!("Tiers ou détail"), &mut d.payee, tr!("texte cherché")),
+                (tr!("Catégorie"), &mut d.category, tr!("nom de catégorie")),
+                (tr!("Montant"), &mut d.amount, "<0, -50>50…"),
             ] {
                 ui_kit::row(ui, label, LABEL_WIDTH, |ui| {
                     ui.add(
@@ -280,7 +284,7 @@ impl FiltersForm {
                 });
                 ui.add_space(6.0);
             }
-            ui_kit::row(ui, "Pointage", LABEL_WIDTH, |ui| {
+            ui_kit::row(ui, tr!("Pointage"), LABEL_WIDTH, |ui| {
                 egui::ComboBox::from_id_salt("filter_tack")
                     .selected_text(d.tack.label())
                     .width(240.0)

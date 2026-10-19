@@ -373,8 +373,8 @@ fn protection_screenshots() {
     });
 }
 
-/// Champs de mot de passe : dernier caractère tapé visible un instant, œil
-/// pour afficher le mot de passe, demande à l'ouverture d'un fichier protégé.
+/// Champs de mot de passe : œil pour afficher le mot de passe (repos, survol,
+/// actif), demande à l'ouverture d'un fichier protégé.
 #[test]
 #[ignore]
 fn password_field_screenshots() {
@@ -390,9 +390,7 @@ fn password_field_screenshots() {
             .unwrap()
             .click();
         h.run_steps(2);
-        h.event(egui::Event::Text("motdepass".into()));
-        h.run_steps(2);
-        h.event(egui::Event::Text("e".into()));
+        h.event(egui::Event::Text("motdepasse".into()));
     };
     let shot = |name: &str, steps: usize, setup: &dyn Fn(&mut Harness<'_, _>)| {
         render_at(
@@ -406,13 +404,25 @@ fn password_field_screenshots() {
             setup,
         );
     };
-    // Le dernier caractère reste lisible une seconde (4 pas), puis disparaît.
-    shot("17c-mot-de-passe-dernier-car", 2, &|h| open_protection(h));
-    shot("17d-mot-de-passe-masque", 8, &|h| open_protection(h));
+    shot("17d-mot-de-passe-masque", 2, &|h| open_protection(h));
+    shot("17h-oeil-survol", 2, &|h| {
+        open_protection(h);
+        let eye = h
+            .get_all_by_label("Afficher le mot de passe")
+            .next()
+            .unwrap()
+            .rect()
+            .center();
+        h.event(egui::Event::PointerMoved(eye));
+        h.run_steps(1);
+        assert_eq!(
+            h.output().platform_output.cursor_icon,
+            egui::CursorIcon::PointingHand
+        );
+    });
     shot("17e-mot-de-passe-visible", 2, &|h| {
         open_protection(h);
-        h.run_steps(8);
-        h.get_all_by_label(egui_phosphor::regular::EYE)
+        h.get_all_by_label("Afficher le mot de passe")
             .next()
             .unwrap()
             .click();
@@ -437,9 +447,8 @@ fn shot_protected(file: &std::path::Path, name: &str, reveal: bool) {
         2,
         |h| {
             h.event(egui::Event::Text("motdepasse".into()));
-            h.run_steps(8);
             if reveal {
-                h.get_by_label(egui_phosphor::regular::EYE).click();
+                h.get_by_label("Afficher le mot de passe").click();
             }
         },
     );

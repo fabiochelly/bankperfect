@@ -109,7 +109,7 @@ Ajoute une commande au menu **Extensions** (ou aux menus choisis par `menu`) et 
 
 ### `bp.importer{ … }`
 
-Ajoute un format de fichier à **Fichier › Importer**. Voir [Formats d'import](#formats-dimport).
+Ajoute un format de fichier à **Fichier › Importer des opérations…**. Voir [Formats d'import](#formats-dimport).
 
 ### `bp.on(évènement, fonction)`
 
@@ -154,7 +154,7 @@ bp.command({
 | `"accounts"` | menu **Comptes** |
 | `"operations"` | menu **Opérations** |
 | `"reports"` | menu **Rapports** |
-| `"tools"` | menu **Outils**, avant **Options** |
+| `"tools"` | menu **Outils**, avant **Options…** |
 | `"extensions"` | menu **Extensions** (par défaut) |
 | `"grid"` | clic droit sur les opérations de la grille |
 | `"account"` | clic droit sur un compte du panneau des comptes |
@@ -259,7 +259,7 @@ local op = bp.current_account():add({
 
 ### Ventiler
 
-Comme **Opérations › Ventiler l'opération** (F6), `op:split` remplace une opération par une ligne par part :
+Comme **Opérations › Ventiler l'opération…** (F6), `op:split` remplace une opération par une ligne par part :
 
 ```lua
 local parts = op:split({
@@ -360,7 +360,7 @@ bp.delete_schedule(loyer.index)
 
 `bp.add_schedule{ … }` crée l'échéance sur le compte affiché, à la date du jour, en prélèvement mensuel à insertion automatique, sauf indication contraire (`payee` est obligatoire). `bp.update_schedule(index, { … })` ne change que les champs donnés.
 
-`bp.forecast(compte, date_limite, { monthly = true }?)` renvoie le prévisionnel d'un compte, comme **Comptes › Prévisionnel** : des lignes `{ date, payee, amount, balance, kind, count }` où `kind` vaut `"balance"` (solde actuel), `"pending"` (opération à venir), `"schedule"` (échéance) ou `"month"` (regroupement mensuel avec `monthly`).
+`bp.forecast(compte, date_limite, { monthly = true }?)` renvoie le prévisionnel d'un compte, comme **Comptes › Solde prévisionnel…** : des lignes `{ date, payee, amount, balance, kind, count }` où `kind` vaut `"balance"` (solde actuel), `"pending"` (opération à venir), `"schedule"` (échéance) ou `"month"` (regroupement mensuel avec `monthly`).
 
 ### Budget mensuel
 
@@ -549,7 +549,7 @@ Couleurs : `"accent"`, `"positive"`, `"negative"`, `"warning"`, `"muted"` (elles
 
 ### Graphiques
 
-`ui.chart` dessine un graphique comme ceux de **Rapports › Graphiques**, aux couleurs du thème, avec légende, graduations et bulles d'information au survol :
+`ui.chart` dessine un graphique comme ceux de **Rapports › Graphiques…**, aux couleurs du thème, avec légende, graduations et bulles d'information au survol :
 
 ![Graphique dans une fenêtre d'extension](captures/extensions-synthese.png)
 
@@ -658,7 +658,7 @@ end)
 
 ## Formats d'import
 
-Une extension peut apprendre à BankPerfect à lire le relevé d'une banque. Le fichier est lu par l'extension ; l'aperçu, la détection des doublons, le choix du compte et des catégories sont ceux de **Fichier › Importer** :
+Une extension peut apprendre à BankPerfect à lire le relevé d'une banque. Le fichier est lu par l'extension ; l'aperçu, la détection des doublons, le choix du compte et des catégories sont ceux de **Fichier › Importer des opérations…** :
 
 ![Import par une extension](captures/extensions-import.png)
 

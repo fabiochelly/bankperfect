@@ -109,7 +109,7 @@ Adds a command to the **Extensions** menu (or to the menus chosen with `menu`) a
 
 ### `bp.importer{ … }`
 
-Adds a file format to **File › Import**. See [Import formats](#import-formats).
+Adds a file format to **File › Import transactions…**. See [Import formats](#import-formats).
 
 ### `bp.on(event, function)`
 
@@ -154,7 +154,7 @@ bp.command({
 | `"accounts"` | **Accounts** menu |
 | `"operations"` | **Transactions** menu |
 | `"reports"` | **Reports** menu |
-| `"tools"` | **Tools** menu, before **Options** |
+| `"tools"` | **Tools** menu, before **Options…** |
 | `"extensions"` | **Extensions** menu (default) |
 | `"grid"` | right-click on transactions in the grid |
 | `"account"` | right-click on an account in the accounts panel |
@@ -276,7 +276,7 @@ local op = bp.current_account():add({
 
 ### Splitting
 
-Like **Transactions › Split transaction** (F6), `op:split` replaces a transaction with one row per part:
+Like **Transactions › Split transaction…** (F6), `op:split` replaces a transaction with one row per part:
 
 ```lua
 local parts = op:split({
@@ -381,7 +381,7 @@ bp.delete_schedule(rent.index)
 
 `bp.add_schedule{ … }` creates the scheduled transaction on the displayed account, starting today, as a monthly direct debit inserted automatically, unless told otherwise (`payee` is required). `bp.update_schedule(index, { … })` only changes the fields given.
 
-`bp.forecast(account, limit_date, { monthly = true }?)` returns the forecast of an account, like **Accounts › Forecast**: rows `{ date, payee, amount, balance, kind, count }` where `kind` is `"balance"` (current balance), `"pending"` (future transaction), `"schedule"` (scheduled transaction) or `"month"` (monthly group, with `monthly`).
+`bp.forecast(account, limit_date, { monthly = true }?)` returns the forecast of an account, like **Accounts › Forecast balance…**: rows `{ date, payee, amount, balance, kind, count }` where `kind` is `"balance"` (current balance), `"pending"` (future transaction), `"schedule"` (scheduled transaction) or `"month"` (monthly group, with `monthly`).
 
 ### Monthly budget
 
@@ -570,7 +570,7 @@ Colors: `"accent"`, `"positive"`, `"negative"`, `"warning"`, `"muted"` (they fol
 
 ### Charts
 
-`ui.chart` draws a chart like those of **Reports › Charts**, in the theme's colors, with a legend, axis labels and tooltips on hover:
+`ui.chart` draws a chart like those of **Reports › Charts…**, in the theme's colors, with a legend, axis labels and tooltips on hover:
 
 ![Chart in an extension window](captures/en/extensions-synthese.png)
 
@@ -679,7 +679,7 @@ end)
 
 ## Import formats
 
-An extension can teach BankPerfect to read a bank's statement. The extension reads the file; the preview, duplicate detection and choice of account and categories are those of **File › Import**:
+An extension can teach BankPerfect to read a bank's statement. The extension reads the file; the preview, duplicate detection and choice of account and categories are those of **File › Import transactions…**:
 
 ![Import through an extension](captures/en/extensions-import.png)
 

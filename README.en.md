@@ -10,7 +10,7 @@ BankPerfect 9 is a complete Rust rewrite of BankPerfect (originally written in D
 
 ## Features
 
-- **Accounts and transactions**: fast entry with suggestions, color-coded payment methods, clearing and reconciliation (with clearing dates), smart clearing from the balance shown by your bank (finds the transactions that have already gone through, allowing for card and cheque delays), splits across several categories, linked transfers between accounts, instant search and filters, undo and redo.
+- **Accounts and transactions**: fast entry with suggestions, color-coded payment methods, clearing and reconciliation (with clearing dates), smart clearing from the balance shown by your bank (finds the transactions that have already gone through, allowing for card and check delays), splits across several categories, linked transfers between accounts, instant search and filters, undo and redo.
 - **Imports**: OFX, QIF and CSV statements, with duplicate detection and auto-categorization rules.
 - **Auto-categorization**, offline: based on your past transactions (same payee, similar amount), then a built-in dictionary of more than 2,000 merchants and generic words (bakery, pharmacy, toll…) and the merchant category codes provided by bank sync. Categories are guessed on import, while you type (magic wand, F9) or in bulk for the whole file or the filtered rows (Ctrl+J), with optional help from AI (using your own Anthropic API key) for unknown descriptions.
 - **Bank sync** (experimental): transactions are imported directly through [Enable Banking](https://enablebanking.com), a licensed PSD2 provider, using your own Enable Banking application (free plan for personal use). You sign in on your bank's website; your credentials are never sent to BankPerfect.

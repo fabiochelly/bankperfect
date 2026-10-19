@@ -62,14 +62,12 @@ fn percent(real: Amount, budget: Amount) -> Option<f64> {
 /// milliers tolérés, et petites expressions arithmétiques (`1200/12`,
 /// `45*2+10`). Contrairement à l'original, `/` est une vraie division
 /// (`100/3` = 33,3333 et non 33). Renvoie `None` si le texte est vide ou
-/// invalide. En anglais, `,` sépare les milliers (« 1,234.56 ») et seul `.`
-/// est décimal.
+/// invalide. En anglais, `,` sépare aussi les milliers (« 1,234.56 »,
+/// voir [`i18n::strip_thousands`](crate::i18n::strip_thousands)).
 pub fn parse_amount_input(text: &str) -> Option<Amount> {
-    let english = crate::i18n::lang() == crate::i18n::Lang::En;
-    let cleaned: String = text
+    let cleaned: String = crate::i18n::strip_thousands(text)
         .chars()
         .filter(|c| !c.is_whitespace() && !matches!(c, '$' | '€' | 'F' | '%'))
-        .filter(|&c| !(english && c == ','))
         .map(|c| if c == ',' { '.' } else { c })
         .collect();
     if cleaned.is_empty() {

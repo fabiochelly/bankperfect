@@ -23,23 +23,7 @@ use crate::ui_kit;
 /// virgule suivie de trois chiffres sépare les milliers (« 1,234.56 »,
 /// « 1,500 ») ; ailleurs elle reste décimale, comme en français.
 pub(crate) fn amount_input(text: &str) -> String {
-    if i18n::lang() != Lang::En {
-        return text.to_string();
-    }
-    let chars: Vec<char> = text.chars().collect();
-    let mut out = String::with_capacity(text.len());
-    for (i, &c) in chars.iter().enumerate() {
-        let thousands = c == ','
-            && i > 0
-            && chars[i - 1].is_ascii_digit()
-            && chars.len() >= i + 4
-            && chars[i + 1..i + 4].iter().all(char::is_ascii_digit)
-            && chars.get(i + 4).is_none_or(|n| !n.is_ascii_digit());
-        if !thousands {
-            out.push(c);
-        }
-    }
-    out
+    i18n::strip_thousands(text)
 }
 
 /// [`parse_amount_input`] avec les milliers à l'anglaise.

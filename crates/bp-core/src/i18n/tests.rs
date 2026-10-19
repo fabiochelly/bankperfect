@@ -40,6 +40,17 @@ fn macros_fill_values() {
 }
 
 #[test]
+fn strips_english_thousands_only() {
+    assert_eq!(with_lang(Lang::Fr, || strip_thousands("1,500")), "1,500");
+    with_lang(Lang::En, || {
+        assert_eq!(strip_thousands("-1,234,567.89"), "-1234567.89");
+        assert_eq!(strip_thousands("12,50"), "12,50");
+        assert_eq!(strip_thousands("1,2345"), "1,2345");
+        assert_eq!(strip_thousands("-€1,500"), "-€1500");
+    });
+}
+
+#[test]
 fn language_from_locale() {
     assert_eq!(Lang::from_locale("fr_FR.UTF-8"), Lang::Fr);
     assert_eq!(Lang::from_locale("fr-CA"), Lang::Fr);

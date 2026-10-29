@@ -3086,6 +3086,7 @@ impl eframe::App for BankPerfectApp {
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         let started = std::time::Instant::now();
         let cpu_previous = frame.info().cpu_usage;
+        crate::file_picker::set_main_window(frame);
         self.frame_ui(ui);
         self.caret.paint(ui.ctx(), self.ime_composing);
         self.profiler.overlay(ui.ctx(), cpu_previous);
@@ -3128,6 +3129,9 @@ impl BankPerfectApp {
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         self.egui_ctx = ui.ctx().clone();
         self.poll_pick();
+        if crate::file_picker::take_failure() {
+            self.error = Some(tr!("La fenêtre de choix de fichier n'a pas pu s'ouvrir.").into());
+        }
         // Exports vers un tableur, d'où qu'ils viennent.
         if let Some(message) = crate::spreadsheet::finished(ui.ctx()) {
             self.toast = Some((message, ui.ctx().input(|i| i.time) + 5.0));

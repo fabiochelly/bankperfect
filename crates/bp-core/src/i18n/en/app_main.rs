@@ -21,6 +21,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Comptes BankPerfect", "BankPerfect accounts"),
     ("Impossible de lire {} : {}", "Cannot read {}: {}"),
     (
+        "La fenêtre de choix de fichier n'a pas pu s'ouvrir.",
+        "The file selection window could not open.",
+    ),
+    (
         "Mot de passe ou clé de secours incorrect",
         "Incorrect password or recovery phrase",
     ),

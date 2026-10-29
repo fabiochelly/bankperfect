@@ -445,6 +445,7 @@ dependencies = [
  "nucleo-matcher",
  "open",
  "printpdf",
+ "raw-window-handle",
  "rfd",
  "rust_xlsxwriter",
  "serde",

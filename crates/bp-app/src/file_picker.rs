@@ -10,6 +10,7 @@
 //!   exécuter une fois le fichier choisi.
 
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -30,6 +31,74 @@ struct Slot(Arc<Mutex<Option<Outcome>>>);
 
 /// Un résultat plus ancien n'est plus attendu (fenêtre fermée entre-temps).
 const STALE: Duration = Duration::from_secs(3);
+
+/// Un sélecteur refermé plus vite n'a pas pu s'ouvrir : rfd rend `None`
+/// aussi bien pour une erreur que pour une annulation.
+const FAILED: Duration = Duration::from_millis(300);
+
+/// Un sélecteur n'a pas pu s'ouvrir (voir [`take_failure`]).
+static FAILURE: AtomicBool = AtomicBool::new(false);
+
+/// Fenêtre principale, propriétaire des sélecteurs sous Windows : sans
+/// propriétaire, un sélecteur ouvert depuis un autre fil peut s'afficher
+/// derrière elle, et l'application semble ne rien faire.
+#[cfg(windows)]
+static MAIN_WINDOW: std::sync::atomic::AtomicIsize = std::sync::atomic::AtomicIsize::new(0);
+
+/// Retient la fenêtre principale (Windows seulement).
+pub fn set_main_window(frame: &eframe::Frame) {
+    #[cfg(windows)]
+    {
+        use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+        if let Ok(handle) = frame.window_handle()
+            && let RawWindowHandle::Win32(win32) = handle.as_raw()
+        {
+            MAIN_WINDOW.store(win32.hwnd.get(), Ordering::Relaxed);
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = frame;
+}
+
+/// Fenêtre principale vue par rfd.
+#[cfg(windows)]
+struct MainWindow(std::num::NonZeroIsize);
+
+#[cfg(windows)]
+impl raw_window_handle::HasWindowHandle for MainWindow {
+    fn window_handle(
+        &self,
+    ) -> Result<raw_window_handle::WindowHandle<'_>, raw_window_handle::HandleError> {
+        let raw = raw_window_handle::RawWindowHandle::Win32(
+            raw_window_handle::Win32WindowHandle::new(self.0),
+        );
+        // SAFETY: la fenêtre principale vit aussi longtemps que l'application.
+        Ok(unsafe { raw_window_handle::WindowHandle::borrow_raw(raw) })
+    }
+}
+
+#[cfg(windows)]
+impl raw_window_handle::HasDisplayHandle for MainWindow {
+    fn display_handle(
+        &self,
+    ) -> Result<raw_window_handle::DisplayHandle<'_>, raw_window_handle::HandleError> {
+        Ok(raw_window_handle::DisplayHandle::windows())
+    }
+}
+
+/// `dialog` rattaché à la fenêtre principale (Windows seulement).
+fn with_parent(dialog: rfd::FileDialog) -> rfd::FileDialog {
+    #[cfg(windows)]
+    if let Some(hwnd) = std::num::NonZeroIsize::new(MAIN_WINDOW.load(Ordering::Relaxed)) {
+        return dialog.set_parent(&MainWindow(hwnd));
+    }
+    dialog
+}
+
+/// Un sélecteur a-t-il échoué à s'ouvrir depuis le dernier appel ?
+pub fn take_failure() -> bool {
+    FAILURE.swap(false, Ordering::Relaxed)
+}
 
 /// Le sélecteur ouvert, s'il y en a un.
 fn current_id() -> egui::Id {
@@ -54,12 +123,17 @@ pub fn open(ctx: &egui::Context, id: egui::Id, kind: Kind, dialog: rfd::FileDial
         d.insert_temp(current_id(), slot.clone());
     });
     let ctx = ctx.clone();
+    let dialog = with_parent(dialog);
     std::thread::spawn(move || {
+        let started = Instant::now();
         let path = match kind {
             Kind::File => dialog.pick_file(),
             Kind::Folder => dialog.pick_folder(),
             Kind::Save => dialog.save_file(),
         };
+        if path.is_none() && started.elapsed() < FAILED {
+            FAILURE.store(true, Ordering::Relaxed);
+        }
         if let Ok(mut result) = slot.0.lock() {
             *result = Some((path, Instant::now()));
         }

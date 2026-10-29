@@ -32,6 +32,15 @@ pub struct Editor {
     error: Option<String>,
     /// Tiers déjà utilisés dans le compte, pour l'auto-complétion.
     known_payees: Vec<String>,
+    /// Proposition de tiers en surbrillance (↑/↓), indice dans la liste.
+    payee_pick: Option<usize>,
+    /// Liste des propositions refermée (Échap ou choix fait) jusqu'à la
+    /// prochaine frappe dans le tiers.
+    payee_closed: bool,
+    /// Emplacement de la liste à l'image précédente, pour y suivre un clic.
+    payee_list: Option<egui::Rect>,
+    /// Proposition retenue : focus et curseur en fin de tiers.
+    payee_refocus: bool,
     focus_requested: bool,
     /// Le contenu dépasse la hauteur du panneau (barre de défilement).
     overflow: bool,
@@ -46,6 +55,14 @@ pub struct Editor {
     auto_category: Option<u32>,
     /// Message de la baguette magique (rien à proposer).
     category_hint: Option<String>,
+}
+
+/// Proposition de l'auto-complétion du tiers.
+enum PayeeChoice {
+    /// Tiers mémorisé : remplit aussi mode, catégorie, détail et montant.
+    Memorized(bp_core::model::Payee),
+    /// Tiers déjà utilisé dans le compte.
+    Used(String),
 }
 
 /// Bouton « baguette magique » à côté de la catégorie.
@@ -73,6 +90,10 @@ impl Editor {
             extra: Vec::new(),
             error: None,
             known_payees: known_payees(document, account),
+            payee_pick: None,
+            payee_closed: false,
+            payee_list: None,
+            payee_refocus: false,
             focus_requested: true,
             overflow: false,
             pending_submit: false,
@@ -99,6 +120,10 @@ impl Editor {
             extra: op.extra.clone(),
             error: None,
             known_payees: known_payees(document, account),
+            payee_pick: None,
+            payee_closed: false,
+            payee_list: None,
+            payee_refocus: false,
             focus_requested: true,
             overflow: false,
             pending_submit: false,
@@ -238,15 +263,15 @@ impl Editor {
                 );
 
                 section(ui, card_width, icon::USER, tr!("Qui et pourquoi"), |ui| {
+                    let id = egui::Id::new("editor_payee");
+                    self.payee_keys(ui, document, id);
                     let response = ui.add(
                         crate::theme::field(&mut self.payee)
+                            .id(id)
                             .hint_text(tr!("Commerçant, organisme, personne…"))
                             .desired_width(f32::INFINITY),
                     );
-                    if response.has_focus()
-                        && !self.payee.is_empty()
-                        && crate::settings::shared::autocomplete()
-                    {
+                    if self.payee_list_shown(ui, &response) {
                         self.payee_suggestions(ui, document, None);
                     }
                     ui.add_space(14.0);
@@ -465,7 +490,7 @@ impl Editor {
         let (date_w, mode_w, cat_w, sign_w, amount_w, tack_w) =
             (150.0, 175.0, 210.0, 34.0, 130.0, 112.0);
         let mut payee_rect = None;
-        let mut payee_focus = false;
+        let mut payee_list = false;
         let color = if self.credit {
             pal.positive
         } else {
@@ -497,13 +522,16 @@ impl Editor {
             };
             // Largeur totale du champ, marges comprises.
             let text_w = ((ui.available_width() - after - GAP) / 2.0).max(120.0);
+            let id = egui::Id::new("bar_payee");
+            this.payee_keys(ui, document, id);
             let payee = ui.add(
                 crate::theme::field(&mut this.payee)
+                    .id(id)
                     .hint_text(tr!("Tiers"))
                     .desired_width(text_w),
             );
             *focused |= payee.has_focus();
-            payee_focus = payee.has_focus();
+            payee_list = this.payee_list_shown(ui, &payee);
             payee_rect = Some(payee.rect);
             let details = ui.add(
                 crate::theme::field(&mut this.details)
@@ -581,7 +609,7 @@ impl Editor {
                 fields_b(ui, self, &mut focused);
             });
         }
-        if payee_focus && !self.payee.is_empty() && crate::settings::shared::autocomplete() {
+        if payee_list {
             self.payee_suggestions(ui, document, payee_rect);
         }
         if std::mem::take(&mut self.pending_submit) {
@@ -790,32 +818,116 @@ impl Editor {
         self.focus_requested = true;
     }
 
+    /// Tiers proposés pour le texte saisi : mémorisés, puis déjà utilisés.
+    fn payee_choices(&self, document: &Document) -> Vec<PayeeChoice> {
+        let needle = bp_core::filter::normalize(&self.payee);
+        let needle = needle.trim();
+        let memorized = document
+            .payees
+            .iter()
+            .filter(|p| bp_core::filter::normalize(&p.caption).contains(needle))
+            .take(5)
+            .cloned()
+            .map(PayeeChoice::Memorized);
+        let used = self
+            .known_payees
+            .iter()
+            .filter(|p| bp_core::filter::normalize(p).contains(needle) && **p != self.payee)
+            .take(6)
+            .cloned()
+            .map(PayeeChoice::Used);
+        memorized.chain(used).collect()
+    }
+
+    /// Avant le champ tiers, qui les prendrait sinon : ↑/↓ parcourent les
+    /// propositions, Entrée retient celle en surbrillance, Échap referme la
+    /// liste.
+    fn payee_keys(&mut self, ui: &egui::Ui, document: &Document, id: egui::Id) {
+        if !ui.memory(|m| m.has_focus(id))
+            || self.payee_closed
+            || self.payee.is_empty()
+            || !crate::settings::shared::autocomplete()
+        {
+            return;
+        }
+        let mut choices = self.payee_choices(document);
+        let count = choices.len();
+        if count == 0 {
+            return;
+        }
+        let pick = self.payee_pick.filter(|&i| i < count);
+        let (down, up, enter, escape) = ui.input_mut(|i| {
+            (
+                i.consume_key(egui::Modifiers::NONE, Key::ArrowDown),
+                i.consume_key(egui::Modifiers::NONE, Key::ArrowUp),
+                pick.is_some() && i.consume_key(egui::Modifiers::NONE, Key::Enter),
+                i.consume_key(egui::Modifiers::NONE, Key::Escape),
+            )
+        });
+        self.payee_pick = match (down, up, pick) {
+            (true, _, None) => Some(0),
+            (true, _, Some(i)) => Some((i + 1) % count),
+            (_, true, None) => Some(count - 1),
+            (_, true, Some(i)) => Some((i + count - 1) % count),
+            _ => pick,
+        };
+        if escape {
+            self.payee_closed = true;
+            self.payee_pick = None;
+        } else if enter && let Some(i) = pick {
+            self.pick_payee(document, choices.swap_remove(i));
+        }
+    }
+
+    /// Après le champ tiers : faut-il afficher les propositions ? Le champ
+    /// perd le focus dès le relâchement d'un clic sur la liste ; elle reste
+    /// donc affichée tant qu'un clic y est en cours, sans quoi il serait
+    /// perdu.
+    fn payee_list_shown(&mut self, ui: &egui::Ui, field: &egui::Response) -> bool {
+        if field.changed() {
+            self.payee_closed = false;
+            self.payee_pick = None;
+        }
+        if std::mem::take(&mut self.payee_refocus) {
+            field.request_focus();
+            if let Some(mut state) = egui::TextEdit::load_state(ui.ctx(), field.id) {
+                let end = egui::text::CCursor::new(self.payee.chars().count());
+                state
+                    .cursor
+                    .set_char_range(Some(egui::text::CCursorRange::one(end)));
+                state.store(ui.ctx(), field.id);
+            }
+        }
+        let clicking = self.payee_list.is_some_and(|list| {
+            ui.input(|i| {
+                i.pointer.press_origin().is_some_and(|p| list.contains(p))
+                    || (i.pointer.any_click()
+                        && i.pointer.interact_pos().is_some_and(|p| list.contains(p)))
+            })
+        });
+        let shown = (field.has_focus() || clicking)
+            && !self.payee_closed
+            && !self.payee.is_empty()
+            && crate::settings::shared::autocomplete();
+        if !shown {
+            self.payee_list = None;
+            self.payee_pick = None;
+        }
+        shown
+    }
+
     fn payee_suggestions(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
         above: Option<egui::Rect>,
     ) {
-        let needle = bp_core::filter::normalize(&self.payee);
-        let needle = needle.trim();
-        let memorized: Vec<_> = document
-            .payees
-            .iter()
-            .filter(|p| bp_core::filter::normalize(&p.caption).contains(needle))
-            .take(5)
-            .cloned()
-            .collect();
-        let used: Vec<String> = self
-            .known_payees
-            .iter()
-            .filter(|p| bp_core::filter::normalize(p).contains(needle) && **p != self.payee)
-            .take(6)
-            .cloned()
-            .collect();
-        if memorized.is_empty() && used.is_empty() {
+        let choices = self.payee_choices(document);
+        if choices.is_empty() {
+            self.payee_list = None;
             return;
         }
-        match above {
+        let rect = match above {
             // Barre du bas : liste flottante au-dessus du champ.
             Some(anchor) => {
                 egui::Area::new(ui.id().with("payee_suggestions"))
@@ -825,44 +937,60 @@ impl Editor {
                     .show(ui.ctx(), |ui| {
                         egui::Frame::popup(ui.style()).show(ui, |ui| {
                             ui.set_min_width(anchor.width());
-                            self.suggestion_list(ui, document, memorized, used);
+                            self.suggestion_list(ui, document, choices);
                         });
-                    });
+                    })
+                    .response
+                    .rect
             }
             None => {
-                egui::Frame::popup(ui.style()).show(ui, |ui| {
-                    self.suggestion_list(ui, document, memorized, used);
-                });
+                egui::Frame::popup(ui.style())
+                    .show(ui, |ui| {
+                        self.suggestion_list(ui, document, choices);
+                    })
+                    .response
+                    .rect
             }
-        }
+        };
+        self.payee_list = Some(rect);
     }
 
     fn suggestion_list(
         &mut self,
         ui: &mut egui::Ui,
         document: &Document,
-        memorized: Vec<bp_core::model::Payee>,
-        used: Vec<String>,
+        choices: Vec<PayeeChoice>,
     ) {
-        {
-            for p in memorized {
-                let text = format!("{}  {}", icon::ADDRESS_BOOK, p.caption);
-                if ui
-                    .selectable_label(false, text)
+        let mut picked = None;
+        for (i, choice) in choices.into_iter().enumerate() {
+            let selected = self.payee_pick == Some(i);
+            let response = match &choice {
+                PayeeChoice::Memorized(p) => ui
+                    .selectable_label(selected, format!("{}  {}", icon::ADDRESS_BOOK, p.caption))
                     .on_hover_text(tr!(
                         "Tiers mémorisé : remplit aussi mode, catégorie, détail et montant"
-                    ))
-                    .clicked()
-                {
-                    self.fill_from_payee(document, &p);
-                }
-            }
-            for name in used {
-                if ui.selectable_label(false, &name).clicked() {
-                    self.payee = name;
-                }
+                    )),
+                PayeeChoice::Used(name) => ui.selectable_label(selected, name),
+            };
+            if response.clicked() {
+                picked = Some(choice);
             }
         }
+        if let Some(choice) = picked {
+            self.pick_payee(document, choice);
+        }
+    }
+
+    /// Reporte la proposition choisie dans la saisie et referme la liste.
+    fn pick_payee(&mut self, document: &Document, choice: PayeeChoice) {
+        match choice {
+            PayeeChoice::Memorized(p) => self.fill_from_payee(document, &p),
+            PayeeChoice::Used(name) => self.payee = name,
+        }
+        self.payee_closed = true;
+        self.payee_pick = None;
+        self.payee_list = None;
+        self.payee_refocus = true;
     }
 
     /// Montant signé saisi (zéro s'il est vide ou illisible).

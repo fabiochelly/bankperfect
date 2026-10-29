@@ -5,7 +5,7 @@
 use std::path::PathBuf;
 
 use egui_kittest::Harness;
-use egui_kittest::kittest::Queryable;
+use egui_kittest::kittest::{NodeT, Queryable};
 
 /// Icône Phosphor du bouton calendrier.
 const CALENDAR_DOTS: &str = "\u{E7B4}";
@@ -1775,4 +1775,72 @@ fn english_captures() {
         open(h);
     });
     unsafe { std::env::remove_var("BP_SCREENSHOT_OVERRIDE") };
+}
+
+/// Auto-complétion du tiers : un clic sur une proposition (appui puis
+/// relâchement, comme une vraie souris) la reporte dans le champ ; ↓ puis
+/// Entrée aussi.
+#[test]
+#[ignore]
+fn payee_autocomplete() {
+    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    let typed = std::env::var("BP_PAYEE_PREFIX").unwrap_or_else(|_| "BO".into());
+    let open = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.get_by_label_contains("Nouvelle opération").click();
+        h.run_steps(10);
+        click_at(h, egui::pos2(1210.0, 433.0));
+        h.event(egui::Event::Text(typed.clone()));
+        h.run_steps(3);
+    };
+    let payee = |h: &Harness<'_, bankperfect::BankPerfectApp>| -> String {
+        h.query_all_by_role(egui::accesskit::Role::TextInput)
+            .filter_map(|n| n.value())
+            .find(|v| v.to_lowercase().contains(&typed.to_lowercase()))
+            .unwrap_or_default()
+    };
+    let suggestion = |h: &Harness<'_, bankperfect::BankPerfectApp>| -> (String, egui::Rect) {
+        let node = h
+            .query_all_by_role(egui::accesskit::Role::Button)
+            .find(|n| {
+                n.accesskit_node().label().is_some_and(|l| {
+                    l.trim_start_matches(|c: char| !c.is_alphanumeric())
+                        .to_lowercase()
+                        .contains(&typed.to_lowercase())
+                })
+            })
+            .expect("proposition");
+        let label = node.accesskit_node().label().unwrap();
+        let name = label
+            .trim_start_matches(|c: char| !c.is_alphanumeric())
+            .to_string();
+        (name, node.rect())
+    };
+
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1440.0, 900.0))
+        .with_pixels_per_point(2.0)
+        .build_eframe(|cc| {
+            bankperfect::theme::install(&cc.egui_ctx);
+            let mut app = bankperfect::BankPerfectApp::with_settings(None, Default::default());
+            app.open_file(file.clone());
+            app
+        });
+    h.run_steps(4);
+    open(&mut h);
+    let (name, rect) = suggestion(&h);
+    click_at(&mut h, rect.center());
+    h.run_steps(3);
+    eprintln!("souris : {name:?} -> {:?}", payee(&h));
+    assert!(payee(&h).len() > typed.len(), "le clic n'a rien reporté");
+
+    // Clavier : Ctrl+0 vide la saisie, puis ↓ et Entrée.
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Num0);
+    h.run_steps(4);
+    open(&mut h);
+    h.key_press(egui::Key::ArrowDown);
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    eprintln!("clavier : {:?}", payee(&h));
+    assert!(payee(&h).len() > typed.len(), "Entrée n'a rien reporté");
 }

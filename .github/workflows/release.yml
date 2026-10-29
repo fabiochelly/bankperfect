@@ -27,7 +27,9 @@ jobs:
         run: cargo build --release --locked -p bankperfect
       - name: Archive
         run: |
+          # Hors tag (lancement manuel), le nom de branche peut contenir « / ».
           VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION//\//-}"
           DIR="bankperfect-${VERSION}-linux-x86_64"
           mkdir -p "$DIR/icons"
           cp target/release/bankperfect LICENSE README.md "$DIR/"
@@ -86,7 +88,8 @@ jobs:
       - name: Archive
         shell: pwsh
         run: |
-          $version = "$env:GITHUB_REF_NAME".TrimStart("v")
+          # Hors tag (lancement manuel), le nom de branche peut contenir « / ».
+          $version = "$env:GITHUB_REF_NAME".TrimStart("v").Replace("/", "-")
           $dir = "bankperfect-$version-windows-x86_64"
           New-Item -ItemType Directory $dir | Out-Null
           Copy-Item target/release/bankperfect.exe, LICENSE, README.md $dir
@@ -110,7 +113,9 @@ jobs:
           cargo build --release --locked -p bankperfect --target x86_64-apple-darwin
       - name: Application universelle
         run: |
+          # Hors tag (lancement manuel), le nom de branche peut contenir « / ».
           VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION//\//-}"
           APP="BankPerfect.app"
           mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
           lipo -create -output "$APP/Contents/MacOS/bankperfect" \

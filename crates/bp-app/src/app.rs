@@ -179,6 +179,7 @@ pub struct BankPerfectApp {
     /// Une composition est en cours dans la méthode de saisie (pré-saisie
     /// non vide), voir `raw_input_hook`.
     ime_composing: bool,
+    caret: crate::caret::SmoothCaret,
     settings: crate::settings::Settings,
     /// Le thème des réglages reste à appliquer (première image).
     theme_pending: bool,
@@ -259,6 +260,7 @@ impl BankPerfectApp {
             menus: menu::MenuBar::default(),
             profiler: crate::profiler::Profiler::from_env(),
             ime_composing: false,
+            caret: crate::caret::SmoothCaret::default(),
             settings,
             theme_pending: false,
             interactive: false,
@@ -3095,6 +3097,7 @@ impl eframe::App for BankPerfectApp {
         let started = std::time::Instant::now();
         let cpu_previous = frame.info().cpu_usage;
         self.frame_ui(ui);
+        self.caret.paint(ui.ctx(), self.ime_composing);
         self.profiler.overlay(ui.ctx(), cpu_previous);
         self.profiler.end_frame(started, cpu_previous);
     }

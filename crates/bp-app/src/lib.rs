@@ -4,6 +4,7 @@ mod app;
 mod bank_sync_ui;
 mod budget_ui;
 mod calculator;
+mod caret;
 mod categorize_ui;
 mod category_icons;
 mod charts_ui;

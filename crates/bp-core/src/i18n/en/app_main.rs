@@ -112,6 +112,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Suivre le système", "Follow the system"),
     ("Thèmes sombres", "Dark themes"),
     ("Thèmes clairs", "Light themes"),
+    ("Curseur de texte animé", "Animated text cursor"),
     (
         "Fond translucide (flou du bureau)",
         "Translucent background (blur)",
@@ -266,7 +267,9 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("modifier le groupe", "group edit"),
     ("champs supplémentaires", "extra fields"),
     // datepicker.rs
-    ("jj/mm/aaaa", "dd/mm/yyyy"),
+    ("date invalide", "invalid date"),
+    ("Revenir aux jours", "Back to days"),
+    ("Choisir le mois", "Choose the month"),
     ("Choisir dans le calendrier", "Pick from the calendar"),
     ("Année suivante", "Next year"),
     ("Mois suivant", "Next month"),

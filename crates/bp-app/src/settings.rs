@@ -48,6 +48,8 @@ pub struct Settings {
     pub ignore_filter_totals: bool,
     /// Suggestions de tiers pendant la saisie.
     pub autocomplete: bool,
+    /// Curseur de texte qui glisse vers sa nouvelle position.
+    pub smooth_caret: bool,
     /// Un montant tapé sans virgule est en centimes (1250 → 12,50).
     pub amounts_in_cents: bool,
     /// Après l'ajout d'une opération, le formulaire reste ouvert et vidé.
@@ -109,6 +111,7 @@ impl Default for Settings {
             disable_reconcile: false,
             ignore_filter_totals: false,
             autocomplete: true,
+            smooth_caret: true,
             amounts_in_cents: false,
             keep_entry_open: false,
             entry_at_bottom: false,
@@ -296,6 +299,7 @@ pub mod shared {
     static STATE: Mutex<(Option<PathBuf>, super::DateFormat)> =
         Mutex::new((None, super::DateFormat::Long));
     static AUTOCOMPLETE: AtomicBool = AtomicBool::new(true);
+    static SMOOTH_CARET: AtomicBool = AtomicBool::new(true);
     static CENTS: AtomicBool = AtomicBool::new(false);
     static CATEGORIZE_IMPORT: AtomicBool = AtomicBool::new(true);
     static CATEGORIZE_ENTRY: AtomicBool = AtomicBool::new(true);
@@ -308,6 +312,7 @@ pub mod shared {
             *state = (settings.export_dir.clone(), settings.date_format);
         }
         AUTOCOMPLETE.store(settings.autocomplete, Ordering::Relaxed);
+        SMOOTH_CARET.store(settings.smooth_caret, Ordering::Relaxed);
         CENTS.store(settings.amounts_in_cents, Ordering::Relaxed);
         CATEGORIZE_IMPORT.store(settings.categorize_on_import, Ordering::Relaxed);
         CATEGORIZE_ENTRY.store(settings.categorize_in_entry, Ordering::Relaxed);
@@ -321,6 +326,11 @@ pub mod shared {
     /// Remplir la catégorie pendant la saisie quand la suggestion est sûre.
     pub fn categorize_in_entry() -> bool {
         CATEGORIZE_ENTRY.load(Ordering::Relaxed)
+    }
+
+    /// Curseur de texte animé (voir `caret`).
+    pub fn smooth_caret() -> bool {
+        SMOOTH_CARET.load(Ordering::Relaxed)
     }
 
     /// Suggestions de tiers pendant la saisie.

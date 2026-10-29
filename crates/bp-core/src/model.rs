@@ -35,13 +35,35 @@ impl Date {
     }
 
     /// Analyse une date saisie : `jj/mm/aaaa`, `jj/mm/aa`, `jj/mm` (année de
-    /// `today`) ou `jj` (mois de `today`). Séparateurs `/`, `.`, `-` ou espace.
+    /// `today`) ou `jj` (mois et année de `today`). Tout caractère autre
+    /// qu'un chiffre sépare (`15/3`, `15.3`, `15 3`, `15,3`…) ; sans
+    /// séparateur, 4, 6 ou 8 chiffres se lisent `jjmm`, `jjmmaa`, `jjmmaaaa`.
     pub fn parse_fr(text: &str, today: Date) -> Option<Self> {
-        let parts: Vec<u32> = text
-            .split(['/', '.', '-', ' '])
+        let mut parts: Vec<u32> = text
+            .split(|c: char| !c.is_ascii_digit())
             .filter(|s| !s.is_empty())
             .map(|s| s.parse().ok())
             .collect::<Option<_>>()?;
+        if let [compact] = parts[..] {
+            let digits = text.trim();
+            if digits.len() >= 3 && digits.chars().all(|c| c.is_ascii_digit()) {
+                parts = match digits.len() {
+                    4 => vec![compact / 100, compact % 100],
+                    6 => vec![compact / 10_000, compact / 100 % 100, compact % 100],
+                    8 => vec![
+                        compact / 1_000_000,
+                        compact / 10_000 % 100,
+                        compact % 10_000,
+                    ],
+                    _ => return None,
+                };
+                if digits.len() == 8 {
+                    // `jjmmaaaa` : l'année garde ses quatre chiffres.
+                    let [d, m, y] = parts[..] else { unreachable!() };
+                    return Self::from_ymd(y as i32, m, d);
+                }
+            }
+        }
         let now = today.to_naive();
         let (day, month, year) = match parts[..] {
             [d] => (d, now.month(), now.year()),
@@ -662,6 +684,22 @@ mod tests {
         assert_eq!(Date::parse_fr("1/1/86", today), Date::from_ymd(1986, 1, 1));
         assert_eq!(Date::parse_fr("31/02/2020", today), None);
         assert_eq!(Date::parse_fr("abc", today), None);
+        // Séparateurs quelconques, saisie compacte.
+        assert_eq!(Date::parse_fr("5,3", today), Date::from_ymd(2026, 3, 5));
+        assert_eq!(Date::parse_fr(" 5 : 3 ", today), Date::from_ymd(2026, 3, 5));
+        assert_eq!(
+            Date::parse_fr("15/3 2025", today),
+            Date::from_ymd(2025, 3, 15)
+        );
+        assert_eq!(Date::parse_fr("1503", today), Date::from_ymd(2026, 3, 15));
+        assert_eq!(Date::parse_fr("150325", today), Date::from_ymd(2025, 3, 15));
+        assert_eq!(
+            Date::parse_fr("15032024", today),
+            Date::from_ymd(2024, 3, 15)
+        );
+        assert_eq!(Date::parse_fr("153", today), None);
+        assert_eq!(Date::parse_fr("3113", today), None);
+        assert_eq!(Date::parse_fr("", today), None);
     }
 
     #[test]

@@ -454,6 +454,104 @@ fn shot_protected(file: &std::path::Path, name: &str, reveal: bool) {
     );
 }
 
+/// Curseur animé : position finale, puis en plein glissement après Début
+/// (pas de 30 ms au lieu de 250).
+#[test]
+#[ignore]
+fn caret_screenshots() {
+    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    let mut h = Harness::builder()
+        .with_size(egui::vec2(1000.0, 400.0))
+        .with_pixels_per_point(2.0)
+        .with_theme(egui::Theme::Dark)
+        .with_step_dt(0.03)
+        .wgpu()
+        .build_eframe(|cc| {
+            bankperfect::theme::install(&cc.egui_ctx);
+            let mut app =
+                bankperfect::BankPerfectApp::with_settings(None, bankperfect::Settings::default());
+            app.open_file(file);
+            app
+        });
+    h.run_steps(10);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.run_steps(4);
+    h.event(egui::Event::Text("pointage intelligent".into()));
+    h.run_steps(10);
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/screenshots");
+    std::fs::create_dir_all(&dir).unwrap();
+    h.render()
+        .unwrap()
+        .save(dir.join("19a-curseur-fin.png"))
+        .unwrap();
+    h.key_press(egui::Key::Home);
+    h.run_steps(1);
+    h.render()
+        .unwrap()
+        .save(dir.join("19b-curseur-glisse.png"))
+        .unwrap();
+    h.run_steps(6);
+    h.render()
+        .unwrap()
+        .save(dir.join("19c-curseur-debut.png"))
+        .unwrap();
+}
+
+/// Champ de date : aperçu de la date comprise, date invalide, calendrier
+/// (jours et mois), saisie complétée en quittant le champ.
+#[test]
+#[ignore]
+fn date_field_screenshots() {
+    let open = |h: &mut Harness<'_, bankperfect::BankPerfectApp>, typed: &str| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::T,
+        );
+        h.run_steps(4);
+        h.query_all_by_role(egui::accesskit::Role::TextInput)
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text(typed.into()));
+        h.run_steps(2);
+    };
+    render("20a-date-champ", egui::Theme::Dark, |h| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::T,
+        );
+    });
+    render("20b-date-saisie", egui::Theme::Dark, |h| open(h, "15"));
+    render("20c-date-invalide", egui::Theme::Dark, |h| open(h, "45"));
+    render("20d-date-complete", egui::Theme::Dark, |h| {
+        open(h, "3,2");
+        h.key_press(egui::Key::Tab);
+    });
+    render("20e-calendrier", egui::Theme::Dark, |h| {
+        open(h, "15");
+        h.get_by_label("Choisir dans le calendrier").click();
+    });
+    render("20f-calendrier-clair", egui::Theme::Light, |h| {
+        open(h, "15");
+        h.get_by_label("Choisir dans le calendrier").click();
+    });
+    render("20g-calendrier-mois", egui::Theme::Dark, |h| {
+        open(h, "15");
+        h.get_by_label("Choisir dans le calendrier").click();
+        h.run_steps(2);
+        use chrono::Datelike;
+        let today = bp_core::model::Date::today().to_naive();
+        let title = format!(
+            "{} {}",
+            bp_core::i18n::month_title(today.month0() as usize),
+            today.year()
+        );
+        h.get_by_label(&title).click();
+    });
+}
+
 #[test]
 #[ignore]
 fn theme_screenshots() {

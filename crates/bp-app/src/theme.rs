@@ -889,7 +889,13 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     v.error_fg_color = p.negative;
     v.selection.bg_fill = p.selection;
     v.selection.stroke = Stroke::new(1.0, p.accent);
-    v.text_cursor.stroke = Stroke::new(2.0, p.accent);
+    // Curseur animé : egui ne dessine plus le sien, `caret` s'en charge.
+    let caret = if crate::settings::shared::smooth_caret() {
+        Color32::TRANSPARENT
+    } else {
+        p.accent
+    };
+    v.text_cursor.stroke = Stroke::new(2.0, caret);
     v.striped = true;
 
     let radius = CornerRadius::same(6);
@@ -1008,7 +1014,7 @@ pub fn password_field(
         .id(id)
         .margin(egui::Margin {
             left: 10,
-            right: 38,
+            right: FIELD_ICON_MARGIN,
             top: 8,
             bottom: 8,
         })
@@ -1031,40 +1037,56 @@ pub fn password_field(
             bp_core::tr!("Afficher le mot de passe"),
         )
     };
-    // L'œil capte aussi le glisser : sinon le champ dessous, qui le capte,
+    if field_icon_button(ui, &response, id.with("eye"), glyph, *visible, tip).clicked() {
+        *visible = !*visible;
+        response.request_focus();
+    }
+    response
+}
+
+/// Marge droite à laisser dans un champ qui porte un [`field_icon_button`].
+pub const FIELD_ICON_MARGIN: i8 = 38;
+
+/// Icône cliquable dessinée à droite dans un champ de texte (œil du mot de
+/// passe, calendrier) : fond au survol, couleur d'accent quand `active`.
+pub fn field_icon_button(
+    ui: &mut egui::Ui,
+    field: &egui::Response,
+    id: egui::Id,
+    glyph: &str,
+    active: bool,
+    tip: &str,
+) -> egui::Response {
+    // L'icône capte aussi le glisser : sinon le champ dessous, qui le capte,
     // resterait survolé et garderait son curseur texte.
-    let eye_rect = egui::Rect::from_center_size(
-        egui::pos2(response.rect.right() - 19.0, response.rect.center().y),
+    let rect = egui::Rect::from_center_size(
+        egui::pos2(field.rect.right() - 19.0, field.rect.center().y),
         egui::vec2(28.0, 28.0),
     );
-    let eye = ui
-        .interact(eye_rect, id.with("eye"), egui::Sense::click_and_drag())
+    let button = ui
+        .interact(rect, id, egui::Sense::click_and_drag())
         .on_hover_cursor(egui::CursorIcon::PointingHand)
         .on_hover_text(tip);
-    eye.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
+    button.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, tip));
     let pal = palette(ui);
-    let hovered = eye.hovered() || eye.is_pointer_button_down_on();
+    let hovered = button.hovered() || button.is_pointer_button_down_on();
     if hovered {
         ui.painter()
-            .rect_filled(eye_rect, CornerRadius::same(6), pal.bg_highlight);
+            .rect_filled(rect, CornerRadius::same(6), pal.bg_highlight);
     }
-    let color = match (*visible, hovered) {
+    let color = match (active, hovered) {
         (true, _) => pal.accent,
         (false, true) => pal.fg,
         (false, false) => pal.muted,
     };
     ui.painter().text(
-        eye_rect.center(),
+        rect.center(),
         egui::Align2::CENTER_CENTER,
         glyph,
         FontId::proportional(20.0),
         color,
     );
-    if eye.clicked() {
-        *visible = !*visible;
-        response.request_focus();
-    }
-    response
+    button
 }
 
 /// Bouton principal (fond couleur d'accent).

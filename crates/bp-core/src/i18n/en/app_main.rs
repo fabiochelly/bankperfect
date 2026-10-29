@@ -25,6 +25,15 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "The file selection window could not open.",
     ),
     (
+        "BankPerfect s'est arrêté à la suite d'une erreur.",
+        "BankPerfect stopped because of an error.",
+    ),
+    (
+        "BankPerfect n'a pas pu démarrer : {}",
+        "BankPerfect could not start: {}",
+    ),
+    ("Détails : {}", "Details: {}"),
+    (
         "Mot de passe ou clé de secours incorrect",
         "Incorrect password or recovery phrase",
     ),

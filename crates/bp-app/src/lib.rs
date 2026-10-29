@@ -10,6 +10,7 @@ mod category_icons;
 mod charts_ui;
 mod command_palette;
 mod commands;
+pub mod crash;
 mod currency_ui;
 mod dashboard;
 mod datepicker;

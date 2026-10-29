@@ -3,6 +3,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() -> eframe::Result {
+    bankperfect::crash::install();
     let initial_file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     let translucent = bankperfect::translucent_window_setting();
     let options = eframe::NativeOptions {
@@ -35,13 +36,24 @@ fn main() -> eframe::Result {
             Ok(Box::new(bankperfect::BankPerfectApp::new(initial_file)))
         }),
     );
-    if matches!(result, Err(eframe::Error::Wgpu(_))) && vulkan_only() {
-        // Pas de Vulkan utilisable : on relance avec OpenGL.
+    if matches!(result, Err(eframe::Error::Wgpu(_))) && gl_fallback() {
+        // Pas de Vulkan (ou de DirectX 12) utilisable : on relance avec OpenGL.
         if let Some(code) = relaunch_with_gl() {
             std::process::exit(code);
         }
     }
+    if let Err(error) = &result {
+        bankperfect::crash::startup_failed(error);
+    }
     result
+}
+
+/// Relancer avec OpenGL si la carte graphique n'a pas pu servir : sous
+/// Linux (Vulkan seul par défaut) et sous Windows (machines virtuelles,
+/// bureau à distance, vieux pilotes). `WGPU_BACKEND` garde la main.
+fn gl_fallback() -> bool {
+    cfg!(any(target_os = "linux", target_os = "windows"))
+        && std::env::var_os("WGPU_BACKEND").is_none()
 }
 
 /// Sous Linux, Vulkan seul par défaut : préparer aussi OpenGL (EGL) coûte

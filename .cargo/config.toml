@@ -1,0 +1,5 @@
+# Exécutable Windows autonome : le runtime Visual C++ (vcruntime140,
+# msvcp140 pour Luau) est lié dans l'exécutable au lieu d'exiger le
+# « Visual C++ Redistributable », absent de certains PC.
+[target.'cfg(all(windows, target_env = "msvc"))']
+rustflags = ["-C", "target-feature=+crt-static"]

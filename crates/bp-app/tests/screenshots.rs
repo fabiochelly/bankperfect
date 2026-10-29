@@ -1844,3 +1844,40 @@ fn payee_autocomplete() {
     eprintln!("clavier : {:?}", payee(&h));
     assert!(payee(&h).len() > typed.len(), "Entrée n'a rien reporté");
 }
+
+/// Pointage simple (option) : Espace pointe la ligne (une coche), un second
+/// Espace la remet à « non pointée ».
+#[test]
+#[ignore]
+fn simple_tack_screenshots() {
+    let settings = || {
+        let mut settings = bankperfect::Settings::default();
+        settings.disable_reconcile = true;
+        settings
+    };
+    let size = egui::vec2(1440.0, 900.0);
+    for (name, presses) in [
+        ("80a-pointage-simple", 1),
+        ("80b-pointage-simple-retour", 2),
+    ] {
+        render_with(name, egui::Theme::Dark, size, None, settings(), |h| {
+            h.key_press(egui::Key::ArrowDown);
+            h.run_steps(2);
+            for _ in 0..presses {
+                h.key_press(egui::Key::Space);
+                h.run_steps(2);
+            }
+        });
+    }
+    render_with(
+        "80c-pointage-simple-saisie",
+        egui::Theme::Dark,
+        size,
+        None,
+        settings(),
+        |h| {
+            h.get_by_label_contains("Nouvelle opération").click();
+            h.run_steps(10);
+        },
+    );
+}

@@ -427,6 +427,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     let (glyph, color) = match op.tack {
                         Tack::None => ("", Color32::TRANSPARENT),
                         Tack::Pointed => (icon::CHECK, pal.pointed),
+                        // Pointage simple : une seule coche, rapprochée ou non.
+                        Tack::Reconciled if doc.disable_reconcile => (icon::CHECK, pal.pointed),
                         Tack::Reconciled => (icon::CHECKS, pal.reconciled),
                     };
                     ui.centered_and_justified(|ui| {

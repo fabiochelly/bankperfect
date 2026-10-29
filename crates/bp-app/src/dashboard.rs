@@ -162,7 +162,9 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
         f.window
             .and_then(|(start, end)| pointed_trend(&f, start, end, doc.chart_window, &pal)),
     );
-    lines.push(reconciled_line(&f, &pal));
+    if !doc.disable_reconcile {
+        lines.push(reconciled_line(&f, &pal));
+    }
     paint_lines(
         ui,
         pos2(inner.left(), baseline + 10.0),
@@ -422,13 +424,22 @@ fn pointed_ring(ui: &Ui, rect: Rect, doc: &OpenDoc, pal: &Palette) {
         FontId::proportional(8.0),
         pal.muted,
     );
-    ui.interact(rect, ui.id().with("pointed_ring"), Sense::hover())
-        .on_hover_text(tr!(
+    let tip = if doc.disable_reconcile {
+        tr!(
+            "{} opérations pointées sur {}",
+            crate::format::count(done),
+            crate::format::count(total),
+        )
+    } else {
+        tr!(
             "{} opérations pointées sur {} (dont {} rapprochées)",
             crate::format::count(done),
             crate::format::count(total),
             crate::format::count(counts[2]),
-        ));
+        )
+    };
+    ui.interact(rect, ui.id().with("pointed_ring"), Sense::hover())
+        .on_hover_text(tip);
 }
 
 /// « 33 non pointées · 1,3 k€ à venir » : le nombre en grand.
@@ -803,7 +814,9 @@ fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
         f.window
             .and_then(|(start, end)| pointed_trend(&f, start, end, doc.chart_window, &pal)),
     );
-    lines.push(reconciled_line(&f, &pal));
+    if !doc.disable_reconcile {
+        lines.push(reconciled_line(&f, &pal));
+    }
     let used = card_text(
         ui,
         r,

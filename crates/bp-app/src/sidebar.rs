@@ -237,7 +237,10 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
             Align2::LEFT_BOTTOM,
         );
     }
-    if let Some(date) = doc.totals().last_reconciled {
+    // Pointage simple : pas de rapprochement à dater.
+    if let Some(date) = doc.totals().last_reconciled
+        && !doc.disable_reconcile
+    {
         let d = date.to_string();
         text(
             &tr!("rapproché {}", &d[..5.min(d.len())]),

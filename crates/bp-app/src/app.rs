@@ -1185,16 +1185,6 @@ impl BankPerfectApp {
                 self.settings.lock_reconciled = !self.settings.lock_reconciled;
                 self.settings.save();
                 doc.locked = self.settings.lock_reconciled;
-                doc.max_undo = self.settings.max_undo;
-                doc.disable_reconcile = self.settings.disable_reconcile;
-                doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
-                if self.settings.remember_sort {
-                    let current = (sort_name(doc.sort).to_string(), doc.ascending);
-                    if self.settings.last_sort.as_ref() != Some(&current) {
-                        self.settings.last_sort = Some(current);
-                        self.settings.save();
-                    }
-                }
             }
             Command::ToggleMarkDates => doc.set_show_mark_dates(!doc.show_mark_dates),
             Command::ToggleBalancePanel => {
@@ -3306,8 +3296,23 @@ impl BankPerfectApp {
         // Zone à droite de la barre latérale : le tiroir de saisie s'y superpose.
         let content_rect = ui.available_rect_before_wrap();
 
-        // Réglages d'affichage et de verrou repris à chaque image.
+        // Réglages d'affichage, de verrou et de calcul repris à chaque image.
         doc.locked = self.settings.lock_reconciled;
+        doc.max_undo = self.settings.max_undo;
+        doc.disable_reconcile = self.settings.disable_reconcile;
+        doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
+        if self.settings.remember_sort
+            && self
+                .settings
+                .last_sort
+                .as_ref()
+                .is_none_or(|(column, ascending)| {
+                    column != sort_name(doc.sort) || *ascending != doc.ascending
+                })
+        {
+            self.settings.last_sort = Some((sort_name(doc.sort).to_string(), doc.ascending));
+            self.settings.save();
+        }
         doc.show_balance_panel = self.settings.show_balance_panel;
         doc.show_forecast = self.settings.show_forecast;
         doc.balance_cards = self.settings.balance_cards;
@@ -3633,6 +3638,8 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
             let tack = match op.tack {
                 Tack::None => None,
                 Tack::Pointed => Some(tr!("pointée")),
+                // Pointage simple : une ligne pointée est enregistrée « rapprochée ».
+                Tack::Reconciled if doc.disable_reconcile => Some(tr!("pointée")),
                 Tack::Reconciled => Some(tr!("rapprochée")),
             };
             ui.label(match tack {

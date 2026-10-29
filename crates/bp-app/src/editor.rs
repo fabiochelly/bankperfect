@@ -65,6 +65,16 @@ enum PayeeChoice {
     Used(String),
 }
 
+/// Pointage simple : une ligne pointée est enregistrée « rapprochée »
+/// (comme dans l'ancienne version) ; une ligne déjà « pointée » le reste.
+fn simple_tack(tack: Tack) -> Tack {
+    if tack == Tack::Pointed {
+        Tack::Pointed
+    } else {
+        Tack::Reconciled
+    }
+}
+
 /// Bouton « baguette magique » à côté de la catégorie.
 const WAND_WIDTH: f32 = 36.0;
 
@@ -298,22 +308,31 @@ impl Editor {
                     });
                     self.suggestion_hints(ui, doc);
                     ui.add_space(14.0);
-                    crate::ui_kit::segmented(
-                        ui,
-                        &mut self.tack,
-                        &[
-                            (Tack::None, icon::CIRCLE_DASHED, tr!("À pointer"), pal.fg),
-                            (Tack::Pointed, icon::CHECK, tr!("Pointée"), pal.pointed),
-                            (
-                                Tack::Reconciled,
-                                icon::CHECKS,
-                                tr!("Rapprochée"),
-                                pal.reconciled,
-                            ),
-                        ],
-                        32.0,
-                        None,
-                    );
+                    let simple = [
+                        (Tack::None, icon::CIRCLE_DASHED, tr!("À pointer"), pal.fg),
+                        (
+                            simple_tack(self.tack),
+                            icon::CHECK,
+                            tr!("Pointée"),
+                            pal.pointed,
+                        ),
+                    ];
+                    let full = [
+                        (Tack::None, icon::CIRCLE_DASHED, tr!("À pointer"), pal.fg),
+                        (Tack::Pointed, icon::CHECK, tr!("Pointée"), pal.pointed),
+                        (
+                            Tack::Reconciled,
+                            icon::CHECKS,
+                            tr!("Rapprochée"),
+                            pal.reconciled,
+                        ),
+                    ];
+                    let options: &[_] = if doc.disable_reconcile {
+                        &simple
+                    } else {
+                        &full
+                    };
+                    crate::ui_kit::segmented(ui, &mut self.tack, options, 32.0, None);
                 });
 
                 let visible_extra: Vec<_> = self
@@ -583,17 +602,21 @@ impl Editor {
                 this.error = None;
                 this.pending_submit = true;
             }
-            crate::ui_kit::segmented(
-                ui,
-                &mut this.tack,
-                &[
-                    (Tack::None, icon::CIRCLE_DASHED, "", pal.fg),
-                    (Tack::Pointed, icon::CHECK, "", pal.pointed),
-                    (Tack::Reconciled, icon::CHECKS, "", pal.reconciled),
-                ],
-                32.0,
-                Some(tack_w),
-            );
+            let simple = [
+                (Tack::None, icon::CIRCLE_DASHED, "", pal.fg),
+                (simple_tack(this.tack), icon::CHECK, "", pal.pointed),
+            ];
+            let full = [
+                (Tack::None, icon::CIRCLE_DASHED, "", pal.fg),
+                (Tack::Pointed, icon::CHECK, "", pal.pointed),
+                (Tack::Reconciled, icon::CHECKS, "", pal.reconciled),
+            ];
+            let options: &[_] = if doc.disable_reconcile {
+                &simple
+            } else {
+                &full
+            };
+            crate::ui_kit::segmented(ui, &mut this.tack, options, 32.0, Some(tack_w));
         };
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = GAP;

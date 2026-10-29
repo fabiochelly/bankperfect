@@ -199,6 +199,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "{} opérations pointées sur {} (dont {} rapprochées)",
         "{} of {} transactions cleared ({} reconciled)",
     ),
+    (
+        "{} opérations pointées sur {}",
+        "{} of {} transactions cleared",
+    ),
     ("rien à pointer", "nothing to clear"),
     ("{} non pointée", "{} uncleared"),
     ("{} non pointées", "{} uncleared"),

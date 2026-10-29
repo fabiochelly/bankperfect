@@ -1714,6 +1714,17 @@ mod tests {
     }
 
     #[test]
+    fn simple_tack_cycle_has_two_states() {
+        let mut d = doc();
+        d.disable_reconcile = true;
+        d.click_row(1, false, false);
+        d.cycle_tack();
+        assert_eq!(d.current_account().operations[1].tack, Tack::Reconciled);
+        d.cycle_tack();
+        assert_eq!(d.current_account().operations[1].tack, Tack::None);
+    }
+
+    #[test]
     fn replace_then_undo_and_redo() {
         let mut d = doc();
         assert_eq!(d.replace_in_visible("Carrefour", "Monoprix"), 2);

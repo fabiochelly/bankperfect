@@ -110,6 +110,13 @@ jobs:
           $makeappx = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" |
             Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
           if (-not $makeappx) { throw "makeappx.exe introuvable" }
+          # Index des ressources : sans lui, « Assets\StoreLogo.png » ne
+          # désigne pas ses variantes .scale-200, .targetsize-48…
+          $makepri = Join-Path $makeappx.DirectoryName "makepri.exe"
+          & $makepri createconfig /cf priconfig.xml /dq fr-FR /pv 10.0.0 /o
+          if ($LASTEXITCODE -ne 0) { throw "makepri createconfig : échec ($LASTEXITCODE)" }
+          & $makepri new /pr $dir /cf priconfig.xml /mn "$dir/AppxManifest.xml" /of "$dir/resources.pri" /o
+          if ($LASTEXITCODE -ne 0) { throw "makepri new : échec ($LASTEXITCODE)" }
           & $makeappx.FullName pack /d $dir /p "bankperfect-$version-x64.msix" /o
           if ($LASTEXITCODE -ne 0) { throw "makeappx : échec ($LASTEXITCODE)" }
       - uses: actions/upload-artifact@v4

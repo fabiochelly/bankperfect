@@ -33,7 +33,7 @@ fn main() -> eframe::Result {
         },
         ..Default::default()
     };
-    bankperfect::crash::step("fenêtre et carte graphique");
+    bankperfect::crash::step(bankperfect::crash::GRAPHICS);
     let result = eframe::run_native(
         "BankPerfect",
         options,

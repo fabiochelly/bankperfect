@@ -26,6 +26,9 @@ const BACKEND_FILE: &str = "moteur-graphique.txt";
 /// avant la première image.
 const STALLED: Duration = Duration::from_secs(30);
 
+/// Étape de la préparation de la fenêtre et de la carte graphique.
+pub const GRAPHICS: &str = "fenêtre et carte graphique";
+
 /// Étape du démarrage en cours, citée si le démarrage se bloque.
 static STEP: Mutex<&str> = Mutex::new("réglages");
 /// Carte graphique et API retenues, citées dans chaque relevé.
@@ -50,6 +53,15 @@ pub fn install() {
         let path = write_log(&text);
         // Seule une panique du fil principal ferme l'application.
         if thread.name() == Some("main") {
+            // Pendant la préparation de la carte graphique (shader refusé
+            // par un pilote, par exemple) : relance avec OpenGL, retenu.
+            let graphics = STEP.lock().is_ok_and(|step| *step == GRAPHICS);
+            if graphics && !READY.load(Ordering::Relaxed) && !on_gl() {
+                write_log("relance avec OpenGL");
+                fall_back_to_gl();
+                std::process::exit(1);
+            }
+            startup_done();
             show(
                 tr!("BankPerfect s'est arrêté à la suite d'une erreur."),
                 path,

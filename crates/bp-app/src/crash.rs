@@ -16,6 +16,11 @@ use std::time::Duration;
 
 const LOG_FILE: &str = "crash.log";
 
+/// Moteur graphique retenu après un échec au démarrage (« gl ») : les
+/// lancements suivants s'en servent d'emblée. Le supprimer revient au
+/// moteur par défaut.
+const BACKEND_FILE: &str = "moteur-graphique.txt";
+
 /// Délai au-delà duquel un démarrage sans première image est tenu pour
 /// bloqué : large, l'ouverture d'un gros fichier passé en argument a lieu
 /// avant la première image.
@@ -75,6 +80,35 @@ pub fn set_gpu(info: &eframe::wgpu::AdapterInfo) {
     }
 }
 
+/// Moteur graphique retenu après un échec au démarrage, s'il y en a un.
+pub fn remembered_backend() -> Option<String> {
+    let path = crate::settings::config_file(BACKEND_FILE)?;
+    let name = std::fs::read_to_string(path).ok()?.trim().to_lowercase();
+    (!name.is_empty()).then_some(name)
+}
+
+/// Retient OpenGL pour les lancements suivants et relance l'application
+/// avec lui, sans attendre qu'elle se termine.
+pub fn fall_back_to_gl() {
+    if let Some(path) = crate::settings::config_file(BACKEND_FILE) {
+        if let Some(dir) = path.parent() {
+            let _ = std::fs::create_dir_all(dir);
+        }
+        let _ = std::fs::write(&path, "gl\n");
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        let _ = std::process::Command::new(exe)
+            .args(std::env::args_os().skip(1))
+            .env("WGPU_BACKEND", "gl")
+            .spawn();
+    }
+}
+
+/// OpenGL déjà utilisé (choisi ou retenu) : plus de moteur de secours.
+fn on_gl() -> bool {
+    std::env::var("WGPU_BACKEND").is_ok_and(|b| b.eq_ignore_ascii_case("gl"))
+}
+
 /// Démarrage terminé (première image, ou échec déjà signalé) : le fil de
 /// veille s'arrête.
 pub fn startup_done() {
@@ -108,7 +142,7 @@ fn watch_startup() {
         step
     );
     let path = write_log(&text);
-    let gl = std::env::var_os("WGPU_BACKEND").is_some();
+    let gl = on_gl();
     let question = if gl {
         tr!("Quitter BankPerfect ?")
     } else {
@@ -116,19 +150,9 @@ fn watch_startup() {
     };
     if ask(&text, question, path) {
         if !gl {
-            relaunch_with_gl();
+            fall_back_to_gl();
         }
         std::process::exit(1);
-    }
-}
-
-/// Relance l'application avec OpenGL, sans attendre qu'elle se termine.
-fn relaunch_with_gl() {
-    if let Ok(exe) = std::env::current_exe() {
-        let _ = std::process::Command::new(exe)
-            .args(std::env::args_os().skip(1))
-            .env("WGPU_BACKEND", "gl")
-            .spawn();
     }
 }
 
@@ -215,6 +239,9 @@ mod native {
 
     /// Laisse Windows poursuivre (rapport d'erreurs, fin du processus).
     const EXCEPTION_CONTINUE_SEARCH: i32 = 0;
+    /// Termine le processus sans rapport d'erreurs : une relance a pris le
+    /// relais.
+    const EXCEPTION_EXECUTE_HANDLER: i32 = 1;
 
     pub fn install() {
         // SAFETY : `filter` a la signature attendue et vit tout le programme.
@@ -233,6 +260,14 @@ mod native {
                 record.ExceptionCode as u32,
                 module(address)
             );
+            // Plantage du pilote graphique avant la première image (Vulkan
+            // d'Intel, par exemple) : relance immédiate avec OpenGL, retenu
+            // pour la suite, sans message.
+            if !super::READY.load(super::Ordering::Relaxed) && !super::on_gl() {
+                super::write_log(&format!("{text}\nrelance avec OpenGL"));
+                super::fall_back_to_gl();
+                return EXCEPTION_EXECUTE_HANDLER;
+            }
             let path = super::write_log(&text);
             super::show(
                 bp_core::tr!("BankPerfect s'est arrêté à la suite d'une erreur."),

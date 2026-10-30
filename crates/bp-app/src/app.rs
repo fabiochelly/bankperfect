@@ -568,6 +568,7 @@ impl BankPerfectApp {
                 self.show_warnings = !opened.warnings.is_empty();
                 self.settings.remember(&path);
                 let mut doc = OpenDoc::new(path, opened);
+                doc.filters.hide_old_lines = self.settings.hide_old_lines;
                 if self.settings.remember_sort
                     && let Some((column, ascending)) = &self.settings.last_sort
                     && let Some(sort) = sort_from_name(column)
@@ -3323,6 +3324,13 @@ impl BankPerfectApp {
         doc.balance_cards = self.settings.balance_cards;
         doc.show_column_filters = self.settings.show_column_filters;
         doc.show_balance_river = self.settings.balance_river;
+        // « Cacher les lignes inutiles » est retenu d'une session à l'autre,
+        // comme dans l'ancienne version, quel que soit le chemin qui l'a
+        // basculé (menu, Ctrl+H, filtres).
+        if doc.filters.hide_old_lines != self.settings.hide_old_lines {
+            self.settings.hide_old_lines = doc.filters.hide_old_lines;
+            self.settings.save();
+        }
         if let Some(notice) = doc.notice.take() {
             self.toast = Some((notice, now + 4.0));
         }

@@ -38,6 +38,9 @@ pub struct Settings {
     pub show_column_filters: bool,
     /// Courbe du solde derrière la colonne Solde de la grille.
     pub balance_river: bool,
+    /// Cacher les lignes inutiles : rapprochées et antérieures au mois
+    /// courant.
+    pub hide_old_lines: bool,
     /// Certificat de licence signé par le serveur (voir `license`).
     pub license: Option<String>,
     /// Niveaux d'annulation.
@@ -106,6 +109,7 @@ impl Default for Settings {
             balance_cards: false,
             show_column_filters: false,
             balance_river: true,
+            hide_old_lines: false,
             license: None,
             max_undo: 30,
             disable_reconcile: false,

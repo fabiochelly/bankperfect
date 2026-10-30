@@ -275,7 +275,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("Afficher les lignes inutiles", "Show unneeded rows"),
     ("Cacher les lignes inutiles", "Hide unneeded rows"),
-    ("masquer anciennes rapprochées", "hide old reconciled"),
+    (
+        "masquer anciennes rapprochées archiver archivage",
+        "hide old reconciled archive",
+    ),
     ("Fond opaque", "Opaque background"),
     (
         "Fond translucide (flou du bureau)",

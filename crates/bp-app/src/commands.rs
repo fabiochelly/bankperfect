@@ -844,7 +844,7 @@ impl Command {
                     label,
                     icon::EYE_SLASH,
                     Some("Ctrl+H"),
-                    tr_mark!("masquer anciennes rapprochées"),
+                    tr_mark!("masquer anciennes rapprochées archiver archivage"),
                 )
             }
             ToggleTranslucent => {

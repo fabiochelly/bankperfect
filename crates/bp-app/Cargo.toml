@@ -9,8 +9,8 @@ homepage.workspace = true
 description.workspace = true
 
 [dependencies]
-bp-core = { version = "9.11.3", path = "../bp-core" }
-bp-ext = { version = "9.11.3", path = "../bp-ext" }
+bp-core = { version = "9.12.0", path = "../bp-core" }
+bp-ext = { version = "9.12.0", path = "../bp-ext" }
 base64 = "0.22.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 directories = "6.0.0"

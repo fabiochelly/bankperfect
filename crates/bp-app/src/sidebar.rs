@@ -40,6 +40,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
         .copied()
         .filter(|&i| i != doc.account)
         .collect();
+    // La liste des comptes défile quand elle ne tient pas : au-delà d'une
+    // douzaine de comptes, les derniers passaient sous le total. Sa hauteur
+    // laisse la place du pied (total, protection), mesuré à l'image
+    // précédente.
     if !others.is_empty() {
         ui.label(
             RichText::new(tr!("AUTRES COMPTES"))
@@ -49,46 +53,63 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
         );
         ui.add_space(2.0);
     }
+    let footer_id = ui.id().with("sidebar_footer");
+    let footer_h = ui.data(|d| d.get_temp::<f32>(footer_id)).unwrap_or(96.0);
     let mut clicked = None;
-    for i in others {
-        let account = &doc.document.accounts[i];
-        let balance = doc.account_balance(i);
-        let (pressed, response) = account_row(ui, account, balance, false, &pal);
-        if pressed || response.secondary_clicked() {
-            clicked = Some(i);
-        }
-        response.context_menu(|ui| command = account_menu(ui, doc));
-    }
-    let disabled: Vec<usize> = order
-        .iter()
-        .copied()
-        .filter(|&i| doc.document.accounts[i].disabled)
-        .collect();
-    if !disabled.is_empty() {
-        ui.add_space(4.0);
-        egui::CollapsingHeader::new(
-            RichText::new(tr!("Comptes désactivés"))
-                .small()
-                .color(pal.muted),
-        )
-        .id_salt("Comptes désactivés")
-        .default_open(false)
-        .show(ui, |ui| {
-            for i in disabled {
-                let account = &doc.document.accounts[i];
-                let balance = doc.account_balance(i);
-                let (pressed, response) = account_row(ui, account, balance, i == doc.account, &pal);
-                if pressed || response.secondary_clicked() {
-                    clicked = Some(i);
+    ui.scope(|ui| {
+        // Barre pleine et fine : flottante, elle masquait la fin des soldes.
+        ui.spacing_mut().scroll = egui::style::ScrollStyle {
+            bar_width: 6.0,
+            ..egui::style::ScrollStyle::solid()
+        };
+        egui::ScrollArea::vertical()
+            .id_salt("sidebar_accounts")
+            .max_height((ui.available_height() - footer_h).max(80.0))
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                for i in others {
+                    let account = &doc.document.accounts[i];
+                    let balance = doc.account_balance(i);
+                    let (pressed, response) = account_row(ui, account, balance, false, &pal);
+                    if pressed || response.secondary_clicked() {
+                        clicked = Some(i);
+                    }
+                    response.context_menu(|ui| command = account_menu(ui, doc));
                 }
-                response.context_menu(|ui| command = account_menu(ui, doc));
-            }
-        });
-    }
+                let disabled: Vec<usize> = order
+                    .iter()
+                    .copied()
+                    .filter(|&i| doc.document.accounts[i].disabled)
+                    .collect();
+                if !disabled.is_empty() {
+                    ui.add_space(4.0);
+                    egui::CollapsingHeader::new(
+                        RichText::new(tr!("Comptes désactivés"))
+                            .small()
+                            .color(pal.muted),
+                    )
+                    .id_salt("Comptes désactivés")
+                    .default_open(false)
+                    .show(ui, |ui| {
+                        for i in disabled {
+                            let account = &doc.document.accounts[i];
+                            let balance = doc.account_balance(i);
+                            let (pressed, response) =
+                                account_row(ui, account, balance, i == doc.account, &pal);
+                            if pressed || response.secondary_clicked() {
+                                clicked = Some(i);
+                            }
+                            response.context_menu(|ui| command = account_menu(ui, doc));
+                        }
+                    });
+                }
+            });
+    });
     if let Some(i) = clicked {
         doc.select_account(i);
     }
 
+    let footer_top = ui.cursor().top();
     ui.add_space(8.0);
     ui.separator();
     ui.horizontal(|ui| {
@@ -111,6 +132,13 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
             .small()
             .color(pal.muted),
     );
+    // Pied : le total ci-dessus, un écart, puis le badge de protection.
+    let badge_h = ui.text_style_height(&egui::TextStyle::Small) + 2.0 * ui.spacing().item_spacing.y;
+    let footer = ui.cursor().top() - footer_top + 8.0 + badge_h;
+    if (footer - footer_h).abs() > 0.5 {
+        ui.data_mut(|d| d.insert_temp(footer_id, footer));
+        ui.ctx().request_repaint();
+    }
 
     // En bas de l'île, avec la même marge qu'à gauche (celle de l'île).
     ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
@@ -183,34 +211,35 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
         let rect = align.anchor_size(pos, galley.size());
         painter.galley(rect.min, galley, color);
     };
-    let bank = if account.bank_name.trim().is_empty() {
-        tr!("Compte")
-    } else {
-        account.bank_name.trim()
-    };
-    text(
-        bank,
-        inner.left_top(),
-        11.0,
-        crate::theme::medium(),
-        white(220),
-        inner.width() - 34.0,
-        Align2::LEFT_TOP,
-    );
-    let name = if account.name.is_empty() {
+    // Le nom du compte, en grand, une seule fois : la banque n'apparaît
+    // que si elle ajoute quelque chose (souvent, le compte porte son nom).
+    let name = if account.name.trim().is_empty() {
         tr!("(sans nom)")
     } else {
-        &account.name
+        account.name.trim()
     };
     text(
         name,
-        pos2(inner.left(), inner.bottom() - 44.0),
-        11.0,
-        crate::theme::medium(),
-        white(210),
-        inner.width(),
-        Align2::LEFT_BOTTOM,
+        pos2(inner.left(), inner.top() - 1.0),
+        16.0,
+        crate::theme::semibold(),
+        Color32::WHITE,
+        inner.width() - 34.0,
+        Align2::LEFT_TOP,
     );
+    let bank = account.bank_name.trim();
+    let (name_key, bank_key) = (name.to_lowercase(), bank.to_lowercase());
+    if !bank.is_empty() && !name_key.contains(&bank_key) && !bank_key.contains(&name_key) {
+        text(
+            bank,
+            pos2(inner.left(), inner.bottom() - 44.0),
+            11.0,
+            crate::theme::medium(),
+            white(210),
+            inner.width(),
+            Align2::LEFT_BOTTOM,
+        );
+    }
     text(
         &money(balance, &account.currency).replacen('-', "\u{2212}", 1),
         pos2(inner.left(), inner.bottom() - 17.0),

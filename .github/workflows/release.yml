@@ -85,6 +85,45 @@ jobs:
       - name: Avertissement (exécutable non signé)
         if: startsWith(github.ref, 'refs/tags/v') && vars.SIGNPATH_ORGANIZATION_ID == ''
         run: echo "::warning::SIGNPATH_ORGANIZATION_ID non défini, bankperfect.exe n'est pas signé et sera bloqué par la validation winget"
+      # Paquet MSIX à déposer sur Partner Center : le Microsoft Store le
+      # signe après certification (voir packaging/msix/AppxManifest.xml).
+      # Sans les variables MSIX_*, une identité provisoire permet de
+      # vérifier la construction ; le Store refuserait ce paquet.
+      - name: Paquet MSIX (Microsoft Store)
+        shell: pwsh
+        env:
+          MSIX_IDENTITY_NAME: ${{ vars.MSIX_IDENTITY_NAME || 'FabioChelly.BankPerfect' }}
+          MSIX_PUBLISHER: ${{ vars.MSIX_PUBLISHER || 'CN=Fabio Chelly' }}
+          MSIX_PUBLISHER_DISPLAY_NAME: ${{ vars.MSIX_PUBLISHER_DISPLAY_NAME || 'Fabio Chelly' }}
+        run: |
+          $version = (Select-String -Path Cargo.toml -Pattern '^version = "(.+)"').Matches[0].Groups[1].Value
+          $dir = "msix"
+          New-Item -ItemType Directory "$dir/Assets" -Force | Out-Null
+          Copy-Item packaging/msix/Assets/* "$dir/Assets/"
+          Copy-Item target/release/bankperfect.exe, LICENSE $dir
+          $manifest = Get-Content packaging/msix/AppxManifest.xml -Raw
+          $manifest = $manifest.Replace("@IDENTITY_NAME@", $env:MSIX_IDENTITY_NAME)
+          $manifest = $manifest.Replace("@PUBLISHER_DISPLAY_NAME@", $env:MSIX_PUBLISHER_DISPLAY_NAME)
+          $manifest = $manifest.Replace("@PUBLISHER@", $env:MSIX_PUBLISHER)
+          $manifest = $manifest.Replace("@VERSION@", "$version.0")
+          Set-Content "$dir/AppxManifest.xml" $manifest -Encoding utf8
+          $makeappx = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin\*\x64\makeappx.exe" |
+            Sort-Object { [version]$_.Directory.Parent.Name } -Descending | Select-Object -First 1
+          if (-not $makeappx) { throw "makeappx.exe introuvable" }
+          # Index des ressources : sans lui, « Assets\StoreLogo.png » ne
+          # désigne pas ses variantes .scale-200, .targetsize-48…
+          $makepri = Join-Path $makeappx.DirectoryName "makepri.exe"
+          & $makepri createconfig /cf priconfig.xml /dq fr-FR /pv 10.0.0 /o
+          if ($LASTEXITCODE -ne 0) { throw "makepri createconfig : échec ($LASTEXITCODE)" }
+          & $makepri new /pr $dir /cf priconfig.xml /mn "$dir/AppxManifest.xml" /of "$dir/resources.pri" /o
+          if ($LASTEXITCODE -ne 0) { throw "makepri new : échec ($LASTEXITCODE)" }
+          & $makeappx.FullName pack /d $dir /p "bankperfect-$version-x64.msix" /o
+          if ($LASTEXITCODE -ne 0) { throw "makeappx : échec ($LASTEXITCODE)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msix
+          path: bankperfect-*-x64.msix
+          if-no-files-found: error
       - name: Archive
         shell: pwsh
         run: |
@@ -149,7 +188,11 @@ jobs:
         with:
           merge-multiple: true
       - name: Sommes de contrôle
-        run: sha256sum bankperfect-* BankPerfect-* > SHA256SUMS.txt
+        run: |
+          # Le MSIX va sur Partner Center, pas dans la release : non signé,
+          # il ne s'installerait pas.
+          rm -f bankperfect-*.msix
+          sha256sum bankperfect-* BankPerfect-* > SHA256SUMS.txt
       - uses: softprops/action-gh-release@v2
         with:
           name: BankPerfect ${{ github.ref_name }}

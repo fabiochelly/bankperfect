@@ -51,9 +51,13 @@ BankPerfect 9 is still too new to be certified by Microsoft: its executable is n
 
 This protection applies to every application, not only BankPerfect. On an up-to-date Windows 11 (24H2 or 25H2, since April 2026), you can turn it back on in the same place; on older versions, turning it back on requires reinstalling Windows.
 
-### macOS
+### macOS: if BankPerfect does not open
 
-On macOS, installing with Homebrew removes the quarantine flag; with the archive, right-click the application and choose “Open” the first time.
+BankPerfect is not notarized by Apple: on first launch from the archive, macOS says “BankPerfect cannot be opened because the developer cannot be verified”. Installing with Homebrew avoids this message.
+
+- **macOS 12 to 14**: right-click (or Control-click) the app, choose “Open”, then “Open” in the next window. Or, after the message, go to **System Preferences** (**System Settings** on macOS 13 and 14) > **Security & Privacy** (**Privacy & Security**) and click **Open Anyway**.
+- **macOS 15 and later**: right-click no longer works. After the message, go to **System Settings** > **Privacy & Security**, click **Open Anyway** at the bottom of the page and confirm.
+- **If macOS says the app is “damaged”**: move it to the Applications folder, then run `xattr -dr com.apple.quarantine /Applications/BankPerfect.app` in Terminal.
 
 ## Building
 

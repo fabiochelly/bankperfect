@@ -3087,6 +3087,7 @@ impl eframe::App for BankPerfectApp {
         let started = std::time::Instant::now();
         let cpu_previous = frame.info().cpu_usage;
         crate::file_picker::set_main_window(frame);
+        crate::crash::startup_done();
         self.frame_ui(ui);
         self.caret.paint(ui.ctx(), self.ime_composing);
         self.profiler.overlay(ui.ctx(), cpu_previous);

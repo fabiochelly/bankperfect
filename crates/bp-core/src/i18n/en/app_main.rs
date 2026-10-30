@@ -34,6 +34,15 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("Détails : {}", "Details: {}"),
     (
+        "BankPerfect ne parvient pas à afficher sa fenêtre (étape : {}).",
+        "BankPerfect cannot display its window (step: {}).",
+    ),
+    ("Quitter BankPerfect ?", "Quit BankPerfect?"),
+    (
+        "Relancer BankPerfect avec OpenGL ?",
+        "Restart BankPerfect with OpenGL?",
+    ),
+    (
         "Mot de passe ou clé de secours incorrect",
         "Incorrect password or recovery phrase",
     ),

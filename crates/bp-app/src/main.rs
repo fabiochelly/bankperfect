@@ -26,10 +26,15 @@ fn main() -> eframe::Result {
         },
         ..Default::default()
     };
+    bankperfect::crash::step("fenêtre et carte graphique");
     let result = eframe::run_native(
         "BankPerfect",
         options,
         Box::new(move |cc| {
+            if let Some(render_state) = &cc.wgpu_render_state {
+                bankperfect::crash::set_gpu(&render_state.adapter.get_info());
+            }
+            bankperfect::crash::step("interface et fichier");
             bankperfect::theme::set_surface_transparent(translucent);
             bankperfect::theme::install(&cc.egui_ctx);
             bankperfect::theme::set_translucent(&cc.egui_ctx, translucent);
@@ -38,6 +43,7 @@ fn main() -> eframe::Result {
     );
     if matches!(result, Err(eframe::Error::Wgpu(_))) && gl_fallback() {
         // Pas de Vulkan (ou de DirectX 12) utilisable : on relance avec OpenGL.
+        bankperfect::crash::startup_done();
         if let Some(code) = relaunch_with_gl() {
             std::process::exit(code);
         }

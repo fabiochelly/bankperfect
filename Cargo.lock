@@ -454,6 +454,7 @@ dependencies = [
  "trash",
  "ttf-parser 0.25.1",
  "ureq",
+ "windows-sys 0.61.2",
  "winresource",
 ]
 

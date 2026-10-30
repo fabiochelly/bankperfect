@@ -804,4 +804,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "{} opérations sans identifiant ont reçu un nouvel identifiant",
         "{} transactions without an ID were given a new ID",
     ),
+    ("Opérations archivées", "Archived transactions"),
+    ("{} opération du {} au {}", "{} transaction from {} to {}"),
+    ("{} opérations du {} au {}", "{} transactions from {} to {}"),
+    ("Archive", "Archive"),
 ];

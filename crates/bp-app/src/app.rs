@@ -1279,6 +1279,27 @@ impl BankPerfectApp {
                     crate::smart_tack_ui::SmartTackForm::new(doc),
                 )))
             }
+            Command::Archive => {
+                self.tool = Some(Tool::Archive(Box::new(
+                    crate::archive_ui::ArchiveForm::new(doc),
+                )))
+            }
+            Command::ViewArchive => {
+                if let Some(synthesis) = crate::archive_ui::selected_synthesis(doc) {
+                    self.tool = Some(Tool::ArchiveView(Box::new(
+                        crate::archive_ui::ArchiveView::new(synthesis),
+                    )))
+                }
+            }
+            Command::RestoreArchive => {
+                if let Some(synthesis) = crate::archive_ui::selected_synthesis(doc) {
+                    let now = ctx.input(|i| i.time);
+                    match crate::archive_ui::restore(doc, synthesis) {
+                        Ok(message) => self.toast = Some((message, now + 4.0)),
+                        Err(e) => self.error = Some(e),
+                    }
+                }
+            }
             Command::ModifyGroup => {
                 self.tool = Some(Tool::ModifyGroup(crate::tools::GroupForm::new()))
             }
@@ -1991,6 +2012,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, SetMarkDate);
                 self.menu_command(ui, ReconcileAll);
                 self.menu_command(ui, SmartTack);
+                self.menu_command(ui, Archive);
                 let mut locked = self.settings.lock_reconciled;
                 if menu::toggle(
                     ui,

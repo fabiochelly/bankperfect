@@ -85,6 +85,9 @@ pub enum Command {
     Tack,
     ReconcileAll,
     SmartTack,
+    Archive,
+    ViewArchive,
+    RestoreArchive,
     ModifyGroup,
     ExtraFields,
     Notes,
@@ -159,6 +162,9 @@ impl Command {
                 SetMarkDate,
                 ReconcileAll,
                 SmartTack,
+                Archive,
+                ViewArchive,
+                RestoreArchive,
                 ToggleLock,
                 ModifyGroup,
                 ExtraFields,
@@ -777,6 +783,35 @@ impl Command {
                                 && bp_core::split::transfer_direction(&op.payee).is_none()
                         }) && d.document.accounts.iter().filter(|a| !a.disabled).count() > 1
                     });
+                i
+            }
+            Archive => info(
+                OPERATIONS,
+                tr!("Archiver des opérations…"),
+                icon::ARCHIVE,
+                None,
+                tr_mark!("archivage anciennes compacter synthèse clôture alléger historique"),
+            ),
+            ViewArchive => {
+                let mut i = info(
+                    OPERATIONS,
+                    tr!("Voir les opérations archivées…"),
+                    icon::MAGNIFYING_GLASS,
+                    None,
+                    tr_mark!("archive synthèse consulter rechercher"),
+                );
+                i.enabled = doc.is_some_and(|d| crate::archive_ui::selected_synthesis(d).is_some());
+                i
+            }
+            RestoreArchive => {
+                let mut i = info(
+                    OPERATIONS,
+                    tr!("Restaurer les opérations archivées"),
+                    icon::ARROW_COUNTER_CLOCKWISE,
+                    None,
+                    tr_mark!("archive synthèse désarchiver"),
+                );
+                i.enabled = doc.is_some_and(|d| crate::archive_ui::selected_synthesis(d).is_some());
                 i
             }
             SplitOperation => {

@@ -675,6 +675,11 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     } else {
                         entry(ui, ConvertToTransfer);
                     }
+                    if crate::archive_ui::selected_synthesis(doc).is_some() {
+                        crate::menu::separator(ui);
+                        entry(ui, ViewArchive);
+                        entry(ui, RestoreArchive);
+                    }
                     // Commandes d'extension placées ici (`menu = "grid"`).
                     let placed = crate::extensions::placed("grid");
                     if !placed.is_empty() {

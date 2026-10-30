@@ -131,6 +131,9 @@ struct UndoEntry {
     accounts: Vec<(usize, Vec<Operation>)>,
     /// Référentiels avant l'action, s'ils ont changé (extensions).
     referentials: Option<bp_core::model::Referentials>,
+    /// Données des fonctionnalités avant l'action, si elle les touche
+    /// (archivage).
+    features: Option<Vec<bp_core::model::FeatureData>>,
     /// Étiquette de l'étape : les crochets d'extension et les suites d'un
     /// même lancement s'ajoutent à l'étape qui porte la leur.
     tag: u64,
@@ -747,6 +750,28 @@ impl OpenDoc {
         }
     }
 
+    /// Comme [`Self::edit_accounts`], pour une action qui touche aussi les
+    /// référentiels et les données des fonctionnalités (archivage : la
+    /// catégorie « Archive », les opérations rangées dans le fichier).
+    pub fn edit_archive<R, E>(
+        &mut self,
+        label: &str,
+        accounts: &[usize],
+        edit: impl FnOnce(&mut bp_core::model::Document) -> Result<R, E>,
+    ) -> Result<R, E> {
+        let referentials = self.document.referentials();
+        let features = self.document.feature_data.clone();
+        let result = self.edit_accounts(label, accounts, edit);
+        if result.is_ok()
+            && let Some(last) = self.undo.last_mut()
+        {
+            last.referentials = Some(referentials);
+            last.features = Some(features);
+            self.category_styles = crate::category_icons::styles(&self.document);
+        }
+        result
+    }
+
     /// Sélectionne des lignes du compte courant et fait défiler jusqu'à la
     /// première.
     pub fn select_lines(&mut self, lines: &[usize]) {
@@ -1197,6 +1222,7 @@ impl OpenDoc {
             account: shown,
             accounts: saved,
             referentials: None,
+            features: None,
             tag: self.undo_tag,
             observe: true,
         });
@@ -1313,6 +1339,7 @@ impl OpenDoc {
                         account: self.account,
                         accounts: changes.accounts.clone(),
                         referentials: changes.referentials.clone(),
+                        features: None,
                         tag: changes.tag,
                         observe: false,
                     });
@@ -1402,6 +1429,9 @@ impl OpenDoc {
             self.category_styles = crate::category_icons::styles(&self.document);
             current
         });
+        let features = entry
+            .features
+            .map(|saved| std::mem::replace(&mut self.document.feature_data, saved));
         self.account = entry.account;
         self.selection.clear();
         self.anchor = None;
@@ -1413,6 +1443,7 @@ impl OpenDoc {
             account: entry.account,
             accounts: current,
             referentials,
+            features,
             tag: entry.tag,
             observe: false,
         }

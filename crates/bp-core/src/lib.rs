@@ -1,5 +1,6 @@
 //! Cœur de BankPerfect : formats de fichiers, modèle de données et calculs.
 
+pub mod archive;
 pub mod autofields;
 pub mod autofilters;
 pub mod backup;

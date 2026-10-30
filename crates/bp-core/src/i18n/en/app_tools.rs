@@ -642,4 +642,81 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "total coché {} au lieu de {}",
         "checked total {} instead of {}",
     ),
+    ("Archive introuvable", "Archive not found"),
+    ("Archiver", "Archive"),
+    ("Archiver des opérations", "Archive transactions"),
+    ("Archiver des opérations…", "Archive transactions…"),
+    (
+        "Aucune opération à archiver.",
+        "No transactions to archive.",
+    ),
+    (
+        "Dans toutes les archives du compte",
+        "In all archives of the account",
+    ),
+    ("Date de début invalide", "Invalid start date"),
+    (
+        "Date de début vide : depuis la première opération.",
+        "Empty start date: from the first transaction.",
+    ),
+    ("Date de fin invalide", "Invalid end date"),
+    (
+        "Les opérations sont remplacées par une écriture de synthèse par statut de pointage : les soldes ne changent pas. Elles restent dans le fichier : un clic droit sur l'écriture de synthèse permet de les consulter ou de les restaurer.",
+        "Transactions are replaced by one summary entry per reconciliation status: balances do not change. They stay in the file: right-click the summary entry to view or restore them.",
+    ),
+    (
+        "Les {} lignes sélectionnées du compte « {} »",
+        "The {} selected lines of account “{}”",
+    ),
+    ("Lignes", "Lines"),
+    ("Rapprochées seulement", "Reconciled only"),
+    (
+        "Rechercher un tiers ou un détail",
+        "Search a payee or a memo",
+    ),
+    ("Restaurer ces opérations", "Restore these transactions"),
+    (
+        "Restaurer les opérations archivées",
+        "Restore archived transactions",
+    ),
+    ("Statut", "Status"),
+    ("Toutes les opérations", "All transactions"),
+    (
+        "Vide : depuis la première opération",
+        "Empty: from the first transaction",
+    ),
+    (
+        "Voir les opérations archivées…",
+        "View archived transactions…",
+    ),
+    ("archivage", "archiving"),
+    (
+        "archivage anciennes compacter synthèse clôture alléger historique",
+        "archiving old compact summary closing lighten history",
+    ),
+    (
+        "archive synthèse consulter rechercher",
+        "archive summary view search",
+    ),
+    ("archive synthèse désarchiver", "archive summary unarchive"),
+    ("restauration d'archive", "archive restore"),
+    ("{} lignes · total {}", "{} lines · total {}"),
+    ("{} opérations archivées", "{} transactions archived"),
+    (
+        "{} opérations dans {} comptes seront remplacées par {} écritures de synthèse.",
+        "{} transactions in {} accounts will be replaced by {} summary entries.",
+    ),
+    ("{} opérations restaurées", "{} transactions restored"),
+    (
+        "{} opérations seront remplacées par {} écritures de synthèse.",
+        "{} transactions will be replaced by {} summary entries.",
+    ),
+    (
+        "1 opération sera remplacée par 1 écriture de synthèse.",
+        "1 transaction will be replaced by 1 summary entry.",
+    ),
+    (
+        "{} opérations seront remplacées par 1 écriture de synthèse.",
+        "{} transactions will be replaced by 1 summary entry.",
+    ),
 ];

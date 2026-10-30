@@ -426,7 +426,7 @@ checksum = "f2032f911046de80f0a198e0901378627c33f59ea0ac00e363d481118bd70a53"
 
 [[package]]
 name = "bankperfect"
-version = "9.11.2"
+version = "9.11.3"
 dependencies = [
  "base64 0.22.1",
  "bp-core",
@@ -589,7 +589,7 @@ dependencies = [
 
 [[package]]
 name = "bp-core"
-version = "9.11.2"
+version = "9.11.3"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -614,7 +614,7 @@ dependencies = [
 
 [[package]]
 name = "bp-ext"
-version = "9.11.2"
+version = "9.11.3"
 dependencies = [
  "bp-core",
  "chrono",

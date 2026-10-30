@@ -36,13 +36,24 @@ Binaries are published on the [Releases](https://github.com/fabiochelly/bankperf
 
 | System | Command |
 | --- | --- |
-| Windows | `winget install FabioChelly.BankPerfect` |
+| Windows | `windows-x86_64.zip` archive from the latest release, to extract (winget package awaiting validation) |
 | macOS | `brew install --cask fabiochelly/bankperfect/bankperfect` |
 | Linux | `linux-x86_64.tar.gz` archive from the latest release, then `./install.sh` (AUR package coming) |
 
 On Linux, `install.sh` installs BankPerfect for the current user (in `~/.local`) with its application menu entry, its icons and the association with `.bp` files; `./install.sh --uninstall` removes it. From the repository, after `cargo build --release`, run `packaging/linux/install.sh`.
 
-The Windows executable is signed ([code signing policy](CODE_SIGNING.md)): free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org). On macOS, installing with Homebrew removes the quarantine flag; with the archive, right-click the application and choose “Open” the first time.
+### Windows: if BankPerfect does not open
+
+BankPerfect 9 is still too new to be certified by Microsoft: its executable is not signed with a certificate Windows recognizes. On Windows 11, Smart App Control may then block it from opening, sometimes without any message, even as administrator.
+
+- If Windows shows “Windows protected your PC”, click “More info” then “Run anyway”.
+- If nothing opens, go to **Windows Security** > **App & browser control** > **Smart App Control settings** and choose **Off**.
+
+This protection applies to every application, not only BankPerfect. On an up-to-date Windows 11 (24H2 or 25H2, since April 2026), you can turn it back on in the same place; on older versions, turning it back on requires reinstalling Windows.
+
+### macOS
+
+On macOS, installing with Homebrew removes the quarantine flag; with the archive, right-click the application and choose “Open” the first time.
 
 ## Building
 

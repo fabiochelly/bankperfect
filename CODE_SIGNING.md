@@ -1,8 +1,6 @@
 # Code signing policy
 
-Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).
-
-L'exécutable Windows (`bankperfect.exe`) publié sur la page [Releases](https://github.com/fabiochelly/bankperfect/releases) est signé par SignPath Foundation. Il est construit automatiquement par GitHub Actions ([`release.yml`](.github/workflows/release.yml)) à partir des sources de ce dépôt, sans binaire tiers signé ; chaque release est approuvée manuellement avant signature.
+L'exécutable Windows (`bankperfect.exe`) publié sur la page [Releases](https://github.com/fabiochelly/bankperfect/releases) n'est pas encore signé : la demande de signature gratuite auprès de SignPath Foundation a été refusée, le projet étant jugé encore trop peu connu. Il est construit automatiquement par GitHub Actions ([`release.yml`](.github/workflows/release.yml)) à partir des sources de ce dépôt, et ses sommes de contrôle sont publiées avec chaque release (`SHA256SUMS.txt`).
 
 ## Rôles
 

@@ -151,9 +151,10 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: BankPerfect ${{ github.ref_name }}
-          # Mention exigée par SignPath, seulement quand l'exécutable est signé.
+          # Mention exigée par SignPath quand l'exécutable est signé, sinon la
+          # marche à suivre si Smart App Control bloque l'exécutable.
           body: |
-            ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && '[Politique de signature du code](https://github.com/fabiochelly/bankperfect/blob/main/CODE_SIGNING.md) : Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).' || '' }}
+            ${{ vars.SIGNPATH_ORGANIZATION_ID != '' && '[Politique de signature du code](https://github.com/fabiochelly/bankperfect/blob/main/CODE_SIGNING.md) : Free code signing provided by [SignPath.io](https://signpath.io), certificate by [SignPath Foundation](https://signpath.org).' || '**Windows : si BankPerfect ne s''ouvre pas.** BankPerfect 9 est encore trop récent pour être certifié par Microsoft : sous Windows 11, le Contrôle intelligent des applications (Smart App Control) peut bloquer son ouverture, parfois sans aucun message. [Comment le débloquer](https://github.com/fabiochelly/bankperfect#windows--si-bankperfect-ne-souvre-pas) · [How to unblock it](https://github.com/fabiochelly/bankperfect/blob/main/README.en.md#windows-if-bankperfect-does-not-open)' }}
           generate_release_notes: true
           files: |
             bankperfect-*

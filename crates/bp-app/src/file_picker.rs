@@ -146,11 +146,72 @@ pub fn open(ctx: &egui::Context, id: egui::Id, kind: Kind, dialog: rfd::FileDial
 pub fn finished(ctx: &egui::Context, id: egui::Id) -> Option<Option<PathBuf>> {
     let slot = ctx.data(|d| d.get_temp::<Slot>(id))?;
     let (path, at) = slot.0.lock().ok()?.take()?;
-    ctx.data_mut(|d| d.remove::<Slot>(id));
+    ctx.data_mut(|d| {
+        d.remove::<Slot>(id);
+        // `take()` a vidé le résultat : sans retirer aussi ce même slot
+        // global, `is_open()` le prendrait pour un sélecteur encore ouvert.
+        // Un ancien résultat ne doit pas effacer un sélecteur plus récent.
+        if d.get_temp::<Slot>(current_id())
+            .is_some_and(|current| Arc::ptr_eq(&current.0, &slot.0))
+        {
+            d.remove::<Slot>(current_id());
+        }
+    });
     (at.elapsed() < STALE).then_some(path)
 }
 
 /// Chemin choisi dans le sélecteur `id`, une seule fois, à sa fermeture.
 pub fn chosen(ctx: &egui::Context, id: egui::Id) -> Option<PathBuf> {
     finished(ctx, id).flatten()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn consuming_a_result_allows_another_picker() {
+        for path in [Some(PathBuf::from("test.pem")), None] {
+            let ctx = egui::Context::default();
+            let id = egui::Id::new("test_picker");
+            let slot = Slot::default();
+            ctx.data_mut(|d| {
+                d.insert_temp(id, slot.clone());
+                d.insert_temp(current_id(), slot.clone());
+            });
+            assert!(is_open(&ctx));
+            *slot.0.lock().unwrap() = Some((path.clone(), Instant::now()));
+            assert_eq!(finished(&ctx, id), Some(path));
+            assert!(!is_open(&ctx));
+            assert_eq!(finished(&ctx, id), None);
+        }
+    }
+
+    #[test]
+    fn consuming_a_stale_result_releases_the_picker() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("test_picker");
+        let slot = Slot::default();
+        *slot.0.lock().unwrap() = Some((None, Instant::now() - STALE));
+        ctx.data_mut(|d| {
+            d.insert_temp(id, slot.clone());
+            d.insert_temp(current_id(), slot);
+        });
+        assert_eq!(finished(&ctx, id), None);
+        assert!(!is_open(&ctx));
+    }
+
+    #[test]
+    fn consuming_an_old_result_preserves_a_new_picker() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("old_picker");
+        let old = Slot::default();
+        *old.0.lock().unwrap() = Some((None, Instant::now()));
+        ctx.data_mut(|d| {
+            d.insert_temp(id, old);
+            d.insert_temp(current_id(), Slot::default());
+        });
+        assert_eq!(finished(&ctx, id), Some(None));
+        assert!(is_open(&ctx));
+    }
 }

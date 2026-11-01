@@ -1,6 +1,7 @@
 //! Export tableur (.xlsx) : lignes affichées de la grille et tableaux des
 //! rapports. Remplace l'ancien export SYLK déguisé en `.xls`.
 
+use bp_core::export::ExportValue;
 use bp_core::i18n::{self, Lang};
 use bp_core::tr;
 use rust_xlsxwriter::{Format, Workbook};
@@ -17,6 +18,24 @@ pub enum Cell {
     /// Nombre entier (comptes d'opérations).
     Number(f64),
     Empty,
+}
+
+/// Cellules du classeur d'un export d'opérations, dont la première ligne est
+/// l'en-tête.
+pub fn from_export(table: Vec<Vec<ExportValue>>) -> Vec<Vec<Cell>> {
+    table
+        .into_iter()
+        .enumerate()
+        .map(|(r, row)| {
+            row.into_iter()
+                .map(|value| match value {
+                    ExportValue::Text(text) if r == 0 => Cell::Bold(text),
+                    ExportValue::Text(text) => Cell::Text(text),
+                    ExportValue::Amount(amount) => Cell::Money(amount.as_f64()),
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// Écrit un tableau dans un classeur d'une feuille. La première ligne est
@@ -163,6 +182,22 @@ pub fn finished(ctx: &egui::Context) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// En-tête en gras, textes intacts, montants et soldes en nombres.
+    #[test]
+    fn export_table_becomes_cells() {
+        let table = vec![
+            vec![ExportValue::Text("Solde".into())],
+            vec![ExportValue::Text("Fnac; Paris".into())],
+            vec![ExportValue::Amount(bp_core::model::Amount::from_cents(
+                -1250,
+            ))],
+        ];
+        let rows = from_export(table);
+        assert!(matches!(&rows[0][0], Cell::Bold(t) if t == "Solde"));
+        assert!(matches!(&rows[1][0], Cell::Text(t) if t == "Fnac; Paris"));
+        assert!(matches!(rows[2][0], Cell::Money(v) if v == -12.5));
+    }
 
     #[test]
     fn writes_a_workbook() {

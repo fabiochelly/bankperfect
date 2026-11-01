@@ -601,6 +601,13 @@ impl ManageForm {
         }
         let full = width - 2.0 * ui_kit::CARD_PADDING - 2.0 - LABEL_WIDTH - 8.0;
 
+        // Le titre de la barre des comptes : celui du fichier, pas du compte.
+        let group_name = doc.document.group_name.clone();
+        ui_kit::section(ui, width, icon::FOLDER_SIMPLE, tr!("Fichier"), |ui| {
+            ui_kit::row(ui, tr!("Nom affiché"), LABEL_WIDTH, |ui| {
+                field!(ui, "group", group_name, full, |d, v| d.group_name = v);
+            });
+        });
         ui_kit::section(
             ui,
             width,

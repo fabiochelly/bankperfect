@@ -22,8 +22,7 @@ pub enum Command {
     SaveAs,
     SaveCopy,
     DeleteFile,
-    ExportCsv,
-    ExportXlsx,
+    Export,
     Report(ReportTab),
     Charts,
     UpdateQuotes,
@@ -141,7 +140,7 @@ impl Command {
                 SaveCopy,
                 CloseFile,
                 Import,
-                ExportCsv,
+                Export,
                 ExportQif,
                 ExportJson,
                 Print,
@@ -181,7 +180,6 @@ impl Command {
                 Forecast,
                 Rules,
                 Categorize,
-                ExportXlsx,
                 Report(ReportTab::Accounts),
                 Report(ReportTab::Categories),
                 Report(ReportTab::Payees),
@@ -346,19 +344,12 @@ impl Command {
                 None,
                 tr_mark!("json format ouvert sauvegarde complète développeur"),
             ),
-            ExportCsv => info(
+            Export => info(
                 FILE,
-                tr!("Exporter en CSV…"),
-                icon::FILE_CSV,
-                None,
-                tr_mark!("tableur excel"),
-            ),
-            ExportXlsx => info(
-                FILE,
-                tr!("Exporter en tableur (.xlsx)…"),
+                tr!("Exporter en tableur (Excel, CSV)…"),
                 icon::MICROSOFT_EXCEL_LOGO,
                 None,
-                tr_mark!("excel calc libreoffice classeur lignes affichées"),
+                tr_mark!("excel xlsx csv calc libreoffice classeur lignes affichées"),
             ),
             Report(tab) => {
                 let (label, glyph, shortcut, keywords) = match tab {
@@ -398,10 +389,12 @@ impl Command {
             ),
             UpdateQuotes => info(
                 ACCOUNTS,
-                tr!("Mettre à jour les cotations…"),
+                tr!("Portefeuille de titres…"),
                 icon::TREND_UP,
                 None,
-                tr_mark!("titres bourse actions isin cours portefeuille"),
+                tr_mark!(
+                    "titres bourse actions isin cours cotations portefeuille vente dividendes"
+                ),
             ),
             Charts => info(
                 REPORTS,

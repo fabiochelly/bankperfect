@@ -724,7 +724,14 @@ SALAIRE MARS\";;1 500,00\r\n\
         let titre = existing(ymd(2026, 3, 7), 99, StandardMode::Titre, "Dividende");
         account.operations = vec![card, cheque, titre];
 
-        let text = export::csv(&doc, &account, &[0, 1, 2], &export::CsvOptions::default());
+        let (_, balances) = export::chronology(&doc, &account);
+        let text = export::csv(
+            &doc,
+            &account,
+            &[0, 1, 2],
+            &balances,
+            &export::ExportOptions::default(),
+        );
         let records = read_records(&text, ';');
         let config = CsvConfig {
             columns: CsvColumns::guess(&records[0].cells),

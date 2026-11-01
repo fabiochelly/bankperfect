@@ -10,7 +10,7 @@
 //! Yahoo Finance : recherche du symbole à partir de l'ISIN, puis cours.
 
 use crate::currencies::Rates;
-use crate::model::{Account, Mode, StandardMode};
+use crate::model::{Account, Amount, Date, Mode, Operation, StandardMode, Tack};
 
 /// Recherche d'un symbole (ISIN accepté).
 pub const SEARCH_URL: &str =
@@ -27,6 +27,14 @@ pub struct StockLine {
     pub identifier: String,
     /// Quantité (premier mot du tiers), `None` si illisible.
     pub quantity: Option<f64>,
+    /// Nom du titre : le tiers sans la quantité ni le prix d'achat.
+    pub name: String,
+    /// Prix d'achat unitaire (« … acheté 13,87 » dans le tiers).
+    pub unit_cost: Option<f64>,
+    /// Date d'achat.
+    pub date: Date,
+    /// Valeur enregistrée sur la ligne.
+    pub value: Amount,
 }
 
 /// Cours d'un titre.
@@ -37,6 +45,39 @@ pub struct Quote {
     pub price: f64,
     /// Code ISO de la devise du cours.
     pub currency: String,
+    /// Clôture de la veille, dans la même devise.
+    pub previous_close: Option<f64>,
+}
+
+/// Cours passés d'un titre, triés par date.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PriceHistory {
+    /// Code ISO de la devise des cours.
+    pub currency: String,
+    pub points: Vec<(Date, f64)>,
+}
+
+/// Période d'historique demandée.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HistoryRange {
+    OneMonth,
+    SixMonths,
+    OneYear,
+    FiveYears,
+    Max,
+}
+
+impl HistoryRange {
+    /// Paramètres de la requête : au quotidien, puis moins finement.
+    pub fn query(self) -> &'static str {
+        match self {
+            Self::OneMonth => "range=1mo&interval=1d",
+            Self::SixMonths => "range=6mo&interval=1d",
+            Self::OneYear => "range=1y&interval=1d",
+            Self::FiveYears => "range=5y&interval=1wk",
+            Self::Max => "range=max&interval=1mo",
+        }
+    }
 }
 
 /// Lignes « Titre » du compte ayant un code dans leur détail.
@@ -54,13 +95,91 @@ pub fn stock_lines(account: &Account) -> Vec<StockLine> {
                 .next()
                 .and_then(|q| q.replace(',', ".").parse::<f64>().ok())
                 .filter(|q| q.is_finite());
+            let (title, bought) = match op.payee.split_once(" acheté ") {
+                Some((title, bought)) => (title, Some(bought)),
+                None => (op.payee.as_str(), None),
+            };
+            let title = title.trim();
+            let name = match quantity {
+                Some(_) => title.split_once(char::is_whitespace).map_or("", |(_, n)| n),
+                None => title,
+            };
             Some(StockLine {
                 line,
+                name: match name.trim() {
+                    "" => identifier.clone(),
+                    name => name.to_string(),
+                },
                 identifier,
                 quantity,
+                unit_cost: bought
+                    .and_then(|b| b.split_whitespace().next())
+                    .and_then(positive_number),
+                date: op.date,
+                value: op.amount,
             })
         })
         .collect()
+}
+
+/// Nombre saisi (virgule ou point décimal), strictement positif.
+pub fn positive_number(text: &str) -> Option<f64> {
+    text.trim()
+        .replace(',', ".")
+        .parse::<f64>()
+        .ok()
+        .filter(|n| n.is_finite() && *n > 0.0)
+}
+
+/// Ligne « Titre » pour un titre saisi : la quantité en tête du tiers, le
+/// prix d'achat conservé dans le tiers (« 10 Orange acheté 13,87 », comme
+/// l'original), le code dans le détail. La valeur est le prix multiplié par
+/// la quantité, ou nulle tant qu'aucun cours n'est connu.
+pub fn new_stock_operation(
+    code: &str,
+    quantity: &str,
+    name: &str,
+    price: &str,
+    date: Date,
+) -> Result<Operation, String> {
+    let code = code.replace(';', " ").trim().to_uppercase();
+    if code.is_empty() {
+        return Err(crate::tr!("Saisissez le code du titre.").into());
+    }
+    if code.contains(char::is_whitespace) {
+        return Err(crate::tr!("Le code du titre s'écrit en un seul mot.").into());
+    }
+    let quantity = quantity.trim();
+    let count = positive_number(quantity).ok_or(crate::tr!(
+        "Saisissez le nombre de titres (ex. : 10 ou 2,5)."
+    ))?;
+    let name = name.replace(';', " ");
+    let name = match name.trim() {
+        "" => code.as_str(),
+        name => name,
+    };
+    let price = price.trim();
+    let (payee, amount) = if price.is_empty() {
+        (format!("{quantity} {name}"), Amount::ZERO)
+    } else {
+        let unit = positive_number(price).ok_or(crate::tr!("Prix d'achat illisible."))?;
+        (
+            format!("{quantity} {name} acheté {price}"),
+            Amount::from_cents((unit * count * 100.0).round() as i64),
+        )
+    };
+    Ok(Operation {
+        uid: 0,
+        date,
+        mark_date: date,
+        tack: Tack::None,
+        mode: Mode::Standard(StandardMode::Titre),
+        payee,
+        details: code,
+        category: None,
+        amount,
+        extra: Vec::new(),
+    })
 }
 
 /// Le texte a-t-il la forme d'un code ISIN (2 lettres, 9 caractères, 1
@@ -98,13 +217,16 @@ pub fn parse_chart(json: &str) -> Option<Quote> {
     let meta = value.get("chart")?.get("result")?.get(0)?.get("meta")?;
     let mut price = meta.get("regularMarketPrice")?.as_f64()?;
     let mut currency = meta.get("currency")?.as_str()?.to_string();
-    if currency == "GBp" || currency == "GBX" {
-        price /= 100.0;
-        currency = "GBP".into();
-    }
+    let scale = pence_scale(&mut currency);
+    price *= scale;
     if !(price.is_finite() && price > 0.0) {
         return None;
     }
+    let previous_close = meta
+        .get("chartPreviousClose")
+        .and_then(|p| p.as_f64())
+        .filter(|p| p.is_finite() && *p > 0.0)
+        .map(|p| p * scale);
     let name = ["longName", "shortName", "symbol"]
         .iter()
         .find_map(|k| meta.get(*k).and_then(|v| v.as_str()))
@@ -119,6 +241,54 @@ pub fn parse_chart(json: &str) -> Option<Quote> {
         name,
         price,
         currency: currency.to_uppercase(),
+        previous_close,
+    })
+}
+
+/// Facteur de conversion des cours en pence (`GBp`), ramenés en livres.
+fn pence_scale(currency: &mut String) -> f64 {
+    if currency == "GBp" || currency == "GBX" {
+        *currency = "GBP".into();
+        0.01
+    } else {
+        1.0
+    }
+}
+
+/// Cours de clôture lus dans la réponse « chart ».
+pub fn parse_history(json: &str) -> Option<PriceHistory> {
+    let value: serde_json::Value = serde_json::from_str(json).ok()?;
+    let result = value.get("chart")?.get("result")?.get(0)?;
+    let mut currency = result.get("meta")?.get("currency")?.as_str()?.to_string();
+    let scale = pence_scale(&mut currency);
+    let times = result.get("timestamp")?.as_array()?;
+    let closes = result
+        .get("indicators")?
+        .get("quote")?
+        .get(0)?
+        .get("close")?
+        .as_array()?;
+    let mut points: Vec<(Date, f64)> = Vec::with_capacity(times.len());
+    for (time, close) in times.iter().zip(closes) {
+        // Séance sans cours : `null`.
+        let (Some(time), Some(close)) = (time.as_i64(), close.as_f64()) else {
+            continue;
+        };
+        let Some(moment) = chrono::DateTime::from_timestamp(time, 0) else {
+            continue;
+        };
+        if !(close.is_finite() && close > 0.0) {
+            continue;
+        }
+        let point = (Date::from_naive(moment.date_naive()), close * scale);
+        match points.last_mut() {
+            Some(last) if last.0 >= point.0 => *last = point,
+            _ => points.push(point),
+        }
+    }
+    Some(PriceHistory {
+        currency: currency.to_uppercase(),
+        points,
     })
 }
 
@@ -167,7 +337,6 @@ pub fn price_in_account_currency(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{Amount, Date, Operation, Tack};
 
     fn op(mode: Mode, payee: &str, details: &str) -> Operation {
         Operation {
@@ -215,12 +384,13 @@ mod tests {
         let lines = stock_lines(&a);
         assert_eq!(lines.len(), 2);
         assert_eq!(
-            lines[0],
-            StockLine {
-                line: 0,
-                identifier: "FR0000133308".into(),
-                quantity: Some(10.0)
-            }
+            (
+                lines[0].line,
+                lines[0].identifier.as_str(),
+                lines[0].quantity,
+                lines[0].name.as_str()
+            ),
+            (0, "FR0000133308", Some(10.0), "Orange")
         );
         assert_eq!(lines[1].identifier, "AAPL");
         assert_eq!(lines[1].quantity, None);
@@ -229,16 +399,88 @@ mod tests {
     }
 
     #[test]
+    fn builds_a_stock_line_from_the_form() {
+        let date = Date(45000);
+        let bought = new_stock_operation(" fr0000133308 ", "2,5", "Orange", "13,80", date).unwrap();
+        assert_eq!(bought.payee, "2,5 Orange acheté 13,80");
+        assert_eq!(bought.details, "FR0000133308");
+        assert_eq!(bought.amount, Amount::from_cents(3450));
+        let bare = new_stock_operation("aapl", "10", "", "", date).unwrap();
+        assert_eq!(bare.payee, "10 AAPL");
+        assert_eq!(bare.amount, Amount::ZERO);
+
+        // La ligne créée est bien relue comme un titre à évaluer.
+        let mut a = account("€", "$");
+        a.operations = vec![bought, bare];
+        let lines = stock_lines(&a);
+        assert_eq!(lines.len(), 2);
+        assert_eq!(lines[0].identifier, "FR0000133308");
+        assert_eq!(lines[0].quantity, Some(2.5));
+        assert_eq!(lines[0].name, "Orange");
+        assert_eq!(lines[0].unit_cost, Some(13.8));
+        assert_eq!(lines[0].date, date);
+        assert!(looks_like_isin(&lines[0].identifier));
+        assert_eq!(lines[1].identifier, "AAPL");
+        assert_eq!(lines[1].quantity, Some(10.0));
+        assert_eq!(lines[1].name, "AAPL");
+        assert_eq!(lines[1].unit_cost, None);
+    }
+
+    #[test]
+    fn reads_the_purchase_price_of_old_lines() {
+        let mut a = account("€", "$");
+        a.operations = vec![
+            op(
+                Mode::Standard(StandardMode::Titre),
+                "10 France Telecom acheté 20,5",
+                "FR0000133308",
+            ),
+            op(Mode::Standard(StandardMode::Titre), "Apple", "AAPL"),
+        ];
+        let lines = stock_lines(&a);
+        assert_eq!(lines[0].name, "France Telecom");
+        assert_eq!(lines[0].unit_cost, Some(20.5));
+        assert_eq!(lines[1].name, "Apple");
+    }
+
+    #[test]
+    fn parses_a_price_history() {
+        // 2026-10-01 et 2026-10-02, séance sans cours, puis le même jour en double.
+        let json = r#"{"chart":{"result":[{"meta":{"currency":"GBp"},
+            "timestamp":[1790841600,1790928000,1791014400,1791014500],
+            "indicators":{"quote":[{"close":[100.0,200.0,null,300.0]}]}}]}}"#;
+        let history = parse_history(json).unwrap();
+        assert_eq!(history.currency, "GBP");
+        let d1 = Date::from_ymd(2026, 10, 1).unwrap();
+        let d2 = Date::from_ymd(2026, 10, 2).unwrap();
+        let d3 = Date::from_ymd(2026, 10, 3).unwrap();
+        assert_eq!(history.points, vec![(d1, 1.0), (d2, 2.0), (d3, 3.0)]);
+        assert_eq!(parse_history(r#"{"chart":{"result":null}}"#), None);
+    }
+
+    #[test]
+    fn refuses_an_incomplete_stock_line() {
+        let date = Date(45000);
+        assert!(new_stock_operation("", "10", "Orange", "", date).is_err());
+        assert!(new_stock_operation("ORA PA", "10", "Orange", "", date).is_err());
+        assert!(new_stock_operation("ORA.PA", "", "Orange", "", date).is_err());
+        assert!(new_stock_operation("ORA.PA", "0", "Orange", "", date).is_err());
+        assert!(new_stock_operation("ORA.PA", "dix", "Orange", "", date).is_err());
+        assert!(new_stock_operation("ORA.PA", "10", "Orange", "abc", date).is_err());
+    }
+
+    #[test]
     fn parses_yahoo_answers() {
         let search = r#"{"quotes":[{"symbol":"ORA.F","quoteType":"FUTURE"},{"symbol":"ORA.PA","quoteType":"EQUITY"}]}"#;
         assert_eq!(parse_search(search).as_deref(), Some("ORA.PA"));
         assert_eq!(parse_search(r#"{"quotes":[]}"#), None);
-        let chart = r#"{"chart":{"result":[{"meta":{"currency":"EUR","symbol":"ORA.PA","regularMarketPrice":13.87,"longName":"Orange S.A."}}]}}"#;
+        let chart = r#"{"chart":{"result":[{"meta":{"currency":"EUR","symbol":"ORA.PA","regularMarketPrice":13.87,"chartPreviousClose":13.5,"longName":"Orange S.A."}}]}}"#;
         let quote = parse_chart(chart).unwrap();
         assert_eq!(
             (quote.price, quote.currency.as_str(), quote.name.as_str()),
             (13.87, "EUR", "Orange S.A.")
         );
+        assert_eq!(quote.previous_close, Some(13.5));
         let pence = r#"{"chart":{"result":[{"meta":{"currency":"GBp","symbol":"VOD.L","regularMarketPrice":7250}}]}}"#;
         let quote = parse_chart(pence).unwrap();
         assert_eq!((quote.price, quote.currency.as_str()), (72.5, "GBP"));

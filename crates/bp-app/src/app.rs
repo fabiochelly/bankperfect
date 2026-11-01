@@ -1013,15 +1013,7 @@ impl BankPerfectApp {
         }
         let Some(doc) = &mut self.doc else { return };
         match command {
-            Command::ExportCsv => self.tool = Some(Tool::ExportCsv(crate::tools::CsvForm::new())),
-            Command::ExportXlsx => {
-                let rows = crate::reports_ui::visible_rows(doc);
-                let dir = crate::settings::shared::export_dir(
-                    doc.path.parent().unwrap_or(std::path::Path::new(".")),
-                );
-                let name = doc.current_account().name.clone();
-                crate::spreadsheet::export(&self.egui_ctx, &dir, &name, &name, rows);
-            }
+            Command::Export => self.tool = Some(Tool::Export(crate::tools::ExportForm::new())),
             Command::Budget(tab) => {
                 self.tool = Some(Tool::Budget(Box::new(crate::budget_ui::BudgetForm::new(
                     doc, tab,
@@ -1419,16 +1411,21 @@ impl BankPerfectApp {
         if path.extension().is_none() {
             path.set_extension("bp");
         }
-        // L'original v5 est gardé à côté de l'ancien emplacement.
-        if doc.format == FileFormat::V5
-            && let Err(e) = backup_v5_original(&doc.path)
-        {
-            self.error = Some(tr!("Copie de l'original impossible : {}", e));
-            return;
+        // L'original v5 reste à sa place : sa copie à côté n'est qu'une
+        // précaution, et ce dossier peut justement être interdit d'écriture.
+        if doc.format == FileFormat::V5 {
+            let _ = backup_v5_original(&doc.path);
         }
+        let previous = (doc.path.clone(), doc.format);
         doc.format = FileFormat::V6;
         doc.path = path.clone();
         self.save(now);
+        if self.error.is_some() {
+            if let Some(doc) = &mut self.doc {
+                (doc.path, doc.format) = previous;
+            }
+            return;
+        }
         self.settings.remember(&path);
     }
 
@@ -1689,7 +1686,7 @@ impl BankPerfectApp {
             self.menu_command(ui, Budget(BudgetTab::Monthly));
             self.menu_command(ui, Budget(BudgetTab::Annual));
             menu::separator(ui);
-            self.menu_command(ui, ExportXlsx);
+            self.menu_command(ui, Export);
             self.extension_items(ui, "reports");
             return;
         }
@@ -1783,8 +1780,7 @@ impl BankPerfectApp {
                 self.menu_command(ui, Import);
                 self.menu_command(ui, BankSync);
                 menu::submenu(ui, Some(icon::EXPORT), tr!("Exporter"), |ui| {
-                    self.menu_command(ui, ExportXlsx);
-                    self.menu_command(ui, ExportCsv);
+                    self.menu_command(ui, Export);
                     self.menu_command(ui, ExportQif);
                     menu::separator(ui);
                     self.menu_command(ui, ExportJson);
@@ -3024,6 +3020,9 @@ impl BankPerfectApp {
                     if self.doc.as_ref().is_some_and(|d| !d.dirty) {
                         let action = self.pending.take().expect("action en attente");
                         self.run(action);
+                    } else {
+                        // Retour au fichier, pour pouvoir l'enregistrer ailleurs.
+                        self.pending = None;
                     }
                 }
                 Choice::No => {
@@ -3718,15 +3717,27 @@ fn selection_summary(ui: &mut egui::Ui, doc: &OpenDoc) {
 /// l'original est conservé à côté (`<nom>_v5.bp0`) et, s'il avait un mot de
 /// passe, le fichier est chiffré avec : la clé de secours est renvoyée.
 fn save_document(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
+    let new_protection = doc.protection.is_none();
     let recovery = ensure_protection(doc)?;
-    if doc.format == FileFormat::V5 {
-        backup_v5_original(&doc.path)?;
+    let written = (|| {
+        if doc.format == FileFormat::V5 {
+            backup_v5_original(&doc.path)
+                .map_err(|e| bp_core::Error::from(e).on_write(&doc.path))?;
+        }
+        file::save(
+            &doc.path,
+            &doc.document,
+            doc.protection.as_ref().expect("protection choisie"),
+        )
+    })();
+    if let Err(e) = written {
+        // La clé de secours n'a pas été montrée : la prochaine tentative
+        // doit en créer une autre plutôt que la perdre.
+        if new_protection {
+            doc.protection = None;
+        }
+        return Err(e);
     }
-    file::save(
-        &doc.path,
-        &doc.document,
-        doc.protection.as_ref().expect("protection choisie"),
-    )?;
     doc.format = FileFormat::V6;
     doc.dirty = false;
     Ok(recovery)

@@ -72,10 +72,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Save the accounts file as…",
     ),
     (
-        "Copie de l'original impossible : {}",
-        "Cannot copy the original: {}",
-    ),
-    (
         "Dossier où enregistrer une copie",
         "Folder in which to save a copy",
     ),

@@ -1,11 +1,13 @@
-//! Exports CSV et QIF (ex-scripts `export_csv.py` et `export_qif.py`).
+//! Exports tableur et QIF (ex-scripts `export_csv.py` et `export_qif.py`).
+//! Le classeur Excel et le CSV partagent le même tableau ([`table`]).
 
-use crate::model::{Account, Document, Mode, Operation, StandardMode, Tack};
+use crate::model::{Account, Amount, Document, Mode, Operation, StandardMode, Tack};
 use crate::tr;
+use crate::view::{SortColumn, running_balances, sorted_order};
 
-/// Colonnes possibles d'un export CSV.
+/// Colonnes possibles d'un export d'opérations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CsvField {
+pub enum ExportField {
     Date,
     Mode,
     Payee,
@@ -13,11 +15,12 @@ pub enum CsvField {
     Category,
     SubCategory,
     Amount,
+    Balance,
     Tack,
 }
 
-impl CsvField {
-    pub const ALL: [CsvField; 8] = [
+impl ExportField {
+    pub const ALL: [ExportField; 9] = [
         Self::Date,
         Self::Mode,
         Self::Payee,
@@ -25,6 +28,7 @@ impl CsvField {
         Self::Category,
         Self::SubCategory,
         Self::Amount,
+        Self::Balance,
         Self::Tack,
     ];
 
@@ -37,15 +41,24 @@ impl CsvField {
             Self::Category => tr!("Catégorie"),
             Self::SubCategory => tr!("Sous-catégorie"),
             Self::Amount => tr!("Montant"),
+            Self::Balance => tr!("Solde"),
             Self::Tack => tr!("Pointage"),
         }
     }
 }
 
+/// Cellule du tableau exporté.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ExportValue {
+    Text(String),
+    Amount(Amount),
+}
+
 #[derive(Debug, Clone)]
-pub struct CsvOptions {
+pub struct ExportOptions {
     /// Colonnes exportées, dans l'ordre.
-    pub fields: Vec<CsvField>,
+    pub fields: Vec<ExportField>,
+    /// Séparateur des colonnes (CSV seulement).
     pub separator: char,
     pub header: bool,
     /// Remplacer « Chq 1234 » par « Chèque émis ».
@@ -56,10 +69,10 @@ pub struct CsvOptions {
     pub tack_symbols: [String; 3],
 }
 
-impl Default for CsvOptions {
+impl Default for ExportOptions {
     fn default() -> Self {
         Self {
-            fields: CsvField::ALL.to_vec(),
+            fields: ExportField::ALL.to_vec(),
             separator: ';',
             header: true,
             cheque_as_mode: false,
@@ -84,7 +97,70 @@ fn category_parts(document: &Document, op: &Operation) -> (String, String) {
     }
 }
 
-/// Génère le contenu CSV des `lines` (indices d'opérations) d'un compte.
+/// Opérations d'un compte dans l'ordre chronologique, avec le solde de
+/// chacune (indexé par opération).
+pub fn chronology(document: &Document, account: &Account) -> (Vec<usize>, Vec<Amount>) {
+    let order = sorted_order(document, account, SortColumn::Date, true);
+    let running = running_balances(account, &order, true);
+    let mut balances = vec![Amount::ZERO; account.operations.len()];
+    for (&line, balance) in order.iter().zip(running) {
+        balances[line] = balance;
+    }
+    (order, balances)
+}
+
+/// Tableau des `lines` (indices d'opérations) d'un compte. `balances` donne
+/// le solde de chaque opération, indexé comme `account.operations`.
+pub fn table(
+    document: &Document,
+    account: &Account,
+    lines: &[usize],
+    balances: &[Amount],
+    options: &ExportOptions,
+) -> Vec<Vec<ExportValue>> {
+    use ExportValue::{Amount as Money, Text};
+    let fields: Vec<ExportField> = options
+        .fields
+        .iter()
+        .copied()
+        .filter(|f| !(options.group_categories.is_some() && *f == ExportField::SubCategory))
+        .collect();
+    let mut rows = Vec::with_capacity(lines.len() + 1);
+    if options.header {
+        rows.push(fields.iter().map(|f| Text(f.label().into())).collect());
+    }
+    for &i in lines {
+        let op = &account.operations[i];
+        let (category, sub) = category_parts(document, op);
+        let cells = fields
+            .iter()
+            .map(|field| match field {
+                ExportField::Date => Text(op.date.to_string()),
+                ExportField::Mode => {
+                    if options.cheque_as_mode && op.cheque_number().is_some() {
+                        Text(StandardMode::ChequeEmis.label().to_string())
+                    } else {
+                        Text(op.mode_label())
+                    }
+                }
+                ExportField::Payee => Text(crate::split::payee_label(&op.payee).into_owned()),
+                ExportField::Details => Text(op.details.clone()),
+                ExportField::Category => Text(match (&options.group_categories, sub.is_empty()) {
+                    (Some(joiner), false) => format!("{category}{joiner}{sub}"),
+                    _ => category.clone(),
+                }),
+                ExportField::SubCategory => Text(sub.clone()),
+                ExportField::Amount => Money(op.amount),
+                ExportField::Balance => Money(balances[i]),
+                ExportField::Tack => Text(options.tack_symbols[tack_index(op.tack)].clone()),
+            })
+            .collect();
+        rows.push(cells);
+    }
+    rows
+}
+
+/// Génère le contenu CSV du tableau (voir [`table`]).
 ///
 /// Pas de guillemets, comme l'original : le séparateur est remplacé par une
 /// espace dans les textes. Montants avec deux décimales ; la virgule décimale
@@ -94,7 +170,8 @@ pub fn csv(
     document: &Document,
     account: &Account,
     lines: &[usize],
-    options: &CsvOptions,
+    balances: &[Amount],
+    options: &ExportOptions,
 ) -> String {
     let sep = options.separator;
     // Séparateur décimal de la langue, sauf s'il se confond avec celui des
@@ -104,47 +181,17 @@ pub fn csv(
         d if d == sep => ',',
         d => d,
     };
-    let clean = |s: &str| s.replace(sep, " ").replace(['\r', '\n'], " ");
-    let fields: Vec<CsvField> = options
-        .fields
-        .iter()
-        .copied()
-        .filter(|f| !(options.group_categories.is_some() && *f == CsvField::SubCategory))
-        .collect();
     let mut out = String::new();
-    let mut push_row = |cells: Vec<String>| {
-        out.push_str(&cells.join(&sep.to_string()));
-        out.push_str("\r\n");
-    };
-    if options.header {
-        push_row(fields.iter().map(|f| f.label().to_string()).collect());
-    }
-    for &i in lines {
-        let op = &account.operations[i];
-        let (category, sub) = category_parts(document, op);
-        let cells = fields
+    for row in table(document, account, lines, balances, options) {
+        let cells: Vec<String> = row
             .iter()
-            .map(|field| match field {
-                CsvField::Date => op.date.to_string(),
-                CsvField::Mode => {
-                    if options.cheque_as_mode && op.cheque_number().is_some() {
-                        StandardMode::ChequeEmis.label().to_string()
-                    } else {
-                        clean(&op.mode_label())
-                    }
-                }
-                CsvField::Payee => clean(&op.payee),
-                CsvField::Details => clean(&op.details),
-                CsvField::Category => match (&options.group_categories, sub.is_empty()) {
-                    (Some(joiner), false) => clean(&format!("{category}{joiner}{sub}")),
-                    _ => clean(&category),
-                },
-                CsvField::SubCategory => clean(&sub),
-                CsvField::Amount => op.amount.format(2, decimal),
-                CsvField::Tack => options.tack_symbols[tack_index(op.tack)].clone(),
+            .map(|value| match value {
+                ExportValue::Text(text) => text.replace(sep, " ").replace(['\r', '\n'], " "),
+                ExportValue::Amount(amount) => amount.format(2, decimal),
             })
             .collect();
-        push_row(cells);
+        out.push_str(&cells.join(&sep.to_string()));
+        out.push_str("\r\n");
     }
     out
 }
@@ -296,31 +343,71 @@ mod tests {
     #[test]
     fn csv_export() {
         let (doc, acc) = sample();
-        let text = csv(&doc, &acc, &[0, 1], &CsvOptions::default());
+        let (_, balances) = chronology(&doc, &acc);
+        let text = csv(&doc, &acc, &[0, 1], &balances, &ExportOptions::default());
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(
             lines[0],
-            "Date;Mode;Tiers;Détails;Catégorie;Sous-catégorie;Montant;Pointage"
+            "Date;Mode;Tiers;Détails;Catégorie;Sous-catégorie;Montant;Solde;Pointage"
         );
         assert_eq!(
             lines[1],
-            "05/03/2026;Carte;Fnac  Paris;livre;Loisirs;Livres;-12,50;P"
+            "05/03/2026;Carte;Fnac  Paris;livre;Loisirs;Livres;-12,50;-12,50;P"
         );
         assert_eq!(
             lines[2],
-            "05/03/2026;Chq 1234;Dupont;n°1234;Loisirs;;-50,00;-"
+            "05/03/2026;Chq 1234;Dupont;n°1234;Loisirs;;-50,00;-62,50;-"
+        );
+    }
+
+    /// Le solde suit les dates, pas l'ordre d'enregistrement des opérations.
+    #[test]
+    fn chronology_orders_balances_by_date() {
+        let (doc, mut acc) = sample();
+        acc.operations[1].date = Date::from_ymd(2026, 3, 1).unwrap();
+        let (order, balances) = chronology(&doc, &acc);
+        assert_eq!(order, [1, 0]);
+        assert_eq!(
+            balances,
+            [Amount::from_cents(-6250), Amount::from_cents(-5000)]
+        );
+    }
+
+    /// Le tableau garde les textes intacts et les montants en nombres.
+    #[test]
+    fn table_keeps_raw_values() {
+        let (doc, acc) = sample();
+        let (_, balances) = chronology(&doc, &acc);
+        let options = ExportOptions {
+            fields: vec![
+                ExportField::Payee,
+                ExportField::Category,
+                ExportField::SubCategory,
+                ExportField::Balance,
+            ],
+            header: false,
+            ..Default::default()
+        };
+        assert_eq!(
+            table(&doc, &acc, &[0], &balances, &options),
+            [[
+                ExportValue::Text("Fnac; Paris".into()),
+                ExportValue::Text("Loisirs".into()),
+                ExportValue::Text("Livres".into()),
+                ExportValue::Amount(Amount::from_cents(-1250)),
+            ]]
         );
     }
 
     #[test]
     fn csv_options() {
         let (doc, acc) = sample();
-        let options = CsvOptions {
+        let options = ExportOptions {
             fields: vec![
-                CsvField::Amount,
-                CsvField::Mode,
-                CsvField::Category,
-                CsvField::SubCategory,
+                ExportField::Amount,
+                ExportField::Mode,
+                ExportField::Category,
+                ExportField::SubCategory,
             ],
             separator: ',',
             header: false,
@@ -328,7 +415,7 @@ mod tests {
             group_categories: Some(" > ".into()),
             ..Default::default()
         };
-        let text = csv(&doc, &acc, &[0, 1], &options);
+        let text = csv(&doc, &acc, &[0, 1], &[Amount::ZERO; 2], &options);
         assert_eq!(
             text,
             "-12.50,Carte,Loisirs > Livres\r\n-50.00,Chèque émis,Loisirs\r\n"

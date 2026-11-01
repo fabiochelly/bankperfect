@@ -135,12 +135,6 @@ fn screenshots() {
         h.run_steps(2);
         h.event(egui::Event::Text("test".into()));
     });
-    render("09-export-csv", egui::Theme::Dark, |h| {
-        h.get_by_label("Fichier").click();
-        h.run_steps(3);
-        h.get_by_label("Exporter en CSV…").click();
-        h.run_steps(2);
-    });
     render("10-groupe", egui::Theme::Dark, |h| {
         h.key_press(egui::Key::ArrowDown);
         h.run_steps(2);
@@ -591,18 +585,6 @@ fn tool_screenshots() {
     render("62-credit-clair", egui::Theme::Light, |h| {
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::L);
     });
-    render("65-cotations", egui::Theme::Dark, |h| {
-        h.get_all_by_label_contains("Titres")
-            .next()
-            .unwrap()
-            .click();
-        h.run_steps(3);
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
-        h.run_steps(2);
-        h.event(egui::Event::Text("cotations".into()));
-        h.run_steps(2);
-        h.key_press(egui::Key::Enter);
-    });
     render("63-devises", egui::Theme::Dark, |h| {
         h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::D);
     });
@@ -613,6 +595,203 @@ fn tool_screenshots() {
         h.run_steps(3);
         h.event(egui::Event::Text("dol".into()));
     });
+}
+
+/// Ouvre la fenêtre d'export par la palette de commandes.
+fn open_export(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.run_steps(2);
+    h.event(egui::Event::Text("tableur".into()));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+}
+
+#[test]
+#[ignore]
+fn export_screenshots() {
+    render("09-export-excel", egui::Theme::Dark, open_export);
+    render("09-export-csv", egui::Theme::Dark, |h| {
+        open_export(h);
+        h.get_by_label_contains("CSV").click();
+        h.run_steps(2);
+    });
+}
+
+/// Remplit les champs du portefeuille, dans l'ordre d'affichage.
+fn fill_fields(h: &mut Harness<'_, bankperfect::BankPerfectApp>, texts: &[&str]) {
+    for (k, text) in texts.iter().enumerate() {
+        h.get_all_by_role(egui::accesskit::Role::TextInput)
+            .nth(k)
+            .expect("champ de saisie")
+            .click();
+        h.run_steps(2);
+        h.event(egui::Event::Text((*text).into()));
+        h.run_steps(2);
+    }
+}
+
+fn open_portfolio(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.run_steps(2);
+    h.event(egui::Event::Text("cotations".into()));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+}
+
+/// Deux achats, une vente et un dividende dans un compte sans titre, puis
+/// les courbes, téléchargées chez Yahoo Finance (réseau).
+fn portfolio_session(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
+    open_portfolio(h);
+    fill_fields(h, &["ora.pa", "10", "Orange", "12,50"]);
+    h.get_by_label_contains("Ajouter").click();
+    h.run_steps(3);
+    h.get_by_label_contains("Titre ORA.PA ajouté au compte");
+    fill_fields(h, &["AAPL", "3", "Apple", "150"]);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    h.get_by_label_contains("Titre AAPL ajouté au compte");
+    h.get_all_by_label_contains("Vendre")
+        .next()
+        .unwrap()
+        .click();
+    h.run_steps(3);
+    fill_fields(h, &["2", "200", "2"]);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    h.get_by_label_contains("Vente enregistrée");
+    h.get_all_by_label_contains("Dividende")
+        .next()
+        .unwrap()
+        .click();
+    h.run_steps(3);
+    fill_fields(h, &["12,40"]);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+    h.get_by_label_contains("Dividende de Apple enregistré");
+}
+
+fn wait_for_network(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
+    for _ in 0..30 {
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        h.run_steps(1);
+    }
+}
+
+#[test]
+#[ignore]
+fn portfolio_screenshots() {
+    render("65-portefeuille-vide", egui::Theme::Dark, open_portfolio);
+    render("65-portefeuille-positions", egui::Theme::Dark, |h| {
+        portfolio_session(h);
+        h.get_by_label_contains("Actualiser les cours").click();
+        h.run_steps(1);
+        wait_for_network(h);
+    });
+    render("65-portefeuille-evolution", egui::Theme::Dark, |h| {
+        portfolio_session(h);
+        h.get_all_by_label_contains("Évolution")
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(1);
+        wait_for_network(h);
+    });
+    render("65-portefeuille-titre", egui::Theme::Light, |h| {
+        portfolio_session(h);
+        h.get_all_by_label_contains("Voir le cours")
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(1);
+        wait_for_network(h);
+    });
+    render("65-portefeuille-repartition", egui::Theme::Dark, |h| {
+        portfolio_session(h);
+        h.get_by_label_contains("Répartition").click();
+    });
+    render("65-portefeuille-journal", egui::Theme::Dark, |h| {
+        portfolio_session(h);
+        h.get_by_label_contains("Ventes et dividendes").click();
+    });
+    render("65-portefeuille-historique", egui::Theme::Dark, |h| {
+        open_portfolio(h);
+        fill_fields(h, &["ORA.PA", "10", "Orange", "12,50"]);
+        // Achat daté d'il y a plusieurs mois.
+        h.get_all_by_role(egui::accesskit::Role::TextInput)
+            .nth(4)
+            .expect("champ de date")
+            .click();
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::A);
+        h.event(egui::Event::Text("02/03/2026".into()));
+        h.run_steps(2);
+        h.get_by_label_contains("Ajouter").click();
+        h.run_steps(3);
+        h.get_all_by_label_contains("Évolution")
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(1);
+        wait_for_network(h);
+    });
+    render("65-portefeuille-appliquer", egui::Theme::Dark, |h| {
+        portfolio_session(h);
+        h.get_by_label_contains("Actualiser les cours").click();
+        h.run_steps(1);
+        wait_for_network(h);
+        h.get_by_label_contains("Appliquer (2)").click();
+        h.run_steps(3);
+        h.get_by_label_contains("2 lignes « Titre » mises à jour");
+        // Rien de plus à écrire : le bouton disparaît.
+        assert!(h.query_by_label_contains("Appliquer").is_none());
+    });
+    render("65-portefeuille-retrait", egui::Theme::Dark, |h| {
+        portfolio_session(h);
+        h.get_all_by_label_contains("Retirer ce titre")
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(3);
+        h.get_by_label("Retirer").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Titre AAPL retiré du compte");
+    });
+    render("65-portefeuille-annulation", egui::Theme::Dark, |h| {
+        open_portfolio(h);
+        fill_fields(h, &["AAPL", "3", "Apple", "150"]);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        h.get_all_by_label_contains("Vendre")
+            .next()
+            .unwrap()
+            .click();
+        h.run_steps(3);
+        fill_fields(h, &["3", "200"]);
+        h.key_press(egui::Key::Enter);
+        h.run_steps(3);
+        h.get_by_label_contains("Vente enregistrée");
+        assert!(h.query_by_label_contains("Vendre").is_none());
+        h.get_by_label("Fermer").click();
+        h.run_steps(3);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::Z);
+        h.run_steps(3);
+        open_portfolio(h);
+        // La vente annulée : le titre est de retour, le journal est vide.
+        h.get_by_label("Apple");
+        h.get_by_label_contains("Ventes et dividendes").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Aucune vente ni aucun dividende enregistré");
+    });
+    render_sized(
+        "65-portefeuille-petit",
+        egui::Theme::Dark,
+        egui::vec2(1100.0, 720.0),
+        |h| {
+            portfolio_session(h);
+        },
+    );
 }
 
 /// Transferts et ventilation.

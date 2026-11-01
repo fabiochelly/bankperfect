@@ -319,7 +319,7 @@ fn account_menu(ui: &mut egui::Ui, doc: &OpenDoc) -> Option<Command> {
     entry(ui, Report(crate::reports_ui::ReportTab::Statement));
     entry(ui, Charts);
     entry(ui, Scheduler);
-    entry(ui, ExportXlsx);
+    entry(ui, Export);
     // Commandes d'extension placées ici (`menu = "account"`).
     let placed = crate::extensions::placed("account");
     if !placed.is_empty() {

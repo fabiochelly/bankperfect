@@ -451,6 +451,11 @@ impl OpenDoc {
         self.view.balance_of[op]
     }
 
+    /// Solde affiché de chaque opération du compte courant.
+    pub fn balances(&self) -> &[Amount] {
+        &self.view.balance_of
+    }
+
     pub fn current_account(&self) -> &bp_core::model::Account {
         &self.document.accounts[self.account]
     }

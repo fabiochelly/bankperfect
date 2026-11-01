@@ -4,6 +4,18 @@ pub const ENTRIES: &[(&str, &str)] = &[
     // error.rs
     ("erreur d'entrée/sortie : {}", "input/output error: {}"),
     (
+        "« {path} » est en lecture seule ({cause}). Retirez cet attribut dans les propriétés du fichier, ou choisissez un autre emplacement avec Fichier > Enregistrer sous.",
+        "“{path}” is read-only ({cause}). Clear this attribute in the file's properties, or choose another location with File > Save As.",
+    ),
+    (
+        "BankPerfect n'a pas le droit d'écrire dans le dossier « {folder} » ({cause}). Choisissez un autre emplacement avec Fichier > Enregistrer sous.",
+        "BankPerfect is not allowed to write to the folder “{folder}” ({cause}). Choose another location with File > Save As.",
+    ),
+    (
+        " Si ce dossier est dans Documents ou sur le Bureau, autorisez BankPerfect dans Sécurité Windows > Protection contre les ransomwares.",
+        " If this folder is in Documents or on the Desktop, allow BankPerfect in Windows Security > Ransomware protection.",
+    ),
+    (
         "fichier BankPerfect non reconnu",
         "unrecognized BankPerfect file",
     ),

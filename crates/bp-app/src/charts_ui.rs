@@ -506,6 +506,9 @@ fn short(v: f64) -> String {
         format!("{:.1} M", v / 1_000_000.0)
     } else if a >= 1_000.0 {
         format!("{:.1} k", v / 1_000.0)
+    } else if a < 100.0 && v.fract().abs() > 1e-9 {
+        // Petits cours : graduations fractionnaires.
+        format!("{v:.2}")
     } else {
         format!("{v:.0}")
     };
@@ -514,7 +517,13 @@ fn short(v: f64) -> String {
 }
 
 /// Bulle d'information près du pointeur.
-fn tooltip(ui: &egui::Ui, at: Pos2, title: &str, lines: &[(Color32, String)], pal: &Palette) {
+pub(crate) fn tooltip(
+    ui: &egui::Ui,
+    at: Pos2,
+    title: &str,
+    lines: &[(Color32, String)],
+    pal: &Palette,
+) {
     let painter = ui.ctx().layer_painter(egui::LayerId::new(
         egui::Order::Tooltip,
         egui::Id::new("chart_tip"),
@@ -1136,7 +1145,8 @@ fn ring_segment(
     }
 }
 
-/// Courbe du solde avec aire en dégradé et curseur au survol.
+/// Courbe du solde avec aire en dégradé et curseur au survol. Une seconde
+/// série éventuelle (prix de revient…) est tracée en simple ligne de référence.
 pub(crate) fn curve(
     ui: &mut egui::Ui,
     rect: Rect,
@@ -1145,11 +1155,17 @@ pub(crate) fn curve(
     pal: &Palette,
     t: f32,
 ) {
+    let top = legend(ui, rect, data, pal);
+    let rect = Rect::from_min_max(pos2(rect.left(), rect.top() + top), rect.max);
     let points = &data.series[0].points;
+    let reference = data.series.get(1).map(|s| &s.points);
     let n = points.len();
-    let (mut lo, mut hi) = points.iter().fold((f64::MAX, f64::MIN), |(lo, hi), p| {
-        (lo.min(p.value), hi.max(p.value))
-    });
+    let (mut lo, mut hi) = points
+        .iter()
+        .chain(reference.into_iter().flatten())
+        .fold((f64::MAX, f64::MIN), |(lo, hi), p| {
+            (lo.min(p.value), hi.max(p.value))
+        });
     if hi - lo < 1.0 {
         lo -= 1.0;
         hi += 1.0;
@@ -1191,9 +1207,15 @@ pub(crate) fn curve(
     // Libellés de dates, une demi-douzaine au plus.
     let every = (n / 6).max(1);
     for i in (0..n).step_by(every) {
+        // Près du bord droit, le libellé se cale à gauche du point.
+        let align = if x_of(i) > plot.right() - 40.0 {
+            egui::Align2::RIGHT_TOP
+        } else {
+            egui::Align2::CENTER_TOP
+        };
         painter.text(
             pos2(x_of(i), plot.bottom() + 8.0),
-            egui::Align2::CENTER_TOP,
+            align,
             &points[i].label,
             egui::FontId::proportional(12.0),
             pal.muted,
@@ -1223,6 +1245,18 @@ pub(crate) fn curve(
         ));
         painter.add(egui::Shape::line(line.clone(), Stroke::new(2.0, color)));
     }
+    let second = series_color(1, 2, pal);
+    if let Some(reference) = reference {
+        let line: Vec<Pos2> = reference
+            .iter()
+            .take(shown)
+            .enumerate()
+            .map(|(i, p)| pos2(x_of(i), y_of(p.value)))
+            .collect();
+        if line.len() > 1 {
+            painter.add(egui::Shape::line(line, Stroke::new(1.5, second)));
+        }
+    }
     let hover = ui
         .interact(plot, ui.id().with("curve"), egui::Sense::hover())
         .hover_pos();
@@ -1243,13 +1277,11 @@ pub(crate) fn curve(
             Stroke::new(1.0, pal.muted.gamma_multiply(0.5)),
         );
         painter.circle(p, 5.0, pal.surface, Stroke::new(2.5, color));
-        tooltip(
-            ui,
-            at,
-            &points[i].label,
-            &[(color, format(points[i].value))],
-            pal,
-        );
+        let mut lines = vec![(color, format(points[i].value))];
+        if let Some(p) = reference.and_then(|r| r.get(i)) {
+            lines.push((second, format(p.value)));
+        }
+        tooltip(ui, at, &points[i].label, &lines, pal);
     }
 }
 

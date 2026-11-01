@@ -277,13 +277,15 @@ fn write_through_temp(path: &Path, bytes: &[u8], sync: bool) -> Result<()> {
         .parent()
         .filter(|p| !p.as_os_str().is_empty())
         .unwrap_or(Path::new("."));
-    let mut tmp = tempfile_in(dir, path)?;
+    let (tmp, mut file) = tempfile_in(dir, path).map_err(|e| e.on_write(path))?;
     let result = (|| {
-        tmp.1.write_all(bytes)?;
+        file.write_all(bytes)?;
         if sync {
-            tmp.1.sync_all()?;
+            file.sync_all()?;
         }
-        fs::rename(&tmp.0, path)?;
+        // Fermé avant le renommage : Windows peut le refuser sinon.
+        drop(file);
+        replace(&tmp, path)?;
         #[cfg(unix)]
         if sync {
             fs::File::open(dir)?.sync_all()?;
@@ -291,9 +293,24 @@ fn write_through_temp(path: &Path, bytes: &[u8], sync: bool) -> Result<()> {
         Ok(())
     })();
     if result.is_err() {
-        let _ = fs::remove_file(&tmp.0);
+        let _ = fs::remove_file(&tmp);
     }
-    result
+    result.map_err(|e: Error| e.on_write(path))
+}
+
+/// Remplace `path` par `tmp`. Sous Windows, un antivirus, l'indexation ou une
+/// synchronisation peut garder le fichier ouvert un instant : le remplacement
+/// est alors refusé (erreurs 5 et 32), puis accepté quelques essais plus loin.
+fn replace(tmp: &Path, path: &Path) -> std::io::Result<()> {
+    for delay_ms in [50, 100, 200, 400, 800] {
+        match fs::rename(tmp, path) {
+            Err(e) if cfg!(windows) && matches!(e.raw_os_error(), Some(5 | 32)) => {
+                std::thread::sleep(std::time::Duration::from_millis(delay_ms));
+            }
+            result => return result,
+        }
+    }
+    fs::rename(tmp, path)
 }
 
 fn tempfile_in(dir: &Path, target: &Path) -> Result<(std::path::PathBuf, fs::File)> {
@@ -467,6 +484,29 @@ mod tests {
     }
 
     const CONTENT: &[u8] = "utilisateur=Fabio\ncompte0=Société Générale;€\n".as_bytes();
+
+    #[cfg(unix)]
+    #[test]
+    fn refused_write_names_the_folder() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let dir = std::env::temp_dir().join(format!(
+            "bp-denied-{}-{:?}",
+            std::process::id(),
+            std::thread::current().id()
+        ));
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("comptes.bp");
+        fs::write(&file, b"ancien").unwrap();
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let result = write_atomic(&file, b"nouveau");
+        fs::set_permissions(&dir, fs::Permissions::from_mode(0o755)).unwrap();
+        let error = result.unwrap_err();
+        assert!(matches!(error, Error::WriteDenied { .. }), "{error}");
+        assert!(error.to_string().contains(&*dir.to_string_lossy()));
+        assert_eq!(fs::read(&file).unwrap(), b"ancien");
+        fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn roundtrip_without_password() {

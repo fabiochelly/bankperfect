@@ -1,7 +1,7 @@
-//! Fenêtres des outils (ex-scripts) : Remplacer, Modifier le groupe, export CSV.
+//! Fenêtres des outils (ex-scripts) : Remplacer, Modifier le groupe, export tableur.
 
 use bp_core::edit::GroupEdit;
-use bp_core::export::{CsvField, CsvOptions};
+use bp_core::export::{ExportField, ExportOptions, ExportValue};
 use bp_core::model::{Amount, Date, Mode, Tack};
 use bp_core::{tr, tr_mark, trc, trn};
 use egui::text::{LayoutJob, TextFormat};
@@ -43,7 +43,7 @@ pub enum Tool {
     Notes(NotesForm),
     Replace(ReplaceForm),
     ModifyGroup(GroupForm),
-    ExportCsv(CsvForm),
+    Export(ExportForm),
 }
 
 /// Ce qu'il faut faire après l'affichage d'un outil.
@@ -95,7 +95,7 @@ impl Tool {
             Tool::Notes(form) => form.show_standalone(ctx),
             Tool::Replace(form) => form.show(ctx, doc),
             Tool::ModifyGroup(form) => form.show(ctx, doc),
-            Tool::ExportCsv(form) => form.show(ctx, doc),
+            Tool::Export(form) => form.show(ctx, doc),
         }
     }
 }
@@ -676,11 +676,27 @@ impl GroupForm {
     }
 }
 
-// ─────────────────────────────── Export CSV ───────────────────────────────
+// ───────────────────────────── Export tableur ─────────────────────────────
 
-pub struct CsvForm {
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ExportFormat {
+    Xlsx,
+    Csv,
+}
+
+impl ExportFormat {
+    fn extension(self) -> &'static str {
+        match self {
+            Self::Xlsx => "xlsx",
+            Self::Csv => "csv",
+        }
+    }
+}
+
+pub struct ExportForm {
+    format: ExportFormat,
     /// Colonnes dans l'ordre, avec leur case « exporter ».
-    fields: Vec<(CsvField, bool)>,
+    fields: Vec<(ExportField, bool)>,
     separator: usize,
     all_accounts: bool,
     header: bool,
@@ -696,10 +712,11 @@ const SEPARATORS: [(char, &str); 3] = [
     ('\t', tr_mark!("Tabulation")),
 ];
 
-impl CsvForm {
+impl ExportForm {
     pub fn new() -> Self {
         Self {
-            fields: CsvField::ALL.iter().map(|f| (*f, true)).collect(),
+            format: ExportFormat::Xlsx,
+            fields: ExportField::ALL.iter().map(|f| (*f, true)).collect(),
             separator: 0,
             all_accounts: false,
             header: true,
@@ -719,8 +736,8 @@ impl CsvForm {
         }
     }
 
-    fn options(&self) -> CsvOptions {
-        CsvOptions {
+    fn options(&self) -> ExportOptions {
+        ExportOptions {
             fields: self
                 .fields
                 .iter()
@@ -728,7 +745,8 @@ impl CsvForm {
                 .map(|(f, _)| *f)
                 .collect(),
             separator: SEPARATORS[self.separator].0,
-            header: self.header,
+            // Un classeur garde toujours son en-tête, figé à l'écran.
+            header: self.header || self.format == ExportFormat::Xlsx,
             cheque_as_mode: self.cheque_as_mode,
             group_categories: self.group.then(|| self.group_separator.clone()),
             tack_symbols: self.tack_symbols.clone(),
@@ -737,11 +755,12 @@ impl CsvForm {
 
     fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
+        doc.refresh();
         let width = ui_kit::dialog_width(ctx, 0.7, 800.0, 1100.0);
         crate::dialogs::modal(ctx, "tool_csv").show(ctx, |ui| {
             ui.set_width(width);
             let pal = palette(ui);
-            title(ui, icon::FILE_CSV, tr!("Exporter vers un fichier CSV"));
+            title(ui, icon::EXPORT, tr!("Exporter vers un tableur"));
             ui_kit::subtitle(
                 ui,
                 tr!(
@@ -804,21 +823,37 @@ impl CsvForm {
                     });
                     ui_kit::section(ui, right, icon::GEAR_SIX, tr!("Format"), |ui| {
                         let label_width = 170.0;
-                        ui_kit::row(ui, tr!("Séparateur"), label_width, |ui| {
+                        ui_kit::row(ui, tr!("Type de fichier"), label_width, |ui| {
                             let w = ui.available_width();
                             ui_kit::segmented(
                                 ui,
-                                &mut self.separator,
+                                &mut self.format,
                                 &[
-                                    (0, "", bp_core::i18n::tr(SEPARATORS[0].1), pal.accent),
-                                    (1, "", bp_core::i18n::tr(SEPARATORS[1].1), pal.accent),
-                                    (2, "", bp_core::i18n::tr(SEPARATORS[2].1), pal.accent),
+                                    (ExportFormat::Xlsx, icon::MICROSOFT_EXCEL_LOGO, tr!("Classeur Excel"), pal.accent),
+                                    (ExportFormat::Csv, icon::FILE_CSV, "CSV", pal.accent),
                                 ],
                                 32.0,
                                 Some(w),
                             );
                         });
                         ui.add_space(6.0);
+                        if self.format == ExportFormat::Csv {
+                            ui_kit::row(ui, tr!("Séparateur"), label_width, |ui| {
+                                let w = ui.available_width();
+                                ui_kit::segmented(
+                                    ui,
+                                    &mut self.separator,
+                                    &[
+                                        (0, "", bp_core::i18n::tr(SEPARATORS[0].1), pal.accent),
+                                        (1, "", bp_core::i18n::tr(SEPARATORS[1].1), pal.accent),
+                                        (2, "", bp_core::i18n::tr(SEPARATORS[2].1), pal.accent),
+                                    ],
+                                    32.0,
+                                    Some(w),
+                                );
+                            });
+                            ui.add_space(6.0);
+                        }
                         ui_kit::row(ui, tr!("Symboles de pointage"), label_width, |ui| {
                             for (symbol, hint) in self.tack_symbols.iter_mut().zip([tr!("non pointée"), tr!("pointée"), tr!("rapprochée")]) {
                                 ui.add(crate::theme::field(symbol).desired_width(46.0).horizontal_align(egui::Align::Center))
@@ -827,8 +862,10 @@ impl CsvForm {
                             ui.label(RichText::new(tr!("non · pointée · rapprochée")).color(pal.muted).size(12.5));
                         });
                         ui.add_space(10.0);
-                        crate::theme::checkbox(ui, &mut self.header, tr!("Inclure la ligne d'en-tête"));
-                        ui.add_space(6.0);
+                        if self.format == ExportFormat::Csv {
+                            crate::theme::checkbox(ui, &mut self.header, tr!("Inclure la ligne d'en-tête"));
+                            ui.add_space(6.0);
+                        }
                         crate::theme::checkbox(ui, &mut self.cheque_as_mode, tr!("Remplacer « Chq XXX » par « Chèque émis »"));
                         ui.add_space(6.0);
                         ui.horizontal(|ui| {
@@ -844,15 +881,11 @@ impl CsvForm {
             let account = doc.current_account();
             let visible = doc.visible();
             let sample: Vec<usize> = visible.iter().take(4).copied().collect();
-            let text = if options.fields.is_empty() {
-                String::new()
-            } else {
-                bp_core::export::csv(&doc.document, account, &sample, &options)
-            };
             ui_kit::section(ui, width, icon::EYE, tr!("Aperçu"), |ui| {
-                if text.is_empty() {
+                if options.fields.is_empty() {
                     ui.label(RichText::new(tr!("Aucune colonne choisie.")).color(pal.muted));
-                } else {
+                } else if self.format == ExportFormat::Csv {
+                    let text = bp_core::export::csv(&doc.document, account, &sample, doc.balances(), &options);
                     egui::ScrollArea::horizontal().show(ui, |ui| {
                         for line in text.lines().take(5) {
                             ui.label(
@@ -862,6 +895,28 @@ impl CsvForm {
                                     .color(pal.fg_dark),
                             );
                         }
+                    });
+                } else {
+                    let table = bp_core::export::table(&doc.document, account, &sample, doc.balances(), &options);
+                    egui::ScrollArea::horizontal().show(ui, |ui| {
+                        let grid = egui::Grid::new("export_preview").spacing([18.0, 4.0]).min_row_height(20.0);
+                        grid.show(ui, |ui| {
+                            for (r, row) in table.iter().enumerate() {
+                                for value in row {
+                                    let text = match value {
+                                        // Abrégé pour garder toutes les colonnes en vue.
+                                        ExportValue::Text(text) if text.chars().count() > 24 => {
+                                            format!("{}…", text.chars().take(23).collect::<String>())
+                                        }
+                                        ExportValue::Text(text) => text.clone(),
+                                        ExportValue::Amount(amount) => amount.format(2, bp_core::i18n::decimal_separator()),
+                                    };
+                                    let text = RichText::new(text).size(12.5).color(pal.fg_dark);
+                                    ui.label(if r == 0 { text.strong() } else { text });
+                                }
+                                ui.end_row();
+                            }
+                        });
                     });
                 }
             });
@@ -895,56 +950,94 @@ impl CsvForm {
         );
         let dialog = rfd::FileDialog::new().set_directory(&start_dir);
         if self.all_accounts {
-            let dialog = dialog.set_title(tr!("Dossier des fichiers CSV"));
+            let dialog = dialog.set_title(tr!("Dossier des fichiers exportés"));
             let id = egui::Id::new("csv_folder");
             crate::file_picker::open(ctx, id, crate::file_picker::Kind::Folder, dialog);
         } else {
             let name = bp_core::export::suggested_file_name(
                 &Self::stem(doc),
                 doc.current_account(),
-                "csv",
+                self.format.extension(),
             );
-            let dialog = dialog
-                .set_title(tr!("Exporter vers un fichier CSV"))
-                .set_file_name(name)
-                .add_filter("CSV", &["csv"]);
+            let dialog = match self.format {
+                ExportFormat::Xlsx => dialog
+                    .set_title(tr!("Exporter vers un tableur"))
+                    .add_filter(tr!("Classeur Excel"), &["xlsx"]),
+                ExportFormat::Csv => dialog
+                    .set_title(tr!("Exporter vers un fichier CSV"))
+                    .add_filter("CSV", &["csv"]),
+            }
+            .set_file_name(name);
             let id = egui::Id::new("csv_file");
             crate::file_picker::open(ctx, id, crate::file_picker::Kind::Save, dialog);
         }
     }
 
-    /// UTF-8 avec BOM : reconnu par Excel et LibreOffice.
-    fn write(path: &std::path::Path, text: String) -> std::io::Result<()> {
-        std::fs::write(path, [b"\xEF\xBB\xBF".as_slice(), text.as_bytes()].concat())
+    /// Écrit les `lines` d'un compte dans le format choisi.
+    fn write(
+        &self,
+        doc: &OpenDoc,
+        account: &bp_core::model::Account,
+        lines: &[usize],
+        balances: &[Amount],
+        path: &std::path::Path,
+    ) -> Result<(), String> {
+        let options = self.options();
+        match self.format {
+            ExportFormat::Xlsx => {
+                let table =
+                    bp_core::export::table(&doc.document, account, lines, balances, &options);
+                crate::spreadsheet::write(
+                    path,
+                    &account.name,
+                    &crate::spreadsheet::from_export(table),
+                )
+            }
+            // UTF-8 avec BOM : reconnu par Excel et LibreOffice.
+            ExportFormat::Csv => {
+                let text = bp_core::export::csv(&doc.document, account, lines, balances, &options);
+                std::fs::write(path, [b"\xEF\xBB\xBF".as_slice(), text.as_bytes()].concat())
+                    .map_err(|e| e.to_string())
+            }
+        }
     }
 
-    /// Un fichier par compte dans `folder`.
+    /// Un fichier par compte dans `folder`, en ordre chronologique.
     fn export_all(&self, doc: &OpenDoc, folder: &std::path::Path) -> String {
-        let options = self.options();
         let stem = Self::stem(doc);
         let mut written = 0;
         for account in &doc.document.accounts {
-            let lines: Vec<usize> = (0..account.operations.len()).collect();
-            let path = folder.join(bp_core::export::suggested_file_name(&stem, account, "csv"));
-            let text = bp_core::export::csv(&doc.document, account, &lines, &options);
-            if Self::write(&path, text).is_ok() {
+            let (lines, balances) = bp_core::export::chronology(&doc.document, account);
+            let name =
+                bp_core::export::suggested_file_name(&stem, account, self.format.extension());
+            if self
+                .write(doc, account, &lines, &balances, &folder.join(name))
+                .is_ok()
+            {
                 written += 1;
             }
         }
         trn!(
             written,
-            "{0} fichier CSV créé dans {1}",
-            "{0} fichiers CSV créés dans {1}",
+            "{0} fichier créé dans {1}",
+            "{0} fichiers créés dans {1}",
             folder.display()
         )
     }
 
     /// Lignes affichées du compte courant dans `path`.
     fn export_current(&self, doc: &OpenDoc, path: &std::path::Path) -> String {
-        let options = self.options();
-        let account = doc.current_account();
-        let text = bp_core::export::csv(&doc.document, account, &doc.visible(), &options);
-        match Self::write(path, text) {
+        let mut path = path.to_path_buf();
+        if path.extension().is_none() {
+            path.set_extension(self.format.extension());
+        }
+        match self.write(
+            doc,
+            doc.current_account(),
+            &doc.visible(),
+            doc.balances(),
+            &path,
+        ) {
             Ok(()) => tr!("Fichier {} créé", path.display()),
             Err(e) => tr!("Impossible de créer {} : {}", path.display(), e),
         }

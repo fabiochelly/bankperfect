@@ -1,6 +1,8 @@
 name: Publication
 
 # Un tag « v9.0.0 » construit les binaires et crée la release GitHub.
+# Le numéro de Cargo.toml reste numérique (requis par le MSIX) : seul le tag
+# porte un suffixe de pré-release.
 on:
   push:
     tags: ["v*"]
@@ -196,6 +198,9 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           name: BankPerfect ${{ github.ref_name }}
+          # Un tag à suffixe (v9.13.0-rc.1) reste une pré-release : il ne
+          # devient pas « Latest », donc ni le site ni les manifestes ne bougent.
+          prerelease: ${{ contains(github.ref_name, '-') }}
           # Mention exigée par SignPath quand l'exécutable est signé, sinon la
           # marche à suivre si Smart App Control bloque l'exécutable.
           body: |

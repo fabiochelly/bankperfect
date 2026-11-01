@@ -25,9 +25,13 @@ pub enum Kind {
 /// Chemin choisi (`None` si annulé) et instant de fermeture du sélecteur.
 type Outcome = (Option<PathBuf>, Instant);
 
-/// Résultat d'un sélecteur : `None` tant qu'il est ouvert.
+/// Suivi d'un sélecteur. `result` est vidé à la lecture : seul `closed` dit
+/// si le sélecteur est encore ouvert.
 #[derive(Clone, Default)]
-struct Slot(Arc<Mutex<Option<Outcome>>>);
+struct Slot {
+    result: Arc<Mutex<Option<Outcome>>>,
+    closed: Arc<AtomicBool>,
+}
 
 /// Un résultat plus ancien n'est plus attendu (fenêtre fermée entre-temps).
 const STALE: Duration = Duration::from_secs(3);
@@ -108,12 +112,26 @@ fn current_id() -> egui::Id {
 /// Un sélecteur est-il ouvert ?
 pub fn is_open(ctx: &egui::Context) -> bool {
     ctx.data(|d| d.get_temp::<Slot>(current_id()))
-        .is_some_and(|slot| slot.0.lock().is_ok_and(|result| result.is_none()))
+        .is_some_and(|slot| !slot.closed.load(Ordering::Relaxed))
 }
 
 /// Ouvre le sélecteur `dialog` ; le résultat sera rendu par [`finished`] (ou
 /// [`chosen`]) avec le même `id`. Sans effet si un sélecteur est déjà ouvert.
 pub fn open(ctx: &egui::Context, id: egui::Id, kind: Kind, dialog: rfd::FileDialog) {
+    let dialog = with_parent(dialog);
+    spawn(ctx, id, move || match kind {
+        Kind::File => dialog.pick_file(),
+        Kind::Folder => dialog.pick_folder(),
+        Kind::Save => dialog.save_file(),
+    });
+}
+
+/// Lance `pick` dans un fil à part, en attendant son résultat sous `id`.
+fn spawn(
+    ctx: &egui::Context,
+    id: egui::Id,
+    pick: impl FnOnce() -> Option<PathBuf> + Send + 'static,
+) {
     if is_open(ctx) {
         return;
     }
@@ -123,20 +141,16 @@ pub fn open(ctx: &egui::Context, id: egui::Id, kind: Kind, dialog: rfd::FileDial
         d.insert_temp(current_id(), slot.clone());
     });
     let ctx = ctx.clone();
-    let dialog = with_parent(dialog);
     std::thread::spawn(move || {
         let started = Instant::now();
-        let path = match kind {
-            Kind::File => dialog.pick_file(),
-            Kind::Folder => dialog.pick_folder(),
-            Kind::Save => dialog.save_file(),
-        };
+        let path = pick();
         if path.is_none() && started.elapsed() < FAILED {
             FAILURE.store(true, Ordering::Relaxed);
         }
-        if let Ok(mut result) = slot.0.lock() {
+        if let Ok(mut result) = slot.result.lock() {
             *result = Some((path, Instant::now()));
         }
+        slot.closed.store(true, Ordering::Relaxed);
         ctx.request_repaint();
     });
 }
@@ -145,7 +159,7 @@ pub fn open(ctx: &egui::Context, id: egui::Id, kind: Kind, dialog: rfd::FileDial
 /// (`Some(None)` s'il a été annulé) ; `None` tant qu'il est ouvert.
 pub fn finished(ctx: &egui::Context, id: egui::Id) -> Option<Option<PathBuf>> {
     let slot = ctx.data(|d| d.get_temp::<Slot>(id))?;
-    let (path, at) = slot.0.lock().ok()?.take()?;
+    let (path, at) = slot.result.lock().ok()?.take()?;
     ctx.data_mut(|d| d.remove::<Slot>(id));
     (at.elapsed() < STALE).then_some(path)
 }
@@ -153,4 +167,44 @@ pub fn finished(ctx: &egui::Context, id: egui::Id) -> Option<Option<PathBuf>> {
 /// Chemin choisi dans le sélecteur `id`, une seule fois, à sa fermeture.
 pub fn chosen(ctx: &egui::Context, id: egui::Id) -> Option<PathBuf> {
     finished(ctx, id).flatten()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Attend la fermeture du sélecteur `id`.
+    fn wait_for(ctx: &egui::Context, id: egui::Id) -> Option<PathBuf> {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            if let Some(choice) = finished(ctx, id) {
+                return choice;
+            }
+            assert!(Instant::now() < deadline, "sélecteur jamais refermé");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    }
+
+    /// Un sélecteur annulé, ou dont le choix a été lu, ne compte plus comme
+    /// ouvert : le suivant peut s'ouvrir.
+    #[test]
+    fn a_closed_picker_allows_the_next_one() {
+        let ctx = egui::Context::default();
+        let id = egui::Id::new("test_pick");
+        let path = PathBuf::from("comptes.bp");
+
+        // Annulation : au-delà de FAILED, ce n'est pas un échec d'ouverture.
+        spawn(&ctx, id, || {
+            std::thread::sleep(FAILED + Duration::from_millis(20));
+            None
+        });
+        assert!(is_open(&ctx));
+        assert_eq!(wait_for(&ctx, id), None);
+        assert!(!is_open(&ctx), "ouvert après une annulation");
+
+        let chosen = path.clone();
+        spawn(&ctx, id, move || Some(chosen));
+        assert_eq!(wait_for(&ctx, id), Some(path));
+        assert!(!is_open(&ctx), "ouvert après un choix");
+    }
 }

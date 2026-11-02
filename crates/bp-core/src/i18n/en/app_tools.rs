@@ -124,10 +124,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Contenu", "Content"),
     ("Tous les comptes", "All accounts"),
     (
-        "Toutes les opérations de chaque compte, un fichier par compte.",
-        "All transactions of every account, one file per account.",
-    ),
-    (
         "Les lignes affichées du compte courant, filtres appliqués.",
         "The rows shown in the current account, with filters applied.",
     ),
@@ -156,6 +152,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Folder for the exported files",
     ),
     ("Type de fichier", "File type"),
+    ("Un seul fichier", "One file"),
+    ("Un fichier par compte", "One file per account"),
     ("{0} fichier créé dans {1}", "{0} file created in {1}"),
     ("{0} fichiers créés dans {1}", "{0} files created in {1}"),
     ("Fichier {} créé", "File {} created"),

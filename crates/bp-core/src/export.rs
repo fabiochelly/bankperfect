@@ -8,6 +8,7 @@ use crate::view::{SortColumn, running_balances, sorted_order};
 /// Colonnes possibles d'un export d'opérations.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ExportField {
+    Account,
     Date,
     Mode,
     Payee,
@@ -20,7 +21,8 @@ pub enum ExportField {
 }
 
 impl ExportField {
-    pub const ALL: [ExportField; 9] = [
+    pub const ALL: [ExportField; 10] = [
+        Self::Account,
         Self::Date,
         Self::Mode,
         Self::Payee,
@@ -34,6 +36,7 @@ impl ExportField {
 
     pub fn label(self) -> &'static str {
         match self {
+            Self::Account => tr!("Compte"),
             Self::Date => tr!("Date"),
             Self::Mode => tr!("Mode"),
             Self::Payee => tr!("Tiers"),
@@ -72,7 +75,11 @@ pub struct ExportOptions {
 impl Default for ExportOptions {
     fn default() -> Self {
         Self {
-            fields: ExportField::ALL.to_vec(),
+            // La colonne « Compte » ne sert que si plusieurs comptes se suivent.
+            fields: ExportField::ALL
+                .into_iter()
+                .filter(|f| *f != ExportField::Account)
+                .collect(),
             separator: ';',
             header: true,
             cheque_as_mode: false,
@@ -135,6 +142,7 @@ pub fn table(
         let cells = fields
             .iter()
             .map(|field| match field {
+                ExportField::Account => Text(account.name.clone()),
                 ExportField::Date => Text(op.date.to_string()),
                 ExportField::Mode => {
                     if options.cheque_as_mode && op.cheque_number().is_some() {
@@ -160,12 +168,22 @@ pub fn table(
     rows
 }
 
-/// Génère le contenu CSV du tableau (voir [`table`]).
-///
-/// Pas de guillemets, comme l'original : le séparateur est remplacé par une
-/// espace dans les textes. Montants avec deux décimales ; la virgule décimale
-/// devient un point si le séparateur est lui-même une virgule (correction :
-/// l'original produisait alors un fichier illisible).
+/// Tableau de toutes les opérations du document, avec un seul en-tête :
+/// compte par compte dans l'ordre d'affichage, chronologique dans chacun pour
+/// que le solde se suive.
+pub fn merged_table(document: &Document, options: &ExportOptions) -> Vec<Vec<ExportValue>> {
+    let mut options = options.clone();
+    let mut rows = Vec::new();
+    for index in crate::reports::display_order(document) {
+        let account = &document.accounts[index];
+        let (lines, balances) = chronology(document, account);
+        rows.extend(table(document, account, &lines, &balances, &options));
+        options.header = false;
+    }
+    rows
+}
+
+/// Génère le contenu CSV d'un compte (voir [`table`] et [`csv_text`]).
 pub fn csv(
     document: &Document,
     account: &Account,
@@ -173,6 +191,16 @@ pub fn csv(
     balances: &[Amount],
     options: &ExportOptions,
 ) -> String {
+    csv_text(&table(document, account, lines, balances, options), options)
+}
+
+/// Texte CSV d'un tableau.
+///
+/// Pas de guillemets, comme l'original : le séparateur est remplacé par une
+/// espace dans les textes. Montants avec deux décimales ; la virgule décimale
+/// devient un point si le séparateur est lui-même une virgule (correction :
+/// l'original produisait alors un fichier illisible).
+pub fn csv_text(rows: &[Vec<ExportValue>], options: &ExportOptions) -> String {
     let sep = options.separator;
     // Séparateur décimal de la langue, sauf s'il se confond avec celui des
     // colonnes.
@@ -182,7 +210,7 @@ pub fn csv(
         d => d,
     };
     let mut out = String::new();
-    for row in table(document, account, lines, balances, options) {
+    for row in rows {
         let cells: Vec<String> = row
             .iter()
             .map(|value| match value {
@@ -396,6 +424,53 @@ mod tests {
                 ExportValue::Text("Livres".into()),
                 ExportValue::Amount(Amount::from_cents(-1250)),
             ]]
+        );
+    }
+
+    /// Tous les comptes dans un tableau : un seul en-tête, l'ordre d'affichage
+    /// et le solde propre à chaque compte.
+    #[test]
+    fn merged_table_follows_each_account() {
+        let (mut doc, first) = sample();
+        let mut second = first.clone();
+        second.name = "Livret".into();
+        second.operations.truncate(1);
+        doc.accounts = vec![first, second];
+        doc.account_order = vec![1, 0];
+        let options = ExportOptions {
+            fields: vec![ExportField::Account, ExportField::Balance],
+            ..Default::default()
+        };
+        let text = |t: &str| ExportValue::Text(t.into());
+        let money = |cents| ExportValue::Amount(Amount::from_cents(cents));
+        assert_eq!(
+            merged_table(&doc, &options),
+            [
+                [text("Compte"), text("Solde")],
+                [text("Livret"), money(-1250)],
+                [text("Courant"), money(-1250)],
+                [text("Courant"), money(-6250)],
+            ]
+        );
+    }
+
+    /// Le CSV d'un tableau réuni garde la colonne du compte, débarrassée du
+    /// séparateur comme les autres textes.
+    #[test]
+    fn merged_csv_keeps_the_account() {
+        let (mut doc, mut account) = sample();
+        account.name = "Courant; joint".into();
+        account.operations.truncate(1);
+        doc.accounts = vec![account];
+        doc.account_order = vec![0];
+        let options = ExportOptions {
+            fields: vec![ExportField::Account, ExportField::Amount],
+            header: false,
+            ..Default::default()
+        };
+        assert_eq!(
+            csv_text(&merged_table(&doc, &options), &options),
+            "Courant  joint;-12,50\r\n"
         );
     }
 

@@ -699,6 +699,8 @@ pub struct ExportForm {
     fields: Vec<(ExportField, bool)>,
     separator: usize,
     all_accounts: bool,
+    /// Tous les comptes : un fichier par compte plutôt qu'un seul.
+    one_file_per_account: bool,
     header: bool,
     cheque_as_mode: bool,
     group: bool,
@@ -716,9 +718,13 @@ impl ExportForm {
     pub fn new() -> Self {
         Self {
             format: ExportFormat::Xlsx,
-            fields: ExportField::ALL.iter().map(|f| (*f, true)).collect(),
+            fields: ExportField::ALL
+                .iter()
+                .map(|f| (*f, *f != ExportField::Account))
+                .collect(),
             separator: 0,
             all_accounts: false,
+            one_file_per_account: false,
             header: true,
             cheque_as_mode: false,
             group: false,
@@ -734,6 +740,11 @@ impl ExportForm {
                 "R".into(),
             ],
         }
+    }
+
+    /// Tous les comptes réunis dans un seul fichier.
+    fn merged(&self) -> bool {
+        self.all_accounts && !self.one_file_per_account
     }
 
     fn options(&self) -> ExportOptions {
@@ -779,7 +790,7 @@ impl ExportForm {
                         let count = self.fields.len();
                         for (i, (field, on)) in self.fields.iter_mut().enumerate() {
                             ui.horizontal(|ui| {
-                                ui.set_min_height(30.0);
+                                ui.set_min_height(26.0);
                                 crate::theme::checkbox(ui, on, field.label());
                                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                     let down = egui::Button::new(RichText::new(icon::CARET_DOWN).color(pal.muted)).frame(false);
@@ -801,6 +812,7 @@ impl ExportForm {
                 ui.vertical(|ui| {
                     ui.set_width(right);
                     ui_kit::section(ui, right, icon::STACK, tr!("Contenu"), |ui| {
+                        let merged = self.merged();
                         ui_kit::segmented(
                             ui,
                             &mut self.all_accounts,
@@ -812,14 +824,33 @@ impl ExportForm {
                             None,
                         );
                         ui.add_space(8.0);
-                        ui.label(
-                            RichText::new(if self.all_accounts {
-                                tr!("Toutes les opérations de chaque compte, un fichier par compte.")
-                            } else {
-                                tr!("Les lignes affichées du compte courant, filtres appliqués.")
-                            })
-                            .color(pal.muted),
-                        );
+                        if self.all_accounts {
+                            ui_kit::segmented(
+                                ui,
+                                &mut self.one_file_per_account,
+                                &[
+                                    (false, icon::FILE, tr!("Un seul fichier"), pal.accent),
+                                    (true, icon::FILES, tr!("Un fichier par compte"), pal.accent),
+                                ],
+                                34.0,
+                                None,
+                            );
+                        } else {
+                            ui.label(
+                                RichText::new(tr!("Les lignes affichées du compte courant, filtres appliqués."))
+                                    .color(pal.muted),
+                            );
+                        }
+                        // Réunir les comptes coche leur colonne, et inversement ;
+                        // elle reste libre ensuite.
+                        if self.merged() != merged {
+                            let wanted = self.merged();
+                            for (field, on) in &mut self.fields {
+                                if *field == ExportField::Account {
+                                    *on = wanted;
+                                }
+                            }
+                        }
                     });
                     ui_kit::section(ui, right, icon::GEAR_SIX, tr!("Format"), |ui| {
                         let label_width = 170.0;
@@ -930,7 +961,11 @@ impl ExportForm {
                 outcome = Outcome::Done(self.export_all(doc, &folder));
             }
             if let Some(path) = crate::file_picker::chosen(ui.ctx(), egui::Id::new("csv_file")) {
-                outcome = Outcome::Done(self.export_current(doc, &path));
+                outcome = Outcome::Done(if self.merged() {
+                    self.export_merged(doc, &path)
+                } else {
+                    self.export_current(doc, &path)
+                });
             }
         });
         outcome
@@ -943,22 +978,31 @@ impl ExportForm {
             .unwrap_or_default()
     }
 
-    /// Demande le dossier (tous les comptes) ou le fichier (compte affiché).
+    /// Demande le dossier (un fichier par compte) ou le fichier.
     fn choose_destination(&self, ctx: &egui::Context, doc: &OpenDoc) {
         let start_dir = crate::settings::shared::export_dir(
             doc.path.parent().unwrap_or(std::path::Path::new(".")),
         );
         let dialog = rfd::FileDialog::new().set_directory(&start_dir);
-        if self.all_accounts {
+        if self.all_accounts && self.one_file_per_account {
             let dialog = dialog.set_title(tr!("Dossier des fichiers exportés"));
             let id = egui::Id::new("csv_folder");
             crate::file_picker::open(ctx, id, crate::file_picker::Kind::Folder, dialog);
         } else {
-            let name = bp_core::export::suggested_file_name(
-                &Self::stem(doc),
-                doc.current_account(),
-                self.format.extension(),
-            );
+            let name = if self.merged() {
+                format!(
+                    "{} - {}.{}",
+                    Self::stem(doc),
+                    tr!("Tous les comptes"),
+                    self.format.extension()
+                )
+            } else {
+                bp_core::export::suggested_file_name(
+                    &Self::stem(doc),
+                    doc.current_account(),
+                    self.format.extension(),
+                )
+            };
             let dialog = match self.format {
                 ExportFormat::Xlsx => dialog
                     .set_title(tr!("Exporter vers un tableur"))
@@ -973,29 +1017,21 @@ impl ExportForm {
         }
     }
 
-    /// Écrit les `lines` d'un compte dans le format choisi.
+    /// Écrit un tableau dans le format choisi. `sheet` nomme la feuille du
+    /// classeur.
     fn write(
         &self,
-        doc: &OpenDoc,
-        account: &bp_core::model::Account,
-        lines: &[usize],
-        balances: &[Amount],
+        rows: Vec<Vec<ExportValue>>,
+        sheet: &str,
         path: &std::path::Path,
     ) -> Result<(), String> {
-        let options = self.options();
         match self.format {
             ExportFormat::Xlsx => {
-                let table =
-                    bp_core::export::table(&doc.document, account, lines, balances, &options);
-                crate::spreadsheet::write(
-                    path,
-                    &account.name,
-                    &crate::spreadsheet::from_export(table),
-                )
+                crate::spreadsheet::write(path, sheet, &crate::spreadsheet::from_export(rows))
             }
             // UTF-8 avec BOM : reconnu par Excel et LibreOffice.
             ExportFormat::Csv => {
-                let text = bp_core::export::csv(&doc.document, account, lines, balances, &options);
+                let text = bp_core::export::csv_text(&rows, &self.options());
                 std::fs::write(path, [b"\xEF\xBB\xBF".as_slice(), text.as_bytes()].concat())
                     .map_err(|e| e.to_string())
             }
@@ -1005,15 +1041,14 @@ impl ExportForm {
     /// Un fichier par compte dans `folder`, en ordre chronologique.
     fn export_all(&self, doc: &OpenDoc, folder: &std::path::Path) -> String {
         let stem = Self::stem(doc);
+        let options = self.options();
         let mut written = 0;
         for account in &doc.document.accounts {
             let (lines, balances) = bp_core::export::chronology(&doc.document, account);
+            let rows = bp_core::export::table(&doc.document, account, &lines, &balances, &options);
             let name =
                 bp_core::export::suggested_file_name(&stem, account, self.format.extension());
-            if self
-                .write(doc, account, &lines, &balances, &folder.join(name))
-                .is_ok()
-            {
+            if self.write(rows, &account.name, &folder.join(name)).is_ok() {
                 written += 1;
             }
         }
@@ -1027,17 +1062,35 @@ impl ExportForm {
 
     /// Lignes affichées du compte courant dans `path`.
     fn export_current(&self, doc: &OpenDoc, path: &std::path::Path) -> String {
+        let account = doc.current_account();
+        let rows = bp_core::export::table(
+            &doc.document,
+            account,
+            &doc.visible(),
+            doc.balances(),
+            &self.options(),
+        );
+        self.write_file(rows, &account.name, path)
+    }
+
+    /// Tous les comptes dans `path`.
+    fn export_merged(&self, doc: &OpenDoc, path: &std::path::Path) -> String {
+        let rows = bp_core::export::merged_table(&doc.document, &self.options());
+        self.write_file(rows, tr!("Tous les comptes"), path)
+    }
+
+    /// Écrit le fichier choisi, complété de son extension, et en rend compte.
+    fn write_file(
+        &self,
+        rows: Vec<Vec<ExportValue>>,
+        sheet: &str,
+        path: &std::path::Path,
+    ) -> String {
         let mut path = path.to_path_buf();
         if path.extension().is_none() {
             path.set_extension(self.format.extension());
         }
-        match self.write(
-            doc,
-            doc.current_account(),
-            &doc.visible(),
-            doc.balances(),
-            &path,
-        ) {
+        match self.write(rows, sheet, &path) {
             Ok(()) => tr!("Fichier {} créé", path.display()),
             Err(e) => tr!("Impossible de créer {} : {}", path.display(), e),
         }

@@ -616,6 +616,19 @@ fn export_screenshots() {
         h.get_by_label_contains("CSV").click();
         h.run_steps(2);
     });
+    render("09-export-tous-les-comptes", egui::Theme::Dark, |h| {
+        open_export(h);
+        h.get_by_label_contains("Tous les comptes").click();
+        h.run_steps(2);
+    });
+    // Le cas le plus haut : aucune option ne doit pousser les boutons hors de la fenêtre.
+    render("09-export-csv-tous-les-comptes", egui::Theme::Dark, |h| {
+        open_export(h);
+        h.get_by_label_contains("CSV").click();
+        h.run_steps(2);
+        h.get_by_label_contains("Tous les comptes").click();
+        h.run_steps(2);
+    });
 }
 
 /// Remplit les champs du portefeuille, dans l'ordre d'affichage.

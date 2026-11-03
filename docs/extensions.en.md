@@ -377,6 +377,7 @@ bp.delete_schedule(rent.index)
 | `day` | desired day of the month (1 to 31; 31 = always the last day), or `nil` |
 | `auto` | automatic insertion when the file opens |
 | `postpone` | `{ saturday, sunday, holiday }`: postpone an occurrence that falls on a Saturday, a Sunday or a public holiday |
+| `exceptions` | one-off amounts: list of `{ date, amount }`, one entry per occurrence with a different amount, identified by its date before postponement; the sign follows the mode. When writing, the list replaces the previous one (`{}` removes them all) |
 | `interval`, `finished` | frequency label (“Every 3 months”) and whether the scheduled transaction is finished, read-only |
 
 `bp.add_schedule{ … }` creates the scheduled transaction on the displayed account, starting today, as a monthly direct debit inserted automatically, unless told otherwise (`payee` is required). `bp.update_schedule(index, { … })` only changes the fields given.

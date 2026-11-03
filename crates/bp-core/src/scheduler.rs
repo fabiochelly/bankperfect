@@ -138,6 +138,17 @@ impl Postpone {
     }
 }
 
+/// Montant particulier d'une seule occurrence (« la prime de mars vaut
+/// 480 € », les autres mois gardent le montant de l'échéance).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AmountException {
+    /// Date théorique de l'occurrence, avant report : un changement des jours
+    /// de report ne détache donc pas l'exception de son occurrence.
+    pub due: Date,
+    /// Valeur absolue : à l'insertion, le signe est imposé par le mode.
+    pub amount: Amount,
+}
+
 /// Une échéance.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -167,6 +178,16 @@ pub struct Schedule {
     /// Insertion automatique à l'ouverture du fichier.
     pub auto_insert: bool,
     pub postpone: Postpone,
+    /// Occurrences dont le montant diffère, triées par date. Absent du JSON
+    /// tant qu'il est vide. Celles déjà passées sont gardées : reculer la
+    /// prochaine échéance les retrouve.
+    ///
+    /// [`STORAGE_VERSION`] n'a pas changé pour ce champ : une version plus
+    /// ancienne de l'application refuserait sinon tout l'échéancier, alors
+    /// qu'elle se contente ainsi d'ignorer les exceptions (et de les perdre si
+    /// elle réenregistre les échéances).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub exceptions: Vec<AmountException>,
 }
 
 impl Default for Schedule {
@@ -186,6 +207,7 @@ impl Default for Schedule {
             period: Period::default(),
             auto_insert: true,
             postpone: Postpone::default(),
+            exceptions: Vec::new(),
         }
     }
 }
@@ -266,6 +288,44 @@ impl Schedule {
             }
         }
         out
+    }
+
+    /// Montant particulier de l'occurrence de date théorique `due`.
+    pub fn exception_on(&self, due: Date) -> Option<Amount> {
+        self.exceptions
+            .iter()
+            .find(|e| e.due == due)
+            .map(|e| e.amount)
+    }
+
+    /// Montant de l'occurrence de date théorique `due`.
+    pub fn amount_on(&self, due: Date) -> Amount {
+        self.exception_on(due).unwrap_or(self.amount)
+    }
+
+    /// Donne à l'occurrence `due` un montant particulier, ou lui rend le
+    /// montant normal (`None`, ou montant identique à celui de l'échéance).
+    pub fn set_exception(&mut self, due: Date, amount: Option<Amount>) {
+        self.exceptions.retain(|e| e.due != due);
+        let amount = amount
+            .map(|a| Amount(a.0.saturating_abs()))
+            .filter(|&a| a != Amount(self.amount.0.saturating_abs()));
+        if let Some(amount) = amount {
+            let at = self.exceptions.partition_point(|e| e.due < due);
+            self.exceptions.insert(at, AmountException { due, amount });
+        }
+    }
+
+    /// `due` est-elle la date théorique d'une occurrence à venir ? Sinon, une
+    /// exception à cette date n'a pas d'effet (récurrence modifiée, date de
+    /// fin avancée).
+    pub fn is_occurrence(&self, due: Date) -> bool {
+        self.occurrences(due).last().is_some_and(|o| o.due == due)
+    }
+
+    /// Exceptions qui ne sont pas encore passées, avec ou sans effet.
+    pub fn upcoming_exceptions(&self) -> impl Iterator<Item = &AmountException> {
+        self.exceptions.iter().filter(|e| e.due >= self.next_date)
     }
 
     /// Libellé de la colonne « Intervalle » (`Tous les mois`, `Tous les 3 jours`…).
@@ -478,7 +538,6 @@ struct PlannedLine {
     account: usize,
     mode: Mode,
     payee: String,
-    amount: Amount,
 }
 
 /// Raison du refus d'une échéance.
@@ -527,7 +586,6 @@ fn planned_lines(
             account: acc1,
             mode: schedule.mode.clone(),
             payee,
-            amount: line_amount(document, &schedule.mode, schedule.amount),
         }]);
     };
     let acc2 = account_index(document, transfer).ok_or(RefusalReason::UnknownTransferAccount)?;
@@ -547,13 +605,11 @@ fn planned_lines(
         PlannedLine {
             account: acc1,
             payee: format!("Transfert {sens1} le compte {name2}"),
-            amount: line_amount(document, &mode1, schedule.amount),
             mode: mode1,
         },
         PlannedLine {
             account: acc2,
             payee: format!("Transfert {sens2} le compte {name1}"),
-            amount: line_amount(document, &mode2, -schedule.amount),
             mode: mode2,
         },
     ])
@@ -700,7 +756,9 @@ pub fn insert_due(
         let occurrences = schedule.occurrences(until);
         for occurrence in &occurrences {
             let first_uid = next_uid;
+            let due_amount = schedule.amount_on(occurrence.due);
             for (n, line) in lines.iter().enumerate() {
+                let amount = line_amount(document, &line.mode, due_amount);
                 let mut operation = Operation {
                     uid: next_uid,
                     date: occurrence.date,
@@ -710,7 +768,7 @@ pub fn insert_due(
                     payee: line.payee.clone(),
                     details: schedule.details.clone(),
                     category,
-                    amount: line.amount,
+                    amount,
                     extra: Vec::new(),
                 };
                 if lines.len() == 2 {
@@ -731,7 +789,7 @@ pub fn insert_due(
                     uid: next_uid,
                     date: occurrence.date,
                     payee: line.payee.clone(),
-                    amount: line.amount,
+                    amount,
                 });
                 next_uid += 1;
             }
@@ -788,6 +846,17 @@ pub struct ForecastLine {
     pub count: usize,
     /// Solde en millièmes du plus grand solde absolu (barre de progression).
     pub progress: i32,
+    /// Pour une occurrence d'échéance : index de l'échéance et date théorique.
+    pub occurrence: Option<(usize, Date)>,
+}
+
+/// Ligne à venir, avant calcul des soldes.
+struct FutureLine {
+    date: Date,
+    payee: String,
+    amount: Amount,
+    kind: ForecastKind,
+    occurrence: Option<(usize, Date)>,
 }
 
 /// Prévisionnel du compte `account` (index réel) jusqu'à `until`
@@ -813,31 +882,38 @@ pub fn forecast(
     };
     let mut total = Amount::ZERO;
     let mut last_date: Option<Date> = None;
-    let mut future: Vec<(Date, String, Amount, ForecastKind)> = Vec::new();
+    let mut future: Vec<FutureLine> = Vec::new();
     for op in &acc.operations {
         if op.tack != Tack::None || op.date <= today {
             total = total + op.amount;
             last_date = last_date.max(Some(op.date));
         } else if op.date <= until {
-            future.push((op.date, op.payee.clone(), op.amount, ForecastKind::Pending));
+            future.push(FutureLine {
+                date: op.date,
+                payee: op.payee.clone(),
+                amount: op.amount,
+                kind: ForecastKind::Pending,
+                occurrence: None,
+            });
         }
     }
-    for schedule in schedules {
+    for (index, schedule) in schedules.iter().enumerate() {
         let Ok(lines) = planned_lines(document, schedule, false) else {
             continue;
         };
         for line in lines.iter().filter(|l| l.account == account) {
             for occurrence in schedule.occurrences(until) {
-                future.push((
-                    occurrence.date,
-                    line.payee.clone(),
-                    line.amount,
-                    ForecastKind::Schedule,
-                ));
+                future.push(FutureLine {
+                    date: occurrence.date,
+                    payee: line.payee.clone(),
+                    amount: line_amount(document, &line.mode, schedule.amount_on(occurrence.due)),
+                    kind: ForecastKind::Schedule,
+                    occurrence: Some((index, occurrence.due)),
+                });
             }
         }
     }
-    future.sort_by(|a, b| (a.0, &a.1, a.2).cmp(&(b.0, &b.1, b.2)));
+    future.sort_by(|a, b| (a.date, &a.payee, a.amount).cmp(&(b.date, &b.payee, b.amount)));
 
     let mut lines = vec![ForecastLine {
         date: last_date.unwrap_or(today),
@@ -847,10 +923,17 @@ pub fn forecast(
         kind: ForecastKind::CurrentBalance,
         count: 1,
         progress: 0,
+        occurrence: None,
     }];
     if one_line_per_month {
         let mut grouped: Vec<(Date, String, Amount, usize)> = Vec::new();
-        for (date, payee, amount, _) in future {
+        for FutureLine {
+            date,
+            payee,
+            amount,
+            ..
+        } in future
+        {
             let end = naive(date)
                 .and_then(|d| {
                     Date::from_ymd(d.year(), d.month(), days_in_month(d.year(), d.month()))
@@ -875,19 +958,21 @@ pub fn forecast(
                 kind: ForecastKind::Month,
                 count,
                 progress: 0,
+                occurrence: None,
             });
         }
     } else {
-        for (date, payee, amount, kind) in future {
-            total = total + amount;
+        for line in future {
+            total = total + line.amount;
             lines.push(ForecastLine {
-                date,
-                payee,
-                amount,
+                date: line.date,
+                payee: line.payee,
+                amount: line.amount,
                 balance: total,
-                kind,
+                kind: line.kind,
                 count: 1,
                 progress: 0,
+                occurrence: line.occurrence,
             });
         }
     }
@@ -956,6 +1041,7 @@ pub fn schedule_from_operation(
         },
         auto_insert: true,
         postpone: Postpone::default(),
+        exceptions: Vec::new(),
     })
 }
 
@@ -1041,6 +1127,7 @@ pub fn schedule_from_legacy(
         },
         auto_insert: entry.autoinsert,
         postpone: Postpone::from_letters(entry.effective_postpone()),
+        exceptions: Vec::new(),
     })
 }
 
@@ -1577,6 +1664,184 @@ pub(crate) mod tests {
         let (schedules, warnings) = schedules_from_legacy(&doc, &[bad]);
         assert!(schedules.is_empty());
         assert_eq!(warnings.len(), 1);
+    }
+
+    // --- Montants particuliers ---
+
+    #[test]
+    fn exception_ne_change_qu_une_occurrence_a_l_insertion() {
+        let mut doc = sample_document();
+        let mut schedule = monthly(d(2024, 1, 15), None);
+        schedule.set_exception(d(2024, 2, 15), Some(Amount::from_cents(48_000)));
+        let mut schedules = vec![schedule];
+        let report = insert_due(
+            &mut doc,
+            &mut schedules,
+            d(2024, 3, 15),
+            Selection::All,
+            false,
+        );
+        let amounts: Vec<Amount> = doc.accounts[0]
+            .operations
+            .iter()
+            .map(|o| o.amount)
+            .collect();
+        let (normal, special) = (Amount::from_cents(-65_000), Amount::from_cents(-48_000));
+        assert_eq!(amounts, vec![normal, special, normal]);
+        assert_eq!(report.inserted[1].amount, special);
+        // Déjà passée, l'exception reste pour le cas où l'on recule.
+        assert_eq!(schedules[0].next_date, d(2024, 4, 15));
+        assert_eq!(schedules[0].exceptions.len(), 1);
+        assert_eq!(schedules[0].upcoming_exceptions().count(), 0);
+    }
+
+    #[test]
+    fn exception_sur_un_transfert() {
+        let mut doc = sample_document();
+        let mut schedule = Schedule {
+            transfer: Some("uid-livret".into()),
+            mode: Mode::Standard(StandardMode::VirementEmis),
+            ..monthly(d(2024, 1, 15), None)
+        };
+        schedule.set_exception(d(2024, 1, 15), Some(Amount::from_cents(10_000)));
+        let mut schedules = vec![schedule];
+        insert_due(
+            &mut doc,
+            &mut schedules,
+            d(2024, 1, 15),
+            Selection::All,
+            false,
+        );
+        assert_eq!(
+            doc.accounts[0].operations[0].amount,
+            Amount::from_cents(-10_000)
+        );
+        assert_eq!(
+            doc.accounts[1].operations[0].amount,
+            Amount::from_cents(10_000)
+        );
+    }
+
+    #[test]
+    fn exception_dans_le_previsionnel() {
+        let doc = sample_document();
+        let mut schedule = monthly(d(2024, 2, 15), None);
+        schedule.set_exception(d(2024, 3, 15), Some(Amount::from_cents(48_000)));
+        let schedules = [schedule];
+        let lines = forecast(&doc, &schedules, 0, d(2024, 4, 30), d(2024, 1, 1), false);
+        let due: Vec<_> = lines
+            .iter()
+            .filter(|l| l.kind == ForecastKind::Schedule)
+            .map(|l| (l.amount, l.occurrence))
+            .collect();
+        let normal = Amount::from_cents(-65_000);
+        assert_eq!(
+            due,
+            vec![
+                (normal, Some((0, d(2024, 2, 15)))),
+                (Amount::from_cents(-48_000), Some((0, d(2024, 3, 15)))),
+                (normal, Some((0, d(2024, 4, 15)))),
+            ]
+        );
+        assert_eq!(
+            forecast_balance(&doc, &schedules, 0, d(2024, 4, 30), d(2024, 1, 1)),
+            Amount::from_cents(-178_000)
+        );
+        // Le compte qui reçoit un transfert voit le montant particulier.
+        let mut transfer = Schedule {
+            transfer: Some("uid-livret".into()),
+            mode: Mode::Standard(StandardMode::VirementEmis),
+            ..monthly(d(2024, 2, 15), None)
+        };
+        transfer.set_exception(d(2024, 2, 15), Some(Amount::from_cents(10_000)));
+        let lines = forecast(&doc, &[transfer], 1, d(2024, 2, 28), d(2024, 1, 1), false);
+        assert_eq!(lines[1].amount, Amount::from_cents(10_000));
+    }
+
+    #[test]
+    fn exception_garde_son_occurrence_si_elle_est_reportee() {
+        let doc = sample_document();
+        // Le 16/03/2024 est un samedi.
+        let mut schedule = Schedule {
+            postpone: Postpone::from_letters("SD"),
+            ..monthly(d(2024, 3, 16), None)
+        };
+        schedule.set_exception(d(2024, 3, 16), Some(Amount::from_cents(48_000)));
+        let lines = forecast(&doc, &[schedule], 0, d(2024, 3, 31), d(2024, 1, 1), false);
+        assert_eq!(lines[1].date, d(2024, 3, 18));
+        assert_eq!(lines[1].amount, Amount::from_cents(-48_000));
+        assert_eq!(lines[1].occurrence, Some((0, d(2024, 3, 16))));
+    }
+
+    #[test]
+    fn exception_detachee_par_un_changement_de_recurrence() {
+        let mut schedule = monthly(d(2024, 1, 15), None);
+        schedule.set_exception(d(2024, 3, 15), Some(Amount::from_cents(48_000)));
+        assert!(schedule.is_occurrence(d(2024, 3, 15)));
+        assert!(!schedule.is_occurrence(d(2024, 3, 16)));
+        // Échéance déplacée du 15 au 20 : l'exception reste listée, sans effet.
+        schedule.next_date = d(2024, 1, 20);
+        assert!(!schedule.is_occurrence(d(2024, 3, 15)));
+        assert_eq!(schedule.upcoming_exceptions().count(), 1);
+        assert_eq!(schedule.amount_on(d(2024, 3, 20)), schedule.amount);
+        // Date de fin avancée : même chose.
+        schedule.next_date = d(2024, 1, 15);
+        schedule.end_date = Some(d(2024, 2, 28));
+        assert!(!schedule.is_occurrence(d(2024, 3, 15)));
+    }
+
+    #[test]
+    fn exception_reprise_quand_on_recule() {
+        let mut doc = sample_document();
+        let mut schedule = monthly(d(2024, 1, 15), None);
+        schedule.set_exception(d(2024, 1, 15), Some(Amount::from_cents(48_000)));
+        let mut schedules = vec![schedule];
+        insert_due(
+            &mut doc,
+            &mut schedules,
+            d(2024, 1, 15),
+            Selection::All,
+            false,
+        );
+        assert!(schedules[0].rewind());
+        assert_eq!(
+            schedules[0].amount_on(schedules[0].next_date),
+            Amount::from_cents(48_000)
+        );
+    }
+
+    #[test]
+    fn exception_saisie_et_retiree() {
+        let mut schedule = monthly(d(2024, 1, 15), None);
+        // Le signe saisi ne compte pas, et la liste reste triée.
+        schedule.set_exception(d(2024, 3, 15), Some(Amount::from_cents(-48_000)));
+        schedule.set_exception(d(2024, 2, 15), Some(Amount::from_cents(70_000)));
+        assert_eq!(schedule.exceptions[0].due, d(2024, 2, 15));
+        assert_eq!(schedule.exceptions[1].amount, Amount::from_cents(48_000));
+        // Une seule exception par occurrence.
+        schedule.set_exception(d(2024, 2, 15), Some(Amount::from_cents(71_000)));
+        assert_eq!(schedule.exceptions.len(), 2);
+        assert_eq!(
+            schedule.exception_on(d(2024, 2, 15)),
+            Some(Amount::from_cents(71_000))
+        );
+        // Le montant normal, saisi ou demandé, retire l'exception.
+        schedule.set_exception(d(2024, 2, 15), Some(schedule.amount));
+        schedule.set_exception(d(2024, 3, 15), None);
+        assert!(schedule.exceptions.is_empty());
+    }
+
+    #[test]
+    fn exceptions_absentes_du_json_si_vides() {
+        let mut schedule = monthly(d(2024, 1, 15), None);
+        let json = String::from_utf8(to_json(std::slice::from_ref(&schedule)).unwrap()).unwrap();
+        assert!(!json.contains("exceptions"));
+        // Fichier écrit avant l'ajout du champ.
+        assert_eq!(from_json(json.as_bytes()).unwrap(), vec![schedule.clone()]);
+
+        schedule.set_exception(d(2024, 3, 15), Some(Amount::from_cents(48_000)));
+        let json = to_json(std::slice::from_ref(&schedule)).unwrap();
+        assert_eq!(from_json(&json).unwrap(), vec![schedule]);
     }
 
     // --- Insertion ---

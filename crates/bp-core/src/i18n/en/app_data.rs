@@ -527,6 +527,25 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("{} (reportée du {})", "{} (postponed from {})"),
     ("Prochaines dates", "Upcoming dates"),
+    ("Changer une seule échéance…", "Change a single occurrence…"),
+    (
+        "Cliquez sur une date pour changer le montant de cette échéance seulement.",
+        "Click a date to change the amount of that occurrence only.",
+    ),
+    (
+        "Cliquez pour changer le montant de cette seule échéance.",
+        "Click to change the amount of this occurrence only.",
+    ),
+    ("Montant de l'échéance du {}", "Amount of the {} occurrence"),
+    ("montant normal : {}", "normal amount: {}"),
+    ("Revenir au montant normal", "Back to the normal amount"),
+    ("Montants ponctuels", "One-off amounts"),
+    ("Modifier ce montant", "Edit this amount"),
+    ("Supprimer ce montant", "Delete this amount"),
+    (
+        "Sans effet : aucune échéance à cette date.",
+        "No effect: no occurrence on this date.",
+    ),
     (
         "Aucune (échéance terminée).",
         "None (scheduled transaction finished).",

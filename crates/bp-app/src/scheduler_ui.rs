@@ -14,6 +14,97 @@ use crate::tools::Outcome;
 use crate::ui_kit;
 
 const LABEL_WIDTH: f32 = 170.0;
+/// Occurrences proposées sous « Prochaines dates », sur 24 mois au plus.
+const UPCOMING_DATES: usize = 24;
+
+/// Saisie du montant d'une seule occurrence. Le champ vide vaut « montant
+/// normal » ; le montant est enregistré à la frappe, comme le reste de
+/// l'échéance.
+struct OccurrenceEdit {
+    due: Date,
+    amount: String,
+    /// Donner le focus au champ à la première image, pas à chaque image.
+    focus: bool,
+    /// Images restantes pour amener le champ à l'écran : la zone de
+    /// défilement ne connaît sa nouvelle hauteur qu'à l'image suivante.
+    reveal: u8,
+}
+
+impl OccurrenceEdit {
+    fn new(schedule: &Schedule, due: Date) -> Self {
+        Self {
+            due,
+            amount: schedule
+                .exception_on(due)
+                .map(plain_amount)
+                .unwrap_or_default(),
+            focus: true,
+            reveal: 3,
+        }
+    }
+
+    /// Renvoie vrai si l'échéance a changé.
+    fn show(&mut self, ui: &mut egui::Ui, schedule: &mut Schedule, currency: &str) -> bool {
+        let pal = palette(ui);
+        let mut changed = false;
+        egui::Frame::new()
+            .fill(pal.accent.gamma_multiply(0.08))
+            .stroke(egui::Stroke::new(1.0, pal.accent.gamma_multiply(0.3)))
+            .corner_radius(10)
+            .inner_margin(egui::Margin::symmetric(12, 8))
+            .show(ui, |ui| {
+                ui.horizontal_wrapped(|ui| {
+                    ui.label(
+                        RichText::new(tr!("Montant de l'échéance du {}", self.due))
+                            .color(pal.fg_dark),
+                    );
+                    let r = ui.add(
+                        crate::theme::field(&mut self.amount)
+                            .hint_text(plain_amount(schedule.amount))
+                            .desired_width(120.0),
+                    );
+                    if std::mem::take(&mut self.focus) {
+                        r.request_focus();
+                    }
+                    if self.reveal > 0 {
+                        self.reveal -= 1;
+                        r.scroll_to_me(Some(egui::Align::Center));
+                        ui.ctx().request_repaint();
+                    }
+                    if r.changed() {
+                        let text = crate::budget_ui::amount_input(&self.amount);
+                        if text.trim().is_empty() {
+                            schedule.set_exception(self.due, None);
+                            changed = true;
+                        } else if let Some(amount) = Amount::parse(&text) {
+                            schedule.set_exception(self.due, Some(amount));
+                            changed = true;
+                        }
+                    }
+                    ui.label(
+                        RichText::new(tr!(
+                            "montant normal : {}",
+                            money(schedule.amount.abs(), currency)
+                        ))
+                        .color(pal.muted),
+                    );
+                    if schedule.exception_on(self.due).is_some()
+                        && ui.button(tr!("Revenir au montant normal")).clicked()
+                    {
+                        schedule.set_exception(self.due, None);
+                        self.amount.clear();
+                        changed = true;
+                    }
+                });
+            });
+        changed
+    }
+}
+
+/// Montant sans signe ni devise, tel qu'on le saisit.
+fn plain_amount(amount: Amount) -> String {
+    amount.abs().format(2, bp_core::i18n::decimal_separator())
+}
 
 pub struct SchedulerForm {
     schedules: Vec<Schedule>,
@@ -30,6 +121,10 @@ pub struct SchedulerForm {
     confirm_delete: bool,
     /// Nombre d'échéances du tout premier échéancier, reprenables.
     oldest: usize,
+    /// Occurrence de l'échéance sélectionnée dont on change le montant.
+    occurrence: Option<OccurrenceEdit>,
+    /// Faire défiler le détail jusqu'aux prochaines dates, une fois.
+    reveal_dates: bool,
 }
 
 /// Index réel du compte d'uid donné.
@@ -55,6 +150,8 @@ impl SchedulerForm {
             warnings,
             confirm_delete: false,
             oldest: scheduler::oldest_schedules(&doc.document).map_or(0, |(s, _)| s.len()),
+            occurrence: None,
+            reveal_dates: false,
         };
         let first = select.or((!form.schedules.is_empty()).then_some(0));
         form.select(first);
@@ -64,6 +161,7 @@ impl SchedulerForm {
     fn select(&mut self, index: Option<usize>) {
         self.selected = index.filter(|&i| i < self.schedules.len());
         self.confirm_delete = false;
+        self.occurrence = None;
         if let Some(s) = self.selected.map(|i| &self.schedules[i]) {
             self.amount = s.amount.abs().format(2, bp_core::i18n::decimal_separator());
             self.next_date = s.next_date.to_string();
@@ -245,7 +343,12 @@ impl SchedulerForm {
                                 .on_hover_text(tr!("Dupliquer"))
                                 .clicked()
                             {
-                                let copy = self.schedules[i].clone();
+                                // Les montants particuliers portent sur les
+                                // dates de l'échéance d'origine.
+                                let copy = Schedule {
+                                    exceptions: Vec::new(),
+                                    ..self.schedules[i].clone()
+                                };
                                 self.schedules.push(copy);
                                 clicked = Some(self.schedules.len() - 1);
                                 changed = true;
@@ -372,6 +475,12 @@ impl SchedulerForm {
                         s.amount = a;
                         changed = true;
                     }
+                }
+            });
+            ui.add_space(4.0);
+            ui_kit::row(ui, "", LABEL_WIDTH, |ui| {
+                if ui.link(tr!("Changer une seule échéance…")).clicked() {
+                    self.reveal_dates = true;
                 }
             });
         });
@@ -522,20 +631,24 @@ impl SchedulerForm {
             .changed();
         });
 
-        // Prochaines dates, pour vérifier la récurrence d'un coup d'œil.
+        // Prochaines dates, pour vérifier la récurrence d'un coup d'œil et
+        // changer le montant d'une seule d'entre elles.
+        let currency = account_index(doc, &s.account)
+            .map_or(doc.main_currency(), |k| &document.accounts[k].currency);
         let horizon = scheduler::add_months(s.next_date, 24, None).unwrap_or(s.next_date);
-        let upcoming: Vec<String> = s
-            .occurrences(horizon)
-            .iter()
-            .take(6)
-            .map(|o| {
-                if o.date != o.due {
-                    tr!("{} (reportée du {})", o.date, o.due)
-                } else {
-                    o.date.to_string()
-                }
-            })
-            .collect();
+        let mut upcoming = s.occurrences(horizon);
+        upcoming.truncate(UPCOMING_DATES);
+        if self
+            .occurrence
+            .as_ref()
+            .is_some_and(|edit| !s.is_occurrence(edit.due))
+        {
+            self.occurrence = None;
+        }
+        let mut clicked = None;
+        if std::mem::take(&mut self.reveal_dates) {
+            ui.scroll_to_cursor(Some(egui::Align::TOP));
+        }
         ui_kit::section(
             ui,
             width,
@@ -544,15 +657,126 @@ impl SchedulerForm {
             |ui| {
                 if upcoming.is_empty() {
                     ui.label(RichText::new(tr!("Aucune (échéance terminée).")).color(pal.muted));
+                    return;
                 }
+                ui.label(
+                    RichText::new(tr!(
+                        "Cliquez sur une date pour changer le montant de cette échéance seulement."
+                    ))
+                    .color(pal.muted),
+                );
+                ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
-                    for date in upcoming {
-                        ui_kit::pill(ui, &date, pal.accent);
+                    for o in &upcoming {
+                        let mut text = if o.date != o.due {
+                            tr!("{} (reportée du {})", o.date, o.due)
+                        } else {
+                            o.date.to_string()
+                        };
+                        let exception = s.exception_on(o.due);
+                        if let Some(amount) = exception {
+                            text = format!("{text} · {}", money(amount, currency));
+                        }
+                        let color = if exception.is_some() {
+                            pal.warning
+                        } else {
+                            pal.accent
+                        };
+                        let selected = self.occurrence.as_ref().is_some_and(|e| e.due == o.due);
+                        if ui_kit::pill_button(ui, &text, color, selected).clicked() {
+                            clicked = Some(o.due);
+                        }
                     }
                 });
+                if let Some(edit) = &mut self.occurrence {
+                    ui.add_space(10.0);
+                    changed |= edit.show(ui, s, currency);
+                }
             },
         );
+        if let Some(due) = clicked {
+            self.toggle_occurrence(i, due);
+        }
+        changed |= self.exceptions(ui, i, currency, width);
         changed
+    }
+
+    /// Ouvre la saisie du montant d'une occurrence, ou la referme.
+    fn toggle_occurrence(&mut self, index: usize, due: Date) {
+        let open = self.occurrence.as_ref().is_some_and(|e| e.due == due);
+        self.occurrence = (!open).then(|| OccurrenceEdit::new(&self.schedules[index], due));
+    }
+
+    /// Montants particuliers à venir, y compris ceux hors de la liste des
+    /// prochaines dates et ceux qui n'ont plus d'effet (récurrence modifiée).
+    fn exceptions(&mut self, ui: &mut egui::Ui, index: usize, currency: &str, width: f32) -> bool {
+        let pal = palette(ui);
+        let s = &self.schedules[index];
+        let rows: Vec<_> = s
+            .upcoming_exceptions()
+            .map(|e| (e.due, e.amount, s.is_occurrence(e.due)))
+            .collect();
+        if rows.is_empty() {
+            return false;
+        }
+        let mut remove = None;
+        let mut edit = None;
+        ui_kit::section(
+            ui,
+            width,
+            icon::PENCIL_SIMPLE,
+            tr!("Montants ponctuels"),
+            |ui| {
+                for (due, amount, active) in rows {
+                    ui.horizontal(|ui| {
+                        ui.set_min_height(28.0);
+                        ui_kit::cell(ui, 96.0, egui::Align::Min, RichText::new(due.to_string()));
+                        ui_kit::cell(
+                            ui,
+                            120.0,
+                            egui::Align::Max,
+                            RichText::new(money(amount, currency)),
+                        );
+                        if active {
+                            if ui
+                                .button(icon::PENCIL_SIMPLE)
+                                .on_hover_text(tr!("Modifier ce montant"))
+                                .clicked()
+                            {
+                                edit = Some(due);
+                            }
+                        } else {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{}  {}",
+                                    icon::WARNING,
+                                    tr!("Sans effet : aucune échéance à cette date.")
+                                ))
+                                .color(pal.warning),
+                            );
+                        }
+                        if ui
+                            .button(RichText::new(icon::TRASH).color(pal.negative))
+                            .on_hover_text(tr!("Supprimer ce montant"))
+                            .clicked()
+                        {
+                            remove = Some(due);
+                        }
+                    });
+                }
+            },
+        );
+        if let Some(due) = edit {
+            self.toggle_occurrence(index, due);
+        }
+        if let Some(due) = remove {
+            self.schedules[index].set_exception(due, None);
+            if self.occurrence.as_ref().is_some_and(|e| e.due == due) {
+                self.occurrence = None;
+            }
+            return true;
+        }
+        false
     }
 
     fn footer(&mut self, ui: &mut egui::Ui, doc: &mut OpenDoc, outcome: &mut Outcome) {
@@ -692,6 +916,8 @@ impl SchedulerForm {
 pub struct ForecastForm {
     until: String,
     monthly: bool,
+    /// Occurrence en cours de modification, avec l'index de son échéance.
+    editing: Option<(usize, OccurrenceEdit)>,
 }
 
 impl ForecastForm {
@@ -700,6 +926,7 @@ impl ForecastForm {
         Self {
             until: until.to_string(),
             monthly: false,
+            editing: None,
         }
     }
 
@@ -746,7 +973,7 @@ impl ForecastForm {
             });
             ui.add_space(12.0);
             let until = Date::parse_fr(&self.until, Date::today()).unwrap_or_else(Date::today);
-            let schedules = scheduler::load(&doc.document)
+            let mut schedules = scheduler::load(&doc.document)
                 .map(|l| l.schedules)
                 .unwrap_or_default();
             let lines = scheduler::forecast(
@@ -788,6 +1015,7 @@ impl ForecastForm {
                 ui.add_space(10.0);
             }
             let body = height - 36.0 - 14.0 - 40.0 - 50.0 - 80.0;
+            let mut changed = false;
             egui::ScrollArea::vertical()
                 .id_salt("forecast_rows")
                 .max_height(body)
@@ -800,7 +1028,12 @@ impl ForecastForm {
                         .unwrap_or(1)
                         .max(1) as f32;
                     for line in &lines {
-                        ui.horizontal(|ui| {
+                        let one_off = line.occurrence.is_some_and(|(index, due)| {
+                            schedules
+                                .get(index)
+                                .is_some_and(|s| s.exception_on(due).is_some())
+                        });
+                        let row = ui.horizontal(|ui| {
                             ui.set_min_height(30.0);
                             ui_kit::cell(
                                 ui,
@@ -810,6 +1043,9 @@ impl ForecastForm {
                             );
                             let (glyph, color) = match line.kind {
                                 ForecastKind::CurrentBalance => (icon::WALLET, pal.accent),
+                                ForecastKind::Schedule if one_off => {
+                                    (icon::PENCIL_SIMPLE, pal.warning)
+                                }
                                 ForecastKind::Schedule => (icon::CALENDAR_DOTS, pal.violet),
                                 ForecastKind::Pending => (icon::CLOCK, pal.future),
                                 ForecastKind::Month => (icon::CALENDAR_BLANK, pal.fg_dark),
@@ -863,8 +1099,44 @@ impl ForecastForm {
                                     .family(crate::theme::medium()),
                             );
                         });
+                        let Some((index, due)) = line.occurrence else {
+                            continue;
+                        };
+                        let Some(schedule) = schedules.get_mut(index) else {
+                            continue;
+                        };
+                        // Par-dessus la ligne : ses libellés prendraient sinon le clic.
+                        if ui
+                            .interact(
+                                row.response.rect,
+                                ui.id().with(("forecast_line", index, due.0)),
+                                egui::Sense::click(),
+                            )
+                            .on_hover_cursor(egui::CursorIcon::PointingHand)
+                            .on_hover_text(tr!(
+                                "Cliquez pour changer le montant de cette seule échéance."
+                            ))
+                            .clicked()
+                        {
+                            let open = self
+                                .editing
+                                .as_ref()
+                                .is_some_and(|(i, e)| *i == index && e.due == due);
+                            self.editing =
+                                (!open).then(|| (index, OccurrenceEdit::new(schedule, due)));
+                        }
+                        if let Some((_, edit)) = self
+                            .editing
+                            .as_mut()
+                            .filter(|(i, e)| *i == index && e.due == due)
+                        {
+                            changed |= edit.show(ui, schedule, &currency);
+                        }
                     }
                 });
+            if changed && scheduler::save(&mut doc.document, &schedules).is_ok() {
+                doc.dirty = true;
+            }
             crate::dialogs::footer(ui, |ui| {
                 if crate::dialogs::primary(ui, tr!("Fermer"), true).clicked()
                     || ui.input(|i| i.key_pressed(Key::Escape))

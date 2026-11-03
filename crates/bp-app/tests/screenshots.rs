@@ -631,6 +631,90 @@ fn export_screenshots() {
     });
 }
 
+/// Ouvre l'échéancier et donne un montant ponctuel à la 3e prochaine date.
+fn one_off_amount(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::E);
+    h.run_steps(3);
+    h.get_by_label_contains("Changer une seule échéance")
+        .click();
+    h.run_steps(8);
+    h.get_all_by_role(egui::accesskit::Role::Button)
+        .filter(|node| {
+            let label = node.accesskit_node().label().unwrap_or_default();
+            label.len() == 10 && label.matches('/').count() == 2
+        })
+        .nth(2)
+        .expect("date à venir")
+        .click();
+    h.run_steps(3);
+    // Le champ a le focus : on saisit directement.
+    h.event(egui::Event::Text("1234,56".into()));
+    h.run_steps(8);
+}
+
+#[test]
+#[ignore]
+fn one_off_amount_screenshots() {
+    render("08-montant-ponctuel", egui::Theme::Dark, one_off_amount);
+    render_sized(
+        "08-montant-ponctuel-petite-fenetre",
+        egui::Theme::Dark,
+        egui::vec2(1100.0, 720.0),
+        one_off_amount,
+    );
+    // La date de fin avancée laisse l'exception sans effet : elle reste listée.
+    render("08-montant-ponctuel-sans-effet", egui::Theme::Dark, |h| {
+        one_off_amount(h);
+        wheel(h, egui::pos2(850.0, 300.0), 250.0);
+        h.get_all_by_role(egui::accesskit::Role::TextInput)
+            .nth(4)
+            .expect("dernière échéance")
+            .click();
+        h.run_steps(3);
+        h.event(egui::Event::Text("10/01/2027".into()));
+        h.run_steps(3);
+        wheel(h, egui::pos2(850.0, 300.0), -900.0);
+    });
+    render("08-montant-ponctuel-previsionnel", egui::Theme::Dark, |h| {
+        one_off_amount(h);
+        h.get_by_label_contains("Solde prévisionnel").click();
+        h.run_steps(3);
+        h.get_by_label_contains("+6 mois").click();
+        h.run_steps(3);
+        // La ligne est plus bas dans la liste : on fait défiler jusqu'à elle.
+        for _ in 0..12 {
+            wheel(h, egui::pos2(720.0, 450.0), -220.0);
+            if line_visible(h) {
+                break;
+            }
+        }
+        h.get_all_by_label_contains("234,56")
+            .next()
+            .expect("ligne du prévisionnel")
+            .click();
+        h.run_steps(8);
+    });
+}
+
+/// Fait défiler sous `pos`, et attend la fin de l'animation.
+fn wheel(h: &mut Harness<'_, bankperfect::BankPerfectApp>, pos: egui::Pos2, delta: f32) {
+    h.event(egui::Event::PointerMoved(pos));
+    h.event(egui::Event::MouseWheel {
+        unit: egui::MouseWheelUnit::Point,
+        delta: egui::vec2(0.0, delta),
+        modifiers: egui::Modifiers::NONE,
+        phase: egui::TouchPhase::Move,
+    });
+    h.run_steps(8);
+}
+
+/// La ligne à 1 234,56 est-elle dans la partie visible du prévisionnel ?
+fn line_visible(h: &Harness<'_, bankperfect::BankPerfectApp>) -> bool {
+    h.get_all_by_label_contains("234,56")
+        .next()
+        .is_some_and(|node| (340.0..700.0).contains(&node.rect().center().y))
+}
+
 /// Remplit les champs du portefeuille, dans l'ordre d'affichage.
 fn fill_fields(h: &mut Harness<'_, bankperfect::BankPerfectApp>, texts: &[&str]) {
     for (k, text) in texts.iter().enumerate() {

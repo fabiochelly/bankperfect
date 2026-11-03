@@ -176,6 +176,8 @@ type ImporterSpec = {
 }
 
 type PeriodUnit = "days" | "weeks" | "months" | "years"
+type ScheduleException = { date: BPDate, amount: number }
+type ScheduleExceptionSpec = { date: DateLike, amount: number | string }
 type Schedule = {
 	index: number,
 	account: BPAccount?,
@@ -192,6 +194,7 @@ type Schedule = {
 	day: number?,
 	auto: boolean,
 	postpone: { saturday: boolean, sunday: boolean, holiday: boolean },
+	exceptions: { ScheduleException },
 	interval: string,
 	finished: boolean,
 }
@@ -210,6 +213,7 @@ type ScheduleSpec = {
 	day: (number | boolean)?,
 	auto: boolean?,
 	postpone: { saturday: boolean?, sunday: boolean?, holiday: boolean? }?,
+	exceptions: { ScheduleExceptionSpec }?,
 }
 type ForecastLine = { date: BPDate, payee: string, amount: number, balance: number, kind: "balance" | "schedule" | "pending" | "month", count: number }
 type BudgetTotal = { budget: number, real: number, difference: number, percent: number? }

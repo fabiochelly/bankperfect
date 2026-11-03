@@ -285,20 +285,52 @@ fn category_combo_impl(
 
 /// Pastille teintée (compteur, état).
 pub fn pill(ui: &mut egui::Ui, text: &str, color: Color32) {
+    pill_shape(ui, text, color, egui::Sense::hover(), false);
+}
+
+/// [`pill`] cliquable ; `selected` l'entoure d'un trait.
+pub fn pill_button(
+    ui: &mut egui::Ui,
+    text: &str,
+    color: Color32,
+    selected: bool,
+) -> egui::Response {
+    pill_shape(ui, text, color, egui::Sense::click(), selected)
+        .on_hover_cursor(egui::CursorIcon::PointingHand)
+}
+
+fn pill_shape(
+    ui: &mut egui::Ui,
+    text: &str,
+    color: Color32,
+    sense: egui::Sense,
+    selected: bool,
+) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
         text.to_string(),
         egui::FontId::new(12.5, crate::theme::medium()),
         color,
     );
     let size = egui::vec2(galley.size().x + 20.0, 26.0);
-    let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
+    let (rect, response) = ui.allocate_exact_size(size, sense);
+    response.widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Button, true, text));
+    let fill = if response.hovered() { 0.28 } else { 0.16 };
     ui.painter()
-        .rect_filled(rect, 13.0, color.gamma_multiply(0.16));
+        .rect_filled(rect, 13.0, color.gamma_multiply(fill));
+    if selected {
+        ui.painter().rect_stroke(
+            rect,
+            13.0,
+            egui::Stroke::new(1.5, color),
+            egui::StrokeKind::Inside,
+        );
+    }
     ui.painter().galley(
         egui::pos2(rect.left() + 10.0, rect.center().y - galley.size().y / 2.0),
         galley,
         color,
     );
+    response
 }
 
 /// Champ texte avec une icône devant, sur toute la largeur `width`.

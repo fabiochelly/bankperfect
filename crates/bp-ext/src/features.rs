@@ -98,6 +98,16 @@ fn schedule_table(lua: &Lua, s: &Session, index: usize, sc: &Schedule) -> mlua::
     postpone.set("sunday", sc.postpone.sunday)?;
     postpone.set("holiday", sc.postpone.holiday)?;
     t.set("postpone", postpone)?;
+    let debit = bp_core::edit::mode_is_debit(&s.document, &sc.mode);
+    let exceptions = lua.create_table()?;
+    for (n, e) in sc.exceptions.iter().enumerate() {
+        let item = lua.create_table()?;
+        item.set("date", date_value(lua, e.due)?)?;
+        let amount = if debit { -e.amount } else { e.amount };
+        item.set("amount", amount_to_f64(amount))?;
+        exceptions.set(n + 1, item)?;
+    }
+    t.set("exceptions", exceptions)?;
     t.set("interval", sc.interval_label())?;
     t.set("finished", sc.is_finished())?;
     Ok(t)
@@ -181,6 +191,30 @@ fn apply_schedule(lua: &Lua, s: &Session, sc: &mut Schedule, t: &Table) -> mlua:
         }
         if let Some(b) = flag("holiday")? {
             sc.postpone.holiday = b;
+        }
+    }
+    // Après `amount` : un montant égal au montant normal n'est pas gardé.
+    if let Some(v) = present("exceptions")? {
+        let Value::Table(list) = v else {
+            return Err(runtime(tr!(
+                "exceptions : une liste de lignes avec date et amount est attendue"
+            )));
+        };
+        let mut exceptions = Vec::new();
+        for item in list.sequence_values::<Table>() {
+            let item = item.map_err(|_| {
+                runtime(tr!(
+                    "exceptions : une liste de lignes avec date et amount est attendue"
+                ))
+            })?;
+            exceptions.push((
+                to_date(lua, &item.get::<Value>("date")?)?,
+                amount_from_value(&item.get::<Value>("amount")?)?,
+            ));
+        }
+        sc.exceptions.clear();
+        for (due, amount) in exceptions {
+            sc.set_exception(due, Some(amount));
         }
     }
     Ok(())

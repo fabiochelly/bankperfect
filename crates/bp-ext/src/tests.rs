@@ -792,6 +792,21 @@ fn schedules_budget_and_rules() {
             end
             assert(due == 3, "3 loyers prévus, pas " .. due)
 
+            bp.update_schedule(1, { exceptions = { { date = "05/02/2026", amount = -900 } } })
+            local e = bp.schedules()[1].exceptions
+            assert(#e == 1 and tostring(e[1].date) == "05/02/2026" and e[1].amount == -900)
+            local total = 0
+            for _, line in bp.forecast(bp.current_account(), "31/03/2026") do
+                if line.kind == "schedule" then total += line.amount end
+            end
+            assert(total == -2600, "2 loyers normaux et 1 particulier, pas " .. total)
+            -- Une mise à jour d'autres champs garde les exceptions ; une liste vide les retire.
+            bp.update_schedule(1, { details = "bail" })
+            assert(#bp.schedules()[1].exceptions == 1)
+            bp.update_schedule(1, { exceptions = {} })
+            assert(#bp.schedules()[1].exceptions == 0)
+            assert(not pcall(bp.update_schedule, 1, { exceptions = "non" }))
+
             bp.budget.set("Logement", -900)
             assert(bp.budget.get("Logement") == -900)
             assert(#bp.budget.entries() == 1)

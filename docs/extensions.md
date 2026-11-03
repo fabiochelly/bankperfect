@@ -356,6 +356,7 @@ bp.delete_schedule(loyer.index)
 | `day` | jour du mois voulu (1 à 31 ; 31 = toujours le dernier jour), ou `nil` |
 | `auto` | insertion automatique à l'ouverture du fichier |
 | `postpone` | `{ saturday, sunday, holiday }` : reporter une échéance qui tombe un samedi, un dimanche ou un jour férié |
+| `exceptions` | montants ponctuels : liste de `{ date, amount }`, une entrée par occurrence dont le montant diffère, repérée par sa date avant report ; le signe suit le mode. En écriture, la liste remplace la précédente (`{}` les retire toutes) |
 | `interval`, `finished` | libellé de la périodicité (« Tous les 3 mois ») et échéance terminée, en lecture |
 
 `bp.add_schedule{ … }` crée l'échéance sur le compte affiché, à la date du jour, en prélèvement mensuel à insertion automatique, sauf indication contraire (`payee` est obligatoire). `bp.update_schedule(index, { … })` ne change que les champs donnés.

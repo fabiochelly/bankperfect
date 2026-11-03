@@ -242,6 +242,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "every: a positive whole number is expected",
     ),
     (
+        "exceptions : une liste de lignes avec date et amount est attendue",
+        "exceptions: a list of rows with date and amount is expected",
+    ),
+    (
         "day : un jour de 1 à 31 est attendu",
         "day: a day from 1 to 31 is expected",
     ),

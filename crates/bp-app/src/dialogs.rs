@@ -48,6 +48,40 @@ pub fn header(ui: &mut egui::Ui, glyph: &str, color: egui::Color32, title: &str)
     ui.add_space(14.0);
 }
 
+/// Corps de fenêtre qui défile quand il ne tient pas à l'écran : la partie
+/// déjà placée au-dessus (titre) et le pied de fenêtre restent visibles.
+/// `id` distingue la position de défilement de chaque fenêtre. Quand la
+/// barre de défilement est là, le contenu lui laisse sa place à droite : il
+/// doit se régler sur `ui.available_width()`.
+pub fn scroll_body<R>(ui: &mut egui::Ui, id: &str, add: impl FnOnce(&mut egui::Ui) -> R) -> R {
+    // Marge autour de la fenêtre, cadre (2 × 24) et pied (22 + 36).
+    const SCREEN_MARGIN: f32 = 32.0;
+    const FRAME: f32 = 48.0;
+    const FOOTER: f32 = 58.0;
+    const GUTTER: f32 = 16.0;
+    let above = ui.cursor().top() - ui.min_rect().top();
+    let max = ui.ctx().content_rect().height() - SCREEN_MARGIN - FRAME - FOOTER - above;
+    // Défilement nécessaire à l'image précédente ?
+    let overflow_id = egui::Id::new((id, "overflow"));
+    let overflow = ui.data(|d| d.get_temp::<bool>(overflow_id).unwrap_or(false));
+    let width = ui.available_width();
+    let output = egui::ScrollArea::vertical()
+        .id_salt(id)
+        .max_height(max.max(120.0))
+        .auto_shrink([false, true])
+        .show(ui, |ui| {
+            let inner = if overflow { width - GUTTER } else { width };
+            ui.set_max_width(inner);
+            add(ui)
+        });
+    let overflows = output.content_size.y > output.inner_rect.height() + 0.5;
+    if overflows != overflow {
+        ui.data_mut(|d| d.insert_temp(overflow_id, overflows));
+        ui.ctx().request_repaint();
+    }
+    output.inner
+}
+
 /// Pied de fenêtre : de l'espace, puis les boutons alignés à droite. Le
 /// contenu est disposé de droite à gauche (bouton principal en premier).
 pub fn footer<R>(ui: &mut egui::Ui, add: impl FnOnce(&mut egui::Ui) -> R) -> R {

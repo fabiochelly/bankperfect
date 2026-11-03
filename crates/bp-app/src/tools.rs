@@ -772,184 +772,189 @@ impl ExportForm {
             ui.set_width(width);
             let pal = palette(ui);
             title(ui, icon::EXPORT, tr!("Exporter vers un tableur"));
-            ui_kit::subtitle(
-                ui,
-                tr!(
-                    "Fichier lisible par Excel, LibreOffice ou Numbers. Choisissez les colonnes, leur ordre et le format."
-                ),
-            );
-            let gap = 18.0;
-            let left = (width - gap) * 0.38;
-            let right = width - gap - left;
-            ui.horizontal_top(|ui| {
-                ui.spacing_mut().item_spacing.x = gap;
-                ui.vertical(|ui| {
-                    ui.set_width(left);
-                    ui_kit::section(ui, left, icon::COLUMNS, tr!("Colonnes, dans l'ordre"), |ui| {
-                        let mut swap = None;
-                        let count = self.fields.len();
-                        for (i, (field, on)) in self.fields.iter_mut().enumerate() {
-                            ui.horizontal(|ui| {
-                                ui.set_min_height(26.0);
-                                crate::theme::checkbox(ui, on, field.label());
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    let down = egui::Button::new(RichText::new(icon::CARET_DOWN).color(pal.muted)).frame(false);
-                                    if ui.add_enabled(i + 1 < count, down).on_hover_text(tr!("Descendre")).clicked() {
-                                        swap = Some((i, i + 1));
-                                    }
-                                    let up = egui::Button::new(RichText::new(icon::CARET_UP).color(pal.muted)).frame(false);
-                                    if ui.add_enabled(i > 0, up).on_hover_text(tr!("Monter")).clicked() {
-                                        swap = Some((i - 1, i));
-                                    }
+            // Le corps défile si la fenêtre dépasse l'écran.
+            crate::dialogs::scroll_body(ui, "tool_csv_body", |ui| {
+                let width = ui.available_width();
+                ui_kit::subtitle(
+                    ui,
+                    tr!(
+                        "Fichier lisible par Excel, LibreOffice ou Numbers. Choisissez les colonnes, leur ordre et le format."
+                    ),
+                );
+                let gap = 18.0;
+                let left = (width - gap) * 0.38;
+                let right = width - gap - left;
+                ui.horizontal_top(|ui| {
+                    ui.spacing_mut().item_spacing.x = gap;
+                    ui.vertical(|ui| {
+                        ui.set_width(left);
+                        ui_kit::section(ui, left, icon::COLUMNS, tr!("Colonnes, dans l'ordre"), |ui| {
+                            let mut swap = None;
+                            let count = self.fields.len();
+                            for (i, (field, on)) in self.fields.iter_mut().enumerate() {
+                                ui.horizontal(|ui| {
+                                    ui.set_min_height(26.0);
+                                    crate::theme::checkbox(ui, on, field.label());
+                                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                        let down = egui::Button::new(RichText::new(icon::CARET_DOWN).color(pal.muted)).frame(false);
+                                        if ui.add_enabled(i + 1 < count, down).on_hover_text(tr!("Descendre")).clicked() {
+                                            swap = Some((i, i + 1));
+                                        }
+                                        let up = egui::Button::new(RichText::new(icon::CARET_UP).color(pal.muted)).frame(false);
+                                        if ui.add_enabled(i > 0, up).on_hover_text(tr!("Monter")).clicked() {
+                                            swap = Some((i - 1, i));
+                                        }
+                                    });
                                 });
-                            });
-                        }
-                        if let Some((a, b)) = swap {
-                            self.fields.swap(a, b);
-                        }
+                            }
+                            if let Some((a, b)) = swap {
+                                self.fields.swap(a, b);
+                            }
+                        });
                     });
-                });
-                ui.vertical(|ui| {
-                    ui.set_width(right);
-                    ui_kit::section(ui, right, icon::STACK, tr!("Contenu"), |ui| {
-                        let merged = self.merged();
-                        ui_kit::segmented(
-                            ui,
-                            &mut self.all_accounts,
-                            &[
-                                (false, icon::FUNNEL, tr!("Lignes affichées"), pal.accent),
-                                (true, icon::BANK, tr!("Tous les comptes"), pal.accent),
-                            ],
-                            34.0,
-                            None,
-                        );
-                        ui.add_space(8.0);
-                        if self.all_accounts {
+                    ui.vertical(|ui| {
+                        ui.set_width(right);
+                        ui_kit::section(ui, right, icon::STACK, tr!("Contenu"), |ui| {
+                            let merged = self.merged();
                             ui_kit::segmented(
                                 ui,
-                                &mut self.one_file_per_account,
+                                &mut self.all_accounts,
                                 &[
-                                    (false, icon::FILE, tr!("Un seul fichier"), pal.accent),
-                                    (true, icon::FILES, tr!("Un fichier par compte"), pal.accent),
+                                    (false, icon::FUNNEL, tr!("Lignes affichées"), pal.accent),
+                                    (true, icon::BANK, tr!("Tous les comptes"), pal.accent),
                                 ],
                                 34.0,
                                 None,
                             );
-                        } else {
-                            ui.label(
-                                RichText::new(tr!("Les lignes affichées du compte courant, filtres appliqués."))
-                                    .color(pal.muted),
-                            );
-                        }
-                        // Réunir les comptes coche leur colonne, et inversement ;
-                        // elle reste libre ensuite.
-                        if self.merged() != merged {
-                            let wanted = self.merged();
-                            for (field, on) in &mut self.fields {
-                                if *field == ExportField::Account {
-                                    *on = wanted;
+                            ui.add_space(8.0);
+                            if self.all_accounts {
+                                ui_kit::segmented(
+                                    ui,
+                                    &mut self.one_file_per_account,
+                                    &[
+                                        (false, icon::FILE, tr!("Un seul fichier"), pal.accent),
+                                        (true, icon::FILES, tr!("Un fichier par compte"), pal.accent),
+                                    ],
+                                    34.0,
+                                    None,
+                                );
+                            } else {
+                                ui.label(
+                                    RichText::new(tr!("Les lignes affichées du compte courant, filtres appliqués."))
+                                        .color(pal.muted),
+                                );
+                            }
+                            // Réunir les comptes coche leur colonne, et inversement ;
+                            // elle reste libre ensuite.
+                            if self.merged() != merged {
+                                let wanted = self.merged();
+                                for (field, on) in &mut self.fields {
+                                    if *field == ExportField::Account {
+                                        *on = wanted;
+                                    }
                                 }
                             }
-                        }
-                    });
-                    ui_kit::section(ui, right, icon::GEAR_SIX, tr!("Format"), |ui| {
-                        let label_width = 170.0;
-                        ui_kit::row(ui, tr!("Type de fichier"), label_width, |ui| {
-                            let w = ui.available_width();
-                            ui_kit::segmented(
-                                ui,
-                                &mut self.format,
-                                &[
-                                    (ExportFormat::Xlsx, icon::MICROSOFT_EXCEL_LOGO, tr!("Classeur Excel"), pal.accent),
-                                    (ExportFormat::Csv, icon::FILE_CSV, "CSV", pal.accent),
-                                ],
-                                32.0,
-                                Some(w),
-                            );
                         });
-                        ui.add_space(6.0);
-                        if self.format == ExportFormat::Csv {
-                            ui_kit::row(ui, tr!("Séparateur"), label_width, |ui| {
+                        ui_kit::section(ui, right, icon::GEAR_SIX, tr!("Format"), |ui| {
+                            let label_width = 170.0;
+                            ui_kit::row(ui, tr!("Type de fichier"), label_width, |ui| {
                                 let w = ui.available_width();
                                 ui_kit::segmented(
                                     ui,
-                                    &mut self.separator,
+                                    &mut self.format,
                                     &[
-                                        (0, "", bp_core::i18n::tr(SEPARATORS[0].1), pal.accent),
-                                        (1, "", bp_core::i18n::tr(SEPARATORS[1].1), pal.accent),
-                                        (2, "", bp_core::i18n::tr(SEPARATORS[2].1), pal.accent),
+                                        (ExportFormat::Xlsx, icon::MICROSOFT_EXCEL_LOGO, tr!("Classeur Excel"), pal.accent),
+                                        (ExportFormat::Csv, icon::FILE_CSV, "CSV", pal.accent),
                                     ],
                                     32.0,
                                     Some(w),
                                 );
                             });
                             ui.add_space(6.0);
-                        }
-                        ui_kit::row(ui, tr!("Symboles de pointage"), label_width, |ui| {
-                            for (symbol, hint) in self.tack_symbols.iter_mut().zip([tr!("non pointée"), tr!("pointée"), tr!("rapprochée")]) {
-                                ui.add(crate::theme::field(symbol).desired_width(46.0).horizontal_align(egui::Align::Center))
-                                    .on_hover_text(hint);
+                            if self.format == ExportFormat::Csv {
+                                ui_kit::row(ui, tr!("Séparateur"), label_width, |ui| {
+                                    let w = ui.available_width();
+                                    ui_kit::segmented(
+                                        ui,
+                                        &mut self.separator,
+                                        &[
+                                            (0, "", bp_core::i18n::tr(SEPARATORS[0].1), pal.accent),
+                                            (1, "", bp_core::i18n::tr(SEPARATORS[1].1), pal.accent),
+                                            (2, "", bp_core::i18n::tr(SEPARATORS[2].1), pal.accent),
+                                        ],
+                                        32.0,
+                                        Some(w),
+                                    );
+                                });
+                                ui.add_space(6.0);
                             }
-                            ui.label(RichText::new(tr!("non · pointée · rapprochée")).color(pal.muted).size(12.5));
-                        });
-                        ui.add_space(10.0);
-                        if self.format == ExportFormat::Csv {
-                            crate::theme::checkbox(ui, &mut self.header, tr!("Inclure la ligne d'en-tête"));
+                            ui_kit::row(ui, tr!("Symboles de pointage"), label_width, |ui| {
+                                for (symbol, hint) in self.tack_symbols.iter_mut().zip([tr!("non pointée"), tr!("pointée"), tr!("rapprochée")]) {
+                                    ui.add(crate::theme::field(symbol).desired_width(46.0).horizontal_align(egui::Align::Center))
+                                        .on_hover_text(hint);
+                                }
+                                // Abrégé plutôt que d'élargir la carte (fenêtre étroite).
+                                ui.add(egui::Label::new(RichText::new(tr!("non · pointée · rapprochée")).color(pal.muted).size(12.5)).truncate());
+                            });
+                            ui.add_space(10.0);
+                            if self.format == ExportFormat::Csv {
+                                crate::theme::checkbox(ui, &mut self.header, tr!("Inclure la ligne d'en-tête"));
+                                ui.add_space(6.0);
+                            }
+                            crate::theme::checkbox(ui, &mut self.cheque_as_mode, tr!("Remplacer « Chq XXX » par « Chèque émis »"));
                             ui.add_space(6.0);
-                        }
-                        crate::theme::checkbox(ui, &mut self.cheque_as_mode, tr!("Remplacer « Chq XXX » par « Chèque émis »"));
-                        ui.add_space(6.0);
-                        ui.horizontal(|ui| {
-                            crate::theme::checkbox(ui, &mut self.group, tr!("Catégorie et sous-catégorie dans une colonne, séparées par"));
-                            ui.add_enabled(self.group, crate::theme::field(&mut self.group_separator).desired_width(50.0));
+                            ui.horizontal(|ui| {
+                                crate::theme::checkbox(ui, &mut self.group, tr!("Catégorie et sous-catégorie dans une colonne, séparées par"));
+                                ui.add_enabled(self.group, crate::theme::field(&mut self.group_separator).desired_width(50.0));
+                            });
                         });
                     });
                 });
-            });
 
-            // Aperçu : les premières lignes du fichier.
-            let options = self.options();
-            let account = doc.current_account();
-            let visible = doc.visible();
-            let sample: Vec<usize> = visible.iter().take(4).copied().collect();
-            ui_kit::section(ui, width, icon::EYE, tr!("Aperçu"), |ui| {
-                if options.fields.is_empty() {
-                    ui.label(RichText::new(tr!("Aucune colonne choisie.")).color(pal.muted));
-                } else if self.format == ExportFormat::Csv {
-                    let text = bp_core::export::csv(&doc.document, account, &sample, doc.balances(), &options);
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        for line in text.lines().take(5) {
-                            ui.label(
-                                RichText::new(line.replace('\t', "   ⇥   "))
-                                    .monospace()
-                                    .size(12.5)
-                                    .color(pal.fg_dark),
-                            );
-                        }
-                    });
-                } else {
-                    let table = bp_core::export::table(&doc.document, account, &sample, doc.balances(), &options);
-                    egui::ScrollArea::horizontal().show(ui, |ui| {
-                        let grid = egui::Grid::new("export_preview").spacing([18.0, 4.0]).min_row_height(20.0);
-                        grid.show(ui, |ui| {
-                            for (r, row) in table.iter().enumerate() {
-                                for value in row {
-                                    let text = match value {
-                                        // Abrégé pour garder toutes les colonnes en vue.
-                                        ExportValue::Text(text) if text.chars().count() > 24 => {
-                                            format!("{}…", text.chars().take(23).collect::<String>())
-                                        }
-                                        ExportValue::Text(text) => text.clone(),
-                                        ExportValue::Amount(amount) => amount.format(2, bp_core::i18n::decimal_separator()),
-                                    };
-                                    let text = RichText::new(text).size(12.5).color(pal.fg_dark);
-                                    ui.label(if r == 0 { text.strong() } else { text });
-                                }
-                                ui.end_row();
+                // Aperçu : les premières lignes du fichier.
+                let options = self.options();
+                let account = doc.current_account();
+                let visible = doc.visible();
+                let sample: Vec<usize> = visible.iter().take(4).copied().collect();
+                ui_kit::section(ui, width, icon::EYE, tr!("Aperçu"), |ui| {
+                    if options.fields.is_empty() {
+                        ui.label(RichText::new(tr!("Aucune colonne choisie.")).color(pal.muted));
+                    } else if self.format == ExportFormat::Csv {
+                        let text = bp_core::export::csv(&doc.document, account, &sample, doc.balances(), &options);
+                        egui::ScrollArea::horizontal().show(ui, |ui| {
+                            for line in text.lines().take(5) {
+                                ui.label(
+                                    RichText::new(line.replace('\t', "   ⇥   "))
+                                        .monospace()
+                                        .size(12.5)
+                                        .color(pal.fg_dark),
+                                );
                             }
                         });
-                    });
-                }
+                    } else {
+                        let table = bp_core::export::table(&doc.document, account, &sample, doc.balances(), &options);
+                        egui::ScrollArea::horizontal().show(ui, |ui| {
+                            let grid = egui::Grid::new("export_preview").spacing([18.0, 4.0]).min_row_height(20.0);
+                            grid.show(ui, |ui| {
+                                for (r, row) in table.iter().enumerate() {
+                                    for value in row {
+                                        let text = match value {
+                                            // Abrégé pour garder toutes les colonnes en vue.
+                                            ExportValue::Text(text) if text.chars().count() > 24 => {
+                                                format!("{}…", text.chars().take(23).collect::<String>())
+                                            }
+                                            ExportValue::Text(text) => text.clone(),
+                                            ExportValue::Amount(amount) => amount.format(2, bp_core::i18n::decimal_separator()),
+                                        };
+                                        let text = RichText::new(text).size(12.5).color(pal.fg_dark);
+                                        ui.label(if r == 0 { text.strong() } else { text });
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                        });
+                    }
+                });
             });
             let any = self.fields.iter().any(|(_, on)| *on);
             match buttons(ui, &format!("{}  {}", icon::EXPORT, tr!("Exporter…")), any) {

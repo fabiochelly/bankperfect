@@ -629,6 +629,29 @@ fn export_screenshots() {
         h.get_by_label_contains("Tous les comptes").click();
         h.run_steps(2);
     });
+    // Écran bas : le corps défile, titre et boutons restent visibles.
+    let tall = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        open_export(h);
+        h.get_by_label_contains("CSV").click();
+        h.run_steps(2);
+        h.get_by_label_contains("Tous les comptes").click();
+        h.run_steps(2);
+    };
+    render_sized(
+        "09-export-ecran-bas",
+        egui::Theme::Dark,
+        egui::vec2(1280.0, 640.0),
+        tall,
+    );
+    render_sized(
+        "09-export-ecran-bas-defile",
+        egui::Theme::Light,
+        egui::vec2(1280.0, 640.0),
+        |h| {
+            tall(h);
+            wheel(h, egui::pos2(640.0, 320.0), -2000.0);
+        },
+    );
 }
 
 /// Ouvre l'échéancier et donne un montant ponctuel à la 3e prochaine date.

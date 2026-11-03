@@ -4,7 +4,9 @@
 use std::collections::HashSet;
 
 use bp_core::model::{Amount, Tack};
-use bp_core::reports::{self, AccountScope, Pivot, PivotGoal, PivotOptions};
+use bp_core::reports::{
+    self, AccountScope, HistoryMeasure, HistoryPeriod, Pivot, PivotGoal, PivotOptions,
+};
 use bp_core::{tr, trn};
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
@@ -24,8 +26,21 @@ pub enum ReportTab {
     Statement,
 }
 
+/// Présentation du total des comptes.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum AccountsView {
+    /// Pointé, à venir et solde de chaque compte.
+    Summary,
+    /// Une colonne par mois ou par année.
+    History(HistoryPeriod),
+}
+
 pub struct ReportsForm {
     pub tab: ReportTab,
+    accounts_view: AccountsView,
+    accounts_measure: HistoryMeasure,
+    /// Année des colonnes mensuelles du total des comptes.
+    accounts_year: i32,
     all_accounts: bool,
     goal: PivotGoal,
     year: Option<i32>,
@@ -80,6 +95,13 @@ impl ReportsForm {
         let year = years.contains(&current).then_some(current);
         Self {
             tab,
+            accounts_view: AccountsView::Summary,
+            accounts_measure: HistoryMeasure::Balance,
+            accounts_year: if years.contains(&current) {
+                current
+            } else {
+                years.last().copied().unwrap_or(current)
+            },
             all_accounts: true,
             goal: PivotGoal::MonthlyTotals,
             year,
@@ -176,7 +198,7 @@ impl ReportsForm {
                 |ui| {
                     ui.set_min_size(egui::vec2(width, body));
                     match self.tab {
-                        ReportTab::Accounts => self.accounts(ui, doc, body, &mut export),
+                        ReportTab::Accounts => self.accounts(ui, doc, width, body, &mut export),
                         ReportTab::Categories | ReportTab::Payees => {
                             self.pivot(ui, doc, width, body, &mut export)
                         }
@@ -216,10 +238,69 @@ impl ReportsForm {
         &mut self,
         ui: &mut egui::Ui,
         doc: &mut OpenDoc,
+        width: f32,
         body: f32,
         export: &mut Option<(String, Vec<Vec<Cell>>)>,
     ) {
         let pal = palette(ui);
+        ui.horizontal_wrapped(|ui| {
+            ui_kit::segmented(
+                ui,
+                &mut self.accounts_view,
+                &[
+                    (
+                        AccountsView::Summary,
+                        "",
+                        tr!("Pointé et à venir"),
+                        pal.accent,
+                    ),
+                    (
+                        AccountsView::History(HistoryPeriod::Monthly),
+                        "",
+                        tr!("Par mois"),
+                        pal.accent,
+                    ),
+                    (
+                        AccountsView::History(HistoryPeriod::Yearly),
+                        "",
+                        tr!("Par année"),
+                        pal.accent,
+                    ),
+                ],
+                32.0,
+                Some(420.0),
+            );
+            if let AccountsView::History(period) = self.accounts_view {
+                ui.add_space(12.0);
+                ui_kit::segmented(
+                    ui,
+                    &mut self.accounts_measure,
+                    &[
+                        (HistoryMeasure::Balance, "", tr!("Solde"), pal.accent),
+                        (HistoryMeasure::Change, "", tr!("Variation"), pal.accent),
+                    ],
+                    32.0,
+                    Some(240.0),
+                );
+                if period == HistoryPeriod::Monthly {
+                    ui.add_space(12.0);
+                    let years = reports::available_years(&doc.document, &AccountScope::All);
+                    egui::ComboBox::from_id_salt("accounts_year")
+                        .selected_text(self.accounts_year.to_string())
+                        .show_ui(ui, |ui| {
+                            for y in years.iter().rev() {
+                                ui.selectable_value(&mut self.accounts_year, *y, y.to_string());
+                            }
+                        });
+                }
+            }
+        });
+        ui.add_space(10.0);
+        let body = body - 52.0;
+        if let AccountsView::History(period) = self.accounts_view {
+            self.account_history(ui, doc, period, width, body, export);
+            return;
+        }
         let totals = reports::account_totals(&doc.document);
         let mut rows = vec![vec![
             Cell::Bold(tr!("Compte").into()),
@@ -342,6 +423,68 @@ impl ReportsForm {
             doc.select_account(i);
         }
         *export = Some((tr!("Total des comptes").into(), rows));
+    }
+
+    /// Total des comptes par mois ou par année, en solde ou en variation.
+    fn account_history(
+        &self,
+        ui: &mut egui::Ui,
+        doc: &OpenDoc,
+        period: HistoryPeriod,
+        width: f32,
+        body: f32,
+        export: &mut Option<(String, Vec<Vec<Cell>>)>,
+    ) {
+        let pal = palette(ui);
+        let measure = self.accounts_measure;
+        let history = reports::account_history(&doc.document, period, measure, self.accounts_year);
+        let mut lines = vec![Line::Header(tr!("Compte"))];
+        lines.extend(history.rows.iter().map(|row| {
+            let label = RichText::new(format!("{}  {}", icon::BANK, row.name))
+                .family(crate::theme::medium());
+            Line::Row(label, &row.values)
+        }));
+        lines.push(Line::Total(tr!("Total"), &history.total));
+        let columns = PeriodColumns {
+            titles: &history.columns,
+            label_width: 260.0,
+            signed_colors: measure == HistoryMeasure::Change,
+        };
+        period_table(ui, "account_history", &columns, &lines, width, body - 30.0);
+        ui.add_space(8.0);
+        let note = match measure {
+            HistoryMeasure::Balance => {
+                tr!("Solde à la fin de chaque période. Les comptes virtuels ne sont pas comptés.")
+            }
+            HistoryMeasure::Change => tr!(
+                "Somme des opérations de chaque période. Les comptes virtuels ne sont pas comptés."
+            ),
+        };
+        ui.label(RichText::new(note).size(12.5).color(pal.muted));
+
+        let mut rows = Vec::new();
+        let mut header = vec![Cell::Bold(tr!("Compte").into())];
+        header.extend(history.columns.iter().map(|c| Cell::Bold(c.clone())));
+        rows.push(header);
+        for r in &history.rows {
+            let mut row = vec![Cell::Text(r.name.clone())];
+            row.extend(r.values.iter().map(|v| Cell::Money(v.as_f64())));
+            rows.push(row);
+        }
+        let mut total = vec![Cell::Bold(tr!("Total").into())];
+        total.extend(history.total.iter().map(|v| Cell::BoldMoney(v.as_f64())));
+        rows.push(total);
+        let title = match (period, measure) {
+            (HistoryPeriod::Monthly, HistoryMeasure::Balance) => {
+                tr!("Soldes par mois {}", self.accounts_year)
+            }
+            (HistoryPeriod::Monthly, HistoryMeasure::Change) => {
+                tr!("Variations par mois {}", self.accounts_year)
+            }
+            (HistoryPeriod::Yearly, HistoryMeasure::Balance) => tr!("Soldes par année").into(),
+            (HistoryPeriod::Yearly, HistoryMeasure::Change) => tr!("Variations par année").into(),
+        };
+        *export = Some((title, rows));
     }
 
     // ─────────────────────────── Tableaux croisés ───────────────────────────
@@ -655,25 +798,75 @@ fn amount_label(ui: &mut egui::Ui, width: f32, value: Amount, currency: &str, bo
 /// Tableau croisé : libellés figés à gauche, une colonne par période (qui
 /// défilent horizontalement), lignes de totaux en bas.
 fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_payee: bool) {
-    const ROW: f32 = 28.0;
-    const COL: f32 = 100.0;
     let pal = palette(ui);
-    let label_width = if by_payee { 260.0 } else { 240.0 };
-    enum Line<'a> {
-        Header,
-        Carried(&'a [Amount]),
-        Row(&'a bp_core::reports::PivotRow),
-        Total(&'static str, &'a [Amount]),
-    }
-    let mut lines = vec![Line::Header];
+    let mut lines = vec![Line::Header(if by_payee {
+        tr!("Tiers")
+    } else {
+        tr!("Catégorie")
+    })];
     if let Some(carried) = &pivot.carried_balance {
         lines.push(Line::Carried(carried));
     }
-    lines.extend(pivot.rows.iter().map(Line::Row));
+    lines.extend(pivot.rows.iter().map(|row| {
+        let label = if row.is_child {
+            RichText::new(format!("      {}", row.label)).color(pal.fg_dark)
+        } else if by_payee {
+            RichText::new(bp_core::split::payee_label(&row.label)).family(crate::theme::medium())
+        } else {
+            RichText::new(&row.label).family(crate::theme::medium())
+        };
+        Line::Row(label, &row.values)
+    }));
     lines.push(Line::Total(tr!("Dépenses"), &pivot.debit));
     lines.push(Line::Total(tr!("Recettes"), &pivot.credit));
     lines.push(Line::Total(tr!("Total"), &pivot.total));
-    let first_total = lines.len() - 3;
+    let label_width = if by_payee { 260.0 } else { 240.0 };
+    let columns = PeriodColumns {
+        titles: &pivot.columns,
+        label_width,
+        signed_colors: true,
+    };
+    period_table(ui, "pivot", &columns, &lines, width, height);
+}
+
+/// Ligne d'un tableau par période.
+enum Line<'a> {
+    /// En-têtes des colonnes, précédés du titre de la colonne des libellés.
+    Header(&'a str),
+    /// « Solde reporté », en italique.
+    Carried(&'a [Amount]),
+    Row(RichText, &'a [Amount]),
+    /// Ligne de total, en gras, sous un trait.
+    Total(&'a str, &'a [Amount]),
+}
+
+/// Colonnes d'un tableau par période.
+struct PeriodColumns<'a> {
+    titles: &'a [String],
+    label_width: f32,
+    /// Montants positifs en vert (variations) plutôt qu'en couleur du texte
+    /// (soldes).
+    signed_colors: bool,
+}
+
+/// Tableau par période : libellés figés à gauche, une colonne par période
+/// (qui défilent horizontalement), lignes de totaux en bas.
+fn period_table(
+    ui: &mut egui::Ui,
+    salt: &str,
+    columns: &PeriodColumns,
+    lines: &[Line],
+    width: f32,
+    height: f32,
+) {
+    const ROW: f32 = 28.0;
+    const COL: f32 = 100.0;
+    let pal = palette(ui);
+    let label_width = columns.label_width;
+    let first_total = lines
+        .iter()
+        .position(|l| matches!(l, Line::Total(..)))
+        .unwrap_or(lines.len());
     let fixed = |ui: &mut egui::Ui, w: f32, align: egui::Align, text: RichText| {
         let layout = if align == egui::Align::Max {
             egui::Layout::right_to_left(egui::Align::Center)
@@ -691,8 +884,10 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
         }
         let color = if value.is_negative() {
             pal.negative
-        } else {
+        } else if columns.signed_colors {
             pal.positive
+        } else {
+            pal.fg
         };
         let text = RichText::new(money(value, "")).color(color);
         if bold {
@@ -702,7 +897,7 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
         }
     };
     egui::ScrollArea::vertical()
-        .id_salt("pivot")
+        .id_salt(salt)
         .max_height(height)
         .auto_shrink([false, true])
         .show(ui, |ui| {
@@ -713,28 +908,15 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
             ui.horizontal_top(|ui| {
                 ui.vertical(|ui| {
                     ui.set_width(label_width);
-                    for line in &lines {
+                    for line in lines {
                         let text = match line {
-                            Line::Header => RichText::new(if by_payee {
-                                tr!("Tiers")
-                            } else {
-                                tr!("Catégorie")
-                            })
-                            .family(crate::theme::semibold())
-                            .color(pal.fg_dark),
+                            Line::Header(title) => RichText::new(*title)
+                                .family(crate::theme::semibold())
+                                .color(pal.fg_dark),
                             Line::Carried(_) => RichText::new(tr!("Solde reporté"))
                                 .italics()
                                 .color(pal.muted),
-                            Line::Row(row) if row.is_child => {
-                                RichText::new(format!("      {}", row.label)).color(pal.fg_dark)
-                            }
-                            Line::Row(row) if by_payee => {
-                                RichText::new(bp_core::split::payee_label(&row.label))
-                                    .family(crate::theme::medium())
-                            }
-                            Line::Row(row) => {
-                                RichText::new(&row.label).family(crate::theme::medium())
-                            }
+                            Line::Row(label, _) => label.clone(),
                             Line::Total(label, _) => {
                                 RichText::new(*label).family(crate::theme::semibold())
                             }
@@ -743,15 +925,15 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
                     }
                 });
                 egui::ScrollArea::horizontal()
-                    .id_salt("pivot_values")
+                    .id_salt((salt, "values"))
                     .show(ui, |ui| {
                         ui.vertical(|ui| {
-                            let row_size = egui::vec2(COL * pivot.columns.len() as f32, ROW);
+                            let row_size = egui::vec2(COL * columns.titles.len() as f32, ROW);
                             let row_layout = egui::Layout::left_to_right(egui::Align::Center);
-                            for line in &lines {
+                            for line in lines {
                                 ui.allocate_ui_with_layout(row_size, row_layout, |ui| match line {
-                                    Line::Header => {
-                                        for title in &pivot.columns {
+                                    Line::Header(_) => {
+                                        for title in columns.titles {
                                             fixed(
                                                 ui,
                                                 COL,
@@ -772,8 +954,8 @@ fn pivot_table(ui: &mut egui::Ui, pivot: &Pivot, width: f32, height: f32, by_pay
                                             );
                                         }
                                     }
-                                    Line::Row(row) => {
-                                        for v in &row.values {
+                                    Line::Row(_, values) => {
+                                        for v in *values {
                                             fixed(ui, COL, egui::Align::Max, amount(*v, false));
                                         }
                                     }

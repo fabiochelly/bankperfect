@@ -48,6 +48,8 @@ pub struct OpenDoc {
     pub show_column_filters: bool,
     /// Courbe du solde derrière la colonne Solde (réglages).
     pub show_balance_river: bool,
+    /// Colonne de pointage à droite du montant (réglages).
+    pub tack_after_amount: bool,
     /// Niveaux d'annulation gardés.
     pub max_undo: usize,
     /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
@@ -258,6 +260,7 @@ impl OpenDoc {
             balance_cards: false,
             show_column_filters: false,
             show_balance_river: true,
+            tack_after_amount: false,
             max_undo: 30,
             disable_reconcile: false,
             ignore_filter_totals: false,

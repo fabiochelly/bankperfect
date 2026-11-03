@@ -203,6 +203,15 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "courbe solde graphique colonne évolution",
         "curve balance chart column trend",
     ),
+    ("Pointage en tête de ligne", "Cleared column first"),
+    (
+        "Pointage à droite du montant",
+        "Cleared column after amount",
+    ),
+    (
+        "pointage colonne ordre position droite gauche montant",
+        "cleared reconciled column order position right left amount",
+    ),
     ("Masquer le solde prévisionnel", "Hide forecast balance"),
     ("Afficher le solde prévisionnel", "Show forecast balance"),
     ("prévision futur", "forecast future projection"),

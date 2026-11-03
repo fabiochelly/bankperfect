@@ -1091,6 +1091,9 @@ impl ExportForm {
             path.set_extension(self.format.extension());
         }
         match self.write(rows, sheet, &path) {
+            // Un classeur unique s'ouvre aussitôt dans le tableur, comme
+            // l'ancien export ; un CSV sert plutôt à un autre logiciel.
+            Ok(()) if self.format == ExportFormat::Xlsx => crate::spreadsheet::open_written(&path),
             Ok(()) => tr!("Fichier {} créé", path.display()),
             Err(e) => tr!("Impossible de créer {} : {}", path.display(), e),
         }

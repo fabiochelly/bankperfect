@@ -1200,6 +1200,10 @@ impl BankPerfectApp {
                 self.settings.balance_river = !self.settings.balance_river;
                 self.settings.save();
             }
+            Command::ToggleTackColumn => {
+                self.settings.tack_after_amount = !self.settings.tack_after_amount;
+                self.settings.save();
+            }
             Command::ReverseCurrencies => self.confirm_reverse = true,
             Command::Rules => {
                 self.tool = Some(Tool::Rules(Box::new(crate::rules_ui::RulesForm::new(doc))))
@@ -1897,6 +1901,18 @@ impl BankPerfectApp {
                 if menu::toggle(ui, &mut river, tr!("Courbe du solde"), None).clicked() {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleBalanceRiver);
+                }
+                let mut tack_right = self.settings.tack_after_amount;
+                if menu::toggle(
+                    ui,
+                    &mut tack_right,
+                    tr!("Pointage à droite du montant"),
+                    None,
+                )
+                .clicked()
+                {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleTackColumn);
                 }
                 menu::separator(ui);
                 menu::heading(ui, tr!("Thème"));
@@ -3345,6 +3361,7 @@ impl BankPerfectApp {
         doc.balance_cards = self.settings.balance_cards;
         doc.show_column_filters = self.settings.show_column_filters;
         doc.show_balance_river = self.settings.balance_river;
+        doc.tack_after_amount = self.settings.tack_after_amount;
         // « Cacher les lignes inutiles » est retenu d'une session à l'autre,
         // comme dans l'ancienne version, quel que soit le chemin qui l'a
         // basculé (menu, Ctrl+H, filtres).

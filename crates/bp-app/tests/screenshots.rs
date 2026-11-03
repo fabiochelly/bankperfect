@@ -2157,3 +2157,41 @@ fn simple_tack_screenshots() {
         },
     );
 }
+
+/// Total des comptes par mois (solde, variation) et pointage à droite du
+/// montant.
+#[test]
+#[ignore]
+fn account_history_screenshots() {
+    let report = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.get_by_label("Rapports").click();
+        h.run_steps(3);
+        h.get_by_label_contains("Total des comptes").click();
+        h.run_steps(3);
+    };
+    render("58-total-comptes-mois", egui::Theme::Light, |h| {
+        report(h);
+        h.get_by_label("Par mois").click();
+    });
+    render("59-total-comptes-variation", egui::Theme::Dark, |h| {
+        report(h);
+        h.get_by_label("Par année").click();
+        h.run_steps(3);
+        h.get_by_label("Variation").click();
+    });
+    let mut settings = bankperfect::Settings::default();
+    settings.tack_after_amount = true;
+    render_with(
+        "60-pointage-a-droite",
+        egui::Theme::Light,
+        egui::vec2(1440.0, 900.0),
+        None,
+        settings,
+        |h| {
+            // Plus bas : des lignes pointées et rapprochées.
+            for _ in 0..6 {
+                wheel(h, egui::pos2(900.0, 600.0), -400.0);
+            }
+        },
+    );
+}

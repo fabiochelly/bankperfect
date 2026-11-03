@@ -115,14 +115,25 @@ struct ColumnMinima {
     balance: f32,
 }
 
+/// Poignée de redimensionnement portée par un trait entre deux colonnes.
+#[derive(Clone, Copy, PartialEq)]
+enum Handle {
+    /// Trait fixe, à côté de la colonne de pointage.
+    None,
+    Date,
+    Mode,
+    Payee,
+    /// Partage entre Montant et Solde.
+    Amount,
+}
+
 /// Position des colonnes à l'écran pour l'image en cours.
 struct ColumnLayout {
     /// Place partagée entre Tiers et Catégorie.
     flex: f32,
     payee: f32,
-    /// Traits entre les colonnes, de gauche à droite : après le pointage, la
-    /// date, le mode, les tiers et le montant.
-    rules: [f32; 5],
+    /// Traits entre les colonnes, de gauche à droite, avec leur poignée.
+    rules: [(f32, Handle); 5],
 }
 
 impl ColumnWidths {
@@ -154,23 +165,49 @@ impl ColumnWidths {
         self
     }
 
-    fn layout(&self, left: f32, total: f32, m: &ColumnMinima, ui: &egui::Ui) -> ColumnLayout {
+    /// `tack_right` : pointage entre Montant et Solde plutôt qu'en tête.
+    fn layout(
+        &self,
+        left: f32,
+        total: f32,
+        m: &ColumnMinima,
+        tack_right: bool,
+        ui: &egui::Ui,
+    ) -> ColumnLayout {
         let s = ui.spacing().item_spacing.x;
         let fixed = TACK_WIDTH + self.date + self.mode + self.amount + self.balance + 6.0 * s;
         let flex = (total - fixed).max(m.payee + m.category);
         let payee = (flex * self.payee_share).clamp(m.payee, flex - m.category);
         // Comme `egui_extras` : au milieu de l'espace entre deux colonnes.
         let after = |x: f32, w: f32| x + w + s / 2.0;
-        let tack = after(left, TACK_WIDTH);
-        let date = after(tack + s / 2.0, self.date);
-        let mode = after(date + s / 2.0, self.mode);
-        let payee_rule = after(mode + s / 2.0, payee);
-        let amount = left + total - self.balance - s / 2.0;
-        ColumnLayout {
-            flex,
-            payee,
-            rules: [tack, date, mode, payee_rule, amount],
-        }
+        // Trait avant la colonne Solde, à droite.
+        let balance = left + total - self.balance - s / 2.0;
+        let rules = if tack_right {
+            let date = after(left, self.date);
+            let mode = after(date + s / 2.0, self.mode);
+            let payee_rule = after(mode + s / 2.0, payee);
+            let amount = balance - TACK_WIDTH - s;
+            [
+                (date, Handle::Date),
+                (mode, Handle::Mode),
+                (payee_rule, Handle::Payee),
+                (amount, Handle::Amount),
+                (balance, Handle::None),
+            ]
+        } else {
+            let tack = after(left, TACK_WIDTH);
+            let date = after(tack + s / 2.0, self.date);
+            let mode = after(date + s / 2.0, self.mode);
+            let payee_rule = after(mode + s / 2.0, payee);
+            [
+                (tack, Handle::None),
+                (date, Handle::Date),
+                (mode, Handle::Mode),
+                (payee_rule, Handle::Payee),
+                (balance, Handle::Amount),
+            ]
+        };
+        ColumnLayout { flex, payee, rules }
     }
 }
 
@@ -215,11 +252,11 @@ fn column_handles(
     let initial = ColumnWidths::initial(narrow);
     // Place que Tiers et Catégorie peuvent encore céder.
     let spare = (layout.flex - m.payee - m.category).max(0.0);
-    for (k, &x) in layout.rules.iter().enumerate() {
+    for &(x, handle) in &layout.rules {
         let mut stroke = ui.visuals().widgets.noninteractive.bg_stroke;
-        if k > 0 {
+        if handle != Handle::None {
             let rect = egui::Rect::from_x_y_ranges((x - 4.0)..=(x + 4.0), header_y);
-            let id = ui.id().with(("grid_resize", narrow, k));
+            let id = ui.id().with(("grid_resize", narrow, handle as u8));
             let response = ui.interact(rect, id, Sense::click_and_drag());
             if response.hovered() || response.dragged() {
                 ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeColumn);
@@ -229,13 +266,13 @@ fn column_handles(
             if response.dragged() {
                 stroke = ui.visuals().widgets.active.bg_stroke;
             }
-            match k {
-                1 if response.double_clicked() => w.date = initial.date,
-                1 => w.date = (w.date + dx).clamp(m.date, w.date + spare),
-                2 if response.double_clicked() => w.mode = initial.mode,
-                2 => w.mode = (w.mode + dx).clamp(m.mode, w.mode + spare),
-                3 if response.double_clicked() => w.payee_share = initial.payee_share,
-                3 => {
+            match handle {
+                Handle::Date if response.double_clicked() => w.date = initial.date,
+                Handle::Date => w.date = (w.date + dx).clamp(m.date, w.date + spare),
+                Handle::Mode if response.double_clicked() => w.mode = initial.mode,
+                Handle::Mode => w.mode = (w.mode + dx).clamp(m.mode, w.mode + spare),
+                Handle::Payee if response.double_clicked() => w.payee_share = initial.payee_share,
+                Handle::Payee => {
                     let payee = (layout.payee + dx).clamp(m.payee, layout.flex - m.category);
                     w.payee_share = payee / layout.flex;
                 }
@@ -303,20 +340,35 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         .data(|d| d.get_temp::<ColumnWidths>(widths_id))
         .unwrap_or_else(|| ColumnWidths::initial(narrow))
         .at_least(&minima);
-    let layout = widths.layout(ui.cursor().left(), ui.available_width(), &minima, ui);
+    // Pointage en tête de ligne, ou entre Montant et Solde (Affichage).
+    let tack_right = doc.tack_after_amount;
+    let layout = widths.layout(
+        ui.cursor().left(),
+        ui.available_width(),
+        &minima,
+        tack_right,
+        ui,
+    );
     let table_top = ui.cursor().top();
     let mut table = TableBuilder::new(ui)
-        .id_salt(("grid", narrow))
+        .id_salt(("grid", narrow, tack_right))
         .striped(true)
         .resizable(false)
         .sense(Sense::click())
-        .cell_layout(Layout::left_to_right(Align::Center))
-        .column(Column::exact(TACK_WIDTH))
+        .cell_layout(Layout::left_to_right(Align::Center));
+    if !tack_right {
+        table = table.column(Column::exact(TACK_WIDTH));
+    }
+    table = table
         .column(Column::exact(widths.date).clip(true))
         .column(Column::exact(widths.mode).clip(true))
         .column(Column::exact(layout.payee).clip(true))
         .column(Column::remainder().at_least(minima.category).clip(true))
-        .column(Column::exact(widths.amount).clip(true))
+        .column(Column::exact(widths.amount).clip(true));
+    if tack_right {
+        table = table.column(Column::exact(TACK_WIDTH));
+    }
+    let mut table = table
         .column(Column::exact(widths.balance).clip(true))
         .min_scrolled_height(0.0);
     if let Some(op) = scroll_to
@@ -338,11 +390,16 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     };
     table
         .header(header_height, |mut header| {
-            header.col(|ui| {
-                if loupe_header(ui, doc) {
-                    action = GridAction::Command(crate::commands::Command::ToggleColumnFilters);
-                }
-            });
+            // La loupe et le filtre de pointage coiffent la colonne de pointage.
+            fn tack_header(header: &mut egui_extras::TableRow, doc: &mut OpenDoc) -> bool {
+                let mut clicked = false;
+                header.col(|ui| clicked = loupe_header(ui, doc));
+                clicked
+            }
+            let loupe = crate::commands::Command::ToggleColumnFilters;
+            if !tack_right && tack_header(&mut header, doc) {
+                action = GridAction::Command(loupe);
+            }
             header.col(|ui| date_header(ui, doc, open));
             header.col(|ui| {
                 filter_header(
@@ -388,6 +445,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     "<0, -50>50…",
                 )
             });
+            if tack_right && tack_header(&mut header, doc) {
+                action = GridAction::Command(loupe);
+            }
             header.col(|ui| {
                 // Même bloc que les titres triables : une ligne de la hauteur de
                 // `ui.horizontal` (titre centré dedans), alignée à droite.
@@ -423,18 +483,22 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     (prev.year(), prev.month()) != (cur.year(), cur.month())
                 };
 
-                let (_, tack_resp) = row.col(|ui| {
-                    let (glyph, color) = match op.tack {
-                        Tack::None => ("", Color32::TRANSPARENT),
-                        Tack::Pointed => (icon::CHECK, pal.pointed),
-                        // Pointage simple : une seule coche, rapprochée ou non.
-                        Tack::Reconciled if doc.disable_reconcile => (icon::CHECK, pal.pointed),
-                        Tack::Reconciled => (icon::CHECKS, pal.reconciled),
-                    };
-                    ui.centered_and_justified(|ui| {
-                        ui.label(RichText::new(glyph).color(color).size(15.0))
-                    });
-                });
+                let (glyph, color) = match op.tack {
+                    Tack::None => ("", Color32::TRANSPARENT),
+                    Tack::Pointed => (icon::CHECK, pal.pointed),
+                    // Pointage simple : une seule coche, rapprochée ou non.
+                    Tack::Reconciled if doc.disable_reconcile => (icon::CHECK, pal.pointed),
+                    Tack::Reconciled => (icon::CHECKS, pal.reconciled),
+                };
+                let tack_cell = |row: &mut egui_extras::TableRow| {
+                    row.col(|ui| {
+                        ui.centered_and_justified(|ui| {
+                            ui.label(RichText::new(glyph).color(color).size(15.0))
+                        });
+                    })
+                    .1
+                };
+                let mut tack_resp = (!tack_right).then(|| tack_cell(&mut row));
                 let (date_cell, _) = row.col(|ui| {
                     if op.date > today {
                         let r = ui.max_rect();
@@ -536,6 +600,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         ui.label(RichText::new(money(op.amount, &currency)).color(color));
                     });
                 });
+                if tack_right {
+                    tack_resp = Some(tack_cell(&mut row));
+                }
+                let tack_resp = tack_resp.expect("colonne de pointage dessinée");
                 let (_, balance_cell) = row.col(|ui| {
                     if let Some(river) = &river {
                         let cell = ui.max_rect();

@@ -60,6 +60,7 @@ pub enum Command {
     ToggleBalanceCards,
     ToggleColumnFilters,
     ToggleBalanceRiver,
+    ToggleTackColumn,
     ReverseCurrencies,
     Scheduler,
     Forecast,
@@ -175,6 +176,7 @@ impl Command {
                 ToggleBalanceCards,
                 ToggleColumnFilters,
                 ToggleBalanceRiver,
+                ToggleTackColumn,
                 ReverseCurrencies,
                 Scheduler,
                 Forecast,
@@ -667,6 +669,20 @@ impl Command {
                     icon::CHART_LINE,
                     None,
                     tr_mark!("courbe solde graphique colonne évolution"),
+                )
+            }
+            ToggleTackColumn => {
+                let label = if doc.is_some_and(|d| d.tack_after_amount) {
+                    tr!("Pointage en tête de ligne")
+                } else {
+                    tr!("Pointage à droite du montant")
+                };
+                info(
+                    VIEW,
+                    label,
+                    icon::CHECKS,
+                    None,
+                    tr_mark!("pointage colonne ordre position droite gauche montant"),
                 )
             }
             ToggleForecast => {

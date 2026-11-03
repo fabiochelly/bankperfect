@@ -174,9 +174,22 @@ pub fn finished(ctx: &egui::Context) -> Option<String> {
         path.set_extension("xlsx");
     }
     Some(match write(&path, &pending.sheet, &pending.rows) {
-        Ok(()) => tr!("Tableau exporté : {}", path.display()),
+        Ok(()) => open_written(&path),
         Err(e) => tr!("Export impossible : {}", e),
     })
+}
+
+/// Ouvre le classeur qui vient d'être écrit dans le tableur du système et
+/// rend le message de résultat.
+pub fn open_written(path: &std::path::Path) -> String {
+    match open::that_detached(path) {
+        Ok(()) => tr!("Tableau exporté : {}", path.display()),
+        Err(e) => tr!(
+            "Tableau exporté : {} (impossible de l'ouvrir : {})",
+            path.display(),
+            e
+        ),
+    }
 }
 
 #[cfg(test)]

@@ -24,6 +24,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Exporter vers un tableur", "Export to spreadsheet"),
     ("Classeur Excel", "Excel workbook"),
     ("Tableau exporté : {}", "Table exported: {}"),
+    (
+        "Tableau exporté : {} (impossible de l'ouvrir : {})",
+        "Table exported: {} (could not open it: {})",
+    ),
     ("Export impossible : {}", "Export failed: {}"),
     // Rapports
     ("Rapports", "Reports"),
@@ -40,6 +44,20 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Les comptes virtuels ne sont pas comptés dans le total.",
         "Virtual accounts are not included in the total.",
     ),
+    ("Pointé et à venir", "Cleared and pending"),
+    ("Variation", "Change"),
+    (
+        "Solde à la fin de chaque période. Les comptes virtuels ne sont pas comptés.",
+        "Balance at the end of each period. Virtual accounts are not included.",
+    ),
+    (
+        "Somme des opérations de chaque période. Les comptes virtuels ne sont pas comptés.",
+        "Sum of the transactions of each period. Virtual accounts are not included.",
+    ),
+    ("Soldes par mois {}", "Balances by month {}"),
+    ("Variations par mois {}", "Changes by month {}"),
+    ("Soldes par année", "Balances by year"),
+    ("Variations par année", "Changes by year"),
     ("Par mois", "By month"),
     ("Par année", "By year"),
     ("Moyenne mensuelle", "Monthly average"),

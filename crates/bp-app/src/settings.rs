@@ -38,6 +38,8 @@ pub struct Settings {
     pub show_column_filters: bool,
     /// Courbe du solde derrière la colonne Solde de la grille.
     pub balance_river: bool,
+    /// Colonne de pointage entre Montant et Solde plutôt qu'en tête de ligne.
+    pub tack_after_amount: bool,
     /// Cacher les lignes inutiles : rapprochées et antérieures au mois
     /// courant.
     pub hide_old_lines: bool,
@@ -109,6 +111,7 @@ impl Default for Settings {
             balance_cards: false,
             show_column_filters: false,
             balance_river: true,
+            tack_after_amount: false,
             hide_old_lines: false,
             license: None,
             max_undo: 30,

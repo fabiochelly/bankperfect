@@ -190,6 +190,130 @@ pub fn account_totals(document: &Document) -> AccountTotals {
     report
 }
 
+/// Période des colonnes du total des comptes par période.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HistoryPeriod {
+    /// Les douze mois d'une année.
+    #[default]
+    Monthly,
+    /// Une colonne par année, de la première à la dernière opération.
+    Yearly,
+}
+
+/// Valeur d'une cellule du total des comptes par période.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum HistoryMeasure {
+    /// Solde à la fin de la période (toutes les opérations jusque-là).
+    #[default]
+    Balance,
+    /// Variation : somme des opérations de la période.
+    Change,
+}
+
+/// Ligne du total des comptes par période.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountHistoryRow {
+    /// Index du compte dans `document.accounts`.
+    pub account: usize,
+    pub name: String,
+    /// Une valeur par colonne.
+    pub values: Vec<Amount>,
+}
+
+/// Total des comptes par mois ou par année.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct AccountHistory {
+    /// En-têtes des colonnes ; en variation, la dernière est « Total ».
+    pub columns: Vec<String>,
+    pub rows: Vec<AccountHistoryRow>,
+    /// Ligne « Total » (comptes non virtuels).
+    pub total: Vec<Amount>,
+}
+
+/// Total des comptes non virtuels par période : solde en fin de période ou
+/// variation sur la période. `year` choisit l'année des colonnes mensuelles
+/// (ignorée par année). En variation, une colonne « Total » donne la
+/// variation sur l'ensemble des colonnes.
+pub fn account_history(
+    document: &Document,
+    period: HistoryPeriod,
+    measure: HistoryMeasure,
+    year: i32,
+) -> AccountHistory {
+    let scope = AccountScope::All;
+    let accounts = scope.accounts(document);
+    let years = available_years(document, &scope);
+    let (mut columns, first_year): (Vec<String>, i32) = match period {
+        HistoryPeriod::Monthly => (
+            (0..12)
+                .map(|m| crate::i18n::month_abbr(m).to_string())
+                .collect(),
+            year,
+        ),
+        HistoryPeriod::Yearly => (
+            years.iter().map(|y| y.to_string()).collect(),
+            years.first().copied().unwrap_or(year),
+        ),
+    };
+    let width = columns.len();
+    // Colonne d'une date : `Err(true)` avant la première, `Err(false)` après
+    // la dernière.
+    let column_of = |date: Date| -> Result<usize, bool> {
+        let (y, m) = year_month(date);
+        let index = match period {
+            HistoryPeriod::Monthly if y < year => return Err(true),
+            HistoryPeriod::Monthly if y > year => return Err(false),
+            HistoryPeriod::Monthly => m as usize - 1,
+            HistoryPeriod::Yearly if y < first_year => return Err(true),
+            HistoryPeriod::Yearly => (y - first_year) as usize,
+        };
+        if index < width { Ok(index) } else { Err(false) }
+    };
+    let mut report = AccountHistory::default();
+    let mut total = vec![Amount::ZERO; width];
+    for account in accounts {
+        let mut carried = Amount::ZERO;
+        let mut values = vec![Amount::ZERO; width];
+        for op in &document.accounts[account].operations {
+            match column_of(op.date) {
+                Ok(col) => values[col] = add(values[col], op.amount),
+                Err(true) => carried = add(carried, op.amount),
+                Err(false) => {}
+            }
+        }
+        if measure == HistoryMeasure::Balance {
+            let mut running = carried;
+            for value in &mut values {
+                running = add(running, *value);
+                *value = running;
+            }
+        }
+        for (sum, value) in total.iter_mut().zip(&values) {
+            *sum = add(*sum, *value);
+        }
+        report.rows.push(AccountHistoryRow {
+            account,
+            name: document.accounts[account].name.clone(),
+            values,
+        });
+    }
+    if measure == HistoryMeasure::Change {
+        for values in report
+            .rows
+            .iter_mut()
+            .map(|r| &mut r.values)
+            .chain(std::iter::once(&mut total))
+        {
+            let sum = values.iter().copied().sum();
+            values.push(sum);
+        }
+        columns.push(tr!("Total").to_string());
+    }
+    report.columns = columns;
+    report.total = total;
+    report
+}
+
 // ---------------------------------------------------------------------------
 // Tableaux croisés : totaux par catégorie et par tiers
 // ---------------------------------------------------------------------------
@@ -1082,6 +1206,59 @@ pub(crate) mod tests {
         assert_eq!(report.total.pointed, cents(-36_000));
         assert_eq!(report.total.upcoming, cents(253_000));
         assert_eq!(report.total.balance, cents(217_000));
+    }
+
+    #[test]
+    fn account_history_by_month() {
+        let doc = sample();
+        let balance = account_history(&doc, HistoryPeriod::Monthly, HistoryMeasure::Balance, 2024);
+        assert_eq!(balance.columns.len(), 12, "pas de colonne Total en solde");
+        let names: Vec<&str> = balance.rows.iter().map(|r| r.name.as_str()).collect();
+        assert_eq!(names, ["Livret", "Courant", "Vide"]);
+        let courant = &balance.rows[1].values;
+        // Décembre 2023 reporté dans le solde de janvier.
+        assert_eq!(courant[0], cents(-76_000));
+        assert_eq!(courant[1], cents(167_000));
+        assert_eq!(courant[11], cents(167_000));
+        assert_eq!(balance.rows[0].values[1], Amount::ZERO);
+        assert_eq!(balance.rows[0].values[2], cents(50_000));
+        assert_eq!(balance.total[2], cents(217_000), "sans le compte virtuel");
+
+        let change = account_history(&doc, HistoryPeriod::Monthly, HistoryMeasure::Change, 2024);
+        assert_eq!(change.columns.len(), 13);
+        assert_eq!(change.columns[12], tr!("Total"));
+        let courant = &change.rows[1].values;
+        assert_eq!(courant[0], cents(-86_000));
+        assert_eq!(courant[1], cents(243_000));
+        assert_eq!(courant[2], Amount::ZERO);
+        assert_eq!(courant[12], cents(157_000));
+        assert_eq!(change.total[12], cents(207_000));
+    }
+
+    #[test]
+    fn account_history_by_year() {
+        let doc = sample();
+        let balance = account_history(&doc, HistoryPeriod::Yearly, HistoryMeasure::Balance, 0);
+        assert_eq!(balance.columns, ["2023", "2024"]);
+        assert_eq!(balance.rows[1].values, [cents(10_000), cents(167_000)]);
+        assert_eq!(balance.rows[0].values, [Amount::ZERO, cents(50_000)]);
+        assert_eq!(balance.total, [cents(10_000), cents(217_000)]);
+
+        let change = account_history(&doc, HistoryPeriod::Yearly, HistoryMeasure::Change, 0);
+        assert_eq!(
+            change.rows[1].values,
+            [cents(10_000), cents(157_000), cents(167_000)]
+        );
+        assert_eq!(change.total[2], cents(217_000));
+
+        let empty = account_history(
+            &document(Vec::new()),
+            HistoryPeriod::Yearly,
+            HistoryMeasure::Change,
+            0,
+        );
+        assert!(empty.rows.is_empty());
+        assert_eq!(empty.columns, [tr!("Total")]);
     }
 
     #[test]

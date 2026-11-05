@@ -291,6 +291,155 @@ fn column_handles(
     }
 }
 
+/// Saisie de la barre de défilement en cours.
+#[derive(Clone, Copy)]
+enum ScrollGrab {
+    /// Curseur tenu, à cette distance de son haut.
+    Thumb(f32),
+    /// Appui dans la barre, hors du curseur : une page par appui, répétée
+    /// à partir de cet instant tant que le bouton reste enfoncé.
+    Page(f64),
+}
+
+/// Barre de défilement de la grille. Le curseur suit la souris comme
+/// d'habitude, mais une bulle indique le mois atteint pendant qu'on le
+/// glisse (avec des milliers de lignes, un pixel vaut plusieurs lignes) ; un
+/// appui dans la barre avance d'une page au lieu d'y sauter d'un coup ; la
+/// zone sensible ne couvre que la barre, plus les montants du solde.
+fn scrollbar(
+    ui: &mut egui::Ui,
+    output: egui::scroll_area::ScrollAreaOutput<()>,
+    pitch: f32,
+    label_at: impl Fn(usize) -> String,
+) {
+    let view = output.inner_rect;
+    let content = output.content_size.y;
+    let max_offset = (content - view.height()).max(0.0);
+    if max_offset <= 0.0 || view.height() < 40.0 {
+        return;
+    }
+    let pal = palette(ui);
+    let ctx = ui.ctx().clone();
+    let id = output.id.with("grid_scrollbar");
+    let track = egui::Rect::from_x_y_ranges(
+        view.right() - 13.0..=view.right() - 3.0,
+        view.top() + 3.0..=view.bottom() - 3.0,
+    );
+    let response = ui.interact(track, id, Sense::click_and_drag());
+    let offset = output.state.offset.y.clamp(0.0, max_offset);
+    let thumb_h = (track.height() * view.height() / content).clamp(36.0, track.height());
+    let travel = (track.height() - thumb_h).max(1.0);
+    let thumb_at = |off: f32| {
+        egui::Rect::from_min_size(
+            egui::pos2(track.left(), track.top() + travel * off / max_offset),
+            egui::vec2(track.width(), thumb_h),
+        )
+    };
+    let (pointer, pressed, down, now) = ctx.input(|i| {
+        (
+            i.pointer.interact_pos(),
+            i.pointer.primary_pressed(),
+            i.pointer.primary_down(),
+            i.time,
+        )
+    });
+    let grab_id = id.with("grab");
+    let mut grab: Option<ScrollGrab> = ctx.data(|d| d.get_temp(grab_id));
+    let page = view.height() - pitch;
+    let mut new_offset = None;
+    if pressed
+        && response.hovered()
+        && let Some(p) = pointer
+    {
+        let thumb = thumb_at(offset);
+        if thumb.y_range().contains(p.y) {
+            grab = Some(ScrollGrab::Thumb(p.y - thumb.top()));
+        } else {
+            let step = if p.y < thumb.top() { -page } else { page };
+            new_offset = Some(offset + step);
+            grab = Some(ScrollGrab::Page(now + 0.4));
+        }
+    } else if !down {
+        grab = None;
+    }
+    match (grab, pointer) {
+        (Some(ScrollGrab::Thumb(from_top)), Some(p)) if down => {
+            let top = (p.y - from_top).clamp(track.top(), track.top() + travel);
+            new_offset = Some((top - track.top()) / travel * max_offset);
+        }
+        (Some(ScrollGrab::Page(at)), Some(p)) if down && !pressed => {
+            let thumb = thumb_at(offset);
+            if now >= at && !thumb.y_range().contains(p.y) && response.hovered() {
+                let step = if p.y < thumb.top() { -page } else { page };
+                new_offset = Some(offset + step);
+                grab = Some(ScrollGrab::Page(now + 0.06));
+            }
+            ctx.request_repaint();
+        }
+        _ => {}
+    }
+    match grab {
+        Some(g) => ctx.data_mut(|d| {
+            d.insert_temp(grab_id, g);
+        }),
+        None => ctx.data_mut(|d| d.remove::<ScrollGrab>(grab_id)),
+    }
+    let shown = new_offset.map_or(offset, |o| o.clamp(0.0, max_offset));
+    if let Some(o) = new_offset {
+        let mut state = output.state;
+        state.offset.y = o.clamp(0.0, max_offset);
+        state.store(&ctx, output.id);
+        ctx.request_repaint();
+    }
+
+    // Dessin : barre fine au repos, plus large au survol ou tenue.
+    let active = response.hovered() || grab.is_some();
+    let thumb = thumb_at(shown);
+    let width = if active { 10.0 } else { 6.0 };
+    let painter = ui.painter();
+    if active {
+        painter.rect_filled(track, 5.0, pal.fg.gamma_multiply(0.06));
+    }
+    let thumb = egui::Rect::from_x_y_ranges(track.right() - width..=track.right(), thumb.y_range());
+    let alpha = match grab {
+        Some(ScrollGrab::Thumb(_)) => 0.75,
+        _ if active => 0.55,
+        _ => 0.35,
+    };
+    painter.rect_filled(thumb, width / 2.0, pal.fg.gamma_multiply(alpha));
+
+    // Bulle du mois atteint, pendant qu'on tient le curseur.
+    if matches!(grab, Some(ScrollGrab::Thumb(_))) {
+        let row = (shown / pitch).floor().max(0.0) as usize;
+        let text = label_at(row);
+        if !text.is_empty() {
+            let layer = egui::LayerId::new(egui::Order::Tooltip, id.with("bubble"));
+            let painter = ctx.layer_painter(layer);
+            let galley = painter.layout_no_wrap(
+                text,
+                egui::FontId::new(14.0, crate::theme::semibold()),
+                pal.fg,
+            );
+            let size = galley.size() + egui::vec2(24.0, 14.0);
+            let rect = egui::Rect::from_min_size(
+                egui::pos2(
+                    track.left() - 10.0 - size.x,
+                    (thumb.center().y - size.y / 2.0).clamp(view.top(), view.bottom() - size.y),
+                ),
+                size,
+            );
+            painter.rect_filled(rect, 8.0, pal.menu_bg);
+            painter.rect_stroke(
+                rect,
+                8.0,
+                Stroke::new(1.0, pal.accent.gamma_multiply(0.6)),
+                egui::StrokeKind::Inside,
+            );
+            painter.galley(rect.min + egui::vec2(12.0, 7.0), galley, pal.fg);
+        }
+    }
+}
+
 /// Ce que l'utilisateur a demandé depuis la grille.
 pub enum GridAction {
     None,
@@ -370,7 +519,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     }
     let mut table = table
         .column(Column::exact(widths.balance).clip(true))
-        .min_scrolled_height(0.0);
+        .min_scrolled_height(0.0)
+        // Barre dessinée par `scrollbar` : celle d'egui, proportionnelle,
+        // faisait sauter des dizaines de lignes au moindre pixel.
+        .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden);
     if let Some(op) = scroll_to
         && let Some(row) = visible.iter().position(|&i| i == op)
     {
@@ -388,7 +540,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     } else {
         30.0
     };
-    table
+    let scroll = table
         .header(header_height, |mut header| {
             // La loupe et le filtre de pointage coiffent la colonne de pointage.
             fn tack_header(header: &mut egui_extras::TableRow, doc: &mut OpenDoc) -> bool {
@@ -693,15 +845,31 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 }
                 // Sélection dès l'appui, comme les listes natives (egui attend
                 // le relâchement pour `clicked`).
-                let (modifiers, pressed) = response
+                let (modifiers, pressed, now) = response
                     .ctx
-                    .input(|i| (i.modifiers, i.pointer.primary_pressed()));
-                if tack_resp.hovered() && pressed {
-                    if !doc.selection.contains(&index) {
-                        doc.click_row(index, false, false);
+                    .input(|i| (i.modifiers, i.pointer.primary_pressed(), i.time));
+                let double_delay = response
+                    .ctx
+                    .options(|o| o.input_options.max_double_click_delay);
+                let on_tack = tack_resp.hovered();
+                if on_tack && pressed {
+                    // Le second appui d'un double-clic ne fait pas tourner le
+                    // pointage une deuxième fois : un double-clic sur une
+                    // ligne pointée la dépointait sans qu'on le voie.
+                    let last_id = egui::Id::new("grid_last_tack_press");
+                    let last: Option<(usize, f64)> = response.ctx.data(|d| d.get_temp(last_id));
+                    let repeat =
+                        last.is_some_and(|(row, t)| row == index && now - t < double_delay);
+                    response
+                        .ctx
+                        .data_mut(|d| d.insert_temp(last_id, (index, now)));
+                    if !repeat {
+                        if !doc.selection.contains(&index) {
+                            doc.click_row(index, false, false);
+                        }
+                        doc.cycle_tack();
                     }
-                    doc.cycle_tack();
-                } else if response.double_clicked() {
+                } else if response.double_clicked() && !on_tack {
                     action = GridAction::Edit(index);
                 } else if response.hovered() && pressed {
                     doc.click_row(index, modifiers.command, modifiers.shift);
@@ -761,6 +929,28 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                 });
             });
         });
+    let pitch = row_height + spacing_y;
+    scrollbar(ui, scroll, pitch, |pos| {
+        let Some(&index) = visible.get(pos.min(visible.len().saturating_sub(1))) else {
+            return String::new();
+        };
+        if sort_by_date {
+            let op = doc.operation(index);
+            let d = if doc.sort == SortColumn::MarkDate {
+                op.mark_date
+            } else {
+                op.date
+            }
+            .to_naive();
+            format!(
+                "{} {}",
+                bp_core::i18n::month_title(d.month0() as usize),
+                d.year()
+            )
+        } else {
+            tr!("Ligne {} sur {}", pos + 1, visible.len())
+        }
+    });
     // Traits jusqu'aux bords de l'île (dans ses marges), sans couvrir son liseré.
     let rules_y = egui::Rangef::new(
         table_top - f32::from(ISLAND_MARGIN.top) + 1.0,
@@ -1216,6 +1406,9 @@ fn date_header(ui: &mut egui::Ui, doc: &mut OpenDoc, open: bool) {
         let label = format!("{glyph} {}", tr!("Période"));
         let button = egui::Button::new(label).selected(active);
         let response = ui.add_sized([ui.available_width(), 34.0], button);
+        if std::mem::take(&mut doc.open_period_popup) {
+            egui::Popup::open_id(ui.ctx(), egui::Popup::default_response_id(&response));
+        }
         egui::Popup::menu(&response)
             .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
             .show(|ui| {

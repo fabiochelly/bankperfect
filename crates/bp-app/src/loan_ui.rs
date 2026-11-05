@@ -368,7 +368,13 @@ impl LoanForm {
                                 ui.selectable_value(&mut self.start_month, m, month_name(m));
                             }
                         });
-                    ui.add(egui::DragValue::new(&mut self.start_year).range(1950..=2200));
+                    crate::ui_kit::stepper(
+                        ui,
+                        "start_year",
+                        &mut self.start_year,
+                        1950..=2200,
+                        None,
+                    );
                 });
             },
         );

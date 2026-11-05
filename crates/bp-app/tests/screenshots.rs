@@ -202,7 +202,7 @@ fn screenshots() {
         h.event(egui::Event::Text("categ".into()));
     });
     render("20-palette-clair", egui::Theme::Light, |h| {
-        h.key_press(egui::Key::F1);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
         h.run_steps(2);
         h.event(egui::Event::Text("compte".into()));
         h.run_steps(2);
@@ -462,8 +462,9 @@ fn caret_screenshots() {
         .wgpu()
         .build_eframe(|cc| {
             bankperfect::theme::install(&cc.egui_ctx);
-            let mut app =
-                bankperfect::BankPerfectApp::with_settings(None, bankperfect::Settings::default());
+            let mut settings = bankperfect::Settings::default();
+            settings.animated_caret = true;
+            let mut app = bankperfect::BankPerfectApp::with_settings(None, settings);
             app.open_file(file);
             app
         });

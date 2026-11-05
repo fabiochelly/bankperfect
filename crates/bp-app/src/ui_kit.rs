@@ -409,3 +409,72 @@ pub fn one_line(
     };
     ui.painter().layout_job(job)
 }
+
+/// Nombre entier réglé au clavier ou avec les boutons − et +. Remplace le
+/// `DragValue` d'egui, qui changeait de valeur au moindre mouvement de la
+/// souris pendant un clic. Renvoie vrai quand la valeur change (bouton, ou
+/// nombre valide tapé).
+pub fn stepper<T>(
+    ui: &mut egui::Ui,
+    id_salt: &str,
+    value: &mut T,
+    range: std::ops::RangeInclusive<T>,
+    suffix: Option<&str>,
+) -> bool
+where
+    T: Copy + Into<i64> + TryFrom<i64>,
+{
+    let (lo, hi) = ((*range.start()).into(), (*range.end()).into());
+    let mut current: i64 = (*value).into();
+    let id = ui.id().with(("stepper", id_salt));
+    let digits = hi.max(lo.abs()).to_string().len() as f32;
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.0;
+        let size = egui::vec2(30.0, 30.0);
+        if ui
+            .add_enabled(current > lo, egui::Button::new(icon::MINUS).min_size(size))
+            .clicked()
+        {
+            current -= 1;
+            changed = true;
+        }
+        // Texte en cours de frappe gardé tel quel tant que le champ a le
+        // focus ; sinon, la valeur.
+        let mut text = ui
+            .data(|d| d.get_temp::<String>(id))
+            .unwrap_or_else(|| current.to_string());
+        let response = ui.add(
+            crate::theme::field(&mut text)
+                .desired_width(14.0 + 9.0 * digits)
+                .horizontal_align(egui::Align::Center),
+        );
+        if response.changed()
+            && let Ok(typed) = text.trim().parse::<i64>()
+            && (lo..=hi).contains(&typed)
+            && typed != current
+        {
+            current = typed;
+            changed = true;
+        }
+        if response.has_focus() {
+            ui.data_mut(|d| d.insert_temp(id, text));
+        } else {
+            ui.data_mut(|d| d.remove::<String>(id));
+        }
+        if ui
+            .add_enabled(current < hi, egui::Button::new(icon::PLUS).min_size(size))
+            .clicked()
+        {
+            current += 1;
+            changed = true;
+        }
+        if let Some(suffix) = suffix {
+            ui.label(suffix);
+        }
+    });
+    if changed && let Ok(v) = T::try_from(current.clamp(lo, hi)) {
+        *value = v;
+    }
+    changed
+}

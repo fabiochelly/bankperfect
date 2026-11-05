@@ -315,6 +315,7 @@ fn account_menu(ui: &mut egui::Ui, doc: &OpenDoc) -> Option<Command> {
         }
     };
     entry(ui, Manage(crate::manage_ui::Tab::Accounts));
+    entry(ui, HideAccount);
     crate::menu::separator(ui);
     entry(ui, Report(crate::reports_ui::ReportTab::Statement));
     entry(ui, Charts);

@@ -25,6 +25,7 @@ mod files_ui;
 mod filters_ui;
 mod format;
 mod grid;
+mod help_ui;
 mod import_ui;
 mod islands;
 mod license;

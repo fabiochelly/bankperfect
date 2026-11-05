@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 use bp_core::FileFormat;
 use bp_core::file;
 use bp_core::format_v6::{Protection, Unlock};
-use bp_core::model::{Amount, Tack};
+use bp_core::model::{Amount, Date, Tack};
 use bp_core::{tr, trn};
 use egui::{Align, Key, KeyboardShortcut, Layout, Modifiers, RichText};
 use egui_phosphor::regular as icon;
@@ -652,10 +652,13 @@ impl BankPerfectApp {
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
-        if ctx.input_mut(|i| {
-            i.consume_shortcut(&SHORTCUT_PALETTE) || i.consume_key(Modifiers::NONE, Key::F1)
-        }) {
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_PALETTE)) {
             self.execute(ctx, Command::Palette);
+            return;
+        }
+        // F1 : l'aide, comme partout (la palette reste sur Ctrl+K).
+        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F1)) {
+            self.execute(ctx, Command::Help);
             return;
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPEN)) {
@@ -928,10 +931,7 @@ impl BankPerfectApp {
                 return;
             }
             Command::Help => {
-                ctx.open_url(egui::OpenUrl::new_tab(
-                    "https://github.com/fabiochelly/bankperfect#readme",
-                ));
-                return;
+                return self.tool = Some(Tool::Help(crate::help_ui::HelpForm::new()));
             }
             Command::DeleteFile => return self.delete_file(),
             Command::Quit => return ctx.send_viewport_cmd(egui::ViewportCommand::Close),
@@ -1183,6 +1183,31 @@ impl BankPerfectApp {
             Command::ToggleBalancePanel => {
                 self.settings.show_balance_panel = !self.settings.show_balance_panel;
                 self.settings.save();
+            }
+            Command::ToggleAccountsPanel => {
+                self.settings.show_accounts_panel = !self.settings.show_accounts_panel;
+                self.settings.save();
+            }
+            Command::HideAccount => {
+                let hidden = doc.account;
+                let name = doc.current_account().name.clone();
+                let next = doc
+                    .document
+                    .account_order
+                    .iter()
+                    .copied()
+                    .find(|&i| i != hidden && !doc.document.accounts[i].disabled);
+                if let Some(next) = next {
+                    doc.edit_document(|d| d.accounts[hidden].disabled = true);
+                    doc.select_account(next);
+                    self.toast = Some((
+                        tr!(
+                            "Compte « {} » masqué. Pour le réafficher : Comptes › Gestion des comptes…, décocher « Compte inactif ».",
+                            name
+                        ),
+                        now + 6.0,
+                    ));
+                }
             }
             Command::ToggleForecast => {
                 self.settings.show_forecast = !self.settings.show_forecast;
@@ -1876,6 +1901,11 @@ impl BankPerfectApp {
                 self.menu_command(ui, SaveFilter);
                 self.menu_command(ui, ClearFilters);
                 menu::separator(ui);
+                let mut accounts = self.settings.show_accounts_panel;
+                if menu::toggle(ui, &mut accounts, tr!("Panneau des comptes"), None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleAccountsPanel);
+                }
                 let mut panel = self.settings.show_balance_panel;
                 if menu::toggle(ui, &mut panel, tr!("Panneau des soldes"), None).clicked() {
                     let ctx = ui.ctx().clone();
@@ -2179,6 +2209,31 @@ impl BankPerfectApp {
             if !names.is_empty() {
                 crate::menu::separator(ui);
             }
+            // Recherche par période, sans passer par la ligne des filtres.
+            for (label, range) in period_presets(Date::today()) {
+                let selected =
+                    (doc.filters.date_from, doc.filters.date_to) == (Some(range.0), Some(range.1));
+                if crate::menu::choice(ui, selected, &label).clicked() {
+                    if selected {
+                        doc.filters.date_from = None;
+                        doc.filters.date_to = None;
+                    } else {
+                        doc.filters.date_from = Some(range.0);
+                        doc.filters.date_to = Some(range.1);
+                    }
+                }
+            }
+            if crate::menu::item(
+                ui,
+                Some(icon::CALENDAR_BLANK),
+                tr!("Période personnalisée…"),
+                None,
+            )
+            .clicked()
+            {
+                doc.open_period_popup = true;
+            }
+            crate::menu::separator(ui);
             if crate::menu::item_enabled(
                 ui,
                 active,
@@ -2268,9 +2323,6 @@ impl BankPerfectApp {
         }
         ui.horizontal_centered(|ui| {
             Self::operation_count(ui, doc);
-            if doc.filters.is_active() || doc.filters.hide_old_lines {
-                filter_chips(ui, doc);
-            }
             if !doc.selection.is_empty() {
                 ui.separator();
             }
@@ -2659,6 +2711,7 @@ impl BankPerfectApp {
         if let Some(tool) = &mut self.tool {
             let result = match (&mut self.doc, tool) {
                 (_, crate::tools::Tool::Notes(form)) => Some(form.show_standalone(ctx)),
+                (_, crate::tools::Tool::Help(form)) => Some(form.show_standalone(ctx)),
                 (_, crate::tools::Tool::Calculator(form)) => Some(form.show_standalone(ctx)),
                 (_, crate::tools::Tool::Loan(form)) => Some(form.show_standalone(ctx)),
                 (_, crate::tools::Tool::Currencies(form)) => Some(form.show_standalone(ctx)),
@@ -2800,6 +2853,33 @@ impl BankPerfectApp {
                     self.confirm_delete = false;
                 }
                 Choice::Cancel => self.confirm_delete = false,
+            }
+        }
+        // Dépointage de lignes rapprochées (MARK-01) : un clic de trop ne
+        // doit pas effacer un rapprochement.
+        if let Some(doc) = &mut self.doc
+            && let Some(n) = doc.untack_request
+        {
+            let message = trn!(
+                n,
+                "Vous avez demandé à supprimer le pointage d'une ligne qui a été rapprochée avec un relevé. Faut-il vraiment la dépointer ?",
+                "Vous avez demandé à supprimer le pointage de {} lignes qui ont été rapprochées avec un relevé. Faut-il vraiment les dépointer ?"
+            );
+            match dialogs::confirm(
+                ctx,
+                "untack",
+                icon::CHECKS,
+                tr!("Supprimer le pointage"),
+                &message,
+                tr!("Supprimer le pointage"),
+                None,
+                true,
+            ) {
+                Choice::Pending => {}
+                Choice::Yes => {
+                    doc.cycle_tack_confirmed();
+                }
+                Choice::No | Choice::Cancel => doc.untack_request = None,
             }
         }
         if self.confirm_delete
@@ -3243,6 +3323,10 @@ impl BankPerfectApp {
             || self.recovery_phrase.is_some()
             || self.pending.is_some()
             || self.confirm_delete
+            || self
+                .doc
+                .as_ref()
+                .is_some_and(|d| d.untack_request.is_some())
             || self.error.is_some()
             || self.show_warnings
             || self.confirm_linked_edit.is_some()
@@ -3293,7 +3377,7 @@ impl BankPerfectApp {
         let doc = self.doc.as_mut().expect("document ouvert");
         // Fenêtre étroite (tuile) : pas de panneau des comptes, le nom du
         // compte devient un sélecteur.
-        let compact = ui.available_width() < 860.0;
+        let compact = ui.available_width() < 860.0 || !self.settings.show_accounts_panel;
         // Barre d'état : une île sur toute la largeur, sous les comptes et le
         // tableau.
         egui::Panel::bottom("status")
@@ -3357,8 +3441,15 @@ impl BankPerfectApp {
             self.settings.save();
         }
         doc.show_balance_panel = self.settings.show_balance_panel;
+        doc.show_accounts_panel = self.settings.show_accounts_panel;
         doc.show_forecast = self.settings.show_forecast;
         doc.balance_cards = self.settings.balance_cards;
+        // « Période personnalisée… » (menu Filtres) : la ligne des filtres
+        // s'ouvre, et le bouton Période ouvre son calendrier.
+        if doc.open_period_popup && !self.settings.show_column_filters {
+            self.settings.show_column_filters = true;
+            self.settings.save();
+        }
         doc.show_column_filters = self.settings.show_column_filters;
         doc.show_balance_river = self.settings.balance_river;
         doc.tack_after_amount = self.settings.tack_after_amount;
@@ -3436,7 +3527,10 @@ impl BankPerfectApp {
                     .inner_margin(grid::ISLAND_MARGIN)
                     .show(ui, |ui| {
                         ui.set_min_size(ui.available_size());
-                        let action = grid::show(ui, doc);
+                        if doc.filters.is_active() || doc.filters.hide_old_lines {
+                            filter_banner(ui, doc);
+                        }
+                        let action = ui.scope(|ui| grid::show(ui, doc)).inner;
                         if !matches!(action, GridAction::None) {
                             grid_action = action;
                         }
@@ -3518,6 +3612,95 @@ fn status_island(
         });
 }
 
+/// Périodes proposées dans le menu Filtres, à côté des filtres prédéfinis
+/// (qui donnent déjà le mois actuel et le mois précédent) : année en cours
+/// et année dernière, bornes incluses.
+fn period_presets(today: Date) -> Vec<(String, (Date, Date))> {
+    use chrono::Datelike;
+    let y = today.to_naive().year();
+    let year = |y: i32| Some((Date::from_ymd(y, 1, 1)?, Date::from_ymd(y, 12, 31)?));
+    [
+        (tr!("Cette année"), year(y)),
+        (tr!("Année dernière"), year(y - 1)),
+    ]
+    .into_iter()
+    .filter_map(|(label, range)| Some((label.to_string(), range?)))
+    .collect()
+}
+
+/// Bandeau en tête du tableau dès qu'un filtre masque des lignes : combien
+/// sont affichées, quels filtres jouent, et un bouton pour tout réafficher.
+/// Sans lui, un filtre posé par mégarde (clic sur la frise, glisser sur la
+/// courbe) faisait croire à des opérations perdues.
+fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+    let pal = palette(ui);
+    let shown = doc.visible_len();
+    let total = doc.total_count();
+    let filtered_totals = doc.filters.is_active() && !doc.ignore_filter_totals();
+    let mut clear = false;
+    egui::Frame::new()
+        .fill(pal.pointed.gamma_multiply(0.13))
+        .stroke(egui::Stroke::new(1.0, pal.pointed.gamma_multiply(0.45)))
+        .corner_radius(10)
+        .inner_margin(egui::Margin::symmetric(12, 7))
+        .outer_margin(egui::Margin {
+            left: 2,
+            right: 6,
+            top: 0,
+            bottom: 6,
+        })
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                // Bouton à droite d'abord : il reste visible même quand les
+                // filtres ne tiennent pas sur la ligne.
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    let button = egui::Button::new(
+                        RichText::new(format!("{}  {}", icon::EYE, tr!("Tout afficher")))
+                            .color(pal.fg),
+                    )
+                    .fill(pal.pointed.gamma_multiply(0.30))
+                    .min_size(egui::vec2(0.0, 28.0));
+                    if ui
+                        .add(button)
+                        .on_hover_text(tr!("Retirer tous les filtres et réafficher toutes les opérations"))
+                        .clicked()
+                    {
+                        clear = true;
+                    }
+                    ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
+                        ui.label(
+                            RichText::new(icon::FUNNEL)
+                                .size(16.0)
+                                .color(pal.pointed),
+                        );
+                        ui.label(
+                            RichText::new(trn!(
+                                total,
+                                "{1} opération affichée sur {2}",
+                                "{1} opérations affichées sur {2}",
+                                crate::format::count(shown),
+                                crate::format::count(total)
+                            ))
+                            .family(crate::theme::semibold())
+                            .color(pal.fg),
+                        )
+                        .on_hover_text(if filtered_totals {
+                            tr!("Les autres sont seulement masquées par les filtres. Les soldes du bandeau sont calculés sur les lignes affichées.")
+                        } else {
+                            tr!("Les autres sont seulement masquées par les filtres.")
+                        });
+                        filter_chips(ui, doc);
+                    });
+                });
+            });
+        });
+    if clear {
+        doc.filters = Default::default();
+    }
+}
+
+/// Un badge par filtre actif ; sa croix retire ce filtre.
 fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let f = &doc.filters;
     let mut chips: Vec<(String, ClearFilter)> = Vec::new();
@@ -3596,13 +3779,6 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
         if response.on_hover_text(tr!("Retirer ce filtre")).clicked() {
             remove = Some(index);
         }
-    }
-    if chips.len() > 1
-        && ui
-            .link(RichText::new(tr!("Tout effacer")).small())
-            .clicked()
-    {
-        doc.filters = Default::default();
     }
     if let Some(index) = remove {
         (chips[index].1)(&mut doc.filters);

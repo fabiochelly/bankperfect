@@ -31,6 +31,9 @@ pub struct Settings {
     /// Verrouiller les lignes rapprochées.
     pub lock_reconciled: bool,
     pub show_balance_panel: bool,
+    /// Panneau des comptes à gauche ; masqué, le nom du compte devient un
+    /// sélecteur au-dessus des soldes.
+    pub show_accounts_panel: bool,
     pub show_forecast: bool,
     /// Soldes en trois cartes plutôt qu'en équation.
     pub balance_cards: bool,
@@ -53,8 +56,11 @@ pub struct Settings {
     pub ignore_filter_totals: bool,
     /// Suggestions de tiers pendant la saisie.
     pub autocomplete: bool,
-    /// Curseur de texte qui glisse vers sa nouvelle position.
-    pub smooth_caret: bool,
+    /// Curseur de texte qui glisse vers sa nouvelle position. Désactivé par
+    /// défaut : l'animation gênait des utilisateurs. Nouveau nom de
+    /// l'ancien `smooth_caret` (activé par défaut), ignoré à la lecture, pour
+    /// que le changement vaille aussi pour les installations existantes.
+    pub animated_caret: bool,
     /// Un montant tapé sans virgule est en centimes (1250 → 12,50).
     pub amounts_in_cents: bool,
     /// Après l'ajout d'une opération, le formulaire reste ouvert et vidé.
@@ -107,6 +113,7 @@ impl Default for Settings {
             translucent: None,
             lock_reconciled: false,
             show_balance_panel: true,
+            show_accounts_panel: true,
             show_forecast: true,
             balance_cards: false,
             show_column_filters: false,
@@ -118,7 +125,7 @@ impl Default for Settings {
             disable_reconcile: false,
             ignore_filter_totals: false,
             autocomplete: true,
-            smooth_caret: true,
+            animated_caret: false,
             amounts_in_cents: false,
             keep_entry_open: false,
             entry_at_bottom: false,
@@ -306,7 +313,7 @@ pub mod shared {
     static STATE: Mutex<(Option<PathBuf>, super::DateFormat)> =
         Mutex::new((None, super::DateFormat::Long));
     static AUTOCOMPLETE: AtomicBool = AtomicBool::new(true);
-    static SMOOTH_CARET: AtomicBool = AtomicBool::new(true);
+    static SMOOTH_CARET: AtomicBool = AtomicBool::new(false);
     static CENTS: AtomicBool = AtomicBool::new(false);
     static CATEGORIZE_IMPORT: AtomicBool = AtomicBool::new(true);
     static CATEGORIZE_ENTRY: AtomicBool = AtomicBool::new(true);
@@ -319,7 +326,7 @@ pub mod shared {
             *state = (settings.export_dir.clone(), settings.date_format);
         }
         AUTOCOMPLETE.store(settings.autocomplete, Ordering::Relaxed);
-        SMOOTH_CARET.store(settings.smooth_caret, Ordering::Relaxed);
+        SMOOTH_CARET.store(settings.animated_caret, Ordering::Relaxed);
         CENTS.store(settings.amounts_in_cents, Ordering::Relaxed);
         CATEGORIZE_IMPORT.store(settings.categorize_on_import, Ordering::Relaxed);
         CATEGORIZE_ENTRY.store(settings.categorize_in_entry, Ordering::Relaxed);
@@ -361,5 +368,22 @@ pub mod shared {
 
     pub fn date(date: bp_core::model::Date) -> String {
         STATE.lock().map(|s| s.1).unwrap_or_default().format(date)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn caret_animation_is_off_even_for_old_settings() {
+        assert!(!Settings::default().animated_caret);
+        let old: Settings = serde_json::from_str(r#"{"smooth_caret": true}"#).unwrap();
+        assert!(
+            !old.animated_caret,
+            "l'ancien réglage activé par défaut est ignoré"
+        );
+        let chosen: Settings = serde_json::from_str(r#"{"animated_caret": true}"#).unwrap();
+        assert!(chosen.animated_caret);
     }
 }

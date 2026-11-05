@@ -669,7 +669,7 @@ impl BudgetForm {
                 );
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    ui.add(egui::DragValue::new(year).range(1900..=9999));
+                    crate::ui_kit::stepper(ui, "new_year", year, 1900..=9999, None);
                     create = ui
                         .button(format!("{}  {}", icon::CHECK, tr!("Créer")))
                         .clicked();
@@ -772,10 +772,11 @@ impl BudgetForm {
         // Nom, année et comptes.
         ui.horizontal(|ui| {
             let name = ui.add(crate::theme::field(&mut self.name_draft).desired_width(260.0));
-            let year = ui.add(egui::DragValue::new(&mut self.year_draft).range(1900..=9999));
+            let year_changed =
+                crate::ui_kit::stepper(ui, "year_draft", &mut self.year_draft, 1900..=9999, None);
             let table = &self.tables.tables[index];
             let changed = self.name_draft.trim() != table.name || self.year_draft != table.year;
-            if changed && (name.lost_focus() || year.drag_stopped() || year.lost_focus()) {
+            if changed && (name.lost_focus() || year_changed) {
                 match self.tables.rename(index, &self.name_draft, self.year_draft) {
                     Ok(i) => {
                         self.selected = Some(i);

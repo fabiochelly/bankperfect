@@ -56,6 +56,9 @@ pub enum Command {
     ToggleLock,
     ToggleMarkDates,
     ToggleBalancePanel,
+    ToggleAccountsPanel,
+    /// Rendre inactif le compte affiché (il quitte la liste des comptes).
+    HideAccount,
     ToggleForecast,
     ToggleBalanceCards,
     ToggleColumnFilters,
@@ -172,6 +175,8 @@ impl Command {
                 ToggleHideOld,
                 ToggleMarkDates,
                 ToggleBalancePanel,
+                ToggleAccountsPanel,
+                HideAccount,
                 ToggleForecast,
                 ToggleBalanceCards,
                 ToggleColumnFilters,
@@ -613,6 +618,35 @@ impl Command {
                     Some("F11"),
                     tr_mark!("pointage colonne date"),
                 )
+            }
+            ToggleAccountsPanel => {
+                let label = if doc.is_none_or(|d| d.show_accounts_panel) {
+                    tr!("Masquer le panneau des comptes")
+                } else {
+                    tr!("Afficher le panneau des comptes")
+                };
+                info(
+                    VIEW,
+                    label,
+                    icon::SIDEBAR_SIMPLE,
+                    None,
+                    tr_mark!("comptes liste gauche barre latérale"),
+                )
+            }
+            HideAccount => {
+                let mut i = info(
+                    ACCOUNTS,
+                    tr!("Masquer ce compte"),
+                    icon::EYE_SLASH,
+                    None,
+                    tr_mark!("compte inactif ancien désactiver cacher"),
+                );
+                // Le dernier compte actif reste affiché.
+                i.enabled = doc.is_some_and(|d| {
+                    d.document.accounts.iter().filter(|a| !a.disabled).count() > 1
+                        && !d.current_account().disabled
+                });
+                i
             }
             ToggleBalancePanel => {
                 let on = doc.is_none_or(|d| d.show_balance_panel);
@@ -1099,9 +1133,9 @@ impl Command {
             ),
             Help => info(
                 HELP,
-                tr!("Aide en ligne"),
+                tr!("Guide d'utilisation"),
                 icon::QUESTION,
-                None,
+                Some("F1"),
                 tr_mark!("manuel documentation"),
             ),
             Palette => info(

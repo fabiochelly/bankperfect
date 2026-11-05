@@ -351,7 +351,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Applies reliable suggestions (history, known merchants) to transactions left uncategorized by the file and the rules",
     ),
     ("Doublons : écart toléré", "Duplicates: date tolerance"),
-    (" j", " d"),
+    ("j", "d"),
     ("même mode", "same method"),
     ("Importer aucune opération", "Import no transactions"),
     ("Importer une opération", "Import one transaction"),

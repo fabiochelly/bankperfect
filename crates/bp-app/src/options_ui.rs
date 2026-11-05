@@ -413,7 +413,7 @@ impl OptionsForm {
                 );
             });
             ui.add_space(8.0);
-            crate::theme::checkbox(ui, &mut d.smooth_caret, tr!("Curseur de texte animé"));
+            crate::theme::checkbox(ui, &mut d.animated_caret, tr!("Curseur de texte animé"));
             ui.add_space(8.0);
             let mut translucent = d.translucent();
             if crate::theme::checkbox(

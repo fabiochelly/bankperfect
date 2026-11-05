@@ -41,6 +41,8 @@ pub struct OpenDoc {
     pub show_mark_dates: bool,
     /// Panneau des soldes et solde prévisionnel affichés (réglages).
     pub show_balance_panel: bool,
+    /// Panneau des comptes à gauche (réglages).
+    pub show_accounts_panel: bool,
     pub show_forecast: bool,
     /// Soldes en trois cartes plutôt qu'en équation (réglages).
     pub balance_cards: bool,
@@ -58,6 +60,13 @@ pub struct OpenDoc {
     ignore_filter_totals: bool,
     /// Message à afficher (refus d'une action), repris par l'application.
     pub notice: Option<String>,
+    /// Dépointage de lignes rapprochées en attente de confirmation : nombre
+    /// de lignes concernées (MARK-01). L'application pose la question, puis
+    /// appelle [`OpenDoc::cycle_tack_confirmed`].
+    pub untack_request: Option<usize>,
+    /// Ouvrir le choix de la période (bouton Période de la ligne des
+    /// filtres) à la prochaine image.
+    pub open_period_popup: bool,
     /// Opérations sélectionnées (indices dans le compte courant).
     pub selection: BTreeSet<usize>,
     /// Dernière ligne cliquée, pour les sélections avec Maj.
@@ -256,6 +265,7 @@ impl OpenDoc {
             locked: false,
             show_mark_dates: false,
             show_balance_panel: true,
+            show_accounts_panel: true,
             show_forecast: true,
             balance_cards: false,
             show_column_filters: false,
@@ -265,6 +275,8 @@ impl OpenDoc {
             disable_reconcile: false,
             ignore_filter_totals: false,
             notice: None,
+            untack_request: None,
+            open_period_popup: false,
             selection: BTreeSet::new(),
             anchor: None,
             cursor: None,
@@ -630,14 +642,39 @@ impl OpenDoc {
     }
 
     /// Change le pointage de la sélection ; refusé (faux) si des lignes
-    /// rapprochées verrouillées devraient être dépointées.
+    /// rapprochées verrouillées devraient être dépointées. Retirer le
+    /// pointage de lignes rapprochées (ou pointées, en pointage simple) se
+    /// confirme d'abord, comme dans l'ancienne version : la demande est posée
+    /// dans `untack_request` et rien ne change.
     pub fn cycle_tack(&mut self) -> bool {
+        self.cycle_tack_with(false)
+    }
+
+    /// Comme [`Self::cycle_tack`], dépointage déjà confirmé.
+    pub fn cycle_tack_confirmed(&mut self) -> bool {
+        self.untack_request = None;
+        self.cycle_tack_with(true)
+    }
+
+    fn cycle_tack_with(&mut self, confirmed: bool) -> bool {
         let Some(&reference) = self.selection.iter().next() else {
             return true;
         };
-        if self.locked && self.current_account().operations[reference].tack == Tack::Reconciled {
+        let from = self.current_account().operations[reference].tack;
+        let untack = from == Tack::Reconciled || (self.disable_reconcile && from != Tack::None);
+        if self.locked && untack {
             self.notice =
                 Some(tr!("Les lignes rapprochées sont verrouillées (menu Opérations)").into());
+            return false;
+        }
+        if untack && !confirmed {
+            let ops = &self.current_account().operations;
+            let count = self
+                .selection
+                .iter()
+                .filter(|&&i| ops.get(i).is_some_and(|op| op.tack == from))
+                .count();
+            self.untack_request = Some(count.max(1));
             return false;
         }
         self.snapshot(tr_mark!("pointage"));
@@ -1240,6 +1277,19 @@ impl OpenDoc {
         self.redo.clear();
     }
 
+    /// Mémorise les données des fonctionnalités (échéancier…) avant une
+    /// modification faite hors de la grille, pour qu'Annuler la défasse.
+    /// Renvoie l'étiquette de l'étape.
+    pub fn snapshot_features(&mut self, label: &str) -> u64 {
+        let features = self.document.feature_data.clone();
+        self.snapshot_accounts(label, self.account, &[]);
+        if let Some(last) = self.undo.last_mut() {
+            last.features = Some(features);
+            last.observe = false;
+        }
+        self.undo_tag
+    }
+
     /// Étiquette de la dernière étape d'annulation.
     pub fn last_undo_tag(&self) -> Option<u64> {
         self.undo.last().map(|e| e.tag)
@@ -1759,8 +1809,38 @@ mod tests {
         d.click_row(1, false, false);
         d.cycle_tack();
         assert_eq!(d.current_account().operations[1].tack, Tack::Reconciled);
-        d.cycle_tack();
+        assert!(!d.cycle_tack(), "dépointer se confirme");
+        assert_eq!(d.untack_request, Some(1));
+        assert_eq!(d.current_account().operations[1].tack, Tack::Reconciled);
+        d.cycle_tack_confirmed();
         assert_eq!(d.current_account().operations[1].tack, Tack::None);
+        assert_eq!(d.untack_request, None);
+    }
+
+    #[test]
+    fn untacking_reconciled_lines_asks_first() {
+        let mut d = doc();
+        d.click_row(1, false, false);
+        d.click_row(2, true, false);
+        d.cycle_tack();
+        d.cycle_tack();
+        let tacks = |d: &OpenDoc| {
+            let ops = &d.current_account().operations;
+            (ops[1].tack, ops[2].tack)
+        };
+        assert_eq!(tacks(&d), (Tack::Reconciled, Tack::Reconciled));
+        assert!(!d.cycle_tack());
+        assert_eq!(d.untack_request, Some(2));
+        assert_eq!(tacks(&d), (Tack::Reconciled, Tack::Reconciled));
+        assert!(d.cycle_tack_confirmed());
+        assert_eq!(tacks(&d), (Tack::None, Tack::None));
+        // Verrou : refus, sans question.
+        d.cycle_tack();
+        d.cycle_tack();
+        d.locked = true;
+        assert!(!d.cycle_tack());
+        assert_eq!(d.untack_request, None);
+        assert!(d.notice.is_some());
     }
 
     #[test]

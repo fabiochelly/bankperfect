@@ -258,7 +258,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Old reconciled rows hidden",
     ),
     ("Retirer ce filtre", "Remove this filter"),
-    ("Tout effacer", "Clear all"),
     ("Nouvelle opération (Inser)", "New transaction (Ins)"),
     ("Nouvelle opération", "New transaction"),
     ("Ligne {} : {}", "Row {}: {}"),
@@ -441,4 +440,73 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("texte cherché", "search text"),
     ("nom de catégorie", "category name"),
     ("Pointage", "Clearing"),
+    // Retour client : pointage, filtres, comptes, échéancier, aide.
+    (
+        "Vous avez demandé à supprimer le pointage d'une ligne qui a été rapprochée avec un relevé. Faut-il vraiment la dépointer ?",
+        "You asked to remove the mark from a row that was reconciled with a statement. Do you really want to unmark it?",
+    ),
+    (
+        "Vous avez demandé à supprimer le pointage de {} lignes qui ont été rapprochées avec un relevé. Faut-il vraiment les dépointer ?",
+        "You asked to remove the mark from {} rows that were reconciled with a statement. Do you really want to unmark them?",
+    ),
+    ("Supprimer le pointage", "Unmark"),
+    ("Année dernière", "Last year"),
+    ("Période personnalisée…", "Custom period…"),
+    ("Tout afficher", "Show all"),
+    (
+        "Retirer tous les filtres et réafficher toutes les opérations",
+        "Remove all filters and show every transaction again",
+    ),
+    (
+        "{1} opération affichée sur {2}",
+        "{1} transaction shown out of {2}",
+    ),
+    (
+        "{1} opérations affichées sur {2}",
+        "{1} transactions shown out of {2}",
+    ),
+    (
+        "Les autres sont seulement masquées par les filtres. Les soldes du bandeau sont calculés sur les lignes affichées.",
+        "The others are only hidden by the filters. The balances at the top are computed on the rows shown.",
+    ),
+    (
+        "Les autres sont seulement masquées par les filtres.",
+        "The others are only hidden by the filters.",
+    ),
+    ("Panneau des comptes", "Accounts panel"),
+    ("Masquer le panneau des comptes", "Hide the accounts panel"),
+    ("Afficher le panneau des comptes", "Show the accounts panel"),
+    (
+        "comptes liste gauche barre latérale",
+        "accounts list left sidebar",
+    ),
+    ("Masquer ce compte", "Hide this account"),
+    (
+        "compte inactif ancien désactiver cacher",
+        "account inactive old disable hide",
+    ),
+    (
+        "Compte « {} » masqué. Pour le réafficher : Comptes › Gestion des comptes…, décocher « Compte inactif ».",
+        "Account “{}” hidden. To show it again: Accounts › Manage accounts…, untick “Inactive account”.",
+    ),
+    ("Ligne {} sur {}", "Row {} of {}"),
+    ("Rechercher", "Search"),
+    (
+        "Toutes les commandes, avec leur raccourci : Ctrl+K",
+        "All commands, with their shortcut: Ctrl+K",
+    ),
+    ("échéancier", "scheduler"),
+    (
+        "Échéancier remis comme à l'ouverture de la fenêtre.",
+        "Scheduler restored as it was when the window opened.",
+    ),
+    ("Annuler les modifications", "Undo changes"),
+    (
+        "Remet l'échéancier tel qu'il était à l'ouverture de la fenêtre",
+        "Restores the scheduler as it was when the window opened",
+    ),
+    (
+        "Modifications enregistrées au fur et à mesure",
+        "Changes are saved as you go",
+    ),
 ];

@@ -369,7 +369,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("À propos de BankPerfect", "About BankPerfect"),
     ("version licence", "version license"),
-    ("Aide en ligne", "Online help"),
+    ("Guide d'utilisation", "User guide"),
     ("manuel documentation", "manual documentation guide"),
     ("Palette de commandes", "Command palette"),
     ("rechercher", "search find"),

@@ -125,6 +125,12 @@ pub struct SchedulerForm {
     occurrence: Option<OccurrenceEdit>,
     /// Faire défiler le détail jusqu'aux prochaines dates, une fois.
     reveal_dates: bool,
+    /// Échéances telles qu'à l'ouverture (ou après la dernière insertion),
+    /// pour « Annuler les modifications ».
+    initial: Vec<Schedule>,
+    /// Étape d'annulation prise à la première modification : Ctrl+Z, une
+    /// fois la fenêtre fermée, défait les modifications de l'échéancier.
+    undo_tag: Option<u64>,
 }
 
 /// Index réel du compte d'uid donné.
@@ -152,7 +158,10 @@ impl SchedulerForm {
             oldest: scheduler::oldest_schedules(&doc.document).map_or(0, |(s, _)| s.len()),
             occurrence: None,
             reveal_dates: false,
+            initial: Vec::new(),
+            undo_tag: None,
         };
+        form.initial = form.schedules.clone();
         let first = select.or((!form.schedules.is_empty()).then_some(0));
         form.select(first);
         form
@@ -169,10 +178,33 @@ impl SchedulerForm {
         }
     }
 
-    fn save(&self, doc: &mut OpenDoc) {
+    fn save(&mut self, doc: &mut OpenDoc) {
+        if self
+            .undo_tag
+            .is_none_or(|tag| doc.last_undo_tag() != Some(tag))
+        {
+            self.undo_tag = Some(doc.snapshot_features(bp_core::tr_mark!("échéancier")));
+        }
         if scheduler::save(&mut doc.document, &self.schedules).is_ok() {
             doc.dirty = true;
         }
+    }
+
+    /// Remet l'échéancier tel qu'à l'ouverture de la fenêtre.
+    fn revert(&mut self, doc: &mut OpenDoc) {
+        if self.undo_tag.is_some() && doc.last_undo_tag() == self.undo_tag {
+            doc.undo();
+        } else if scheduler::save(&mut doc.document, &self.initial).is_ok() {
+            doc.dirty = true;
+        }
+        self.undo_tag = None;
+        self.schedules = self.initial.clone();
+        let selected = self
+            .selected
+            .filter(|&i| i < self.schedules.len())
+            .or((!self.schedules.is_empty()).then_some(0));
+        self.select(selected);
+        self.message = Some(tr!("Échéancier remis comme à l'ouverture de la fenêtre.").into());
     }
 
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
@@ -485,51 +517,6 @@ impl SchedulerForm {
             });
         });
 
-        ui_kit::section(ui, width, icon::BANK, tr!("Comptes"), |ui| {
-            ui_kit::row(ui, tr!("Compte"), LABEL_WIDTH, |ui| {
-                let current = account_index(doc, &s.account);
-                let mut chosen = current;
-                egui::ComboBox::from_id_salt("sched_account")
-                    .selected_text(chosen.map_or(tr!("Compte inexistant").to_string(), |k| {
-                        document.accounts[k].name.clone()
-                    }))
-                    .width(full - 12.0)
-                    .show_ui(ui, |ui| {
-                        for &k in &document.account_order {
-                            ui.selectable_value(&mut chosen, Some(k), &document.accounts[k].name);
-                        }
-                    });
-                if chosen != current
-                    && let Some(k) = chosen
-                {
-                    s.account = document.accounts[k].uid.clone();
-                    changed = true;
-                }
-            });
-            ui.add_space(8.0);
-            ui_kit::row(ui, tr!("Transfert vers"), LABEL_WIDTH, |ui| {
-                let current = s.transfer.as_ref().and_then(|uid| account_index(doc, uid));
-                let mut chosen = current;
-                egui::ComboBox::from_id_salt("sched_transfer")
-                    .selected_text(
-                        chosen.map_or(tr!("Aucun (opération simple)").to_string(), |k| {
-                            document.accounts[k].name.clone()
-                        }),
-                    )
-                    .width(full - 12.0)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(&mut chosen, None, tr!("Aucun (opération simple)"));
-                        for &k in &document.account_order {
-                            ui.selectable_value(&mut chosen, Some(k), &document.accounts[k].name);
-                        }
-                    });
-                if chosen != current {
-                    s.transfer = chosen.map(|k| document.accounts[k].uid.clone());
-                    changed = true;
-                }
-            });
-        });
-
         ui_kit::section(ui, width, icon::ARROWS_CLOCKWISE, tr!("Récurrence"), |ui| {
             ui_kit::row(ui, tr!("Prochaine échéance"), LABEL_WIDTH, |ui| {
                 let r = crate::datepicker::date_field(
@@ -567,10 +554,7 @@ impl SchedulerForm {
             ui.add_space(8.0);
             ui_kit::row(ui, tr!("Tous les"), LABEL_WIDTH, |ui| {
                 let mut every = s.period.every.max(1);
-                if ui
-                    .add(egui::DragValue::new(&mut every).range(1..=99))
-                    .changed()
-                {
+                if ui_kit::stepper(ui, "sched_every", &mut every, 1..=99, None) {
                     s.period.every = every;
                     changed = true;
                 }
@@ -629,6 +613,51 @@ impl SchedulerForm {
                 tr!("Insérer automatiquement à l'ouverture du fichier quand l'échéance est passée"),
             )
             .changed();
+        });
+
+        ui_kit::section(ui, width, icon::BANK, tr!("Comptes"), |ui| {
+            ui_kit::row(ui, tr!("Compte"), LABEL_WIDTH, |ui| {
+                let current = account_index(doc, &s.account);
+                let mut chosen = current;
+                egui::ComboBox::from_id_salt("sched_account")
+                    .selected_text(chosen.map_or(tr!("Compte inexistant").to_string(), |k| {
+                        document.accounts[k].name.clone()
+                    }))
+                    .width(full - 12.0)
+                    .show_ui(ui, |ui| {
+                        for &k in &document.account_order {
+                            ui.selectable_value(&mut chosen, Some(k), &document.accounts[k].name);
+                        }
+                    });
+                if chosen != current
+                    && let Some(k) = chosen
+                {
+                    s.account = document.accounts[k].uid.clone();
+                    changed = true;
+                }
+            });
+            ui.add_space(8.0);
+            ui_kit::row(ui, tr!("Transfert vers"), LABEL_WIDTH, |ui| {
+                let current = s.transfer.as_ref().and_then(|uid| account_index(doc, uid));
+                let mut chosen = current;
+                egui::ComboBox::from_id_salt("sched_transfer")
+                    .selected_text(
+                        chosen.map_or(tr!("Aucun (opération simple)").to_string(), |k| {
+                            document.accounts[k].name.clone()
+                        }),
+                    )
+                    .width(full - 12.0)
+                    .show_ui(ui, |ui| {
+                        ui.selectable_value(&mut chosen, None, tr!("Aucun (opération simple)"));
+                        for &k in &document.account_order {
+                            ui.selectable_value(&mut chosen, Some(k), &document.accounts[k].name);
+                        }
+                    });
+                if chosen != current {
+                    s.transfer = chosen.map(|k| document.accounts[k].uid.clone());
+                    changed = true;
+                }
+            });
         });
 
         // Prochaines dates, pour vérifier la récurrence d'un coup d'œil et
@@ -781,6 +810,7 @@ impl SchedulerForm {
 
     fn footer(&mut self, ui: &mut egui::Ui, doc: &mut OpenDoc, outcome: &mut Outcome) {
         let pal = palette(ui);
+        let mut revert = false;
         ui.add_space(10.0);
         ui.horizontal(|ui| {
             ui.label(RichText::new(tr!("Insérer les échéances jusqu'au")).color(pal.fg_dark));
@@ -850,6 +880,10 @@ impl SchedulerForm {
                     ));
                 }
                 self.schedules = schedules;
+                // Les opérations insérées ne s'annulent pas d'ici : leur
+                // état devient la nouvelle référence.
+                self.initial = self.schedules.clone();
+                self.undo_tag = None;
                 self.select(self.selected);
                 self.message = Some(summary);
             }
@@ -906,7 +940,39 @@ impl SchedulerForm {
                 *outcome =
                     Outcome::Switch(Box::new(crate::tools::Tool::Forecast(ForecastForm::new())));
             }
+            let modified = self.schedules != self.initial;
+            if ui
+                .add_enabled(
+                    modified,
+                    egui::Button::new(format!(
+                        "{}  {}",
+                        icon::ARROW_COUNTER_CLOCKWISE,
+                        tr!("Annuler les modifications")
+                    ))
+                    .min_size(egui::vec2(0.0, 34.0)),
+                )
+                .on_hover_text(tr!(
+                    "Remet l'échéancier tel qu'il était à l'ouverture de la fenêtre"
+                ))
+                .clicked()
+            {
+                revert = true;
+            }
+            ui.with_layout(egui::Layout::left_to_right(egui::Align::Center), |ui| {
+                ui.label(
+                    RichText::new(format!(
+                        "{}  {}",
+                        icon::CHECK,
+                        tr!("Modifications enregistrées au fur et à mesure")
+                    ))
+                    .small()
+                    .color(pal.muted),
+                );
+            });
         });
+        if revert {
+            self.revert(doc);
+        }
     }
 }
 

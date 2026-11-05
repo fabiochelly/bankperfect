@@ -648,9 +648,11 @@ impl ImportForm {
             ui.add_space(10.0);
             ui.horizontal(|ui| {
                 ui.label(RichText::new(tr!("Lignes d'en-tête ignorées")).color(pal.fg_dark));
-                changed |= ui
-                    .add(egui::DragValue::new(&mut self.csv.skip_rows).range(0..=50))
-                    .changed();
+                let mut rows = self.csv.skip_rows as u32;
+                if crate::ui_kit::stepper(ui, "skip_rows", &mut rows, 0..=50, None) {
+                    self.csv.skip_rows = rows as usize;
+                    changed = true;
+                }
             });
             ui.add_space(10.0);
             ui.label(RichText::new(tr!("Ordre des dates")).color(pal.fg_dark));
@@ -1185,11 +1187,7 @@ impl ImportForm {
             ui.add_space(16.0);
             let before = (self.tolerance, self.match_mode);
             ui.label(RichText::new(tr!("Doublons : écart toléré")).color(pal.fg_dark));
-            ui.add(
-                egui::DragValue::new(&mut self.tolerance)
-                    .range(0..=10)
-                    .suffix(tr!(" j")),
-            );
+            crate::ui_kit::stepper(ui, "tolerance", &mut self.tolerance, 0..=10, Some(tr!("j")));
             crate::theme::checkbox(ui, &mut self.match_mode, tr!("même mode"));
             if before != (self.tolerance, self.match_mode) {
                 self.recheck = true;

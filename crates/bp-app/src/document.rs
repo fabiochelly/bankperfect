@@ -1786,6 +1786,30 @@ mod tests {
         assert_eq!(d.totals().balance, Amount::from_cents(-3_000));
     }
 
+    /// Chaque commande épinglable a sa propre icône (les thèmes et les
+    /// langues, familles d'une même commande, exceptés).
+    #[test]
+    fn pinnable_commands_have_distinct_icons() {
+        use crate::commands::Command;
+        let d = doc();
+        let mut seen: std::collections::HashMap<&str, Command> = Default::default();
+        for command in Command::all(Some(&d)) {
+            if command.pin_id().is_none()
+                || matches!(command, Command::UseTheme(_) | Command::Language(_))
+            {
+                continue;
+            }
+            let icon = command.info(Some(&d)).icon;
+            if let Some(previous) = seen.insert(icon, command) {
+                panic!("{command:?} et {previous:?} ont la même icône");
+            }
+            assert!(
+                !command.description().is_empty(),
+                "{command:?} sans description"
+            );
+        }
+    }
+
     #[test]
     fn search_index_built_on_first_text_filter_and_per_account() {
         let mut d = doc_with_transfer();

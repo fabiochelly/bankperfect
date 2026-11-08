@@ -48,71 +48,97 @@ fn short_label(label: &str) -> &str {
     label.trim_end_matches(['…', '.']).trim_end()
 }
 
-enum PinnedClick {
-    None,
-    Run,
-    Unpin,
-}
-
-/// Bouton d'une commande épinglée : icône seule (barre de menus) ou icône et
-/// libellé (barre dédiée). Infobulle avec libellé et raccourci ; clic droit
-/// pour la retirer.
-fn pinned_button(
+/// Commande épinglée : son icône dans sa couleur (et son libellé dans la
+/// barre dédiée), sans cadre de bouton ; la couleur se renforce au survol.
+/// Un seul élément, d'identifiant fixe, reçoit clic et glisser : un clic
+/// exécute, un glisser déplace (ou retire, hors de la barre). Infobulle :
+/// libellé, raccourci et ce que fait la commande.
+fn pinned_item(
     ui: &mut egui::Ui,
+    id: &str,
+    command: Command,
     info: &crate::commands::Info,
     with_label: bool,
     dragging: bool,
-) -> (PinnedClick, egui::Response) {
+) -> egui::Response {
     let pal = palette(ui);
-    let color = if info.enabled {
-        pal.fg_dark
-    } else {
-        pal.muted.gamma_multiply(0.6)
-    };
-    let text = if with_label {
-        RichText::new(format!("{}  {}", info.icon, short_label(&info.label))).color(color)
-    } else {
-        RichText::new(info.icon).size(17.0).color(color)
-    };
-    // Glisser pour déplacer, cliquer pour exécuter.
-    let button = egui::Button::new(text)
-        .frame_when_inactive(dragging)
-        .selected(dragging)
-        .corner_radius(7)
-        .min_size(egui::vec2(PINNED_ICON, PINNED_ICON));
-    let hover = match info.shortcut {
-        Some(shortcut) => format!("{}  ({shortcut})", info.label),
-        None => info.label.clone(),
-    };
-    // Toujours actif au clic droit, pour pouvoir retirer une commande
-    // indisponible pour l'instant.
-    let response = ui.add(button);
-    let response = if dragging || (with_label && info.shortcut.is_none()) {
-        response
-    } else {
-        response.on_hover_text(hover)
-    };
-    let mut click = if response.clicked() && info.enabled {
-        PinnedClick::Run
-    } else {
-        PinnedClick::None
-    };
-    response.context_menu(|ui| {
-        crate::menu::popup_style(ui.style_mut());
-        crate::menu::begin(ui);
-        if crate::menu::item_enabled(
-            ui,
-            true,
-            Some(icon::PUSH_PIN_SLASH),
-            tr!("Retirer de la barre de menus"),
-            None,
+    let color = command.color(&pal);
+    let icon_font = egui::FontId::proportional(17.0);
+    let label_font = egui::TextStyle::Body.resolve(ui.style());
+    let label = with_label.then(|| {
+        ui.painter().layout_no_wrap(
+            short_label(&info.label).to_string(),
+            label_font,
+            pal.fg_dark,
         )
-        .clicked()
-        {
-            click = PinnedClick::Unpin;
-        }
     });
-    (click, response)
+    let width = label
+        .as_ref()
+        .map_or(PINNED_ICON, |g| PINNED_ICON + g.size().x + 8.0);
+    let (_, rect) = ui.allocate_space(egui::vec2(width, PINNED_ICON));
+    let response = ui.interact(
+        rect,
+        egui::Id::new(("pinned_command", id)),
+        egui::Sense::click_and_drag(),
+    );
+    response.widget_info(|| {
+        egui::WidgetInfo::labeled(egui::WidgetType::Button, info.enabled, &info.label)
+    });
+    let hot = info.enabled && (response.hovered() || dragging);
+    let tint = if !info.enabled {
+        pal.muted.gamma_multiply(0.5)
+    } else if hot {
+        color
+    } else {
+        // Au repos, un peu adoucie ; moins en clair, où elle pâlirait.
+        color.gamma_multiply(if ui.visuals().dark_mode { 0.72 } else { 0.85 })
+    };
+    if hot {
+        ui.painter()
+            .rect_filled(rect, 7.0, color.gamma_multiply(0.14));
+    }
+    ui.painter().text(
+        egui::pos2(rect.left() + PINNED_ICON / 2.0, rect.center().y),
+        egui::Align2::CENTER_CENTER,
+        info.icon,
+        icon_font,
+        tint,
+    );
+    if let Some(galley) = label {
+        let text_color = if !info.enabled {
+            pal.muted
+        } else if hot {
+            pal.fg
+        } else {
+            pal.fg_dark
+        };
+        ui.painter().galley(
+            egui::pos2(
+                rect.left() + PINNED_ICON - 2.0,
+                rect.center().y - galley.size().y / 2.0,
+            ),
+            galley,
+            text_color,
+        );
+    }
+    if hot && !dragging {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    if dragging {
+        return response;
+    }
+    response.on_hover_ui(|ui| {
+        ui.horizontal(|ui| {
+            ui.label(RichText::new(short_label(&info.label)).strong());
+            if let Some(shortcut) = info.shortcut {
+                ui.label(RichText::new(shortcut).color(palette(ui).muted));
+            }
+        });
+        let description = command.description();
+        if !description.is_empty() {
+            ui.label(description);
+        }
+    })
 }
 
 /// Ce que l'utilisateur a fait dans une rangée de commandes épinglées.
@@ -124,7 +150,8 @@ struct PinnedOutcome {
     moved: Option<(String, String)>,
 }
 
-/// Rangée de commandes épinglées, réordonnables par glisser-déposer.
+/// Rangée de commandes épinglées : clic pour exécuter, glisser pour
+/// réordonner, glisser hors de la rangée (ou clic droit) pour retirer.
 /// `reverse` : disposition de droite à gauche (barre de menus), on les pose
 /// à l'envers pour garder l'ordre des réglages à l'écran.
 fn pinned_row(
@@ -138,39 +165,92 @@ fn pinned_row(
     let dragged: Option<String> = ui.data(|d| d.get_temp(drag_id));
     let mut slots: Vec<(String, egui::Rect)> = Vec::with_capacity(pinned.len());
     let mut still_dragging = false;
+    let mut released = false;
     let order: Vec<usize> = if reverse {
         (0..pinned.len()).rev().collect()
     } else {
         (0..pinned.len()).collect()
     };
+    ui.spacing_mut().item_spacing.x = 2.0;
     for k in order {
         let (command, info) = &pinned[k];
         let Some(id) = command.pin_id() else { continue };
         let is_dragged = dragged.as_deref() == Some(id.as_str());
-        let (click, response) = pinned_button(ui, info, with_label, is_dragged);
-        // Glisser : identifiant fixe par commande (celui du bouton dépend de
-        // sa place, qui change pendant le déplacement).
-        let response = ui.interact(
-            response.rect,
-            egui::Id::new(("pinned_drag", &id)),
-            egui::Sense::drag(),
-        );
-        match click {
-            PinnedClick::Run => outcome.run = Some(*command),
-            PinnedClick::Unpin => outcome.unpin = Some(id.clone()),
-            PinnedClick::None => {}
+        let response = pinned_item(ui, &id, *command, info, with_label, is_dragged);
+        if response.clicked() && info.enabled {
+            outcome.run = Some(*command);
         }
+        response.context_menu(|ui| {
+            crate::menu::popup_style(ui.style_mut());
+            crate::menu::begin(ui);
+            if crate::menu::item_enabled(
+                ui,
+                true,
+                Some(icon::PUSH_PIN_SLASH),
+                tr!("Retirer de la barre de menus"),
+                None,
+            )
+            .clicked()
+            {
+                outcome.unpin = Some(id.clone());
+            }
+        });
         if response.drag_started() {
             ui.data_mut(|d| d.insert_temp(drag_id, id.clone()));
         }
         if response.dragged() {
             still_dragging = true;
-            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
+        if response.drag_stopped() && is_dragged {
+            released = true;
         }
         slots.push((id, response.rect));
     }
-    if let Some(dragged) = dragged {
-        if still_dragging {
+    let Some(dragged) = dragged else {
+        return outcome;
+    };
+    // Zone de la rangée, avec de la marge : au-delà, l'icône lâchée est
+    // retirée.
+    let zone = slots
+        .iter()
+        .fold(egui::Rect::NOTHING, |zone, (_, rect)| zone.union(*rect))
+        .expand(18.0);
+    let pointer = ui.ctx().pointer_latest_pos();
+    let outside = pointer.is_some_and(|p| !zone.contains(p));
+    if still_dragging {
+        if outside {
+            // Icône fantôme sous le pointeur, en rouge : lâcher la retire.
+            if let (Some(p), Some((_, info))) = (
+                pointer,
+                pinned
+                    .iter()
+                    .find(|(c, _)| c.pin_id().as_deref() == Some(dragged.as_str())),
+            ) {
+                let pal = palette(ui);
+                let painter = ui.ctx().layer_painter(egui::LayerId::new(
+                    egui::Order::Tooltip,
+                    egui::Id::new("pinned_ghost"),
+                ));
+                let ghost = egui::Rect::from_center_size(p, egui::vec2(PINNED_ICON, PINNED_ICON));
+                painter.rect_filled(ghost, 7.0, pal.negative.gamma_multiply(0.18));
+                painter.text(
+                    ghost.center(),
+                    egui::Align2::CENTER_CENTER,
+                    info.icon,
+                    egui::FontId::proportional(17.0),
+                    pal.negative,
+                );
+                painter.text(
+                    ghost.right_center() + egui::vec2(8.0, 0.0),
+                    egui::Align2::LEFT_CENTER,
+                    tr!("Relâcher pour retirer"),
+                    egui::FontId::proportional(12.5),
+                    pal.negative,
+                );
+            }
+            ui.ctx().set_cursor_icon(egui::CursorIcon::NoDrop);
+        } else {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
             // Déplacement en direct : la commande prend la place de celle
             // dont le pointeur a passé le milieu (pas d'aller-retour entre
             // deux boutons de largeurs différentes).
@@ -178,7 +258,7 @@ fn pinned_row(
                 .iter()
                 .find(|(id, _)| *id == dragged)
                 .map(|(_, r)| r.center().x);
-            if let (Some(pointer), Some(from)) = (ui.ctx().pointer_interact_pos(), from)
+            if let (Some(pointer), Some(from)) = (pointer, from)
                 && let Some((target, _)) = slots.iter().find(|(id, rect)| {
                     *id != dragged
                         && rect.x_range().contains(pointer.x)
@@ -188,7 +268,12 @@ fn pinned_row(
             {
                 outcome.moved = Some((dragged, target.clone()));
             }
-        } else if !ui.input(|i| i.pointer.any_down()) {
+        }
+    } else {
+        if released && outside {
+            outcome.unpin = Some(dragged);
+        }
+        if !ui.input(|i| i.pointer.any_down()) {
             ui.data_mut(|d| d.remove::<String>(drag_id));
         }
     }
@@ -1839,19 +1924,18 @@ impl BankPerfectApp {
                     .map(|(_, info)| {
                         ui.painter()
                             .layout_no_wrap(
-                                format!("{}  {}", info.icon, short_label(&info.label)),
+                                short_label(&info.label).to_string(),
                                 font.clone(),
                                 pal.fg,
                             )
                             .size()
                             .x
-                            + 2.0 * ui.spacing().button_padding.x
-                            + 4.0
+                            + PINNED_ICON
+                            + 10.0
                     })
                     .sum();
                 let with_label = labelled <= room - 16.0;
                 ui.horizontal(|ui| {
-                    ui.spacing_mut().item_spacing.x = 4.0;
                     let row = pinned_row(ui, &pinned, with_label, false);
                     command = row.run;
                     unpin = row.unpin;

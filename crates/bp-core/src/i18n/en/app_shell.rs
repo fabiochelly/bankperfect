@@ -16,8 +16,335 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "{}{}  naviguer     Entrée  exécuter     {}  épingler     Échap  fermer",
         "{}{}  navigate     Enter  run     {}  pin     Esc  close",
     ),
+    // Descriptions des commandes (infobulles).
+    (
+        "Ouvrir un fichier de comptes BankPerfect.",
+        "Open a BankPerfect accounts file.",
+    ),
+    (
+        "Créer un nouveau fichier de comptes.",
+        "Create a new accounts file.",
+    ),
+    ("Fermer le fichier ouvert.", "Close the open file."),
+    (
+        "Enregistrer les modifications du fichier.",
+        "Save the changes to the file.",
+    ),
+    (
+        "Enregistrer le fichier sous un autre nom ou à un autre endroit.",
+        "Save the file under another name or in another place.",
+    ),
+    (
+        "Enregistrer une copie du fichier, sur une clé USB par exemple, en gardant le fichier ouvert.",
+        "Save a copy of the file, on a USB stick for example, keeping the current file open.",
+    ),
+    (
+        "Mettre un fichier de comptes à la corbeille.",
+        "Move an accounts file to the trash.",
+    ),
+    (
+        "Exporter les opérations vers un tableur (Excel, CSV).",
+        "Export transactions to a spreadsheet (Excel, CSV).",
+    ),
+    (
+        "Soldes de tous les comptes, sur une même page.",
+        "Balances of all accounts on one page.",
+    ),
+    (
+        "Totaux des dépenses et des recettes par catégorie, mois par mois.",
+        "Expense and income totals by category, month by month.",
+    ),
+    ("Totaux par tiers.", "Totals by payee."),
+    (
+        "Relevé des opérations du compte, prêt à imprimer.",
+        "Statement of the account's transactions, ready to print.",
+    ),
+    (
+        "Graphiques : soldes, répartition par catégorie, par mois, par mode de paiement…",
+        "Charts: balances, breakdown by category, by month, by payment method…",
+    ),
+    (
+        "Mettre à jour les cours du portefeuille de titres.",
+        "Update the quotes of the securities portfolio.",
+    ),
+    (
+        "Récupérer les opérations directement auprès de la banque.",
+        "Fetch transactions directly from the bank.",
+    ),
+    (
+        "Créer un virement entre deux de vos comptes.",
+        "Create a transfer between two of your accounts.",
+    ),
+    (
+        "Transformer l'opération sélectionnée en transfert vers un autre compte.",
+        "Turn the selected transaction into a transfer to another account.",
+    ),
+    (
+        "Répartir l'opération sur plusieurs catégories.",
+        "Split the transaction across several categories.",
+    ),
+    (
+        "Aller à la ligne jumelle de ce transfert, dans l'autre compte.",
+        "Go to the twin row of this transfer, in the other account.",
+    ),
+    (
+        "Budget mois par mois, par catégorie.",
+        "Month-by-month budget, by category.",
+    ),
+    (
+        "Budget sur l'année, par catégorie.",
+        "Yearly budget, by category.",
+    ),
+    (
+        "Exporter les opérations au format QIF.",
+        "Export transactions in QIF format.",
+    ),
+    (
+        "Exporter tout le fichier au format JSON.",
+        "Export the whole file in JSON format.",
+    ),
+    (
+        "Imprimer le relevé du compte.",
+        "Print the account statement.",
+    ),
+    (
+        "Importer un relevé bancaire (OFX, QIF, CSV).",
+        "Import a bank statement (OFX, QIF, CSV).",
+    ),
+    (
+        "Créer un fichier à partir d'un export JSON.",
+        "Create a file from a JSON export.",
+    ),
+    (
+        "Protéger le fichier par un mot de passe.",
+        "Protect the file with a password.",
+    ),
+    (
+        "Revenir à une sauvegarde automatique du fichier.",
+        "Go back to an automatic backup of the file.",
+    ),
+    ("Quitter BankPerfect.", "Quit BankPerfect."),
+    ("Annuler la dernière modification.", "Undo the last change."),
+    (
+        "Rétablir la modification annulée.",
+        "Redo the undone change.",
+    ),
+    ("Saisir une nouvelle opération.", "Enter a new transaction."),
+    (
+        "Placer le curseur dans le formulaire de saisie.",
+        "Put the cursor in the entry form.",
+    ),
+    (
+        "Changer d'un coup un champ de toutes les lignes sélectionnées.",
+        "Change one field of all selected rows at once.",
+    ),
+    (
+        "Modifier l'opération sélectionnée.",
+        "Edit the selected transaction.",
+    ),
+    (
+        "Supprimer les lignes sélectionnées.",
+        "Delete the selected rows.",
+    ),
+    ("Couper les lignes sélectionnées.", "Cut the selected rows."),
+    (
+        "Copier les lignes sélectionnées.",
+        "Copy the selected rows.",
+    ),
+    (
+        "Coller les lignes copiées dans le compte affiché.",
+        "Paste the copied rows into the account shown.",
+    ),
+    (
+        "Rechercher un texte et le remplacer dans les opérations.",
+        "Find a text and replace it in transactions.",
+    ),
+    (
+        "Ajouter le tiers de l'opération à la liste des tiers.",
+        "Add the transaction's payee to the payee list.",
+    ),
+    (
+        "Changer la date de pointage des lignes sélectionnées.",
+        "Change the clearing date of the selected rows.",
+    ),
+    (
+        "Empêcher la modification des lignes rapprochées.",
+        "Prevent changes to reconciled rows.",
+    ),
+    (
+        "Afficher ou masquer la colonne des dates de pointage.",
+        "Show or hide the clearing date column.",
+    ),
+    (
+        "Afficher ou masquer le bandeau des soldes.",
+        "Show or hide the balance panel.",
+    ),
+    (
+        "Afficher ou masquer la liste des comptes, à gauche.",
+        "Show or hide the account list, on the left.",
+    ),
+    (
+        "Rendre inactif le compte affiché : il quitte la liste des comptes.",
+        "Make the account shown inactive: it leaves the account list.",
+    ),
+    (
+        "Afficher ou masquer le solde prévisionnel sur la courbe.",
+        "Show or hide the forecast balance on the chart.",
+    ),
+    (
+        "Présenter les soldes en équation ou en trois cartes.",
+        "Show the balances as an equation or as three cards.",
+    ),
+    (
+        "Calculer les soldes sur tout le compte, même quand un filtre est actif.",
+        "Compute the balances on the whole account, even when a filter is active.",
+    ),
+    (
+        "Afficher ou masquer la ligne des filtres sous les titres des colonnes.",
+        "Show or hide the filter row under the column titles.",
+    ),
+    (
+        "Afficher ou masquer la courbe du solde derrière la colonne Solde.",
+        "Show or hide the balance curve behind the Balance column.",
+    ),
+    (
+        "Placer la colonne de pointage en tête de ligne ou après le montant.",
+        "Put the clearing column at the start of the row or after the amount.",
+    ),
+    (
+        "Inverser devise principale et devise secondaire à l'affichage.",
+        "Swap the main and secondary currencies on screen.",
+    ),
+    (
+        "Opérations qui reviennent régulièrement : salaire, loyer, abonnements…",
+        "Recurring transactions: salary, rent, subscriptions…",
+    ),
+    (
+        "Solde prévu à une date, échéances comprises.",
+        "Expected balance at a date, scheduled transactions included.",
+    ),
+    (
+        "Règles qui remplissent la catégorie, le tiers… à la saisie et à l'import.",
+        "Rules that fill in the category, payee… when entering and importing.",
+    ),
+    (
+        "Proposer une catégorie aux opérations qui n'en ont pas.",
+        "Suggest a category for transactions without one.",
+    ),
+    ("Gérer les filtres enregistrés.", "Manage saved filters."),
+    (
+        "Enregistrer le filtre en cours pour le retrouver plus tard.",
+        "Save the current filter to find it again later.",
+    ),
+    (
+        "Retirer tous les filtres et réafficher toutes les opérations.",
+        "Remove all filters and show all transactions again.",
+    ),
+    (
+        "Créer une échéance sur le modèle de l'opération sélectionnée.",
+        "Create a scheduled transaction based on the selected one.",
+    ),
+    (
+        "Masquer les lignes rapprochées d'avant le mois en cours ; les soldes ne changent pas.",
+        "Hide reconciled rows from before the current month; the balances do not change.",
+    ),
+    (
+        "Fond de fenêtre translucide.",
+        "Translucent window background.",
+    ),
+    ("Passer en thème sombre.", "Switch to the dark theme."),
+    ("Passer en thème clair.", "Switch to the light theme."),
+    (
+        "Suivre le thème clair ou sombre du système.",
+        "Follow the system's light or dark theme.",
+    ),
+    ("Appliquer ce thème de couleurs.", "Apply this color theme."),
+    (
+        "Changer la langue de l'interface.",
+        "Change the interface language.",
+    ),
+    ("Afficher le compte suivant.", "Show the next account."),
+    (
+        "Afficher le compte précédent.",
+        "Show the previous account.",
+    ),
+    (
+        "Créer, renommer et régler les comptes.",
+        "Create, rename and set up accounts.",
+    ),
+    (
+        "Gérer la liste des catégories.",
+        "Manage the category list.",
+    ),
+    ("Gérer la liste des tiers.", "Manage the payee list."),
+    ("Gérer les modes de paiement.", "Manage payment methods."),
+    (
+        "Pointer ou dépointer les lignes sélectionnées.",
+        "Clear or unclear the selected rows.",
+    ),
+    (
+        "Rapprocher toutes les lignes pointées.",
+        "Reconcile all cleared rows.",
+    ),
+    (
+        "Retrouver les lignes à pointer à partir du solde du relevé.",
+        "Find the rows to clear from the statement balance.",
+    ),
+    (
+        "Ranger à part les anciennes opérations pour alléger le compte.",
+        "Put old transactions aside to lighten the account.",
+    ),
+    (
+        "Consulter les opérations archivées.",
+        "Browse archived transactions.",
+    ),
+    (
+        "Remettre les opérations archivées dans le compte.",
+        "Put archived transactions back into the account.",
+    ),
+    (
+        "Changer le nom du fichier de comptes et de son titulaire.",
+        "Change the name of the accounts file and of its owner.",
+    ),
+    (
+        "Ajouter des champs personnalisés aux opérations.",
+        "Add custom fields to transactions.",
+    ),
+    ("Bloc-notes du fichier.", "Notepad of the file."),
+    ("Calculatrice.", "Calculator."),
+    (
+        "Simuler un crédit : mensualités, taux, durée.",
+        "Simulate a loan: payments, rate, duration.",
+    ),
+    ("Convertir entre devises.", "Convert between currencies."),
+    ("Réglages de BankPerfect.", "BankPerfect settings."),
+    (
+        "Version et informations sur BankPerfect.",
+        "Version and information about BankPerfect.",
+    ),
+    (
+        "Activer ou consulter votre licence.",
+        "Activate or view your license.",
+    ),
+    (
+        "Guide d'utilisation de BankPerfect.",
+        "BankPerfect user guide.",
+    ),
+    (
+        "Activer, désactiver et installer des extensions.",
+        "Enable, disable and install extensions.",
+    ),
+    (
+        "Ouvrir le dossier des extensions.",
+        "Open the extensions folder.",
+    ),
+    (
+        "Documentation pour écrire des extensions.",
+        "Documentation for writing extensions.",
+    ),
     ("Épingler dans la barre de menus", "Pin to the menu bar"),
     ("Retirer de la barre de menus", "Remove from the menu bar"),
+    ("Relâcher pour retirer", "Release to remove"),
     // Groupes des commandes.
     ("Fichier", "File"),
     ("Édition", "Edit"),

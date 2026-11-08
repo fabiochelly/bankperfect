@@ -249,6 +249,216 @@ impl Command {
         list
     }
 
+    /// Couleur de l'icône dans la palette et la barre des commandes
+    /// épinglées, prise dans la palette du thème (teintes propres au clair
+    /// et au sombre) : fichiers en bleu, ajouts et imports en vert,
+    /// suppressions en rouge, pointage, échéances, rapports…
+    pub fn color(self, pal: &crate::theme::Palette) -> egui::Color32 {
+        use Command::*;
+        match self {
+            Open
+            | NewFile
+            | CloseFile
+            | Save
+            | SaveAs
+            | SaveCopy
+            | FocusEntry
+            | ModifySelected
+            | EditOperation
+            | CutLines
+            | CopyLines
+            | PasteLines
+            | Replace
+            | ToggleBalancePanel
+            | ToggleAccountsPanel
+            | ToggleBalanceCards
+            | Theme(ThemePreference::System)
+            | Language(_)
+            | NextAccount
+            | PreviousAccount
+            | Manage(Tab::Accounts)
+            | Manage(Tab::Categories)
+            | Manage(Tab::Payees)
+            | Manage(Tab::Modes)
+            | ModifyGroup
+            | ExtraFields
+            | Options
+            | About
+            | Help => pal.accent,
+            DeleteFile | Quit | Delete | HideAccount | ClearFilters => pal.negative,
+            Export | BankSync | Transfer | ConvertToTransfer | SplitOperation | GoToSister
+            | ExportQif | ExportJson | Print | ReverseCurrencies | Calculator | Loan
+            | Currencies => pal.teal,
+            Report(ReportTab::Accounts)
+            | Report(ReportTab::Categories)
+            | Report(ReportTab::Payees)
+            | Report(ReportTab::Statement)
+            | Charts
+            | Budget(BudgetTab::Monthly)
+            | Budget(BudgetTab::Annual)
+            | Undo
+            | Redo
+            | ToggleTranslucent
+            | Theme(ThemePreference::Dark)
+            | UseTheme(_)
+            | ManageExtensions
+            | ExtensionsFolder
+            | ExtensionsDocs => pal.violet,
+            UpdateQuotes
+            | Protection
+            | Backups
+            | ToggleLock
+            | ToggleBalanceLock
+            | Rules
+            | Categorize
+            | Theme(ThemePreference::Light)
+            | Notes
+            | License => pal.warning,
+            Import | ImportJson | NewOperation | AddToPayees => pal.positive,
+            SetMarkDate | ToggleMarkDates | ToggleColumnFilters | ToggleTackColumn
+            | AutoFilters | SaveFilter | ToggleHideOld | Tack => pal.pointed,
+            ToggleForecast | ToggleBalanceRiver | Scheduler | Forecast | AddToScheduler => {
+                pal.future
+            }
+            ReconcileAll | SmartTack | Archive | ViewArchive | RestoreArchive => pal.reconciled,
+            OpenRecent(_) => pal.accent,
+            ApplyFilter(_) => pal.pointed,
+            SelectAccount(_) => pal.accent,
+            Extension(_) | Palette => pal.fg_dark,
+        }
+    }
+
+    /// Ce que fait la commande, en une phrase (infobulle de la barre des
+    /// commandes épinglées).
+    pub fn description(self) -> &'static str {
+        use Command::*;
+        match self {
+            Open => tr!("Ouvrir un fichier de comptes BankPerfect."),
+            NewFile => tr!("Créer un nouveau fichier de comptes."),
+            CloseFile => tr!("Fermer le fichier ouvert."),
+            Save => tr!("Enregistrer les modifications du fichier."),
+            SaveAs => tr!("Enregistrer le fichier sous un autre nom ou à un autre endroit."),
+            SaveCopy => tr!(
+                "Enregistrer une copie du fichier, sur une clé USB par exemple, en gardant le fichier ouvert."
+            ),
+            DeleteFile => tr!("Mettre un fichier de comptes à la corbeille."),
+            Export => tr!("Exporter les opérations vers un tableur (Excel, CSV)."),
+            Report(ReportTab::Accounts) => tr!("Soldes de tous les comptes, sur une même page."),
+            Report(ReportTab::Categories) => {
+                tr!("Totaux des dépenses et des recettes par catégorie, mois par mois.")
+            }
+            Report(ReportTab::Payees) => tr!("Totaux par tiers."),
+            Report(ReportTab::Statement) => {
+                tr!("Relevé des opérations du compte, prêt à imprimer.")
+            }
+            Charts => tr!(
+                "Graphiques : soldes, répartition par catégorie, par mois, par mode de paiement…"
+            ),
+            UpdateQuotes => tr!("Mettre à jour les cours du portefeuille de titres."),
+            BankSync => tr!("Récupérer les opérations directement auprès de la banque."),
+            Transfer => tr!("Créer un virement entre deux de vos comptes."),
+            ConvertToTransfer => {
+                tr!("Transformer l'opération sélectionnée en transfert vers un autre compte.")
+            }
+            SplitOperation => tr!("Répartir l'opération sur plusieurs catégories."),
+            GoToSister => tr!("Aller à la ligne jumelle de ce transfert, dans l'autre compte."),
+            Budget(BudgetTab::Monthly) => tr!("Budget mois par mois, par catégorie."),
+            Budget(BudgetTab::Annual) => tr!("Budget sur l'année, par catégorie."),
+            ExportQif => tr!("Exporter les opérations au format QIF."),
+            ExportJson => tr!("Exporter tout le fichier au format JSON."),
+            Print => tr!("Imprimer le relevé du compte."),
+            Import => tr!("Importer un relevé bancaire (OFX, QIF, CSV)."),
+            ImportJson => tr!("Créer un fichier à partir d'un export JSON."),
+            Protection => tr!("Protéger le fichier par un mot de passe."),
+            Backups => tr!("Revenir à une sauvegarde automatique du fichier."),
+            Quit => tr!("Quitter BankPerfect."),
+            Undo => tr!("Annuler la dernière modification."),
+            Redo => tr!("Rétablir la modification annulée."),
+            NewOperation => tr!("Saisir une nouvelle opération."),
+            FocusEntry => tr!("Placer le curseur dans le formulaire de saisie."),
+            ModifySelected => tr!("Changer d'un coup un champ de toutes les lignes sélectionnées."),
+            EditOperation => tr!("Modifier l'opération sélectionnée."),
+            Delete => tr!("Supprimer les lignes sélectionnées."),
+            CutLines => tr!("Couper les lignes sélectionnées."),
+            CopyLines => tr!("Copier les lignes sélectionnées."),
+            PasteLines => tr!("Coller les lignes copiées dans le compte affiché."),
+            Replace => tr!("Rechercher un texte et le remplacer dans les opérations."),
+            AddToPayees => tr!("Ajouter le tiers de l'opération à la liste des tiers."),
+            SetMarkDate => tr!("Changer la date de pointage des lignes sélectionnées."),
+            ToggleLock => tr!("Empêcher la modification des lignes rapprochées."),
+            ToggleMarkDates => tr!("Afficher ou masquer la colonne des dates de pointage."),
+            ToggleBalancePanel => tr!("Afficher ou masquer le bandeau des soldes."),
+            ToggleAccountsPanel => tr!("Afficher ou masquer la liste des comptes, à gauche."),
+            HideAccount => {
+                tr!("Rendre inactif le compte affiché : il quitte la liste des comptes.")
+            }
+            ToggleForecast => tr!("Afficher ou masquer le solde prévisionnel sur la courbe."),
+            ToggleBalanceCards => tr!("Présenter les soldes en équation ou en trois cartes."),
+            ToggleBalanceLock => {
+                tr!("Calculer les soldes sur tout le compte, même quand un filtre est actif.")
+            }
+            ToggleColumnFilters => {
+                tr!("Afficher ou masquer la ligne des filtres sous les titres des colonnes.")
+            }
+            ToggleBalanceRiver => {
+                tr!("Afficher ou masquer la courbe du solde derrière la colonne Solde.")
+            }
+            ToggleTackColumn => {
+                tr!("Placer la colonne de pointage en tête de ligne ou après le montant.")
+            }
+            ReverseCurrencies => {
+                tr!("Inverser devise principale et devise secondaire à l'affichage.")
+            }
+            Scheduler => {
+                tr!("Opérations qui reviennent régulièrement : salaire, loyer, abonnements…")
+            }
+            Forecast => tr!("Solde prévu à une date, échéances comprises."),
+            Rules => {
+                tr!("Règles qui remplissent la catégorie, le tiers… à la saisie et à l'import.")
+            }
+            Categorize => tr!("Proposer une catégorie aux opérations qui n'en ont pas."),
+            AutoFilters => tr!("Gérer les filtres enregistrés."),
+            SaveFilter => tr!("Enregistrer le filtre en cours pour le retrouver plus tard."),
+            ClearFilters => tr!("Retirer tous les filtres et réafficher toutes les opérations."),
+            AddToScheduler => tr!("Créer une échéance sur le modèle de l'opération sélectionnée."),
+            ToggleHideOld => tr!(
+                "Masquer les lignes rapprochées d'avant le mois en cours ; les soldes ne changent pas."
+            ),
+            ToggleTranslucent => tr!("Fond de fenêtre translucide."),
+            Theme(ThemePreference::Dark) => tr!("Passer en thème sombre."),
+            Theme(ThemePreference::Light) => tr!("Passer en thème clair."),
+            Theme(ThemePreference::System) => tr!("Suivre le thème clair ou sombre du système."),
+            UseTheme(_) => tr!("Appliquer ce thème de couleurs."),
+            Language(_) => tr!("Changer la langue de l'interface."),
+            NextAccount => tr!("Afficher le compte suivant."),
+            PreviousAccount => tr!("Afficher le compte précédent."),
+            Manage(Tab::Accounts) => tr!("Créer, renommer et régler les comptes."),
+            Manage(Tab::Categories) => tr!("Gérer la liste des catégories."),
+            Manage(Tab::Payees) => tr!("Gérer la liste des tiers."),
+            Manage(Tab::Modes) => tr!("Gérer les modes de paiement."),
+            Tack => tr!("Pointer ou dépointer les lignes sélectionnées."),
+            ReconcileAll => tr!("Rapprocher toutes les lignes pointées."),
+            SmartTack => tr!("Retrouver les lignes à pointer à partir du solde du relevé."),
+            Archive => tr!("Ranger à part les anciennes opérations pour alléger le compte."),
+            ViewArchive => tr!("Consulter les opérations archivées."),
+            RestoreArchive => tr!("Remettre les opérations archivées dans le compte."),
+            ModifyGroup => tr!("Changer le nom du fichier de comptes et de son titulaire."),
+            ExtraFields => tr!("Ajouter des champs personnalisés aux opérations."),
+            Notes => tr!("Bloc-notes du fichier."),
+            Calculator => tr!("Calculatrice."),
+            Loan => tr!("Simuler un crédit : mensualités, taux, durée."),
+            Currencies => tr!("Convertir entre devises."),
+            Options => tr!("Réglages de BankPerfect."),
+            About => tr!("Version et informations sur BankPerfect."),
+            License => tr!("Activer ou consulter votre licence."),
+            Help => tr!("Guide d'utilisation de BankPerfect."),
+            ManageExtensions => tr!("Activer, désactiver et installer des extensions."),
+            ExtensionsFolder => tr!("Ouvrir le dossier des extensions."),
+            ExtensionsDocs => tr!("Documentation pour écrire des extensions."),
+            OpenRecent(_) | ApplyFilter(_) | SelectAccount(_) | Extension(_) | Palette => "",
+        }
+    }
+
     /// Identifiant retenu dans les réglages quand la commande est épinglée
     /// dans la barre de menus. Les commandes désignées par un rang (fichier
     /// récent, filtre, compte, extension) ne s'épinglent pas : leur rang
@@ -335,7 +545,7 @@ impl Command {
             DeleteFile => info(
                 FILE,
                 tr!("Supprimer un fichier de comptes…"),
-                icon::TRASH_SIMPLE,
+                icon::FILE_X,
                 None,
                 tr_mark!("corbeille effacer"),
             ),
@@ -392,25 +602,25 @@ impl Command {
                 let (label, glyph, shortcut, keywords) = match tab {
                     ReportTab::Accounts => (
                         tr!("Total des comptes"),
-                        icon::BANK,
+                        icon::TABLE,
                         None,
                         tr_mark!("soldes tous comptes"),
                     ),
                     ReportTab::Categories => (
                         tr!("Totaux par catégorie"),
-                        icon::TAG,
+                        icon::CHART_PIE_SLICE,
                         Some("Ctrl+T"),
                         tr_mark!("tableau croisé dépenses recettes mois année"),
                     ),
                     ReportTab::Payees => (
                         tr!("Totaux par tiers"),
-                        icon::ADDRESS_BOOK,
+                        icon::USERS_THREE,
                         None,
                         tr_mark!("tableau croisé bénéficiaires"),
                     ),
                     ReportTab::Statement => (
                         tr!("Relevé multicompte"),
-                        icon::LIST_BULLETS,
+                        icon::RECEIPT,
                         None,
                         tr_mark!("plusieurs comptes ensemble"),
                     ),
@@ -515,7 +725,7 @@ impl Command {
             NewOperation => info(
                 EDIT,
                 tr!("Nouvelle opération"),
-                icon::PLUS,
+                icon::PLUS_CIRCLE,
                 Some(tr_mark!("Inser")),
                 tr_mark!("ajouter saisir ligne"),
             ),
@@ -541,7 +751,7 @@ impl Command {
                 let mut i = info(
                     EDIT,
                     tr!("Modifier la ligne sélectionnée"),
-                    icon::PENCIL_SIMPLE_LINE,
+                    icon::PENCIL_LINE,
                     Some(tr_mark!("Maj+Entrée")),
                     tr_mark!("éditer enregistrer modification"),
                 );
@@ -629,7 +839,7 @@ impl Command {
                 info(
                     OPERATIONS,
                     label,
-                    icon::LOCK,
+                    icon::LOCK_KEY,
                     None,
                     tr_mark!("verrou protéger rapprochement"),
                 )
@@ -644,7 +854,7 @@ impl Command {
                 info(
                     VIEW,
                     label,
-                    icon::CALENDAR_CHECK,
+                    icon::CALENDAR_STAR,
                     Some("F11"),
                     tr_mark!("pointage colonne date"),
                 )
@@ -667,7 +877,7 @@ impl Command {
                 let mut i = info(
                     ACCOUNTS,
                     tr!("Masquer ce compte"),
-                    icon::EYE_SLASH,
+                    icon::EYE_CLOSED,
                     None,
                     tr_mark!("compte inactif ancien désactiver cacher"),
                 );
@@ -730,7 +940,7 @@ impl Command {
                 info(
                     VIEW,
                     label,
-                    icon::MAGNIFYING_GLASS,
+                    icon::TEXT_COLUMNS,
                     None,
                     tr_mark!("filtres colonnes recherche loupe tiers montant"),
                 )
@@ -744,7 +954,7 @@ impl Command {
                 info(
                     VIEW,
                     label,
-                    icon::CHART_LINE,
+                    icon::WAVE_SINE,
                     None,
                     tr_mark!("courbe solde graphique colonne évolution"),
                 )
@@ -758,7 +968,7 @@ impl Command {
                 info(
                     VIEW,
                     label,
-                    icon::CHECKS,
+                    icon::CHECK_SQUARE_OFFSET,
                     None,
                     tr_mark!("pointage colonne ordre position droite gauche montant"),
                 )
@@ -883,7 +1093,7 @@ impl Command {
                 let mut i = info(
                     OPERATIONS,
                     tr!("Voir les opérations archivées…"),
-                    icon::MAGNIFYING_GLASS,
+                    icon::ARCHIVE_TRAY,
                     None,
                     tr_mark!("archive synthèse consulter rechercher"),
                 );
@@ -943,14 +1153,14 @@ impl Command {
             ReverseCurrencies => info(
                 TOOLS,
                 tr!("Inverser les monnaies du compte…"),
-                icon::ARROWS_LEFT_RIGHT,
+                icon::COINS,
                 None,
                 tr_mark!("devise convertir euro franc"),
             ),
             Replace => info(
                 EDIT,
                 tr!("Remplacer…"),
-                icon::SWAP,
+                icon::TEXT_AA,
                 Some("Ctrl+R"),
                 tr_mark!("rechercher texte tiers détail"),
             ),
@@ -1108,7 +1318,7 @@ impl Command {
                 let mut i = info(
                     OPERATIONS,
                     tr!("Modifier le groupe…"),
-                    icon::PENCIL_SIMPLE_LINE,
+                    icon::IDENTIFICATION_BADGE,
                     Some("Ctrl+M"),
                     tr_mark!("plusieurs lignes sélection"),
                 );
@@ -1157,7 +1367,7 @@ impl Command {
             Options => info(
                 TOOLS,
                 tr!("Options…"),
-                icon::SLIDERS,
+                icon::GEAR,
                 Some("Ctrl+,"),
                 tr_mark!("préférences réglages paramètres"),
             ),
@@ -1221,7 +1431,7 @@ impl Command {
             ExtensionsFolder => info(
                 EXTENSIONS,
                 tr!("Ouvrir le dossier des extensions"),
-                icon::FOLDER_OPEN,
+                icon::FOLDER_SIMPLE,
                 None,
                 tr_mark!("plugins scripts luau"),
             ),

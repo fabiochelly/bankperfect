@@ -365,7 +365,15 @@ fn row(
         Align2::CENTER_CENTER,
         entry.info.icon,
         FontId::proportional(17.0),
-        if selected { pal.accent } else { pal.fg_dark },
+        {
+            // Couleur propre à la commande, comme dans la barre épinglée.
+            let color = entry.command.color(pal);
+            if selected {
+                color
+            } else {
+                color.gamma_multiply(0.85)
+            }
+        },
     );
 
     // Libellé avec les lettres trouvées en couleur d'accent.

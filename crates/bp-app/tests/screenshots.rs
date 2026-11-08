@@ -2284,6 +2284,38 @@ fn beta_feedback_screenshots() {
             h.event(egui::Event::Text("é".into()));
         },
     );
+    let rainbow = pinned(&[
+        "Open",
+        "Save",
+        "Import",
+        "Export",
+        "Undo",
+        "Delete",
+        "Tack",
+        "SmartTack",
+        "Scheduler",
+        "Charts",
+        "Categorize",
+        "ToggleBalanceLock",
+        "Calculator",
+        "Options",
+    ]);
+    render_with(
+        "90b-epinglees-clair",
+        egui::Theme::Light,
+        egui::vec2(1600.0, 900.0),
+        None,
+        rainbow.clone(),
+        |_| {},
+    );
+    render_with(
+        "90c-epinglees-sombre",
+        egui::Theme::Dark,
+        egui::vec2(1600.0, 900.0),
+        None,
+        rainbow,
+        |_| {},
+    );
     render_with(
         "99-epinglees-glisser",
         egui::Theme::Dark,
@@ -2291,30 +2323,66 @@ fn beta_feedback_screenshots() {
         None,
         pinned(&["Save", "Scheduler", "Charts", "Calculator"]),
         |h| {
-            // « Enregistrer » glissé au-delà du milieu du troisième bouton.
             let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
                 pos,
                 button: egui::PointerButton::Primary,
                 pressed,
                 modifiers: egui::Modifiers::NONE,
             };
-            let start = egui::pos2(1109.0, 19.0);
-            h.event(egui::Event::PointerMoved(start));
-            h.run_steps(1);
-            h.event(press(start, true));
-            h.run_steps(1);
-            for x in (1112..=1215).step_by(6) {
-                h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 19.0)));
+            let center = |h: &Harness<'_, bankperfect::BankPerfectApp>, label: &str| {
+                h.get_by_label(label).rect().center()
+            };
+            let drag = |h: &mut Harness<'_, bankperfect::BankPerfectApp>,
+                        from: egui::Pos2,
+                        to: egui::Pos2| {
+                h.event(egui::Event::PointerMoved(from));
                 h.run_steps(1);
-            }
-            h.event(press(egui::pos2(1215.0, 19.0), false));
-            h.run_steps(2);
+                h.event(press(from, true));
+                h.run_steps(1);
+                for k in 1..=20 {
+                    let p = from + (to - from) * (k as f32 / 20.0);
+                    h.event(egui::Event::PointerMoved(p));
+                    h.run_steps(1);
+                }
+                h.event(press(to, false));
+                h.run_steps(2);
+            };
+            // « Enregistrer » glissé au-delà du milieu de « Graphiques ».
+            let from = center(h, "Enregistrer");
+            let to = center(h, "Graphiques…") + egui::vec2(10.0, 0.0);
+            drag(h, from, to);
             let order = &h.state().settings_for_tests().pinned_commands;
             assert_eq!(
                 order,
                 &["Scheduler", "Charts", "Save", "Calculator"],
                 "ordre après glisser"
             );
+            // Un clic exécute la commande (le glisser ne l'avale plus).
+            let charts = center(h, "Graphiques…");
+            h.event(egui::Event::PointerMoved(charts));
+            h.run_steps(1);
+            h.event(press(charts, true));
+            h.run_steps(1);
+            h.event(press(charts, false));
+            h.run_steps(4);
+            assert!(
+                h.query_by_label("Par catégorie").is_some(),
+                "clic : fenêtre Graphiques ouverte"
+            );
+            h.key_press(egui::Key::Escape);
+            h.run_steps(4);
+            // Glissée hors de la barre, « Calculatrice » est retirée.
+            let from = center(h, "Calculatrice");
+            drag(h, from, from + egui::vec2(-40.0, 220.0));
+            let order = &h.state().settings_for_tests().pinned_commands;
+            assert_eq!(
+                order,
+                &["Scheduler", "Charts", "Save"],
+                "retrait par glisser"
+            );
+            // Survol : infobulle avec la description.
+            let scheduler = center(h, "Échéancier…");
+            h.event(egui::Event::PointerMoved(scheduler));
         },
     );
     // Saisie dans un filtre de colonne : le bandeau qui apparaît au premier

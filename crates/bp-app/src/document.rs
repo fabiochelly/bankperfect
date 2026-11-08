@@ -363,7 +363,7 @@ impl OpenDoc {
                 .apply(account, &self.view.index, &self.view.order)
                 .into();
             self.view.filters = Some((self.filters.clone(), today));
-            self.view.totals = self.compute_totals();
+            self.view.totals = self.compute_totals(today);
         }
     }
 
@@ -495,13 +495,26 @@ impl OpenDoc {
         self.view.totals
     }
 
-    fn compute_totals(&self) -> Totals {
+    /// « Cacher les lignes inutiles » n'est qu'un confort d'affichage : les
+    /// lignes rapprochées qu'il masque comptent toujours dans les soldes, sans
+    /// quoi « En banque » ne correspond plus au relevé pendant le pointage.
+    fn compute_totals(&self, today: Date) -> Totals {
         let ops = &self.current_account().operations;
         let mut totals = Totals::default();
         let all: Vec<usize>;
-        let lines: &[usize] = if self.ignore_filter_totals {
+        let unhidden: Vec<usize>;
+        let lines: &[usize] = if self.ignore_filter_totals || !self.filters.is_active() {
             all = (0..ops.len()).collect();
             &all
+        } else if self.filters.hide_old_lines {
+            let mut filters = self.filters.clone();
+            filters.hide_old_lines = false;
+            unhidden = filters.compile(today).apply(
+                self.current_account(),
+                &self.view.index,
+                &self.view.order,
+            );
+            &unhidden
         } else {
             &self.view.visible
         };
@@ -1751,6 +1764,26 @@ mod tests {
         assert_eq!(totals.balance, Amount::from_cents(-3_000));
         assert_eq!(totals.pending, Amount::from_cents(-2_000));
         assert_eq!(totals.reconciled, Amount::from_cents(-1_000));
+    }
+
+    /// Les lignes rapprochées anciennes masquées comptent toujours dans les
+    /// soldes, seules ou combinées à un filtre.
+    #[test]
+    fn hidden_old_lines_still_count_in_totals() {
+        let mut d = doc();
+        let full = d.totals();
+        d.filters.hide_old_lines = true;
+        d.refresh();
+        assert!(
+            !d.visible().contains(&0),
+            "ligne rapprochée ancienne masquée"
+        );
+        assert_eq!(d.totals().balance, full.balance);
+        assert_eq!(d.totals().pointed, full.pointed);
+        d.filters.payee = "carre".into();
+        d.refresh();
+        assert_eq!(*d.visible(), [3]);
+        assert_eq!(d.totals().balance, Amount::from_cents(-3_000));
     }
 
     #[test]

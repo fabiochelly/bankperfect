@@ -78,6 +78,17 @@ impl ChartKind {
         self != ChartKind::Balances
     }
 
+    /// Répartition qu'on peut limiter à une année ou à un mois ?
+    fn uses_period(self) -> bool {
+        matches!(
+            self,
+            ChartKind::Categories
+                | ChartKind::Modes
+                | ChartKind::DayOfMonth
+                | ChartKind::AmountLevels
+        )
+    }
+
     /// Peut-il s'afficher en anneau (répartition) ?
     fn can_donut(self) -> bool {
         matches!(self, ChartKind::Categories | ChartKind::Modes)
@@ -88,6 +99,14 @@ impl ChartKind {
 enum Style {
     Bars,
     Donut,
+}
+
+/// Période d'une répartition : tout l'historique, une année ou un mois.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Period {
+    All,
+    Year,
+    Month,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -106,6 +125,10 @@ pub struct ChartsForm {
     monthly: bool,
     style: Style,
     sign: Sign,
+    period: Period,
+    /// Année, et mois de 1 à 12, de la période affichée.
+    year: i32,
+    month: u32,
     visible: VisibleLines,
     /// Instant d'apparition du graphique courant (animation).
     shown_at: Option<f64>,
@@ -124,6 +147,9 @@ impl ChartsForm {
             monthly: true,
             style: Style::Donut,
             sign: Sign::Expenses,
+            period: Period::All,
+            year: chrono::Datelike::year(&bp_core::model::Date::today().to_naive()),
+            month: chrono::Datelike::month(&bp_core::model::Date::today().to_naive()),
             visible: VisibleLines::default(),
             shown_at: None,
             message: None,
@@ -137,9 +163,11 @@ impl ChartsForm {
             AccountScope::One(doc.account)
         };
         let filtered = self.filtered;
+        let range = self.period_range();
         let visible = if filtered { self.visible.get(doc) } else { &[] };
-        let keep = |account: usize, line: usize, _op: &bp_core::model::Operation| {
-            !filtered || visible.get(account).is_some_and(|v| v.contains(&line))
+        let keep = |account: usize, line: usize, op: &bp_core::model::Operation| {
+            (!filtered || visible.get(account).is_some_and(|v| v.contains(&line)))
+                && range.is_none_or(|(from, to)| op.date >= from && op.date <= to)
         };
         let d = &doc.document;
         let data = match self.kind {
@@ -170,6 +198,93 @@ impl ChartsForm {
         }
     }
 
+    /// Dates extrêmes de la période choisie (répartitions seulement).
+    fn period_range(&self) -> Option<(bp_core::model::Date, bp_core::model::Date)> {
+        use bp_core::model::Date;
+        if !self.kind.uses_period() {
+            return None;
+        }
+        let (from, next) = match self.period {
+            Period::All => return None,
+            Period::Year => (
+                Date::from_ymd(self.year, 1, 1)?,
+                Date::from_ymd(self.year + 1, 1, 1)?,
+            ),
+            Period::Month => (
+                Date::from_ymd(self.year, self.month, 1)?,
+                if self.month == 12 {
+                    Date::from_ymd(self.year + 1, 1, 1)?
+                } else {
+                    Date::from_ymd(self.year, self.month + 1, 1)?
+                },
+            ),
+        };
+        Some((from, Date(next.0 - 1)))
+    }
+
+    /// Choix Total / Année / Mois et flèches pour changer d'année ou de mois.
+    fn period_picker(&mut self, ui: &mut egui::Ui, pal: &Palette) {
+        ui_kit::segmented(
+            ui,
+            &mut self.period,
+            &[
+                (Period::All, "", tr!("Total"), pal.accent),
+                (Period::Year, "", tr!("Année"), pal.accent),
+                (Period::Month, "", tr!("Mois"), pal.accent),
+            ],
+            32.0,
+            Some(250.0),
+        );
+        if self.period == Period::All {
+            return;
+        }
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = 4.0;
+            let step = |ui: &mut egui::Ui, glyph: &str, hint: &str| {
+                ui.add(egui::Button::new(glyph).min_size(vec2(30.0, 30.0)))
+                    .on_hover_text(hint)
+                    .clicked()
+            };
+            let monthly = self.period == Period::Month;
+            let (previous, next) = if monthly {
+                (tr!("Mois précédent"), tr!("Mois suivant"))
+            } else {
+                (tr!("Année précédente"), tr!("Année suivante"))
+            };
+            let mut delta = 0;
+            if step(ui, icon::CARET_LEFT, previous) {
+                delta = -1;
+            }
+            let label = if monthly {
+                format!(
+                    "{} {}",
+                    i18n::month_title(self.month as usize - 1),
+                    self.year
+                )
+            } else {
+                self.year.to_string()
+            };
+            ui_kit::cell(
+                ui,
+                if monthly { 130.0 } else { 56.0 },
+                egui::Align::Center,
+                RichText::new(label).family(crate::theme::semibold()),
+            );
+            if step(ui, icon::CARET_RIGHT, next) {
+                delta = 1;
+            }
+            if delta != 0 {
+                if monthly {
+                    let index = self.year * 12 + self.month as i32 - 1 + delta;
+                    self.year = index.div_euclid(12);
+                    self.month = index.rem_euclid(12) as u32 + 1;
+                } else {
+                    self.year += delta;
+                }
+            }
+        });
+    }
+
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
         let width = ui_kit::dialog_width(ctx, 0.85, 900.0, 1700.0);
@@ -192,6 +307,9 @@ impl ChartsForm {
             self.detailed,
             self.all_categories,
             self.monthly,
+            self.period,
+            self.year,
+            self.month,
         );
         crate::dialogs::modal(ctx, "charts").show(ctx, |ui| {
             ui.set_width(width);
@@ -269,6 +387,9 @@ impl ChartsForm {
             self.detailed,
             self.all_categories,
             self.monthly,
+            self.period,
+            self.year,
+            self.month,
         );
         if before != after {
             self.shown_at = None;
@@ -382,6 +503,9 @@ impl ChartsForm {
                         Some(230.0),
                     );
                 }
+            }
+            if self.kind.uses_period() {
+                self.period_picker(ui, pal);
             }
             if self.kind == ChartKind::BalanceOverTime {
                 ui_kit::segmented(

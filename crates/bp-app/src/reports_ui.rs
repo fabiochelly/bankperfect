@@ -285,7 +285,7 @@ impl ReportsForm {
                 if period == HistoryPeriod::Monthly {
                     ui.add_space(12.0);
                     let years = reports::available_years(&doc.document, &AccountScope::All);
-                    egui::ComboBox::from_id_salt("accounts_year")
+                    crate::ui_kit::Combo::new("accounts_year")
                         .selected_text(self.accounts_year.to_string())
                         .show_ui(ui, |ui| {
                             for y in years.iter().rev() {
@@ -531,7 +531,7 @@ impl ReportsForm {
             if self.goal == PivotGoal::MonthlyTotals {
                 ui.add_space(12.0);
                 let years = reports::available_years(&doc.document, &self.scope(doc));
-                egui::ComboBox::from_id_salt("pivot_year")
+                crate::ui_kit::Combo::new("pivot_year")
                     .selected_text(
                         self.year
                             .map_or(tr!("Toutes années").to_string(), |y| y.to_string()),

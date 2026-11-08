@@ -771,7 +771,7 @@ impl Painter<'_> {
                     },
                     |o| RichText::new(o.as_str()),
                 );
-                egui::ComboBox::from_id_salt(id)
+                crate::ui_kit::Combo::new(id)
                     .selected_text(text)
                     .width(width)
                     .height(420.0)
@@ -821,7 +821,7 @@ impl Painter<'_> {
                     },
                     |a| RichText::new(format!("{}  {}", icon::BANK, a.name)),
                 );
-                egui::ComboBox::from_id_salt(id)
+                crate::ui_kit::Combo::new(id)
                     .selected_text(text)
                     .width(width)
                     .height(420.0)

@@ -13,9 +13,11 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Récemment utilisées", "Recently used"),
     ("Toutes les commandes", "All commands"),
     (
-        "{}{}  naviguer     Entrée  exécuter     Échap  fermer",
-        "{}{}  navigate     Enter  run     Esc  close",
+        "{}{}  naviguer     Entrée  exécuter     {}  épingler     Échap  fermer",
+        "{}{}  navigate     Enter  run     {}  pin     Esc  close",
     ),
+    ("Épingler dans la barre de menus", "Pin to the menu bar"),
+    ("Retirer de la barre de menus", "Remove from the menu bar"),
     // Groupes des commandes.
     ("Fichier", "File"),
     ("Édition", "Edit"),
@@ -465,6 +467,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Thank you for your support! Your name and license number are shown at the bottom of the window.",
     ),
     ("Retirer de cet ordinateur", "Remove from this computer"),
+    ("Changer de clé", "Change key"),
+    ("Effacer la clé", "Clear the key"),
     (
         "Si vous avez acheté une licence, collez ici la clé reçue lors de l'achat. Elle est vérifiée une seule fois auprès du serveur de l'auteur ; votre nom et votre numéro de licence s'afficheront ensuite en bas de la fenêtre.",
         "If you have bought a license, paste the key you received with your purchase here. It is checked only once with the author's server; your name and license number will then be shown at the bottom of the window.",

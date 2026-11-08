@@ -125,6 +125,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Seulement les lignes filtrées", "Filtered lines only"),
     ("Détailler pointé et à venir", "Show cleared and pending"),
     ("Sous-catégories", "Subcategories"),
+    ("Année", "Year"),
+    ("Mois", "Month"),
     ("Valeurs nulles", "Zero values"),
     ("Aucune opération à représenter", "No transactions to show"),
     ("{} opération", "{} transaction"),

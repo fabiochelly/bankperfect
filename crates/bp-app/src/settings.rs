@@ -46,6 +46,11 @@ pub struct Settings {
     /// Cacher les lignes inutiles : rapprochées et antérieures au mois
     /// courant.
     pub hide_old_lines: bool,
+    /// Fenêtre agrandie à la fermeture : rouverte agrandie.
+    pub window_maximized: bool,
+    /// Commandes épinglées depuis la palette (`Command::pin_id`), affichées
+    /// en icônes dans la barre de menus.
+    pub pinned_commands: Vec<String>,
     /// Certificat de licence signé par le serveur (voir `license`).
     pub license: Option<String>,
     /// Niveaux d'annulation.
@@ -120,6 +125,8 @@ impl Default for Settings {
             balance_river: true,
             tack_after_amount: false,
             hide_old_lines: false,
+            window_maximized: false,
+            pinned_commands: Vec::new(),
             license: None,
             max_undo: 30,
             disable_reconcile: false,

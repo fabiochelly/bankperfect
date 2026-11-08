@@ -481,6 +481,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("(sans tiers)", "(no payee)"),
     ("{} · transfert", "{} · transfer"),
     ("terminée · {}", "finished · {}"),
+    ("en retard · {}", "overdue · {}"),
     ("Nouvelle échéance", "New scheduled transaction"),
     ("Supprimer l'échéance", "Delete scheduled transaction"),
     (

@@ -27,6 +27,8 @@ pub enum PaletteResult {
     Keep,
     Close,
     Run(Command),
+    /// Épingler la commande dans la barre de menus, ou l'en retirer.
+    TogglePin(Command),
 }
 
 struct Entry {
@@ -129,6 +131,7 @@ impl CommandPalette {
         ctx: &egui::Context,
         doc: Option<&OpenDoc>,
         recent: &[Command],
+        pinned: &[String],
     ) -> PaletteResult {
         let mut result = PaletteResult::Keep;
         let entries = self.entries(doc, recent);
@@ -265,13 +268,18 @@ impl CommandPalette {
                                     ui.add_space(2.0);
                                     previous_recent = Some(entry.recent);
                                 }
-                                let response = row(ui, entry, k == self.selected, &pal);
+                                let pin = entry.command.pin_id().map(|id| pinned.contains(&id));
+                                let (response, pin_clicked) =
+                                    row(ui, entry, k == self.selected, pin, &pal);
+                                if pin_clicked {
+                                    result = PaletteResult::TogglePin(entry.command);
+                                }
                                 if response.hovered()
                                     && ui.input(|i| i.pointer.delta() != egui::Vec2::ZERO)
                                 {
                                     self.selected = k;
                                 }
-                                if response.clicked() {
+                                if response.clicked() && !pin_clicked {
                                     result = PaletteResult::Run(entry.command);
                                 }
                                 if k == self.selected && self.scroll_to_selected {
@@ -285,9 +293,10 @@ impl CommandPalette {
                 ui.horizontal(|ui| {
                     ui.add_space(10.0);
                     let hint = tr!(
-                        "{}{}  naviguer     Entrée  exécuter     Échap  fermer",
+                        "{}{}  naviguer     Entrée  exécuter     {}  épingler     Échap  fermer",
                         icon::ARROW_UP,
-                        icon::ARROW_DOWN
+                        icon::ARROW_DOWN,
+                        icon::PUSH_PIN
                     );
                     ui.label(RichText::new(hint).size(11.5).color(pal.muted));
                 });
@@ -300,13 +309,15 @@ impl CommandPalette {
 }
 
 /// Ligne de résultat : icône, libellé (lettres trouvées surlignées), groupe
-/// et raccourci en touches.
+/// et raccourci en touches, puis la punaise (`pin` : épinglée ou non, `None`
+/// si la commande ne s'épingle pas). Renvoie aussi le clic sur la punaise.
 fn row(
     ui: &mut egui::Ui,
     entry: &Entry,
     selected: bool,
+    pin: Option<bool>,
     pal: &crate::theme::Palette,
-) -> egui::Response {
+) -> (egui::Response, bool) {
     // Gouttière à droite pour la barre de défilement.
     let width = ui.available_width() - 14.0;
     let (rect, response) = ui.allocate_exact_size(egui::vec2(width, ROW_HEIGHT), Sense::click());
@@ -314,7 +325,27 @@ fn row(
         egui::WidgetInfo::labeled(egui::WidgetType::Button, true, &entry.info.label)
     });
     if !ui.is_rect_visible(rect) {
-        return response;
+        return (response, false);
+    }
+    // Punaise à droite : visible au survol, à la sélection, ou si épinglée.
+    let pin_rect = egui::Rect::from_center_size(
+        egui::pos2(rect.right() - 18.0, rect.center().y),
+        egui::vec2(28.0, 28.0),
+    );
+    let mut pin_clicked = false;
+    let mut pin_paint = None;
+    if let Some(pinned) = pin {
+        let pin_response = ui
+            .interact(pin_rect, response.id.with("pin"), Sense::click())
+            .on_hover_text(if pinned {
+                tr!("Retirer de la barre de menus")
+            } else {
+                tr!("Épingler dans la barre de menus")
+            });
+        pin_clicked = pin_response.clicked();
+        if pinned || selected || response.hovered() || pin_response.hovered() {
+            pin_paint = Some((pinned, pin_response.hovered()));
+        }
     }
     let painter = ui.painter();
     if selected {
@@ -357,7 +388,7 @@ fn row(
     );
 
     // À droite : raccourci en touches, puis le groupe.
-    let mut x = rect.right() - 10.0;
+    let mut x = rect.right() - 40.0;
     if let Some(shortcut) = entry.info.shortcut {
         for key in shortcut.split('+').rev() {
             let galley = painter.layout_no_wrap(
@@ -391,5 +422,20 @@ fn row(
         FontId::proportional(12.0),
         pal.muted,
     );
-    response
+    // Punaise par-dessus le fond de la ligne.
+    if let Some((pinned, hovered)) = pin_paint {
+        if pinned {
+            painter.rect_filled(pin_rect, 6.0, pal.accent.gamma_multiply(0.18));
+        } else if hovered {
+            painter.rect_filled(pin_rect, 6.0, pal.bg_highlight);
+        }
+        painter.text(
+            pin_rect.center(),
+            Align2::CENTER_CENTER,
+            icon::PUSH_PIN,
+            FontId::proportional(15.0),
+            if pinned { pal.accent } else { pal.muted },
+        );
+    }
+    (response, pin_clicked)
 }

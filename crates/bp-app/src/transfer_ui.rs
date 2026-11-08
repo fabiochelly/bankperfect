@@ -48,7 +48,7 @@ fn account_combo(
         .get(*value)
         .map(|a| a.name.clone())
         .unwrap_or_default();
-    egui::ComboBox::from_id_salt(id)
+    crate::ui_kit::Combo::new(id)
         .selected_text(name)
         .width(width)
         .show_ui(ui, |ui| {
@@ -344,31 +344,54 @@ struct PartDraft {
 pub struct SplitForm {
     line: usize,
     parts: Vec<PartDraft>,
+    /// La première part reçoit ce qui reste à ventiler, tant que l'utilisateur
+    /// n'a pas saisi son montant lui-même (ni demandé une répartition égale).
+    first_absorbs: bool,
     error: Option<String>,
 }
 
 impl SplitForm {
     pub fn new(doc: &OpenDoc, line: usize) -> Self {
+        // Comme dans l'ancienne version : la première part garde tout le
+        // montant, les suivantes sont à saisir et la première diminue d'autant
+        // (et non deux moitiés imposées).
         let op = doc.operation(line);
-        let halves = split::split_evenly(op.amount.abs(), 2);
-        let parts = halves
-            .iter()
-            .enumerate()
-            .map(|(k, a)| PartDraft {
-                details: if k == 0 {
-                    op.details.clone()
-                } else {
-                    String::new()
-                },
-                category: if k == 0 { op.category } else { None },
-                amount: money(*a, ""),
-            })
-            .collect();
+        let parts = vec![
+            PartDraft {
+                details: op.details.clone(),
+                category: op.category,
+                amount: money(op.amount.abs(), ""),
+            },
+            PartDraft {
+                details: String::new(),
+                category: None,
+                amount: String::new(),
+            },
+        ];
         Self {
             line,
             parts,
+            first_absorbs: true,
             error: None,
         }
+    }
+
+    /// Première part = montant de l'opération moins les autres parts.
+    fn absorb_remainder(&mut self, total: Amount) {
+        if !self.first_absorbs {
+            return;
+        }
+        let others: i64 = self.parts[1..]
+            .iter()
+            .filter_map(|p| Amount::parse(&p.amount))
+            .map(|a| a.abs().0)
+            .sum();
+        let rest = total.0 - others;
+        self.parts[0].amount = if rest > 0 {
+            money(Amount(rest), "")
+        } else {
+            String::new()
+        };
     }
 
     fn parsed(&self) -> Vec<Option<Amount>> {
@@ -402,6 +425,7 @@ impl SplitForm {
             });
             ui.add_space(12.0);
             self.parts_table(ui, doc, width, &pal);
+            self.absorb_remainder(op.amount.abs());
             let amounts = self.parsed();
             let total: Amount = amounts.iter().flatten().copied().sum();
             let remaining = Amount(op.amount.0.abs() - total.0);
@@ -416,12 +440,15 @@ impl SplitForm {
                 }
                 if ui.button(format!("{}  {}", icon::EQUALS, tr!("Répartir également"))).on_hover_text(tr!("Même montant pour chaque part")).clicked() {
                     let shares = split::split_evenly(op.amount.abs(), self.parts.len());
+                    self.first_absorbs = false;
                     for (p, a) in self.parts.iter_mut().zip(shares) {
                         p.amount = money(a, "");
                     }
                 }
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    let missing = amounts.iter().any(|a| !a.is_some_and(|a| a.0 > 0));
                     let (text, color) = match remaining.0.cmp(&0) {
+                        std::cmp::Ordering::Equal if missing => (tr!("Saisissez le montant de chaque part").to_string(), pal.warning),
                         std::cmp::Ordering::Equal => (format!("{}  {}", icon::CHECK_CIRCLE, tr!("Tout est ventilé")), pal.positive),
                         std::cmp::Ordering::Greater => (tr!("Reste à ventiler : {}", money(remaining, &currency)), pal.warning),
                         std::cmp::Ordering::Less => (tr!("Dépassement : {}", money(Amount(-remaining.0), &currency)), pal.negative),
@@ -513,6 +540,7 @@ impl SplitForm {
             .max_height(ui_kit::dialog_height(ui.ctx(), 0.45))
             .show(ui, |ui| {
                 let can_remove = self.parts.len() > 2;
+                let mut first_typed = false;
                 for (k, part) in self.parts.iter_mut().enumerate() {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = gap;
@@ -535,12 +563,15 @@ impl SplitForm {
                             &mut part.category,
                             category_w,
                         );
-                        ui.add(
+                        let amount = ui.add(
                             crate::theme::field(&mut part.amount)
                                 .horizontal_align(egui::Align::Max)
                                 .hint_text(tr!("0,00"))
                                 .desired_width(amount_w),
                         );
+                        if k == 0 && amount.changed() {
+                            first_typed = true;
+                        }
                         if can_remove
                             && ui
                                 .add(
@@ -554,6 +585,9 @@ impl SplitForm {
                         }
                     });
                     ui.add_space(6.0);
+                }
+                if first_typed {
+                    self.first_absorbs = false;
                 }
             });
         if let Some(k) = remove {

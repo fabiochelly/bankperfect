@@ -360,7 +360,7 @@ impl LoanForm {
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(tr!("Première échéance")).color(pal.fg_dark));
-                    egui::ComboBox::from_id_salt("loan_start_month")
+                    crate::ui_kit::Combo::new("loan_start_month")
                         .selected_text(month_name(self.start_month))
                         .width(120.0)
                         .show_ui(ui, |ui| {

@@ -492,6 +492,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Répartir également", "Split evenly"),
     ("Même montant pour chaque part", "Same amount for each part"),
     ("Tout est ventilé", "Fully split"),
+    (
+        "Saisissez le montant de chaque part",
+        "Enter an amount for each part",
+    ),
     ("Reste à ventiler : {}", "Left to split: {}"),
     ("Dépassement : {}", "Over by: {}"),
     ("Ventiler en {} lignes", "Split into {} rows"),

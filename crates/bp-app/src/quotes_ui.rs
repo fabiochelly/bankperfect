@@ -1182,7 +1182,7 @@ impl QuotesForm {
                 .as_ref()
                 .and_then(|code| positions.iter().find(|p| p.code == *code))
                 .map_or(tr!("Tout le portefeuille"), |p| p.name.as_str());
-            egui::ComboBox::from_id_salt("quotes_chart_code")
+            crate::ui_kit::Combo::new("quotes_chart_code")
                 .selected_text(selected)
                 .width(300.0)
                 .show_ui(ui, |ui| {

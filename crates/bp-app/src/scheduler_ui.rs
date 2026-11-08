@@ -125,6 +125,10 @@ pub struct SchedulerForm {
     occurrence: Option<OccurrenceEdit>,
     /// Faire défiler le détail jusqu'aux prochaines dates, une fois.
     reveal_dates: bool,
+    /// À l'ouverture, faire défiler la liste jusqu'à l'échéance
+    /// sélectionnée : la prochaine à partir d'aujourd'hui, les échéances en
+    /// retard restant au-dessus.
+    reveal_selected: bool,
     /// Échéances telles qu'à l'ouverture (ou après la dernière insertion),
     /// pour « Annuler les modifications ».
     initial: Vec<Schedule>,
@@ -158,13 +162,35 @@ impl SchedulerForm {
             oldest: scheduler::oldest_schedules(&doc.document).map_or(0, |(s, _)| s.len()),
             occurrence: None,
             reveal_dates: false,
+            reveal_selected: true,
             initial: Vec::new(),
             undo_tag: None,
         };
         form.initial = form.schedules.clone();
-        let first = select.or((!form.schedules.is_empty()).then_some(0));
+        let first = select.or_else(|| form.first_upcoming(Date::today()));
         form.select(first);
         form
+    }
+
+    /// Ordre d'affichage : par prochaine échéance, les terminées en dernier.
+    fn display_order(&self) -> Vec<usize> {
+        let mut order: Vec<usize> = (0..self.schedules.len()).collect();
+        order.sort_by_key(|&k| {
+            let s = &self.schedules[k];
+            (s.is_finished(), s.next_date)
+        });
+        order
+    }
+
+    /// Première échéance (dans l'ordre affiché) dont la prochaine date est
+    /// aujourd'hui ou plus tard ; à défaut, la première de la liste.
+    fn first_upcoming(&self, today: Date) -> Option<usize> {
+        let order = self.display_order();
+        order
+            .iter()
+            .copied()
+            .find(|&k| !self.schedules[k].is_finished() && self.schedules[k].next_date >= today)
+            .or(order.first().copied())
     }
 
     fn select(&mut self, index: Option<usize>) {
@@ -279,7 +305,11 @@ impl SchedulerForm {
                                 );
                             });
                         }
-                        for (k, s) in self.schedules.iter().enumerate() {
+                        // Par prochaine échéance, les terminées en dernier ;
+                        // `k` reste l'index réel de l'échéance.
+                        let today = Date::today();
+                        let reveal = std::mem::take(&mut self.reveal_selected);
+                        for (k, s) in self.display_order().into_iter().map(|k| (k, &self.schedules[k])) {
                             let account = account_index(doc, &s.account)
                                 .map_or(tr!("compte inexistant").to_string(), |i| doc.document.accounts[i].name.clone());
                             let selected = self.selected == Some(k);
@@ -299,7 +329,45 @@ impl SchedulerForm {
                                 egui::WidgetInfo::selected(egui::WidgetType::SelectableLabel, true, selected, &s.payee)
                             });
                             let title_color = if s.is_finished() { pal.muted } else { pal.fg };
-                            let left = rect.left() + 14.0;
+                            // Prochaine échéance en pastille calendrier, bien
+                            // visible (colonne « Prochaine échéance » de
+                            // l'ancienne version).
+                            let tile = egui::Rect::from_min_size(
+                                rect.left_center() + egui::vec2(10.0, -20.0),
+                                egui::vec2(46.0, 40.0),
+                            );
+                            // En retard (pas encore insérée) : couleur d'alerte.
+                            let tint = if s.is_finished() {
+                                pal.muted
+                            } else if s.next_date < today {
+                                pal.warning
+                            } else {
+                                pal.accent
+                            };
+                            if reveal && selected {
+                                response.scroll_to_me(Some(egui::Align::TOP));
+                            }
+                            ui.painter().rect_filled(tile, 8.0, tint.gamma_multiply(0.16));
+                            let next = s.next_date.to_naive();
+                            ui.painter().text(
+                                tile.center_top() + egui::vec2(0.0, 14.0),
+                                egui::Align2::CENTER_CENTER,
+                                chrono::Datelike::day(&next).to_string(),
+                                egui::FontId::new(17.0, crate::theme::semibold()),
+                                if s.is_finished() { pal.muted } else { pal.fg },
+                            );
+                            ui.painter().text(
+                                tile.center_bottom() - egui::vec2(0.0, 9.0),
+                                egui::Align2::CENTER_CENTER,
+                                format!(
+                                    "{} {:02}",
+                                    bp_core::i18n::month_abbr(chrono::Datelike::month0(&next) as usize),
+                                    chrono::Datelike::year(&next).rem_euclid(100)
+                                ),
+                                egui::FontId::new(10.5, crate::theme::medium()),
+                                tint,
+                            );
+                            let left = tile.right() + 12.0;
                             ui.painter().text(
                                 egui::pos2(left, rect.top() + 16.0),
                                 egui::Align2::LEFT_CENTER,
@@ -307,12 +375,14 @@ impl SchedulerForm {
                                 egui::FontId::new(14.0, crate::theme::medium()),
                                 title_color,
                             );
-                            let mut sub = format!("{} · {} · {}", s.next_date, s.interval_label(), account);
+                            let mut sub = format!("{} · {}", s.interval_label(), account);
                             if s.transfer.is_some() {
                                 sub = tr!("{} · transfert", sub);
                             }
                             if s.is_finished() {
                                 sub = tr!("terminée · {}", sub);
+                            } else if s.next_date < today {
+                                sub = tr!("en retard · {}", sub);
                             }
                             ui.painter().text(
                                 egui::pos2(left, rect.bottom() - 14.0),
@@ -619,7 +689,7 @@ impl SchedulerForm {
             ui_kit::row(ui, tr!("Compte"), LABEL_WIDTH, |ui| {
                 let current = account_index(doc, &s.account);
                 let mut chosen = current;
-                egui::ComboBox::from_id_salt("sched_account")
+                crate::ui_kit::Combo::new("sched_account")
                     .selected_text(chosen.map_or(tr!("Compte inexistant").to_string(), |k| {
                         document.accounts[k].name.clone()
                     }))
@@ -640,7 +710,7 @@ impl SchedulerForm {
             ui_kit::row(ui, tr!("Transfert vers"), LABEL_WIDTH, |ui| {
                 let current = s.transfer.as_ref().and_then(|uid| account_index(doc, uid));
                 let mut chosen = current;
-                egui::ComboBox::from_id_salt("sched_transfer")
+                crate::ui_kit::Combo::new("sched_transfer")
                     .selected_text(
                         chosen.map_or(tr!("Aucun (opération simple)").to_string(), |k| {
                             document.accounts[k].name.clone()

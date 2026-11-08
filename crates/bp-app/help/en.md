@@ -21,6 +21,10 @@ Scroll with the mouse wheel or with the `Page Up` and `Page Down` keys. You can 
 
 All the menus are at the top of the window. If you cannot find a command, press `Ctrl+K`: the command palette opens. Type a few letters of what you are looking for (for example "scheduler" or "clear"), then `Enter`.
 
+### Pinning your favorite commands
+
+In the palette, click the pin at the end of a row: the command is added as an icon to the menu bar, next to **Filters**. This way you build your own toolbar. Drag the icons to put them in the order you want; right-click an icon to remove it. When they no longer fit next to the menus, they move to a bar just below.
+
 > This help opens at any time with the `F1` key or from the **Help** menu.
 
 ## Entering and editing a transaction
@@ -108,7 +112,9 @@ Under the magnifying glass, a menu filters by clearing state: **Not cleared**, *
 
 A colored banner appears at the top of the table: it tells how many transactions are shown out of the total, and which filters are in use. Click **Show all** to get all your transactions back. In this banner, each filter also has its own small cross to remove it alone.
 
-By default, the balances at the top of the window then cover only the rows shown. To keep them computed on the whole account, tick **Balances computed on all lines, even when a filter is active** in **Tools › Options…**.
+By default, the balances at the top of the window then cover only the rows shown. To keep them computed on the whole account, click the pin in the banner, left of **Show all**: the setting applies to all accounts, and another click turns it off. It is the same as **Balances computed on all lines, even when a filter is active** in **Tools › Options…**.
+
+**Hide unneeded rows** (`Ctrl+H`) is not a filter: the reconciled rows it hides still count in the balances, which stay those of the bank statement.
 
 ### Saved filters
 
@@ -156,7 +162,7 @@ Open it with **Accounts › Scheduler…** or `Ctrl+E`. You can also right-click
 
 ### Creating or editing a scheduled transaction
 
-On the left, the list of scheduled transactions. Click one to edit it, or click **New scheduled transaction** to create one. On the right:
+On the left, the list of scheduled transactions, sorted by next due date: that date heads each row. When the window opens, the list shows the next one from today; overdue ones (not inserted yet) are above, in orange. Click one to edit it, or click **New scheduled transaction** to create one. On the right:
 
 1. **Transaction**: the payee, the memo, the payment method, the category and the amount. The payment method tells whether it is an expense or income.
 2. **Recurrence**: the **Next due date** (the small arrows move to the previous or next occurrence), the frequency (**Every** 1 month, 3 months, 1 year… set with the field and the - and + buttons), and the **Last due date** (leave it empty if there is no end). An occurrence that falls on a Saturday, a Sunday or a holiday can be moved to the next business day.

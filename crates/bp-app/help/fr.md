@@ -21,6 +21,10 @@ Faites défiler avec la molette de la souris ou avec les touches `Page préc.` e
 
 Tous les menus sont en haut de la fenêtre. Si vous ne trouvez pas une commande, tapez `Ctrl+K` : la palette de commandes s'ouvre, tapez quelques lettres de ce que vous cherchez (par exemple « échéancier » ou « pointer ») puis `Entrée`.
 
+### Épingler ses commandes préférées
+
+Dans la palette, cliquez sur la punaise au bout d'une ligne : la commande s'ajoute en icône dans la barre de menus, à côté de **Filtres**. Vous composez ainsi votre propre barre d'outils. Faites glisser les icônes pour les ranger dans l'ordre voulu ; un clic droit sur une icône la retire. Quand elles ne tiennent plus à côté des menus, elles passent dans une barre juste en dessous.
+
 > Cette aide s'ouvre à tout moment avec la touche `F1` ou par le menu **Aide**.
 
 ## Saisir et modifier une opération
@@ -108,7 +112,9 @@ Sous la loupe, un menu filtre selon le pointage : **Non pointées**, **Pointées
 
 Un bandeau coloré s'affiche en haut du tableau : il indique combien d'opérations sont affichées sur le total, et quels filtres sont en cours. Cliquez sur **Tout afficher** pour retrouver toutes vos opérations. Dans ce bandeau, chaque filtre a aussi sa petite croix pour le retirer seul.
 
-Par défaut, les soldes du haut de la fenêtre portent alors sur les seules lignes affichées. Pour qu'ils restent calculés sur tout le compte, cochez **Soldes calculés sur toutes les lignes, même quand un filtre est actif** dans **Outils › Options…**.
+Par défaut, les soldes du haut de la fenêtre portent alors sur les seules lignes affichées. Pour qu'ils restent calculés sur tout le compte, cliquez sur la punaise du bandeau, à gauche de **Tout afficher** : le réglage vaut pour tous les comptes, et un nouveau clic l'annule. C'est le même que **Soldes calculés sur toutes les lignes, même quand un filtre est actif** dans **Outils › Options…**.
+
+**Cacher les lignes inutiles** (`Ctrl+H`) n'est pas un filtre : les lignes rapprochées qu'il masque comptent toujours dans les soldes, qui restent ceux du relevé de la banque.
 
 ### Filtres enregistrés
 
@@ -156,7 +162,7 @@ Ouvrez-le par **Comptes › Échéancier…** ou `Ctrl+E`. Vous pouvez aussi fai
 
 ### Créer ou modifier une échéance
 
-À gauche, la liste des échéances. Cliquez sur l'une d'elles pour la modifier, ou sur **Nouvelle échéance** pour en créer une. À droite :
+À gauche, la liste des échéances, triée par prochaine échéance : sa date figure en tête de chaque ligne. À l'ouverture, la liste se place sur la prochaine à partir d'aujourd'hui ; celles en retard (pas encore insérées) sont au-dessus, en orange. Cliquez sur l'une d'elles pour la modifier, ou sur **Nouvelle échéance** pour en créer une. À droite :
 
 1. **Opération** : le tiers, le détail, le mode de paiement, la catégorie et le montant. Le mode indique s'il s'agit d'une dépense ou d'une recette.
 2. **Récurrence** : la date de la **Prochaine échéance** (les petites flèches passent à l'échéance précédente ou suivante), la fréquence (**Tous les** 1 mois, 3 mois, 1 an… réglée avec le champ et les boutons - et +), et la **Dernière échéance** (laissez vide si elle n'a pas de fin). Vous pouvez reporter une échéance qui tombe un samedi, un dimanche ou un jour férié au jour ouvré suivant.

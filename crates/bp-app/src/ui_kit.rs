@@ -22,6 +22,56 @@ pub fn dialog_height(ctx: &egui::Context, fraction: f32) -> f32 {
     ctx.content_rect().height() * fraction
 }
 
+/// [`egui::ComboBox`] dont la liste reste au-dessus de la fenêtre qui l'ouvre.
+///
+/// Fenêtres modales et listes déroulantes partagent la couche « premier
+/// plan » d'egui : une liste rouverte après un clic dans la fenêtre pouvait
+/// s'afficher derrière elle (choix de catégorie de « Catégoriser les
+/// opérations »). La liste devient une sous-couche de la fenêtre, toujours
+/// dessinée juste au-dessus.
+pub struct Combo(egui::ComboBox);
+
+impl Combo {
+    pub fn new(id_salt: impl egui::AsIdSalt) -> Self {
+        Self(egui::ComboBox::from_id_salt(id_salt))
+    }
+
+    pub fn selected_text(self, text: impl Into<egui::WidgetText>) -> Self {
+        Self(self.0.selected_text(text))
+    }
+
+    pub fn width(self, width: f32) -> Self {
+        Self(self.0.width(width))
+    }
+
+    pub fn height(self, height: f32) -> Self {
+        Self(self.0.height(height))
+    }
+
+    pub fn truncate(self) -> Self {
+        Self(self.0.truncate())
+    }
+
+    pub fn show_ui<R>(
+        self,
+        ui: &mut egui::Ui,
+        add_contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> egui::InnerResponse<Option<R>> {
+        let shown = self.0.show_ui(ui, add_contents);
+        let layer = ui.layer_id();
+        let ctx = ui.ctx();
+        if layer.order == egui::Order::Foreground
+            && egui::ComboBox::is_open(ctx, shown.response.id)
+            && ctx.memory(|m| m.areas().parent_layer(layer).is_none())
+        {
+            let popup =
+                egui::LayerId::new(egui::Order::Foreground, shown.response.id.with("popup"));
+            ctx.set_sublayer(layer, popup);
+        }
+        shown
+    }
+}
+
 /// Infobulle, seulement si son texte n'est pas vide (pas de bulle vide).
 pub fn hover(response: egui::Response, text: &str) -> egui::Response {
     if text.trim().is_empty() {
@@ -198,7 +248,7 @@ pub fn mode_combo(
     let pal = palette(ui);
     let before = mode.clone();
     let (glyph, color) = crate::grid::mode_style(document, mode, &pal);
-    egui::ComboBox::from_id_salt(id)
+    Combo::new(id)
         .selected_text(RichText::new(format!("{glyph}  {}", mode.label())).color(color))
         .width(width - ui.spacing().button_padding.x)
         .height(420.0)
@@ -257,7 +307,7 @@ fn category_combo_impl(
         }
         None => RichText::new(tr!("Aucune catégorie")).color(pal.muted),
     };
-    let mut combo = egui::ComboBox::from_id_salt(id)
+    let mut combo = Combo::new(id)
         .selected_text(selected)
         .width(width - ui.spacing().button_padding.x)
         .height(420.0);

@@ -596,7 +596,7 @@ impl ImportForm {
                                 RichText::new(letter.to_string()).monospace().size(15.0),
                             ),
                         );
-                        egui::ComboBox::from_id_salt(("qif_letter", letter))
+                        crate::ui_kit::Combo::new(("qif_letter", letter))
                             .selected_text(chosen.map_or(tr!("Ignorer"), |f| f.label()))
                             .width(ui.available_width() - 16.0)
                             .show_ui(ui, |ui| {
@@ -709,7 +709,7 @@ impl ImportForm {
                         );
                     });
                     let mut field = self.csv_fields[k];
-                    egui::ComboBox::from_id_salt(("csv_col", k))
+                    crate::ui_kit::Combo::new(("csv_col", k))
                         .selected_text(field.label())
                         .width(ui.available_width() - 16.0)
                         .show_ui(ui, |ui| {
@@ -812,7 +812,7 @@ impl ImportForm {
             let label = target.map_or(tr!("Ne pas importer").to_string(), |t| {
                 doc.document.accounts[t].name.clone()
             });
-            egui::ComboBox::from_id_salt(("import_target", shown))
+            crate::ui_kit::Combo::new(("import_target", shown))
                 .selected_text(label)
                 .width(260.0)
                 .show_ui(ui, |ui| {

@@ -31,6 +31,9 @@ pub struct LicenseForm {
     error: Option<String>,
     /// Le champ a déjà reçu le focus (à l'ouverture).
     focused: bool,
+    /// « Changer de clé » sur une licence active : le champ de saisie
+    /// remplace la fiche de la licence.
+    replacing: bool,
 }
 
 impl LicenseForm {
@@ -42,6 +45,7 @@ impl LicenseForm {
             pending: None,
             error: None,
             focused: false,
+            replacing: false,
         }
     }
 
@@ -75,6 +79,7 @@ impl LicenseForm {
             }
         }
         let mut action = LicenseAction::Keep;
+        let current = current.filter(|_| !self.replacing);
         dialogs::modal(ctx, "license").show(ctx, |ui| {
             ui.set_width(crate::ui_kit::dialog_width(ui.ctx(), 0.4, 460.0, 560.0));
             let pal = palette(ui);
@@ -121,6 +126,12 @@ impl LicenseForm {
                         if dialogs::button(ui, tr!("Retirer de cet ordinateur")).clicked() {
                             action = LicenseAction::Remove;
                         }
+                        if dialogs::button(ui, tr!("Changer de clé")).clicked() {
+                            self.replacing = true;
+                            self.from_legacy = false;
+                            self.key.clear();
+                            self.focused = false;
+                        }
                     });
                 }
                 None => {
@@ -134,15 +145,49 @@ impl LicenseForm {
                         ),
                     );
                     let busy = self.pending.is_some();
-                    let field = ui.add_enabled(
-                        !busy,
-                        crate::theme::field(&mut self.key)
-                            .hint_text(tr!("Clé de licence"))
-                            .desired_width(f32::INFINITY),
-                    );
-                    // Prêt à coller dès l'ouverture.
-                    if !self.focused {
+                    let mut clear = false;
+                    let field = ui
+                        .horizontal(|ui| {
+                            let clear_w = if self.key.is_empty() { 0.0 } else { 34.0 };
+                            let field = ui.add_enabled(
+                                !busy,
+                                crate::theme::field(&mut self.key)
+                                    .hint_text(tr!("Clé de licence"))
+                                    .desired_width(ui.available_width() - clear_w),
+                            );
+                            if !self.key.is_empty()
+                                && ui
+                                    .add_enabled(
+                                        !busy,
+                                        egui::Button::new(icon::X).min_size(egui::vec2(28.0, 28.0)),
+                                    )
+                                    .on_hover_text(tr!("Effacer la clé"))
+                                    .clicked()
+                            {
+                                clear = true;
+                            }
+                            field
+                        })
+                        .inner;
+                    // Prêt à coller dès l'ouverture : une clé préremplie
+                    // (ancienne version) est sélectionnée, le collage la
+                    // remplace au lieu de s'ajouter à sa suite.
+                    if !self.focused || clear {
+                        if clear {
+                            self.key.clear();
+                            self.error = None;
+                            self.from_legacy = false;
+                        }
                         field.request_focus();
+                        let mut state =
+                            egui::TextEdit::load_state(ui.ctx(), field.id).unwrap_or_default();
+                        state
+                            .cursor
+                            .set_char_range(Some(egui::text::CCursorRange::two(
+                                egui::text::CCursor::new(0),
+                                egui::text::CCursor::new(self.key.chars().count()),
+                            )));
+                        egui::TextEdit::store_state(ui.ctx(), field.id, state);
                         self.focused = true;
                     }
                     if self.from_legacy {

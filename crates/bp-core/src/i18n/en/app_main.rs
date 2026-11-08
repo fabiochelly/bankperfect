@@ -473,6 +473,14 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Les autres sont seulement masquées par les filtres.",
         "The others are only hidden by the filters.",
     ),
+    (
+        "Soldes figés sur tout le compte, quels que soient les filtres. Cliquer pour les calculer sur les lignes affichées.",
+        "Balances pinned to the whole account, whatever the filters. Click to compute them on the rows shown.",
+    ),
+    (
+        "Soldes calculés sur les lignes affichées. Cliquer pour les figer sur tout le compte, quels que soient les filtres.",
+        "Balances computed on the rows shown. Click to pin them to the whole account, whatever the filters.",
+    ),
     ("Panneau des comptes", "Accounts panel"),
     ("Masquer le panneau des comptes", "Hide the accounts panel"),
     ("Afficher le panneau des comptes", "Show the accounts panel"),

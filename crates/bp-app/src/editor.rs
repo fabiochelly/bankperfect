@@ -426,7 +426,7 @@ impl Editor {
         let pal = palette(ui);
         let before = self.mode.clone();
         let (glyph, color) = crate::grid::mode_style(document, &self.mode, &pal);
-        egui::ComboBox::from_id_salt("mode")
+        crate::ui_kit::Combo::new("mode")
             .selected_text(RichText::new(format!("{glyph}  {}", self.mode.label())).color(color))
             .width(width)
             .height(420.0)

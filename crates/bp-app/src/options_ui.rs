@@ -186,7 +186,7 @@ impl OptionsForm {
                             .iter()
                             .find(|(id, _)| *id == d.ai_model)
                             .map_or(d.ai_model.as_str(), |(_, label)| bp_core::i18n::tr(label));
-                        egui::ComboBox::from_id_salt("ai_model")
+                        crate::ui_kit::Combo::new("ai_model")
                             .selected_text(current)
                             .width(ui.available_width().min(380.0))
                             .show_ui(ui, |ui| {
@@ -358,7 +358,7 @@ impl OptionsForm {
             ui_kit::row(ui, tr!("Langue de l'interface"), LABEL_WIDTH, |ui| {
                 let current = d.language();
                 let mut chosen = current;
-                egui::ComboBox::from_id_salt("language")
+                crate::ui_kit::Combo::new("language")
                     .selected_text(current.native_name())
                     .width(240.0)
                     .show_ui(ui, |ui| {
@@ -461,7 +461,7 @@ impl OptionsForm {
         ui_kit::section(ui, width, icon::CALENDAR_BLANK, tr!("Dates"), |ui| {
             ui_kit::row(ui, tr!("Format des dates"), LABEL_WIDTH, |ui| {
                 let sample = bp_core::model::Date::today();
-                egui::ComboBox::from_id_salt("date_format")
+                crate::ui_kit::Combo::new("date_format")
                     .selected_text(d.date_format.format(sample))
                     .width(240.0)
                     .show_ui(ui, |ui| {

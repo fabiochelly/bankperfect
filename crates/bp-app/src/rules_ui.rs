@@ -344,7 +344,7 @@ impl RulesForm {
                     ui.add_enabled_ui(on, |ui| {
                         let mut mode = Mode::Standard(rule.set_mode.unwrap_or(StandardMode::Carte));
                         let before = mode.clone();
-                        egui::ComboBox::from_id_salt("rule_mode")
+                        crate::ui_kit::Combo::new("rule_mode")
                             .selected_text(mode.label().to_string())
                             .width(full - 12.0)
                             .show_ui(ui, |ui| {

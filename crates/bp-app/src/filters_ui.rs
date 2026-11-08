@@ -285,7 +285,7 @@ impl FiltersForm {
                 ui.add_space(6.0);
             }
             ui_kit::row(ui, tr!("Pointage"), LABEL_WIDTH, |ui| {
-                egui::ComboBox::from_id_salt("filter_tack")
+                crate::ui_kit::Combo::new("filter_tack")
                     .selected_text(d.tack.label())
                     .width(240.0)
                     .show_ui(ui, |ui| {

@@ -863,7 +863,9 @@ struct FutureLine {
 /// (`previsions.py`).
 ///
 /// Première ligne : le solde actuel (lignes pointées ou datées jusqu'à
-/// `today`), datée de la plus récente de ces lignes. Puis, dans l'ordre
+/// `today`), datée de `today`. L'ancien script la datait de la plus récente
+/// de ces lignes : une échéance insérée d'avance et déjà pointée faisait
+/// commencer la liste au mois suivant au lieu du jour de l'interrogation. Puis, dans l'ordre
 /// chronologique : les opérations non pointées à venir jusqu'à `until`, et les
 /// occurrences des échéances du compte (y compris les transferts reçus d'un
 /// autre compte) jusqu'à `until`, à leur date reportée. Avec
@@ -881,12 +883,10 @@ pub fn forecast(
         return Vec::new();
     };
     let mut total = Amount::ZERO;
-    let mut last_date: Option<Date> = None;
     let mut future: Vec<FutureLine> = Vec::new();
     for op in &acc.operations {
         if op.tack != Tack::None || op.date <= today {
             total = total + op.amount;
-            last_date = last_date.max(Some(op.date));
         } else if op.date <= until {
             future.push(FutureLine {
                 date: op.date,
@@ -916,7 +916,7 @@ pub fn forecast(
     future.sort_by(|a, b| (a.date, &a.payee, a.amount).cmp(&(b.date, &b.payee, b.amount)));
 
     let mut lines = vec![ForecastLine {
-        date: last_date.unwrap_or(today),
+        date: today,
         payee: tr!("Solde actuel").into(),
         amount: total,
         balance: total,
@@ -2194,7 +2194,7 @@ pub(crate) mod tests {
         doc.accounts[0].operations = vec![
             op(1, d(2024, 6, 1), Tack::Pointed, "Salaire", 200_000),
             op(2, d(2024, 6, 10), Tack::None, "Courses", -10_000),
-            // Pointée mais future : dans le solde actuel.
+            // Pointée mais future : dans le solde actuel, daté du jour.
             op(3, d(2024, 6, 20), Tack::Reconciled, "Avance", 5_000),
             op(4, d(2024, 7, 2), Tack::None, "Assurance", -3_000),
             // Au-delà de la date choisie : ignorée.
@@ -2233,13 +2233,7 @@ pub(crate) mod tests {
         assert_eq!(
             summary,
             vec![
-                (
-                    d(2024, 6, 20),
-                    "Solde actuel",
-                    195_000,
-                    195_000,
-                    CurrentBalance
-                ),
+                (today, "Solde actuel", 195_000, 195_000, CurrentBalance),
                 (
                     d(2024, 7, 1),
                     "Loyer",

@@ -2219,3 +2219,151 @@ fn account_history_screenshots() {
         },
     );
 }
+
+/// Ouvre une commande par la palette (texte recherché, puis Entrée).
+fn palette_run(h: &mut Harness<'_, bankperfect::BankPerfectApp>, query: &str) {
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.run_steps(2);
+    h.event(egui::Event::Text(query.into()));
+    h.run_steps(2);
+    h.key_press(egui::Key::Enter);
+    h.run_steps(3);
+}
+
+/// Retours des bêta-testeurs : commandes épinglées, échéancier, graphiques
+/// par période, ventilation, licence, punaise des soldes.
+#[test]
+#[ignore]
+fn beta_feedback_screenshots() {
+    let pinned = |ids: &[&str]| {
+        let mut settings = bankperfect::Settings::default();
+        settings.pinned_commands = ids.iter().map(|s| s.to_string()).collect();
+        settings
+    };
+    let few = pinned(&["Save", "Scheduler", "Charts", "Calculator"]);
+    render_with(
+        "90-epinglees",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        few.clone(),
+        |_| {},
+    );
+    let many = pinned(&[
+        "Save",
+        "Undo",
+        "Redo",
+        "Scheduler",
+        "Forecast",
+        "Charts",
+        "Calculator",
+        "Loan",
+        "Categorize",
+        "SmartTack",
+        "Import",
+        "Export",
+        "Print",
+    ]);
+    render_with(
+        "91-epinglees-barre",
+        egui::Theme::Dark,
+        egui::vec2(1100.0, 800.0),
+        None,
+        many,
+        |_| {},
+    );
+    render_with(
+        "92-palette-punaise",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        few,
+        |h| {
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+            h.run_steps(2);
+            h.event(egui::Event::Text("é".into()));
+        },
+    );
+    render_with(
+        "99-epinglees-glisser",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        pinned(&["Save", "Scheduler", "Charts", "Calculator"]),
+        |h| {
+            // « Enregistrer » glissé au-delà du milieu du troisième bouton.
+            let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            let start = egui::pos2(1109.0, 19.0);
+            h.event(egui::Event::PointerMoved(start));
+            h.run_steps(1);
+            h.event(press(start, true));
+            h.run_steps(1);
+            for x in (1112..=1215).step_by(6) {
+                h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 19.0)));
+                h.run_steps(1);
+            }
+            h.event(press(egui::pos2(1215.0, 19.0), false));
+            h.run_steps(2);
+            let order = &h.state().settings_for_tests().pinned_commands;
+            assert_eq!(
+                order,
+                &["Scheduler", "Charts", "Save", "Calculator"],
+                "ordre après glisser"
+            );
+        },
+    );
+    render("93-echeancier", egui::Theme::Dark, |h| {
+        palette_run(h, "échéancier")
+    });
+    render("94-previsionnel", egui::Theme::Dark, |h| {
+        palette_run(h, "prévisionnel")
+    });
+    render("95-graphique-mois", egui::Theme::Dark, |h| {
+        palette_run(h, "graphiques");
+        h.get_by_label("Mois").click();
+    });
+    render("96-ventiler", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        palette_run(h, "ventiler");
+        h.run_steps(2);
+        h.event(egui::Event::PointerMoved(egui::pos2(0.0, 0.0)));
+    });
+    render("97-licence", egui::Theme::Dark, |h| {
+        palette_run(h, "licence")
+    });
+    render("98-punaise-soldes", egui::Theme::Dark, |h| {
+        let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        h.event(egui::Event::PointerMoved(egui::pos2(1275.0, 160.0)));
+        h.event(press(egui::pos2(1275.0, 160.0), true));
+        h.run_steps(2);
+        for x in (1285..=1385).step_by(10) {
+            h.event(egui::Event::PointerMoved(egui::pos2(x as f32, 160.0)));
+            h.run_steps(1);
+        }
+        h.event(press(egui::pos2(1385.0, 160.0), false));
+        h.run_steps(3);
+        // Punaise du bandeau : soldes figés sur tout le compte.
+        let pin = egui::pos2(1249.0, 236.0);
+        h.event(egui::Event::PointerMoved(pin));
+        h.run_steps(1);
+        h.event(press(pin, true));
+        h.run_steps(1);
+        h.event(press(pin, false));
+        h.run_steps(2);
+        assert!(
+            h.state().settings_for_tests().ignore_filter_totals,
+            "soldes figés"
+        );
+    });
+}

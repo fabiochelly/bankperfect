@@ -40,6 +40,173 @@ const SHORTCUT_PAYEES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE,
 /// Symbole du logiciel en haut à droite : côté et marge au bord de la fenêtre.
 const LOGO_SIZE: f32 = 34.0;
 const LOGO_MARGIN: f32 = 6.0;
+/// Côté d'une icône de commande épinglée dans la barre de menus.
+const PINNED_ICON: f32 = 28.0;
+
+/// Libellé de commande sans les points de suspension finaux.
+fn short_label(label: &str) -> &str {
+    label.trim_end_matches(['…', '.']).trim_end()
+}
+
+enum PinnedClick {
+    None,
+    Run,
+    Unpin,
+}
+
+/// Bouton d'une commande épinglée : icône seule (barre de menus) ou icône et
+/// libellé (barre dédiée). Infobulle avec libellé et raccourci ; clic droit
+/// pour la retirer.
+fn pinned_button(
+    ui: &mut egui::Ui,
+    info: &crate::commands::Info,
+    with_label: bool,
+    dragging: bool,
+) -> (PinnedClick, egui::Response) {
+    let pal = palette(ui);
+    let color = if info.enabled {
+        pal.fg_dark
+    } else {
+        pal.muted.gamma_multiply(0.6)
+    };
+    let text = if with_label {
+        RichText::new(format!("{}  {}", info.icon, short_label(&info.label))).color(color)
+    } else {
+        RichText::new(info.icon).size(17.0).color(color)
+    };
+    // Glisser pour déplacer, cliquer pour exécuter.
+    let button = egui::Button::new(text)
+        .frame_when_inactive(dragging)
+        .selected(dragging)
+        .corner_radius(7)
+        .min_size(egui::vec2(PINNED_ICON, PINNED_ICON));
+    let hover = match info.shortcut {
+        Some(shortcut) => format!("{}  ({shortcut})", info.label),
+        None => info.label.clone(),
+    };
+    // Toujours actif au clic droit, pour pouvoir retirer une commande
+    // indisponible pour l'instant.
+    let response = ui.add(button);
+    let response = if dragging || (with_label && info.shortcut.is_none()) {
+        response
+    } else {
+        response.on_hover_text(hover)
+    };
+    let mut click = if response.clicked() && info.enabled {
+        PinnedClick::Run
+    } else {
+        PinnedClick::None
+    };
+    response.context_menu(|ui| {
+        crate::menu::popup_style(ui.style_mut());
+        crate::menu::begin(ui);
+        if crate::menu::item_enabled(
+            ui,
+            true,
+            Some(icon::PUSH_PIN_SLASH),
+            tr!("Retirer de la barre de menus"),
+            None,
+        )
+        .clicked()
+        {
+            click = PinnedClick::Unpin;
+        }
+    });
+    (click, response)
+}
+
+/// Ce que l'utilisateur a fait dans une rangée de commandes épinglées.
+#[derive(Default)]
+struct PinnedOutcome {
+    run: Option<Command>,
+    unpin: Option<String>,
+    /// Commande glissée sur la place d'une autre : (déplacée, cible).
+    moved: Option<(String, String)>,
+}
+
+/// Rangée de commandes épinglées, réordonnables par glisser-déposer.
+/// `reverse` : disposition de droite à gauche (barre de menus), on les pose
+/// à l'envers pour garder l'ordre des réglages à l'écran.
+fn pinned_row(
+    ui: &mut egui::Ui,
+    pinned: &[(Command, crate::commands::Info)],
+    with_label: bool,
+    reverse: bool,
+) -> PinnedOutcome {
+    let mut outcome = PinnedOutcome::default();
+    let drag_id = egui::Id::new("pinned_drag");
+    let dragged: Option<String> = ui.data(|d| d.get_temp(drag_id));
+    let mut slots: Vec<(String, egui::Rect)> = Vec::with_capacity(pinned.len());
+    let mut still_dragging = false;
+    let order: Vec<usize> = if reverse {
+        (0..pinned.len()).rev().collect()
+    } else {
+        (0..pinned.len()).collect()
+    };
+    for k in order {
+        let (command, info) = &pinned[k];
+        let Some(id) = command.pin_id() else { continue };
+        let is_dragged = dragged.as_deref() == Some(id.as_str());
+        let (click, response) = pinned_button(ui, info, with_label, is_dragged);
+        // Glisser : identifiant fixe par commande (celui du bouton dépend de
+        // sa place, qui change pendant le déplacement).
+        let response = ui.interact(
+            response.rect,
+            egui::Id::new(("pinned_drag", &id)),
+            egui::Sense::drag(),
+        );
+        match click {
+            PinnedClick::Run => outcome.run = Some(*command),
+            PinnedClick::Unpin => outcome.unpin = Some(id.clone()),
+            PinnedClick::None => {}
+        }
+        if response.drag_started() {
+            ui.data_mut(|d| d.insert_temp(drag_id, id.clone()));
+        }
+        if response.dragged() {
+            still_dragging = true;
+            ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+        }
+        slots.push((id, response.rect));
+    }
+    if let Some(dragged) = dragged {
+        if still_dragging {
+            // Déplacement en direct : la commande prend la place de celle
+            // dont le pointeur a passé le milieu (pas d'aller-retour entre
+            // deux boutons de largeurs différentes).
+            let from = slots
+                .iter()
+                .find(|(id, _)| *id == dragged)
+                .map(|(_, r)| r.center().x);
+            if let (Some(pointer), Some(from)) = (ui.ctx().pointer_interact_pos(), from)
+                && let Some((target, _)) = slots.iter().find(|(id, rect)| {
+                    *id != dragged
+                        && rect.x_range().contains(pointer.x)
+                        && ((rect.center().x > from && pointer.x > rect.center().x)
+                            || (rect.center().x < from && pointer.x < rect.center().x))
+                })
+            {
+                outcome.moved = Some((dragged, target.clone()));
+            }
+        } else if !ui.input(|i| i.pointer.any_down()) {
+            ui.data_mut(|d| d.remove::<String>(drag_id));
+        }
+    }
+    outcome
+}
+
+/// Applique un déplacement de commande épinglée aux réglages.
+fn move_pinned(ids: &mut Vec<String>, moved: &str, target: &str) -> bool {
+    let (Some(from), Some(to)) = (
+        ids.iter().position(|p| p == moved),
+        ids.iter().position(|p| p == target),
+    ) else {
+        return false;
+    };
+    let id = ids.remove(from);
+    ids.insert(to, id);
+    true
+}
 
 /// Haut des îles (comptes, soldes) : juste sous le symbole, qui déborde de
 /// la barre de menus.
@@ -187,6 +354,11 @@ pub struct BankPerfectApp {
     interactive: bool,
     /// Première image pas encore peinte.
     first_frame: bool,
+    /// La fenêtre a été adaptée à l'écran (premier affichage).
+    window_fitted: bool,
+    /// Les commandes épinglées ne tiennent pas entre les menus et les
+    /// filtres : elles passent dans une barre sous les menus.
+    pinned_overflow: bool,
     /// Extensions Luau chargées.
     extensions: bp_ext::Engine,
     ext_manager: Option<crate::extensions::Manager>,
@@ -218,6 +390,12 @@ impl BankPerfectApp {
             app.open_path(path);
         }
         app
+    }
+
+    /// Réglages en cours (tests).
+    #[doc(hidden)]
+    pub fn settings_for_tests(&self) -> &crate::settings::Settings {
+        &self.settings
     }
 
     /// Application avec des réglages donnés (tests : thème laissé tel quel).
@@ -265,6 +443,8 @@ impl BankPerfectApp {
             theme_pending: false,
             interactive: false,
             first_frame: true,
+            window_fitted: false,
+            pinned_overflow: false,
             extensions: crate::extensions::engine(None, &[]),
             ext_manager: None,
             ext_errors: Vec::new(),
@@ -1630,7 +1810,65 @@ impl BankPerfectApp {
         }
     }
 
+    /// Barre des commandes épinglées, sous les menus, quand elles ne
+    /// tiennent pas à côté d'eux : une île d'icônes avec leur libellé.
+    fn pinned_bar(&mut self, ui: &mut egui::Ui) {
+        let pinned = Command::pinned(self.doc.as_ref(), &self.settings.pinned_commands);
+        let pal = palette(ui);
+        let mut command = None;
+        let mut unpin = None;
+        let mut moved = None;
+        crate::islands::frame(&pal, ui.visuals().dark_mode)
+            .inner_margin(egui::Margin::symmetric(8, 4))
+            .show(ui, |ui| {
+                // Le symbole du logiciel déborde à droite sous les menus.
+                let room = ui.available_width() - LOGO_SIZE - 2.0 * LOGO_MARGIN;
+                ui.set_max_width(room);
+                // Une seule ligne : avec les libellés s'ils tiennent tous,
+                // en icônes seules sinon.
+                let font = egui::TextStyle::Body.resolve(ui.style());
+                let labelled: f32 = pinned
+                    .iter()
+                    .map(|(_, info)| {
+                        ui.painter()
+                            .layout_no_wrap(
+                                format!("{}  {}", info.icon, short_label(&info.label)),
+                                font.clone(),
+                                pal.fg,
+                            )
+                            .size()
+                            .x
+                            + 2.0 * ui.spacing().button_padding.x
+                            + 4.0
+                    })
+                    .sum();
+                let with_label = labelled <= room - 16.0;
+                ui.horizontal(|ui| {
+                    ui.spacing_mut().item_spacing.x = 4.0;
+                    let row = pinned_row(ui, &pinned, with_label, false);
+                    command = row.run;
+                    unpin = row.unpin;
+                    moved = row.moved;
+                });
+            });
+        if let Some(id) = unpin {
+            self.settings.pinned_commands.retain(|p| *p != id);
+            self.settings.save();
+        }
+        if let Some((from, to)) = moved
+            && move_pinned(&mut self.settings.pinned_commands, &from, &to)
+        {
+            self.settings.save();
+        }
+        if let Some(command) = command {
+            let ctx = ui.ctx().clone();
+            self.execute(&ctx, command);
+        }
+    }
+
     fn menu_bar(&mut self, ui: &mut egui::Ui) {
+        let mut unpin: Option<String> = None;
+        let mut moved: Option<(String, String)> = None;
         let titles: &[&str] = if self.doc.is_some() {
             &[
                 tr!("Fichier"),
@@ -1678,15 +1916,44 @@ impl BankPerfectApp {
                 // Filtres prédéfinis à gauche du symbole : la place gagnée
                 // évite une ligne d'en-tête au-dessus des soldes.
                 let mut command = None;
-                if let Some(doc) = self.doc.as_mut() {
-                    ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                        ui.add_space((ui.max_rect().right() - rect.left() + 16.0).max(0.0));
+                let pinned = Command::pinned(self.doc.as_ref(), &self.settings.pinned_commands);
+                let mut overflow = false;
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_space((ui.max_rect().right() - rect.left() + 16.0).max(0.0));
+                    if let Some(doc) = self.doc.as_mut() {
                         command = Self::filters_menu(ui, doc);
-                    });
-                }
+                    }
+                    // Commandes épinglées entre les menus et les filtres,
+                    // si elles y tiennent ; sinon, barre dédiée en dessous.
+                    if !pinned.is_empty() {
+                        let needed = pinned.len() as f32 * (PINNED_ICON + 2.0) + 40.0;
+                        overflow = needed > ui.available_width();
+                        if !overflow {
+                            if self.doc.is_some() {
+                                ui.add_space(6.0);
+                                ui.separator();
+                            }
+                            ui.add_space(2.0);
+                            let row = pinned_row(ui, &pinned, false, true);
+                            command = command.or(row.run);
+                            unpin = row.unpin;
+                            moved = row.moved;
+                        }
+                    }
+                });
+                self.pinned_overflow = overflow;
                 (opened, command)
             })
             .inner;
+        if let Some(id) = unpin.take() {
+            self.settings.pinned_commands.retain(|p| *p != id);
+            self.settings.save();
+        }
+        if let Some((from, to)) = moved
+            && move_pinned(&mut self.settings.pinned_commands, &from, &to)
+        {
+            self.settings.save();
+        }
         if let Some((index, anchor)) = opened {
             let ctx = ui.ctx().clone();
             let mut menus = std::mem::take(&mut self.menus);
@@ -2097,7 +2364,7 @@ impl BankPerfectApp {
                     .size(18.0)
                     .family(crate::theme::semibold());
                 let mut selected = None;
-                egui::ComboBox::from_id_salt("account_switcher")
+                crate::ui_kit::Combo::new("account_switcher")
                     .selected_text(title)
                     .height(420.0)
                     .show_ui(ui, |ui| {
@@ -2699,8 +2966,24 @@ impl BankPerfectApp {
         }
         if let Some(palette) = &mut self.command_palette {
             use crate::command_palette::PaletteResult;
-            match palette.show(ctx, self.doc.as_ref(), &self.recent_commands) {
+            match palette.show(
+                ctx,
+                self.doc.as_ref(),
+                &self.recent_commands,
+                &self.settings.pinned_commands,
+            ) {
                 PaletteResult::Keep => {}
+                PaletteResult::TogglePin(command) => {
+                    if let Some(id) = command.pin_id() {
+                        if let Some(k) = self.settings.pinned_commands.iter().position(|p| *p == id)
+                        {
+                            self.settings.pinned_commands.remove(k);
+                        } else {
+                            self.settings.pinned_commands.push(id);
+                        }
+                        self.settings.save();
+                    }
+                }
                 PaletteResult::Close => self.command_palette = None,
                 PaletteResult::Run(command) => {
                     self.command_palette = None;
@@ -3245,6 +3528,49 @@ impl BankPerfectApp {
         }
     }
 
+    /// Au premier affichage, la fenêtre (1280 × 800 par défaut) est
+    /// centrée sur l'écran si elle y tient, barre des tâches comprise, et
+    /// agrandie sinon : sur un portable en 1366 × 768, ou en 1080p à 125 %,
+    /// Windows la posait en partie sous la barre des tâches. Elle est aussi
+    /// agrandie si elle l'était à la fermeture. Ensuite, l'état agrandi est
+    /// retenu dans les réglages. Sous Wayland, le compositeur place et
+    /// dimensionne lui-même les fenêtres.
+    fn fit_window(&mut self, ctx: &egui::Context) {
+        if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+            return;
+        }
+        let (monitor, outer, maximized, minimized) = ctx.input(|i| {
+            let v = i.viewport();
+            (v.monitor_size, v.outer_rect, v.maximized, v.minimized)
+        });
+        if !self.window_fitted {
+            let (Some(monitor), Some(outer)) = (monitor, outer) else {
+                return;
+            };
+            self.window_fitted = true;
+            // Barre des tâches (environ 48 points) et un peu d'air autour.
+            const TASKBAR: f32 = 48.0;
+            const MARGIN: f32 = 16.0;
+            let work = egui::vec2(monitor.x, monitor.y - TASKBAR);
+            let fits =
+                outer.width() + 2.0 * MARGIN <= work.x && outer.height() + 2.0 * MARGIN <= work.y;
+            if self.settings.window_maximized || !fits {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Maximized(true));
+            } else if outer.max.x > work.x || outer.max.y > work.y || outer.min.y < 0.0 {
+                let pos = ((work - outer.size()) / 2.0).max(egui::Vec2::ZERO);
+                ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(pos.to_pos2()));
+            }
+            return;
+        }
+        if minimized != Some(true)
+            && let Some(maximized) = maximized
+            && maximized != self.settings.window_maximized
+        {
+            self.settings.window_maximized = maximized;
+            self.settings.save();
+        }
+    }
+
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         self.egui_ctx = ui.ctx().clone();
         self.poll_pick();
@@ -3261,6 +3587,9 @@ impl BankPerfectApp {
             ctx.set_theme(self.settings.theme_preference());
         }
         crate::theme::adapt_to_display(&ctx);
+        if self.interactive {
+            self.fit_window(&ctx);
+        }
         // Sous Wayland, la première image part avant que le compositeur ait
         // donné l'échelle de l'écran (1 au lieu de 2 en HiDPI) : tout y
         // serait mis en page et rastérisé pour rien. Le fond seul suffit.
@@ -3360,6 +3689,17 @@ impl BankPerfectApp {
             .show_separator_line(false)
             .frame(egui::Frame::side_top_panel(ui.style()).fill(canvas))
             .show(ui, |ui| self.menu_bar(ui));
+        if self.pinned_overflow && !self.settings.pinned_commands.is_empty() {
+            egui::Panel::top("pinned_commands")
+                .show_separator_line(false)
+                .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
+                    left: gap,
+                    right: gap,
+                    top: 0,
+                    bottom: gap,
+                }))
+                .show(ui, |ui| self.pinned_bar(ui));
+        }
 
         if self.doc.is_none() {
             egui::CentralPanel::default_margins()
@@ -3515,6 +3855,7 @@ impl BankPerfectApp {
                 .into();
         }
 
+        let mut toggle_pin = false;
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
                 left: gap,
@@ -3527,8 +3868,10 @@ impl BankPerfectApp {
                     .inner_margin(grid::ISLAND_MARGIN)
                     .show(ui, |ui| {
                         ui.set_min_size(ui.available_size());
-                        if doc.filters.is_active() || doc.filters.hide_old_lines {
-                            filter_banner(ui, doc);
+                        if (doc.filters.is_active() || doc.filters.hide_old_lines)
+                            && filter_banner(ui, doc)
+                        {
+                            toggle_pin = true;
                         }
                         let action = ui.scope(|ui| grid::show(ui, doc)).inner;
                         if !matches!(action, GridAction::None) {
@@ -3536,6 +3879,11 @@ impl BankPerfectApp {
                         }
                     });
             });
+        if toggle_pin {
+            self.settings.ignore_filter_totals = !self.settings.ignore_filter_totals;
+            self.settings.save();
+            doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
+        }
         if self.editor.is_none()
             && !self.settings.entry_at_bottom
             && floating_add_button(&ctx, content_rect)
@@ -3632,12 +3980,17 @@ fn period_presets(today: Date) -> Vec<(String, (Date, Date))> {
 /// sont affichées, quels filtres jouent, et un bouton pour tout réafficher.
 /// Sans lui, un filtre posé par mégarde (clic sur la frise, glisser sur la
 /// courbe) faisait croire à des opérations perdues.
-fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) {
+///
+/// La punaise fige les soldes sur tout le compte pendant qu'un filtre est
+/// actif (réglage « Soldes calculés sur toutes les lignes », commun à tous
+/// les comptes) ; renvoie `true` quand elle est cliquée.
+fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
     let pal = palette(ui);
     let shown = doc.visible_len();
     let total = doc.total_count();
     let filtered_totals = doc.filters.is_active() && !doc.ignore_filter_totals();
     let mut clear = false;
+    let mut toggle_pin = false;
     egui::Frame::new()
         .fill(pal.pointed.gamma_multiply(0.13))
         .stroke(egui::Stroke::new(1.0, pal.pointed.gamma_multiply(0.45)))
@@ -3667,6 +4020,28 @@ fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) {
                         .clicked()
                     {
                         clear = true;
+                    }
+                    if doc.filters.is_active() {
+                        let pinned = doc.ignore_filter_totals();
+                        let pin = egui::Button::new(
+                            RichText::new(icon::PUSH_PIN)
+                                .size(16.0)
+                                .color(if pinned { pal.fg } else { pal.muted }),
+                        )
+                        .fill(if pinned {
+                            pal.pointed.gamma_multiply(0.30)
+                        } else {
+                            egui::Color32::TRANSPARENT
+                        })
+                        .min_size(egui::vec2(28.0, 28.0));
+                        let hover = if pinned {
+                            tr!("Soldes figés sur tout le compte, quels que soient les filtres. Cliquer pour les calculer sur les lignes affichées.")
+                        } else {
+                            tr!("Soldes calculés sur les lignes affichées. Cliquer pour les figer sur tout le compte, quels que soient les filtres.")
+                        };
+                        if ui.add(pin).on_hover_text(hover).clicked() {
+                            toggle_pin = true;
+                        }
                     }
                     ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                         ui.label(
@@ -3698,6 +4073,7 @@ fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     if clear {
         doc.filters = Default::default();
     }
+    toggle_pin
 }
 
 /// Un badge par filtre actif ; sa croix retire ce filtre.

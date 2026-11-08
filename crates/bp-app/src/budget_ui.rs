@@ -301,7 +301,7 @@ impl BudgetForm {
                         &doc.document,
                         &bp_core::reports::AccountScope::All,
                     );
-                    egui::ComboBox::from_id_salt("budget_year")
+                    crate::ui_kit::Combo::new("budget_year")
                         .selected_text(year.to_string())
                         .width(110.0)
                         .show_ui(ui, |ui| {
@@ -317,7 +317,7 @@ impl BudgetForm {
                 }
                 BudgetPeriod::Filter(_) => {
                     let before = self.filter_index;
-                    egui::ComboBox::from_id_salt("budget_filter")
+                    crate::ui_kit::Combo::new("budget_filter")
                         .selected_text(
                             self.filter_names
                                 .get(self.filter_index)
@@ -843,7 +843,7 @@ impl BudgetForm {
             ui.add_space(12.0);
             if self.view != ValueKind::Difference {
                 ui.label(RichText::new(tr!("Saisie :")).color(pal.fg_dark));
-                egui::ComboBox::from_id_salt("annual_spread")
+                crate::ui_kit::Combo::new("annual_spread")
                     .selected_text(spread_label(self.spread))
                     .width(170.0)
                     .show_ui(ui, |ui| {

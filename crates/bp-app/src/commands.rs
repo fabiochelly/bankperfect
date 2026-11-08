@@ -246,6 +246,33 @@ impl Command {
         list
     }
 
+    /// Identifiant retenu dans les réglages quand la commande est épinglée
+    /// dans la barre de menus. Les commandes désignées par un rang (fichier
+    /// récent, filtre, compte, extension) ne s'épinglent pas : leur rang
+    /// change d'une session à l'autre.
+    pub fn pin_id(self) -> Option<String> {
+        use Command::*;
+        match self {
+            OpenRecent(_) | ApplyFilter(_) | SelectAccount(_) | Extension(_) | Palette => None,
+            other => Some(format!("{other:?}")),
+        }
+    }
+
+    /// Commandes épinglées disponibles, dans l'ordre des réglages.
+    pub fn pinned(doc: Option<&OpenDoc>, ids: &[String]) -> Vec<(Command, Info)> {
+        if ids.is_empty() {
+            return Vec::new();
+        }
+        let all: Vec<(String, Command)> = Command::all(doc)
+            .into_iter()
+            .filter_map(|c| Some((c.pin_id()?, c)))
+            .collect();
+        ids.iter()
+            .filter_map(|id| all.iter().find(|(c, _)| c == id).map(|&(_, c)| c))
+            .map(|c| (c, c.info(doc)))
+            .collect()
+    }
+
     pub fn info(self, doc: Option<&OpenDoc>) -> Info {
         use Command::*;
         let has_doc = doc.is_some();

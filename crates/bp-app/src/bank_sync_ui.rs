@@ -889,7 +889,7 @@ impl BankSyncForm {
                                     .as_ref()
                                     .and_then(|uid| names.iter().find(|(u, _)| u == uid))
                                     .map(|(_, n)| n.clone());
-                                egui::ComboBox::from_id_salt(("bank_target", &link.uid))
+                                crate::ui_kit::Combo::new(("bank_target", &link.uid))
                                     .selected_text(
                                         current.unwrap_or_else(|| tr!("Ne pas importer").into()),
                                     )
@@ -1120,7 +1120,7 @@ impl BankSyncForm {
                         .map_or(self.country.clone(), |(_, n)| {
                             bp_core::i18n::tr(n).to_string()
                         });
-                    egui::ComboBox::from_id_salt("bank_country")
+                    crate::ui_kit::Combo::new("bank_country")
                         .selected_text(label)
                         .width(170.0)
                         .show_ui(ui, |ui| {

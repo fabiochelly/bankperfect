@@ -574,7 +574,7 @@ impl Command {
                 FILE,
                 tr!("Imprimer le relevé…"),
                 icon::PRINTER,
-                Some("Ctrl+P"),
+                None,
                 tr_mark!("pdf aperçu relevé impression"),
             ),
             ImportJson => info(
@@ -1389,14 +1389,14 @@ impl Command {
                 HELP,
                 tr!("Guide d'utilisation"),
                 icon::QUESTION,
-                Some("F1"),
+                Some(tr_mark!("Maj+F1")),
                 tr_mark!("manuel documentation"),
             ),
             Palette => info(
                 TOOLS,
                 tr!("Palette de commandes"),
                 icon::COMMAND,
-                Some("Ctrl+K"),
+                Some("Ctrl+P"),
                 tr_mark!("rechercher"),
             ),
             Extension(index) => match crate::extensions::entry(index) {

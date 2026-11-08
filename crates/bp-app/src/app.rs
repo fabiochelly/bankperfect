@@ -315,12 +315,14 @@ const SHORTCUT_SPLIT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, 
 const SHORTCUT_FILTERS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F7);
 const SHORTCUT_SCHEDULER: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::E);
 const SHORTCUT_IMPORT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::I);
-const SHORTCUT_PRINT: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::P);
 const SHORTCUT_OPTIONS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::Comma);
 const SHORTCUT_NEW: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::N);
 const SHORTCUT_SAVE_AS: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F12);
 const SHORTCUT_CLOSE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::W);
-const SHORTCUT_PALETTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::K);
+/// Palette de commandes : Ctrl+P, ou F1 (comme l'ancienne version).
+const SHORTCUT_PALETTE: KeyboardShortcut = KeyboardShortcut::new(Modifiers::COMMAND, Key::P);
+/// Guide d'utilisation : Maj+F1 (F1 ouvre la palette).
+const SHORTCUT_HELP: KeyboardShortcut = KeyboardShortcut::new(Modifiers::SHIFT, Key::F1);
 const SHORTCUT_MARK_DATE: KeyboardShortcut =
     KeyboardShortcut::new(Modifiers::COMMAND.plus(Modifiers::SHIFT), Key::P);
 const SHORTCUT_MARK_DATES: KeyboardShortcut = KeyboardShortcut::new(Modifiers::NONE, Key::F11);
@@ -362,12 +364,12 @@ const BUILTIN_SHORTCUTS: &[KeyboardShortcut] = &[
     SHORTCUT_FILTERS,
     SHORTCUT_SCHEDULER,
     SHORTCUT_IMPORT,
-    SHORTCUT_PRINT,
     SHORTCUT_OPTIONS,
     SHORTCUT_NEW,
     SHORTCUT_SAVE_AS,
     SHORTCUT_CLOSE,
     SHORTCUT_PALETTE,
+    SHORTCUT_HELP,
     SHORTCUT_MARK_DATE,
     SHORTCUT_MARK_DATES,
     SHORTCUT_CUT,
@@ -917,13 +919,16 @@ impl BankPerfectApp {
 
     fn handle_shortcuts(&mut self, ctx: &egui::Context) {
         let now = ctx.input(|i| i.time);
-        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_PALETTE)) {
-            self.execute(ctx, Command::Palette);
+        // Maj+F1 avant F1 : `consume_key` sans modificateur accepterait
+        // aussi Maj.
+        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_HELP)) {
+            self.execute(ctx, Command::Help);
             return;
         }
-        // F1 : l'aide, comme partout (la palette reste sur Ctrl+K).
-        if ctx.input_mut(|i| i.consume_key(Modifiers::NONE, Key::F1)) {
-            self.execute(ctx, Command::Help);
+        if ctx.input_mut(|i| {
+            i.consume_shortcut(&SHORTCUT_PALETTE) || i.consume_key(Modifiers::NONE, Key::F1)
+        }) {
+            self.execute(ctx, Command::Palette);
             return;
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_OPEN)) {
@@ -1046,9 +1051,6 @@ impl BankPerfectApp {
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_IMPORT)) {
             return self.execute(ctx, Command::Import);
-        }
-        if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_PRINT)) {
-            return self.execute(ctx, Command::Print);
         }
         if ctx.input_mut(|i| i.consume_shortcut(&SHORTCUT_MARK_DATE)) {
             return self.execute(ctx, Command::SetMarkDate);

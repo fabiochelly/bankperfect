@@ -510,8 +510,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Ligne {} sur {}", "Row {} of {}"),
     ("Rechercher", "Search"),
     (
-        "Toutes les commandes, avec leur raccourci : Ctrl+K",
-        "All commands, with their shortcut: Ctrl+K",
+        "Toutes les commandes, avec leur raccourci : Ctrl+P ou F1",
+        "All commands, with their shortcut: Ctrl+P or F1",
     ),
     ("échéancier", "scheduler"),
     (

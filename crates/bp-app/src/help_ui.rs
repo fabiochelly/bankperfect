@@ -302,7 +302,7 @@ impl HelpForm {
                         RichText::new(format!(
                             "{}  {}",
                             icon::COMMAND,
-                            tr!("Toutes les commandes, avec leur raccourci : Ctrl+K")
+                            tr!("Toutes les commandes, avec leur raccourci : Ctrl+P ou F1")
                         ))
                         .small()
                         .color(pal.muted),

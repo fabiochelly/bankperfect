@@ -19,13 +19,13 @@ Scroll with the mouse wheel or with the `Page Up` and `Page Down` keys. You can 
 
 ### Finding a command
 
-All the menus are at the top of the window. If you cannot find a command, press `Ctrl+K`: the command palette opens. Type a few letters of what you are looking for (for example "scheduler" or "clear"), then `Enter`.
+All the menus are at the top of the window. If you cannot find a command, press `Ctrl+P` or `F1`: the command palette opens. Type a few letters of what you are looking for (for example "scheduler" or "clear"), then `Enter`.
 
 ### Pinning your favorite commands
 
 In the palette, click the pin at the end of a row: the command is added as an icon to the menu bar, next to **Filters**. This way you build your own toolbar. Drag the icons to put them in the order you want; right-click an icon to remove it. When they no longer fit next to the menus, they move to a bar just below.
 
-> This help opens at any time with the `F1` key or from the **Help** menu.
+> This help opens at any time with `Shift+F1` or from the **Help** menu.
 
 ## Entering and editing a transaction
 
@@ -293,8 +293,8 @@ The same window lets you **Change password**, create a **New recovery phrase** o
 
 ### The most useful
 
-- `F1`: this help
-- `Ctrl+K`: command palette, to find a command by its name
+- `Shift+F1`: this help
+- `Ctrl+P` or `F1`: command palette, to find a command by its name
 - `Ctrl+S`: save
 - `Ctrl+Z`: undo the last action; `Ctrl+Y`: redo it
 - `Ins`: new transaction
@@ -329,7 +329,6 @@ The same window lets you **Change password**, create a **New recovery phrase** o
 - `F12`: save as
 - `Ctrl+W`: close the file
 - `Ctrl+I`: import transactions
-- `Ctrl+P`: print statement
 
 ### Transactions and tools
 
@@ -369,6 +368,6 @@ If your file contains scheduled transactions from an even older scheduler, the s
 - Entry is done in a form on the right; would you rather have a bar at the bottom as before? Tick **View › Entry form at the bottom**.
 - To search, use the **Filters** button at the top right, or the magnifying glass on the left of the **Date** heading.
 - The old scripts are now built into the menus (**Reports**, **Tools**, **Transactions**). The old plugins no longer work; they are replaced by the **Extensions** menu.
-- Cannot find a command? `Ctrl+K`, then type its name.
+- Cannot find a command? `Ctrl+P` (or `F1`), then type its name.
 
 > Light or dark mode, themes and text size are set in the **View** menu and in **Tools › Options…**.

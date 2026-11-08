@@ -1,4 +1,4 @@
-//! Palette de commandes (Ctrl+K) : toutes les fonctions de l'application,
+//! Palette de commandes (Ctrl+P ou F1) : toutes les fonctions de l'application,
 //! trouvées par recherche floue (insensible à la casse et aux accents).
 
 use bp_core::tr;

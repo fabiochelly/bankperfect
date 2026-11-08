@@ -17,7 +17,7 @@ BankPerfect 9 is a complete Rust rewrite of BankPerfect (originally written in D
 - **Scheduler**: recurring transactions inserted automatically, projected balance.
 - **Reports and charts**: totals by category and by payee, multi-account statement, donut, bar and line charts, export to a spreadsheet (`.xlsx`).
 - **Budgets**: monthly budget by category and yearly budget tables.
-- **Tools**: loan calculator, currency converter (ECB rates), securities portfolio (prices, gains, sales, dividends, charts), calculator, notes, command palette (Ctrl+K).
+- **Tools**: loan calculator, currency converter (ECB rates), securities portfolio (prices, gains, sales, dividends, charts), calculator, notes, command palette (Ctrl+P or F1).
 - **Extensions**: sandboxed [Luau](https://luau.org) scripts that add commands (in the menus of their choice and on right-click), shortcuts, native windows (forms, tables, statistics, charts), statement import formats and automations for transactions, the scheduler, the budget and the rules, with built-in undo; six examples included. See the [extension documentation](docs/extensions.en.md).
 - **Themes**: 19 dark and light themes (Tokyo Night, Catppuccin, Dracula, Nord, Gruvbox, Rosé Pine, One Dark, Everforest, Kanagawa, Solarized…), including “BankPerfect classic” with the colors of the previous version, and a mode that follows the system.
 - **Security**: encrypted files (XChaCha20-Poly1305, password derived with Argon2id) with a 24-word recovery phrase, automatic backups.

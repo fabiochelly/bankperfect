@@ -480,6 +480,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("Modifier la ligne sélectionnée", "Update selected row"),
     ("Maj+Entrée", "Shift+Enter"),
+    ("Maj+F1", "Shift+F1"),
     ("éditer enregistrer modification", "edit save change modify"),
     ("Supprimer les opérations", "Delete transactions"),
     ("Suppr", "Del"),

@@ -194,15 +194,15 @@ fn screenshots() {
         h.get_by_label("Protéger").click();
     });
     render("18-palette", egui::Theme::Dark, |h| {
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     });
     render("19-palette-recherche", egui::Theme::Dark, |h| {
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("categ".into()));
     });
     render("20-palette-clair", egui::Theme::Light, |h| {
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("compte".into()));
         h.run_steps(2);
@@ -300,7 +300,7 @@ fn screenshots() {
         h.key_press(egui::Key::ArrowDown);
         h.key_press(egui::Key::ArrowDown);
         h.run_steps(2);
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("ajouter à l'échéancier".into()));
         h.run_steps(2);
@@ -309,7 +309,7 @@ fn screenshots() {
     render("40-previsionnel", egui::Theme::Light, |h| {
         h.key_press(egui::Key::ArrowDown);
         h.run_steps(2);
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("ajouter à l'échéancier".into()));
         h.run_steps(2);
@@ -469,7 +469,7 @@ fn caret_screenshots() {
             app
         });
     h.run_steps(10);
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     h.run_steps(4);
     h.event(egui::Event::Text("pointage intelligent".into()));
     h.run_steps(10);
@@ -600,7 +600,7 @@ fn tool_screenshots() {
 
 /// Ouvre la fenêtre d'export par la palette de commandes.
 fn open_export(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     h.run_steps(2);
     h.event(egui::Event::Text("tableur".into()));
     h.run_steps(2);
@@ -753,7 +753,7 @@ fn fill_fields(h: &mut Harness<'_, bankperfect::BankPerfectApp>, texts: &[&str])
 }
 
 fn open_portfolio(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     h.run_steps(2);
     h.event(egui::Event::Text("cotations".into()));
     h.run_steps(2);
@@ -976,7 +976,7 @@ fn transfer_screenshots() {
         h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
     });
     render("76-synchro-config", egui::Theme::Dark, |h| {
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("synchroniser avec la banque".into()));
         h.run_steps(2);
@@ -987,7 +987,7 @@ fn transfer_screenshots() {
         h.key_press(egui::Key::ArrowDown);
         h.key_press(egui::Key::ArrowDown);
         h.run_steps(2);
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("convertir en transfert".into()));
         h.run_steps(2);
@@ -1013,7 +1013,7 @@ fn dashboard_widths() {
         ("61-cartes-clair", egui::Theme::Light),
     ] {
         render_sized(name, theme, egui::vec2(1280.0, 700.0), |h| {
-            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
             h.run_steps(2);
             h.event(egui::Event::Text("trois cartes".into()));
             h.run_steps(2);
@@ -1350,7 +1350,7 @@ fn right_click(h: &mut Harness<'_, bankperfect::BankPerfectApp>, pos: egui::Pos2
 fn license_screens() {
     let key = std::env::var("BP_LICENSE_KEY").expect("BP_LICENSE_KEY");
     let open_dialog = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("Licence".into()));
         h.run_steps(2);
@@ -1500,7 +1500,7 @@ fn smart_tack_screenshots() {
         .sum();
     let balance = bp_core::smart_tack::pointed_balance(account, Some(today)) + cleared;
     let open = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
-        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("pointage intelligent".into()));
         h.run_steps(2);
@@ -1596,7 +1596,7 @@ const FULL: egui::Vec2 = egui::vec2(1440.0, 900.0);
 
 /// Ouvre une commande par la palette (texte cherché, puis Entrée).
 fn run_command(h: &mut Harness<'_, bankperfect::BankPerfectApp>, text: &str) {
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     h.run_steps(2);
     h.event(egui::Event::Text(text.into()));
     h.run_steps(2);
@@ -1646,10 +1646,10 @@ fn english_screenshots() {
         h.get_by_label("Export").hover();
     });
     render_en("en-05-palette", dark, FULL, |h| {
-        h.key_press_modifiers(Modifiers::COMMAND, Key::K);
+        h.key_press_modifiers(Modifiers::COMMAND, Key::P);
     });
     render_en("en-05-palette-search", light, FULL, |h| {
-        h.key_press_modifiers(Modifiers::COMMAND, Key::K);
+        h.key_press_modifiers(Modifiers::COMMAND, Key::P);
         h.run_steps(2);
         h.event(egui::Event::Text("categ".into()));
     });
@@ -2222,7 +2222,7 @@ fn account_history_screenshots() {
 
 /// Ouvre une commande par la palette (texte recherché, puis Entrée).
 fn palette_run(h: &mut Harness<'_, bankperfect::BankPerfectApp>, query: &str) {
-    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+    h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
     h.run_steps(2);
     h.event(egui::Event::Text(query.into()));
     h.run_steps(2);
@@ -2279,7 +2279,7 @@ fn beta_feedback_screenshots() {
         None,
         few,
         |h| {
-            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::K);
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
             h.run_steps(2);
             h.event(egui::Event::Text("é".into()));
         },
@@ -2385,6 +2385,32 @@ fn beta_feedback_screenshots() {
             h.event(egui::Event::PointerMoved(scheduler));
         },
     );
+    // Raccourcis : F1 et Ctrl+P ouvrent la palette, Maj+F1 le guide.
+    render("9b-raccourcis", egui::Theme::Dark, |h| {
+        let palette_open = |h: &Harness<'_, bankperfect::BankPerfectApp>| {
+            h.query_by(|n| n.placeholder() == Some("Rechercher une commande…"))
+                .is_some()
+        };
+        h.key_press(egui::Key::F1);
+        h.run_steps(3);
+        assert!(palette_open(h), "F1 : palette");
+        h.key_press(egui::Key::Escape);
+        h.run_steps(3);
+        assert!(!palette_open(h), "Échap : palette fermée");
+        h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+        h.run_steps(3);
+        assert!(palette_open(h), "Ctrl+P : palette");
+        h.key_press(egui::Key::Escape);
+        h.run_steps(3);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::F1);
+        h.run_steps(3);
+        assert!(!palette_open(h), "Maj+F1 : pas la palette");
+        assert!(
+            h.query_by(|n| n.placeholder().is_some_and(|p| p.ends_with("Rechercher")))
+                .is_some(),
+            "Maj+F1 : guide"
+        );
+    });
     // Saisie dans un filtre de colonne : le bandeau qui apparaît au premier
     // caractère ne doit pas faire perdre le focus au champ.
     let mut filters = bankperfect::Settings::default();

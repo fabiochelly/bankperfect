@@ -19,13 +19,13 @@ Faites défiler avec la molette de la souris ou avec les touches `Page préc.` e
 
 ### Trouver une commande
 
-Tous les menus sont en haut de la fenêtre. Si vous ne trouvez pas une commande, tapez `Ctrl+K` : la palette de commandes s'ouvre, tapez quelques lettres de ce que vous cherchez (par exemple « échéancier » ou « pointer ») puis `Entrée`.
+Tous les menus sont en haut de la fenêtre. Si vous ne trouvez pas une commande, tapez `Ctrl+P` ou `F1` : la palette de commandes s'ouvre, tapez quelques lettres de ce que vous cherchez (par exemple « échéancier » ou « pointer ») puis `Entrée`.
 
 ### Épingler ses commandes préférées
 
 Dans la palette, cliquez sur la punaise au bout d'une ligne : la commande s'ajoute en icône dans la barre de menus, à côté de **Filtres**. Vous composez ainsi votre propre barre d'outils. Faites glisser les icônes pour les ranger dans l'ordre voulu ; un clic droit sur une icône la retire. Quand elles ne tiennent plus à côté des menus, elles passent dans une barre juste en dessous.
 
-> Cette aide s'ouvre à tout moment avec la touche `F1` ou par le menu **Aide**.
+> Cette aide s'ouvre à tout moment avec `Maj+F1` ou par le menu **Aide**.
 
 ## Saisir et modifier une opération
 
@@ -293,8 +293,8 @@ La même fenêtre permet de **Changer le mot de passe**, de créer une **Nouvell
 
 ### Les plus utiles
 
-- `F1` : cette aide
-- `Ctrl+K` : palette de commandes, pour trouver une commande par son nom
+- `Maj+F1` : cette aide
+- `Ctrl+P` ou `F1` : palette de commandes, pour trouver une commande par son nom
 - `Ctrl+S` : enregistrer
 - `Ctrl+Z` : annuler la dernière action ; `Ctrl+Y` : la refaire
 - `Inser` : nouvelle opération
@@ -329,7 +329,6 @@ La même fenêtre permet de **Changer le mot de passe**, de créer une **Nouvell
 - `F12` : enregistrer sous
 - `Ctrl+W` : fermer le fichier
 - `Ctrl+I` : importer des opérations
-- `Ctrl+P` : imprimer le relevé
 
 ### Opérations et outils
 
@@ -369,6 +368,6 @@ Si votre fichier contient des échéances d'un échéancier encore plus ancien, 
 - La saisie se fait dans un formulaire à droite ; préférez-vous une barre en bas comme avant ? Cochez **Affichage › Saisie en bas de la fenêtre**.
 - Pour chercher, utilisez le bouton **Filtres** en haut à droite, ou la loupe à gauche du titre **Date**.
 - Les anciens scripts sont maintenant intégrés aux menus (**Rapports**, **Outils**, **Opérations**). Les anciens plugins ne fonctionnent plus ; ils sont remplacés par le menu **Extensions**.
-- Une commande introuvable ? `Ctrl+K`, puis tapez son nom.
+- Une commande introuvable ? `Ctrl+P` (ou `F1`), puis tapez son nom.
 
 > Le mode clair ou sombre, les thèmes et la taille du texte se règlent dans le menu **Affichage** et dans **Outils › Options…**.

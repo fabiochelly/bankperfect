@@ -50,7 +50,7 @@ bp.command({
 })
 ```
 
-In **Extensions › Manage extensions…**, click **Reload**: the command appears in the **Extensions** menu and in the command palette (Ctrl+K), and responds to its shortcut. To put it somewhere else (**Transactions** menu, right-click on rows…), see [Menus](#menus).
+In **Extensions › Manage extensions…**, click **Reload**: the command appears in the **Extensions** menu and in the command palette (Ctrl+P or F1), and responds to its shortcut. To put it somewhere else (**Transactions** menu, right-click on rows…), see [Menus](#menus).
 
 To see what is possible, click **Examples** in the same window: six commented extensions are copied into your folder.
 
@@ -162,7 +162,7 @@ bp.command({
 ![Right-click on transactions](captures/en/extensions-clic-droit.png)
 
 - A list puts the command in several places: `menu = { "reports", "account" }`.
-- The **Extensions** menu only keeps the commands that are placed nowhere else (plus the extension management commands). The command palette (Ctrl+K) always offers every command.
+- The **Extensions** menu only keeps the commands that are placed nowhere else (plus the extension management commands). The command palette (Ctrl+P or F1) always offers every command.
 - Extension commands are added at the end of the menu, after a separator. They are grayed out when they cannot be used (`needs`).
 - With no file open, only the **File**, **Tools**, **Extensions** and **Help** menus exist, and only `needs = "nothing"` commands appear in them.
 - Right-clicking a transaction that is not selected selects it first, so `bp.selection()` returns the rows concerned.

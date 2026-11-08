@@ -50,7 +50,7 @@ bp.command({
 })
 ```
 
-Dans **Extensions › Gérer les extensions…**, cliquez sur **Recharger** : la commande apparaît dans le menu **Extensions**, dans la palette de commandes (Ctrl+K) et répond à son raccourci. Pour la placer ailleurs (menu **Opérations**, clic droit sur les lignes…), voir [Menus](#menus).
+Dans **Extensions › Gérer les extensions…**, cliquez sur **Recharger** : la commande apparaît dans le menu **Extensions**, dans la palette de commandes (Ctrl+P ou F1) et répond à son raccourci. Pour la placer ailleurs (menu **Opérations**, clic droit sur les lignes…), voir [Menus](#menus).
 
 Pour découvrir ce qu'il est possible de faire, cliquez sur **Exemples** dans la même fenêtre : six extensions commentées sont copiées dans votre dossier.
 
@@ -162,7 +162,7 @@ bp.command({
 ![Clic droit sur les opérations](captures/extensions-clic-droit.png)
 
 - Une liste place la commande à plusieurs endroits : `menu = { "reports", "account" }`.
-- Le menu **Extensions** ne garde que les commandes qui ne sont placées nulle part ailleurs (il reste les commandes de gestion des extensions). La palette (Ctrl+K) propose toujours toutes les commandes.
+- Le menu **Extensions** ne garde que les commandes qui ne sont placées nulle part ailleurs (il reste les commandes de gestion des extensions). La palette (Ctrl+P ou F1) propose toujours toutes les commandes.
 - Les commandes d'extension s'ajoutent à la fin du menu, après un séparateur. Elles sont grisées quand elles ne sont pas utilisables (`needs`).
 - Sans fichier ouvert, seuls les menus **Fichier**, **Outils**, **Extensions** et **Aide** existent, et seules les commandes `needs = "nothing"` y figurent.
 - Un clic droit sur une opération non sélectionnée la sélectionne d'abord ; `bp.selection()` renvoie donc les lignes concernées.

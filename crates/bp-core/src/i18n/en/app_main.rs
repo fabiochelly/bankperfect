@@ -474,12 +474,22 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "The others are only hidden by the filters.",
     ),
     (
-        "Soldes figés sur tout le compte, quels que soient les filtres. Cliquer pour les calculer sur les lignes affichées.",
-        "Balances pinned to the whole account, whatever the filters. Click to compute them on the rows shown.",
+        "Soldes verrouillés sur tout le compte, même quand un filtre est actif. Cliquer pour les calculer sur les lignes affichées.",
+        "Balances locked to the whole account, even when a filter is active. Click to compute them on the rows shown.",
     ),
     (
-        "Soldes calculés sur les lignes affichées. Cliquer pour les figer sur tout le compte, quels que soient les filtres.",
-        "Balances computed on the rows shown. Click to pin them to the whole account, whatever the filters.",
+        "Verrouiller les soldes sur tout le compte, même quand un filtre est actif (pratique pour pointer).",
+        "Lock the balances to the whole account, even when a filter is active (handy for clearing).",
+    ),
+    ("Déverrouiller les soldes", "Unlock the balances"),
+    ("Verrouiller les soldes", "Lock the balances"),
+    (
+        "Verrouiller les soldes sur tout le compte",
+        "Lock the balances to the whole account",
+    ),
+    (
+        "soldes verrou cadenas filtre pointage figer bloquer",
+        "balances lock padlock filter clearing freeze",
     ),
     ("Panneau des comptes", "Accounts panel"),
     ("Masquer le panneau des comptes", "Hide the accounts panel"),

@@ -112,7 +112,7 @@ Under the magnifying glass, a menu filters by clearing state: **Not cleared**, *
 
 A colored banner appears at the top of the table: it tells how many transactions are shown out of the total, and which filters are in use. Click **Show all** to get all your transactions back. In this banner, each filter also has its own small cross to remove it alone.
 
-By default, the balances at the top of the window then cover only the rows shown. To keep them computed on the whole account, click the pin in the banner, left of **Show all**: the setting applies to all accounts, and another click turns it off. It is the same as **Balances computed on all lines, even when a filter is active** in **Tools › Options…**.
+By default, the balances at the top of the window then cover only the rows shown. To keep them computed on the whole account, for example to clear transactions against a statement, turn on the small padlock at the top right of the **Final balance** tile: it turns red, the setting applies to all accounts, and another click turns it off. It is the same as **Balances computed on all lines, even when a filter is active** in **Tools › Options…**.
 
 **Hide unneeded rows** (`Ctrl+H`) is not a filter: the reconciled rows it hides still count in the balances, which stay those of the bank statement.
 

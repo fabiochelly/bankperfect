@@ -1397,6 +1397,13 @@ impl BankPerfectApp {
                 self.settings.balance_cards = !self.settings.balance_cards;
                 self.settings.save();
             }
+            Command::ToggleBalanceLock => {
+                self.settings.ignore_filter_totals = !self.settings.ignore_filter_totals;
+                self.settings.save();
+                if let Some(doc) = self.doc.as_mut() {
+                    doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
+                }
+            }
             Command::ToggleColumnFilters => {
                 self.settings.show_column_filters = !self.settings.show_column_filters;
                 self.settings.save();
@@ -3855,7 +3862,6 @@ impl BankPerfectApp {
                 .into();
         }
 
-        let mut toggle_pin = false;
         egui::CentralPanel::default_margins()
             .frame(egui::Frame::new().fill(canvas).inner_margin(egui::Margin {
                 left: gap,
@@ -3868,10 +3874,8 @@ impl BankPerfectApp {
                     .inner_margin(grid::ISLAND_MARGIN)
                     .show(ui, |ui| {
                         ui.set_min_size(ui.available_size());
-                        if (doc.filters.is_active() || doc.filters.hide_old_lines)
-                            && filter_banner(ui, doc)
-                        {
-                            toggle_pin = true;
+                        if doc.filters.is_active() || doc.filters.hide_old_lines {
+                            filter_banner(ui, doc);
                         }
                         let action = ui.scope(|ui| grid::show(ui, doc)).inner;
                         if !matches!(action, GridAction::None) {
@@ -3879,11 +3883,6 @@ impl BankPerfectApp {
                         }
                     });
             });
-        if toggle_pin {
-            self.settings.ignore_filter_totals = !self.settings.ignore_filter_totals;
-            self.settings.save();
-            doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
-        }
         if self.editor.is_none()
             && !self.settings.entry_at_bottom
             && floating_add_button(&ctx, content_rect)
@@ -3980,17 +3979,12 @@ fn period_presets(today: Date) -> Vec<(String, (Date, Date))> {
 /// sont affichées, quels filtres jouent, et un bouton pour tout réafficher.
 /// Sans lui, un filtre posé par mégarde (clic sur la frise, glisser sur la
 /// courbe) faisait croire à des opérations perdues.
-///
-/// La punaise fige les soldes sur tout le compte pendant qu'un filtre est
-/// actif (réglage « Soldes calculés sur toutes les lignes », commun à tous
-/// les comptes) ; renvoie `true` quand elle est cliquée.
-fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
+fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     let pal = palette(ui);
     let shown = doc.visible_len();
     let total = doc.total_count();
     let filtered_totals = doc.filters.is_active() && !doc.ignore_filter_totals();
     let mut clear = false;
-    let mut toggle_pin = false;
     egui::Frame::new()
         .fill(pal.pointed.gamma_multiply(0.13))
         .stroke(egui::Stroke::new(1.0, pal.pointed.gamma_multiply(0.45)))
@@ -4020,28 +4014,6 @@ fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
                         .clicked()
                     {
                         clear = true;
-                    }
-                    if doc.filters.is_active() {
-                        let pinned = doc.ignore_filter_totals();
-                        let pin = egui::Button::new(
-                            RichText::new(icon::PUSH_PIN)
-                                .size(16.0)
-                                .color(if pinned { pal.fg } else { pal.muted }),
-                        )
-                        .fill(if pinned {
-                            pal.pointed.gamma_multiply(0.30)
-                        } else {
-                            egui::Color32::TRANSPARENT
-                        })
-                        .min_size(egui::vec2(28.0, 28.0));
-                        let hover = if pinned {
-                            tr!("Soldes figés sur tout le compte, quels que soient les filtres. Cliquer pour les calculer sur les lignes affichées.")
-                        } else {
-                            tr!("Soldes calculés sur les lignes affichées. Cliquer pour les figer sur tout le compte, quels que soient les filtres.")
-                        };
-                        if ui.add(pin).on_hover_text(hover).clicked() {
-                            toggle_pin = true;
-                        }
                     }
                     ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
                         ui.label(
@@ -4073,7 +4045,6 @@ fn filter_banner(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
     if clear {
         doc.filters = Default::default();
     }
-    toggle_pin
 }
 
 /// Un badge par filtre actif ; sa croix retire ce filtre.

@@ -33,6 +33,8 @@ const TILES_HEIGHT: f32 = 148.0;
 const CARDS_HEIGHT: f32 = 112.0;
 /// Côté du bouton qui bascule entre l'équation et les cartes.
 const TOGGLE_SIZE: f32 = 22.0;
+/// Place des deux boutons du coin (cadenas et disposition), écart compris.
+const CORNER_WIDTH: f32 = 2.0 * TOGGLE_SIZE + 8.0;
 /// Durée du fondu quand on bascule de présentation.
 const SWITCH_SECONDS: f64 = 0.25;
 /// Rayon des cartes : celui des îles.
@@ -95,7 +97,7 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
     if t < 1.0 {
         ui.ctx().request_repaint();
     }
-    let toggle = ui
+    let command = ui
         .scope(|ui| {
             ui.set_opacity(ease(t) as f32);
             if doc.balance_cards {
@@ -108,13 +110,77 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
     // Même écart sous les tuiles qu'entre elles : l'espacement entre
     // éléments, déjà ajouté après les tuiles, compte dans cet écart.
     ui.add_space(crate::islands::GAP - ui.spacing().item_spacing.y);
-    toggle.then_some(Command::ToggleBalanceCards)
+    command
+}
+
+/// Boutons en haut à droite de la tuile du solde : le cadenas des soldes,
+/// puis la bascule équation / trois cartes. Renvoie la commande cliquée.
+fn corner_buttons(
+    ui: &Ui,
+    area: Rect,
+    split: bool,
+    doc: &OpenDoc,
+    pal: &Palette,
+) -> Option<Command> {
+    let toggle = toggle_rect(area);
+    if layout_toggle(ui, toggle, split, pal) {
+        return Some(Command::ToggleBalanceCards);
+    }
+    let lock = toggle.translate(vec2(-(TOGGLE_SIZE + 4.0), 0.0));
+    balance_lock(ui, lock, doc.ignore_filter_totals(), pal).then_some(Command::ToggleBalanceLock)
+}
+
+/// Cadenas des soldes : allumé (rouge), les soldes portent sur tout le
+/// compte même quand un filtre est actif, pour pointer face au relevé.
+fn balance_lock(ui: &Ui, rect: Rect, locked: bool, pal: &Palette) -> bool {
+    let response = ui.interact(rect, ui.id().with("balance_lock"), Sense::click());
+    response.widget_info(|| {
+        egui::WidgetInfo::selected(
+            egui::WidgetType::Checkbox,
+            true,
+            locked,
+            tr!("Verrouiller les soldes"),
+        )
+    });
+    let hovered = response.hovered();
+    if locked {
+        ui.painter().rect_filled(
+            rect,
+            6.0,
+            pal.negative
+                .gamma_multiply(if hovered { 0.28 } else { 0.18 }),
+        );
+    } else if hovered {
+        ui.painter().rect_filled(rect, 6.0, pal.bg_highlight);
+    }
+    let (glyph, color) = if locked {
+        (icon::LOCK_SIMPLE, pal.negative)
+    } else {
+        (
+            icon::LOCK_SIMPLE_OPEN,
+            if hovered { pal.fg } else { pal.muted },
+        )
+    };
+    ui.painter().text(
+        rect.center(),
+        Align2::CENTER_CENTER,
+        glyph,
+        FontId::proportional(14.0),
+        color,
+    );
+    response
+        .on_hover_text(if locked {
+            tr!("Soldes verrouillés sur tout le compte, même quand un filtre est actif. Cliquer pour les calculer sur les lignes affichées.")
+        } else {
+            tr!("Verrouiller les soldes sur tout le compte, même quand un filtre est actif (pratique pour pointer).")
+        })
+        .clicked()
 }
 
 /// Soldes en tuiles (îles) : « En banque », « À venir » et, en grand,
 /// « Solde final » avec sa courbe ; les signes de l'équation sont posés à
 /// cheval entre les tuiles.
-fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
+fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
     let pal = palette(ui);
     let dark = ui.visuals().dark_mode;
     let (area, _) =
@@ -224,6 +290,11 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
             lines.push(forecast_line(&f, end, &pal));
         }
     }
+    // Largeur du montant final, pas du montant en train de défiler : sinon
+    // le bord de la courbe suit chaque image du défilement et tremble.
+    let final_width = amount_galley(ui, f.totals.balance, &f.currency, 34.0, color, text_max)
+        .size()
+        .x;
     let text_width = lines
         .iter()
         .map(|(text, color)| {
@@ -231,22 +302,22 @@ fn equation(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
                 .size()
                 .x
         })
-        .fold(galley.size().x, f32::max);
+        .fold(final_width, f32::max);
     if let Some((start, end)) = f.window {
         let fade_from = inner.left() + text_width - 10.0;
         if hero.right() - fade_from >= 120.0 {
             lush_chart(ui, hero, fade_from, doc, &f, start, end, &pal, dark);
         }
     }
-    let toggle = layout_toggle(ui, toggle_rect(inner), false, &pal);
+    let toggle = corner_buttons(ui, inner, false, doc, &pal);
     let chips_left = if inner.width() >= CHIPS_MIN_BLOCK {
         let chips = Rect::from_min_max(
             pos2(inner.center().x, inner.top() - 3.0),
-            pos2(inner.right() - TOGGLE_SIZE - 4.0, inner.top() + 15.0),
+            pos2(inner.right() - CORNER_WIDTH, inner.top() + 15.0),
         );
         window_chips(ui, chips, doc, &pal, hero_color)
     } else {
-        inner.right() - TOGGLE_SIZE - 4.0
+        inner.right() - CORNER_WIDTH
     };
     tile_head(
         ui,
@@ -763,7 +834,7 @@ fn axis_labels(start: Date, end: Date) -> Vec<(Date, String, bool)> {
 
 // ─────────────────────────────── Les cartes ───────────────────────────────
 
-fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
+fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
     let pal = palette(ui);
     let dark = ui.visuals().dark_mode;
     let (strip, _) =
@@ -892,11 +963,11 @@ fn three_cards(ui: &mut Ui, doc: &mut OpenDoc) -> bool {
 
     // Solde final.
     let (block, r) = (blocks[2], inner(blocks[2]));
-    let toggle = layout_toggle(ui, toggle_rect(r), true, &pal);
+    let toggle = corner_buttons(ui, r, true, doc, &pal);
     if r.width() >= CHIPS_MIN_BLOCK {
         let area = Rect::from_min_max(
             pos2(r.center().x, r.top() - 3.0),
-            pos2(r.right() - TOGGLE_SIZE - 4.0, r.top() + 15.0),
+            pos2(r.right() - CORNER_WIDTH, r.top() + 15.0),
         );
         window_chips(ui, area, doc, &pal, balance_color);
     }
@@ -973,7 +1044,12 @@ fn card_text(
     let shown = animated(ui, ui.id().with(id), value);
     let galley = amount_galley(ui, shown, currency, 26.0, value_color, max_width);
     let baseline = title.bottom() + 5.0 + baseline_of(&galley);
-    let mut width = galley.size().x.max(title.width());
+    // Largeur du montant final : le graphique voisin ne suit pas le
+    // défilement des chiffres (il tremblait).
+    let final_width = amount_galley(ui, value, currency, 26.0, value_color, max_width)
+        .size()
+        .x;
+    let mut width = final_width.max(title.width());
     paint_on_baseline(ui, rect.left(), baseline, galley);
     let used = paint_lines(
         ui,

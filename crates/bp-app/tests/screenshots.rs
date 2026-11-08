@@ -2317,6 +2317,30 @@ fn beta_feedback_screenshots() {
             );
         },
     );
+    // Saisie dans un filtre de colonne : le bandeau qui apparaît au premier
+    // caractère ne doit pas faire perdre le focus au champ.
+    let mut filters = bankperfect::Settings::default();
+    filters.show_column_filters = true;
+    render_with(
+        "9a-filtre-saisie",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        filters,
+        |h| {
+            h.get_by(|n| n.placeholder() == Some("Filtrer tiers et détail"))
+                .click();
+            h.run_steps(2);
+            for c in ["e", "d", "f"] {
+                h.event(egui::Event::Text(c.into()));
+                h.run_steps(2);
+            }
+            assert!(
+                h.query_all_by_value("edf").next().is_some(),
+                "les trois caractères sont dans le champ"
+            );
+        },
+    );
     render("93-echeancier", egui::Theme::Dark, |h| {
         palette_run(h, "échéancier")
     });
@@ -2337,7 +2361,7 @@ fn beta_feedback_screenshots() {
     render("97-licence", egui::Theme::Dark, |h| {
         palette_run(h, "licence")
     });
-    render("98-punaise-soldes", egui::Theme::Dark, |h| {
+    render("98-cadenas-soldes", egui::Theme::Dark, |h| {
         let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
             pos,
             button: egui::PointerButton::Primary,
@@ -2353,14 +2377,10 @@ fn beta_feedback_screenshots() {
         }
         h.event(press(egui::pos2(1385.0, 160.0), false));
         h.run_steps(3);
-        // Punaise du bandeau : soldes figés sur tout le compte.
-        let pin = egui::pos2(1249.0, 236.0);
-        h.event(egui::Event::PointerMoved(pin));
-        h.run_steps(1);
-        h.event(press(pin, true));
-        h.run_steps(1);
-        h.event(press(pin, false));
+        // Cadenas de la tuile du solde : soldes verrouillés sur tout le compte.
+        h.get_by_label("Verrouiller les soldes").click();
         h.run_steps(2);
+        h.event(egui::Event::PointerMoved(egui::pos2(700.0, 700.0)));
         assert!(
             h.state().settings_for_tests().ignore_filter_totals,
             "soldes figés"

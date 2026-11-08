@@ -112,7 +112,7 @@ Sous la loupe, un menu filtre selon le pointage : **Non pointées**, **Pointées
 
 Un bandeau coloré s'affiche en haut du tableau : il indique combien d'opérations sont affichées sur le total, et quels filtres sont en cours. Cliquez sur **Tout afficher** pour retrouver toutes vos opérations. Dans ce bandeau, chaque filtre a aussi sa petite croix pour le retirer seul.
 
-Par défaut, les soldes du haut de la fenêtre portent alors sur les seules lignes affichées. Pour qu'ils restent calculés sur tout le compte, cliquez sur la punaise du bandeau, à gauche de **Tout afficher** : le réglage vaut pour tous les comptes, et un nouveau clic l'annule. C'est le même que **Soldes calculés sur toutes les lignes, même quand un filtre est actif** dans **Outils › Options…**.
+Par défaut, les soldes du haut de la fenêtre portent alors sur les seules lignes affichées. Pour qu'ils restent calculés sur tout le compte, par exemple pour pointer face au relevé, allumez le petit cadenas en haut à droite de la tuile **Solde final** : il devient rouge, le réglage vaut pour tous les comptes, et un nouveau clic l'éteint. C'est le même que **Soldes calculés sur toutes les lignes, même quand un filtre est actif** dans **Outils › Options…**.
 
 **Cacher les lignes inutiles** (`Ctrl+H`) n'est pas un filtre : les lignes rapprochées qu'il masque comptent toujours dans les soldes, qui restent ceux du relevé de la banque.
 

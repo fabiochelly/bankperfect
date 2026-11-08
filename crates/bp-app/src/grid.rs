@@ -1269,7 +1269,11 @@ fn filter_header(
         }
         let value = field(&mut doc.filters);
         let active = !value.is_empty();
+        // Identifiant fixe : au premier caractère, le bandeau des filtres
+        // apparaît au-dessus du tableau et décale les identifiants
+        // automatiques ; le champ perdait alors le focus.
         let edit = crate::theme::field(value)
+            .id(egui::Id::new(("column_filter", format!("{column:?}"))))
             .hint_text(hint)
             .desired_width(f32::INFINITY);
         let response = ui.add(edit);

@@ -61,6 +61,8 @@ pub enum Command {
     HideAccount,
     ToggleForecast,
     ToggleBalanceCards,
+    /// Soldes verrouillés sur tout le compte, même quand un filtre est actif.
+    ToggleBalanceLock,
     ToggleColumnFilters,
     ToggleBalanceRiver,
     ToggleTackColumn,
@@ -179,6 +181,7 @@ impl Command {
                 HideAccount,
                 ToggleForecast,
                 ToggleBalanceCards,
+                ToggleBalanceLock,
                 ToggleColumnFilters,
                 ToggleBalanceRiver,
                 ToggleTackColumn,
@@ -702,6 +705,20 @@ impl Command {
                     icon::COLUMNS,
                     None,
                     tr_mark!("soldes cartes équation panneau bascule"),
+                )
+            }
+            ToggleBalanceLock => {
+                let label = if doc.is_some_and(|d| d.ignore_filter_totals()) {
+                    tr!("Déverrouiller les soldes")
+                } else {
+                    tr!("Verrouiller les soldes sur tout le compte")
+                };
+                info(
+                    VIEW,
+                    label,
+                    icon::LOCK_SIMPLE,
+                    None,
+                    tr_mark!("soldes verrou cadenas filtre pointage figer bloquer"),
                 )
             }
             ToggleColumnFilters => {

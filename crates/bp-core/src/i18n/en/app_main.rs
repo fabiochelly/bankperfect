@@ -331,6 +331,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     // editor.rs
     ("Modifier l'opération", "Edit transaction"),
+    (
+        "Enregistrer comme nouvelle ligne, sans modifier l'opération d'origine (Ctrl+Maj+Entrée)",
+        "Save as a new transaction, leaving the original one unchanged (Ctrl+Shift+Enter)",
+    ),
     ("Fermer (Échap)", "Close (Esc)"),
     ("Quand et comment", "When and how"),
     (

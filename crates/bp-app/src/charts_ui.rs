@@ -1044,13 +1044,18 @@ pub(crate) fn donut(
     }
     let mut sorted: Vec<(String, f64)> = points.to_vec();
     sorted.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-    // Au-delà de 9 parts, le reste est regroupé.
-    if sorted.len() > 10 {
-        let rest: f64 = sorted[9..].iter().map(|p| p.1).sum();
-        let count = sorted.len() - 9;
-        sorted.truncate(9);
-        sorted.push((tr!("Autres ({})", count), rest));
-    }
+    // Au-delà de 9 parts, l'anneau regroupe le reste en « Autres » ; la
+    // légende détaille quand même chacune des parts regroupées.
+    let rest = if sorted.len() > 10 {
+        sorted.split_off(9)
+    } else {
+        Vec::new()
+    };
+    let others = (!rest.is_empty()).then(|| {
+        let sum: f64 = rest.iter().map(|p| p.1).sum();
+        sorted.push((tr!("Autres ({})", rest.len()), sum));
+        sorted.len() - 1
+    });
     let total: f64 = sorted.iter().map(|p| p.1).sum();
     let legend_width = (rect.width() * 0.42).clamp(260.0, 460.0);
     let chart = Rect::from_min_max(rect.min, pos2(rect.right() - legend_width, rect.bottom()));
@@ -1060,11 +1065,8 @@ pub(crate) fn donut(
     let hover = ui
         .input(|i| i.pointer.hover_pos())
         .filter(|p| rect.contains(*p));
-    // Part survolée : sur l'anneau ou sur la légende.
-    let row_h = 34.0;
-    let legend_top = rect.center().y - row_h * sorted.len() as f32 / 2.0;
-    let legend_left = rect.right() - legend_width + 16.0;
-    let mut hovered = hover.and_then(|p| {
+    // Part survolée sur l'anneau.
+    let on_ring = hover.and_then(|p| {
         let d = p - center;
         let dist = d.length();
         if dist < inner || dist > radius + 8.0 {
@@ -1080,15 +1082,112 @@ pub(crate) fn donut(
             angle <= acc
         })
     });
-    if hovered.is_none()
-        && let Some(p) = hover
-        && p.x >= legend_left - 8.0
-    {
-        let k = ((p.y - legend_top) / row_h).floor();
-        if k >= 0.0 && (k as usize) < sorted.len() {
-            hovered = Some(k as usize);
+    // Légende : une ligne par part de l'anneau, puis le détail des parts
+    // regroupées (part de l'anneau, indice dans `rest`). Elle défile quand
+    // elle dépasse la hauteur du graphique.
+    let row_h = 34.0;
+    let detail_h = 26.0;
+    let rows: Vec<(usize, Option<usize>)> = (0..sorted.len())
+        .map(|k| (k, None))
+        .chain(
+            others
+                .into_iter()
+                .flat_map(|k| (0..rest.len()).map(move |j| (k, Some(j)))),
+        )
+        .collect();
+    let content_h = sorted.len() as f32 * row_h + rest.len() as f32 * detail_h;
+    let legend_rect = Rect::from_min_max(
+        pos2(rect.right() - legend_width + 8.0, rect.top()),
+        rect.max,
+    );
+    let pad = ((legend_rect.height() - content_h) / 2.0).max(0.0);
+    let percent = |v: f64| {
+        let share = v / total * 100.0;
+        if share > 0.0 && share < 0.5 {
+            tr!("< 1 %").to_string()
+        } else {
+            tr!("{} %", format!("{share:.0}"))
         }
-    }
+    };
+    let mut hovered: Option<(usize, Option<usize>)> = on_ring.map(|k| (k, None));
+    let mut child = ui.new_child(egui::UiBuilder::new().max_rect(legend_rect).id_salt((
+        "donut_legend",
+        rect.min.x as i32,
+        rect.min.y as i32,
+    )));
+    egui::ScrollArea::vertical()
+        .id_salt("donut_legend")
+        .max_height(legend_rect.height())
+        .auto_shrink([false, false])
+        .show(&mut child, |ui| {
+            let (area, _) = ui.allocate_exact_size(
+                vec2(ui.available_width(), pad + content_h),
+                egui::Sense::hover(),
+            );
+            let pointer = hover.filter(|p| ui.clip_rect().contains(*p));
+            let mut y = area.top() + pad;
+            let mut boxes = Vec::with_capacity(rows.len());
+            for &(k, detail) in &rows {
+                let h = if detail.is_some() { detail_h } else { row_h };
+                let r = Rect::from_min_size(pos2(area.left(), y), vec2(area.width() - 8.0, h));
+                if hovered.is_none() && pointer.is_some_and(|p| r.contains(p)) {
+                    hovered = Some((k, detail));
+                }
+                boxes.push(r);
+                y += h;
+            }
+            let painter = ui.painter();
+            for (&(k, detail), r) in rows.iter().zip(boxes) {
+                if hovered == Some((k, detail)) {
+                    painter.rect_filled(r, 6.0, pal.bg_highlight.gamma_multiply(0.5));
+                }
+                let (label, v) = match detail {
+                    Some(j) => (&rest[j].0, rest[j].1),
+                    None => (&sorted[k].0, sorted[k].1),
+                };
+                let cy = r.center().y;
+                let left = r.left() + 8.0;
+                let color = crate::theme::chart_color(pal, k);
+                // Parts regroupées : en retrait, pastille de la couleur
+                // d'« Autres ».
+                let (text_left, name_size, amount_font) = if detail.is_some() {
+                    painter.circle_filled(pos2(left + 20.0, cy), 3.0, color.gamma_multiply(0.7));
+                    (left + 32.0, 12.5, egui::FontId::proportional(12.5))
+                } else {
+                    painter.rect_filled(
+                        Rect::from_center_size(pos2(left + 6.0, cy), vec2(12.0, 12.0)),
+                        4.0,
+                        color,
+                    );
+                    (
+                        left + 22.0,
+                        13.5,
+                        egui::FontId::new(13.5, crate::theme::medium()),
+                    )
+                };
+                let pct =
+                    painter.layout_no_wrap(percent(v), egui::FontId::proportional(12.5), pal.muted);
+                let amount = painter.layout_no_wrap(format(v), amount_font, pal.fg);
+                let right = r.right() - 8.0;
+                let pw = pct.size().x;
+                let aw = amount.size().x;
+                painter.galley(pos2(right - pw, cy - pct.size().y / 2.0), pct, pal.muted);
+                painter.galley(
+                    pos2(right - 52.0 - aw, cy - amount.size().y / 2.0),
+                    amount,
+                    pal.fg,
+                );
+                let name = ui_kit::one_line(
+                    ui,
+                    label.clone(),
+                    egui::FontId::proportional(name_size),
+                    pal.fg_dark,
+                    (right - 64.0 - aw) - text_left,
+                );
+                painter.galley(pos2(text_left, cy - name.size().y / 2.0), name, pal.fg_dark);
+            }
+        });
+    let hovered_slice = hovered.map(|(k, _)| k);
     let sweep = t * std::f32::consts::TAU;
     let mut start = -std::f32::consts::FRAC_PI_2;
     let end_limit = start + sweep;
@@ -1101,12 +1200,12 @@ pub(crate) fn donut(
             continue;
         }
         let color = crate::theme::chart_color(pal, k);
-        let (r_out, r_in) = if hovered == Some(k) {
+        let (r_out, r_in) = if hovered_slice == Some(k) {
             (radius + 6.0, inner - 2.0)
         } else {
             (radius, inner)
         };
-        let color = if hovered.is_some() && hovered != Some(k) {
+        let color = if hovered_slice.is_some() && hovered_slice != Some(k) {
             color.gamma_multiply(0.45)
         } else {
             color
@@ -1126,9 +1225,11 @@ pub(crate) fn donut(
         );
         painter.add(mesh);
     }
-    // Centre : total, ou la part survolée.
+    // Centre : total, ou la part survolée (éventuellement une part regroupée
+    // dans « Autres », depuis la légende).
     let (title, value, share) = match hovered {
-        Some(k) => (sorted[k].0.clone(), sorted[k].1, Some(sorted[k].1 / total)),
+        Some((_, Some(j))) => (rest[j].0.clone(), rest[j].1, Some(rest[j].1 / total)),
+        Some((k, None)) => (sorted[k].0.clone(), sorted[k].1, Some(sorted[k].1 / total)),
         None => (tr!("Total").to_string(), total, None),
     };
     let title = ui_kit::one_line(
@@ -1168,55 +1269,6 @@ pub(crate) fn donut(
             ),
             egui::FontId::proportional(13.0),
             pal.muted,
-        );
-    }
-    // Légende.
-    for (k, (label, v)) in sorted.iter().enumerate() {
-        let y = legend_top + k as f32 * row_h;
-        let r = Rect::from_min_size(pos2(legend_left - 8.0, y), vec2(legend_width - 16.0, row_h));
-        if hovered == Some(k) {
-            painter.rect_filled(r, 6.0, pal.bg_highlight.gamma_multiply(0.5));
-        }
-        let cy = y + row_h / 2.0;
-        painter.rect_filled(
-            Rect::from_center_size(pos2(legend_left + 6.0, cy), vec2(12.0, 12.0)),
-            4.0,
-            crate::theme::chart_color(pal, k),
-        );
-        let pct = painter.layout_no_wrap(
-            tr!("{} %", format!("{:.0}", v / total * 100.0)),
-            egui::FontId::proportional(12.5),
-            pal.muted,
-        );
-        let amount = painter.layout_no_wrap(
-            format(*v),
-            egui::FontId::new(13.5, crate::theme::medium()),
-            pal.fg,
-        );
-        let right = r.right() - 8.0;
-        let pw = pct.size().x;
-        let aw = amount.size().x;
-        painter.galley(
-            pos2(right - 44.0 + (44.0 - pw), cy - pct.size().y / 2.0),
-            pct,
-            pal.muted,
-        );
-        painter.galley(
-            pos2(right - 52.0 - aw, cy - amount.size().y / 2.0),
-            amount,
-            pal.fg,
-        );
-        let name = ui_kit::one_line(
-            ui,
-            label.clone(),
-            egui::FontId::proportional(13.5),
-            pal.fg_dark,
-            (right - 64.0 - aw) - (legend_left + 22.0),
-        );
-        painter.galley(
-            pos2(legend_left + 22.0, cy - name.size().y / 2.0),
-            name,
-            pal.fg_dark,
         );
     }
 }

@@ -2481,3 +2481,54 @@ fn beta_feedback_screenshots() {
         );
     });
 }
+
+/// Anneau avec sous-catégories (parts regroupées détaillées dans la
+/// légende), modification d'une ligne (bouton « Nouvelle ligne ») et menu
+/// « Coller » du champ de licence.
+#[test]
+#[ignore]
+fn chart_edit_license_screenshots() {
+    let charts = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        h.key_press_modifiers(
+            egui::Modifiers::COMMAND | egui::Modifiers::SHIFT,
+            egui::Key::G,
+        );
+        h.run_steps(3);
+        h.get_by_label("Sous-catégories").click();
+    };
+    render("70-anneau-sous-categories", egui::Theme::Dark, |h| {
+        charts(h)
+    });
+    render("71-anneau-survol-autres", egui::Theme::Light, |h| {
+        charts(h);
+        h.run_steps(8);
+        h.event(egui::Event::PointerMoved(egui::pos2(1200.0, 720.0)));
+    });
+    render("72-modifier-nouvelle-ligne", egui::Theme::Dark, |h| {
+        h.key_press(egui::Key::ArrowDown);
+        h.run_steps(2);
+        h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+    });
+    render_sized(
+        "73-licence-coller",
+        egui::Theme::Dark,
+        egui::vec2(1280.0, 700.0),
+        |h| {
+            h.key_press_modifiers(egui::Modifiers::COMMAND, egui::Key::P);
+            h.run_steps(2);
+            h.event(egui::Event::Text("Licence".into()));
+            h.run_steps(2);
+            h.key_press(egui::Key::Enter);
+            h.run_steps(3);
+            let field = h
+                .query_all_by_role(egui::accesskit::Role::TextInput)
+                .last()
+                .expect("champ de la clé")
+                .rect()
+                .center();
+            right_click(h, field);
+            h.run_steps(2);
+            h.event(egui::Event::PointerMoved(field + egui::vec2(40.0, 30.0)));
+        },
+    );
+}

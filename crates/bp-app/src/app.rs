@@ -3754,6 +3754,7 @@ impl BankPerfectApp {
             || self.confirm_linked_edit.is_some()
             || self.options.is_some()
             || self.about
+            || self.license_form.is_some()
             || self.tool.is_some()
             || self.extensions.has_frames()
             || self.ext_manager.is_some()

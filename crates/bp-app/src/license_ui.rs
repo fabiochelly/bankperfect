@@ -146,15 +146,39 @@ impl LicenseForm {
                     );
                     let busy = self.pending.is_some();
                     let mut clear = false;
+                    let mut paste = false;
                     let field = ui
                         .horizontal(|ui| {
-                            let clear_w = if self.key.is_empty() { 0.0 } else { 34.0 };
+                            let buttons_w = if self.key.is_empty() { 34.0 } else { 68.0 };
                             let field = ui.add_enabled(
                                 !busy,
                                 crate::theme::field(&mut self.key)
                                     .hint_text(tr!("Clé de licence"))
-                                    .desired_width(ui.available_width() - clear_w),
+                                    .desired_width(ui.available_width() - buttons_w),
                             );
+                            // Sous Windows, on colle volontiers par clic droit :
+                            // le champ d'egui n'a pas de menu, on en ajoute un,
+                            // et un bouton « Coller » à côté.
+                            field.context_menu(|ui| {
+                                if ui
+                                    .button(format!("{}  {}", icon::CLIPBOARD_TEXT, tr!("Coller")))
+                                    .clicked()
+                                {
+                                    paste = true;
+                                    ui.close();
+                                }
+                            });
+                            if ui
+                                .add_enabled(
+                                    !busy,
+                                    egui::Button::new(icon::CLIPBOARD_TEXT)
+                                        .min_size(egui::vec2(28.0, 28.0)),
+                                )
+                                .on_hover_text(tr!("Coller la clé copiée (Ctrl+V)"))
+                                .clicked()
+                            {
+                                paste = true;
+                            }
                             if !self.key.is_empty()
                                 && ui
                                     .add_enabled(
@@ -169,10 +193,18 @@ impl LicenseForm {
                             field
                         })
                         .inner;
+                    // Coller : la clé copiée remplace le contenu du champ
+                    // (sélectionné ci-dessous, collage à l'image suivante).
+                    if paste {
+                        self.error = None;
+                        self.from_legacy = false;
+                        ui.ctx()
+                            .send_viewport_cmd(egui::ViewportCommand::RequestPaste);
+                    }
                     // Prêt à coller dès l'ouverture : une clé préremplie
                     // (ancienne version) est sélectionnée, le collage la
                     // remplace au lieu de s'ajouter à sa suite.
-                    if !self.focused || clear {
+                    if !self.focused || clear || paste {
                         if clear {
                             self.key.clear();
                             self.error = None;

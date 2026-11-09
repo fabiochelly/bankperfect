@@ -798,6 +798,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Changer de clé", "Change key"),
     ("Effacer la clé", "Clear the key"),
     (
+        "Coller la clé copiée (Ctrl+V)",
+        "Paste the copied key (Ctrl+V)",
+    ),
+    (
         "Si vous avez acheté une licence, collez ici la clé reçue lors de l'achat. Elle est vérifiée une seule fois auprès du serveur de l'auteur ; votre nom et votre numéro de licence s'afficheront ensuite en bas de la fenêtre.",
         "If you have bought a license, paste the key you received with your purchase here. It is checked only once with the author's server; your name and license number will then be shown at the bottom of the window.",
     ),

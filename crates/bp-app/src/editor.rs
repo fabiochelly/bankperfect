@@ -203,7 +203,12 @@ impl Editor {
         });
         ui.add_space(10.0);
 
-        let footer_height = 64.0;
+        // Pied : boutons, et l'erreur au-dessus en modification.
+        let footer_height = if self.target.is_some() && self.error.is_some() {
+            88.0
+        } else {
+            64.0
+        };
         // Gouttière à droite pour la barre de défilement, seulement si le
         // contenu dépassait à l'image précédente.
         let card_width = ui.available_width() - if self.overflow { 14.0 } else { 0.0 };
@@ -375,13 +380,20 @@ impl Editor {
                     if ui.add(save).on_hover_text(tr!("Ctrl+Entrée")).clicked() {
                         action = self.validate();
                     }
+                    if self.target.is_some()
+                        && let Some(saved) = self.save_as_new_button(ui, 38.0)
+                    {
+                        action = saved;
+                    }
                     if ui
                         .add(egui::Button::new(tr!("Annuler")).min_size(egui::vec2(90.0, 38.0)))
                         .clicked()
                     {
                         action = EditorAction::Close;
                     }
-                    if let Some(error) = &self.error {
+                    if self.target.is_none()
+                        && let Some(error) = &self.error
+                    {
                         ui.label(
                             RichText::new(format!("{}  {error}", icon::WARNING))
                                 .color(pal.negative),
@@ -389,13 +401,19 @@ impl Editor {
                     }
                 });
             });
+            // En modification, trois boutons : l'erreur passe au-dessus.
+            if self.target.is_some()
+                && let Some(error) = &self.error
+            {
+                ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
+            }
             ui.add_space(4.0);
             ui.separator();
         });
 
         let (enter, escape, load, clear, guess) = ui.input_mut(|i| {
             (
-                i.modifiers.command && i.key_pressed(Key::Enter),
+                (i.modifiers.command && i.key_pressed(Key::Enter)).then_some(i.modifiers.shift),
                 i.key_pressed(Key::Escape),
                 i.consume_key(egui::Modifiers::NONE, Key::F10),
                 i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
@@ -411,8 +429,12 @@ impl Editor {
         if clear {
             self.clear(document);
         }
-        if enter {
-            action = self.validate();
+        if let Some(shift) = enter {
+            action = if shift && self.target.is_some() {
+                self.validate_as_new()
+            } else {
+                self.validate()
+            };
         } else if escape {
             action = EditorAction::Close;
         }
@@ -488,6 +510,11 @@ impl Editor {
                     .clicked()
                 {
                     action = self.validate();
+                }
+                if self.target.is_some()
+                    && let Some(saved) = self.save_as_new_button(ui, 30.0)
+                {
+                    action = saved;
                 }
                 let reset = if self.target.is_some() {
                     tr!("Annuler")
@@ -640,7 +667,8 @@ impl Editor {
         }
         let (enter, escape, load, clear, guess) = ui.input_mut(|i| {
             (
-                focused && i.modifiers.command && i.key_pressed(Key::Enter),
+                (focused && i.modifiers.command && i.key_pressed(Key::Enter))
+                    .then_some(i.modifiers.shift),
                 focused && i.key_pressed(Key::Escape),
                 focused && i.consume_key(egui::Modifiers::NONE, Key::F10),
                 focused && i.consume_key(egui::Modifiers::COMMAND, Key::Num0),
@@ -656,8 +684,12 @@ impl Editor {
         if clear {
             self.clear(document);
         }
-        if enter {
-            action = self.validate();
+        if let Some(shift) = enter {
+            action = if shift && self.target.is_some() {
+                self.validate_as_new()
+            } else {
+                self.validate()
+            };
         } else if escape {
             action = EditorAction::Close;
         }
@@ -1177,6 +1209,47 @@ impl Editor {
     }
 
     fn validate(&mut self) -> EditorAction {
+        self.validate_as(self.target)
+    }
+
+    /// Enregistre la ligne modifiée comme une nouvelle opération : la ligne
+    /// d'origine reste telle quelle (pour reprendre une opération en ne
+    /// changeant que la date et le montant, par exemple).
+    fn validate_as_new(&mut self) -> EditorAction {
+        let action = self.validate_as(None);
+        let EditorAction::Save(_, mut op) = action else {
+            return action;
+        };
+        // Une copie n'est pas pointée, sauf si le pointage a été choisi.
+        if self.original_tack == Some(self.tack) {
+            op.tack = Tack::None;
+        }
+        op.mark_date = if op.tack == Tack::None {
+            op.date
+        } else {
+            Date::today()
+        };
+        // Ni liée à la ligne sœur du transfert d'origine.
+        op.extra.retain(|(key, _)| {
+            key != bp_core::split::SISTER_ACCOUNT_KEY && key != bp_core::split::SISTER_LINE_KEY
+        });
+        EditorAction::Save(None, op)
+    }
+
+    /// Bouton « Nouvelle ligne » d'une opération en cours de modification.
+    fn save_as_new_button(&mut self, ui: &mut egui::Ui, height: f32) -> Option<EditorAction> {
+        let button = egui::Button::new(format!("{}  {}", icon::COPY, tr!("Nouvelle ligne")))
+            .min_size(egui::vec2(0.0, height));
+        ui.add(button)
+            .on_hover_text(tr!(
+                "Enregistrer comme nouvelle ligne, sans modifier l'opération d'origine \
+                 (Ctrl+Maj+Entrée)"
+            ))
+            .clicked()
+            .then(|| self.validate_as_new())
+    }
+
+    fn validate_as(&mut self, target: Option<usize>) -> EditorAction {
         let today = Date::today();
         let Some(date) = Date::parse_fr(&self.date, today) else {
             self.error = Some(tr!("Date invalide (jj/mm/aaaa)").into());
@@ -1200,7 +1273,7 @@ impl Editor {
         let details = self.details.replace(';', " ");
         self.error = None;
         EditorAction::Save(
-            self.target,
+            target,
             Operation {
                 uid: 0,
                 date,
@@ -1342,8 +1415,7 @@ mod tests {
         });
     }
 
-    #[test]
-    fn edited_amount_reads_back() {
+    fn document(op: Operation) -> Document {
         let account = bp_core::model::Account {
             uid: "a".into(),
             name: "Courant".into(),
@@ -1362,20 +1434,9 @@ mod tests {
             secondary_rate: 1.0,
             is_virtual: false,
             disabled: false,
-            operations: vec![Operation {
-                uid: 1,
-                date: Date(45000),
-                mark_date: Date(45000),
-                tack: Tack::None,
-                mode: Mode::default(),
-                payee: "Fnac".into(),
-                details: String::new(),
-                category: None,
-                amount: Amount::from_cents(-123_456),
-                extra: Vec::new(),
-            }],
+            operations: vec![op],
         };
-        let document = Document {
+        Document {
             group_name: String::new(),
             guid: String::new(),
             user_name: String::new(),
@@ -1387,7 +1448,27 @@ mod tests {
             payees: Vec::new(),
             feature_data: Vec::new(),
             unknown_header: Vec::new(),
-        };
+        }
+    }
+
+    fn fnac() -> Operation {
+        Operation {
+            uid: 1,
+            date: Date(45000),
+            mark_date: Date(45000),
+            tack: Tack::None,
+            mode: Mode::default(),
+            payee: "Fnac".into(),
+            details: String::new(),
+            category: None,
+            amount: Amount::from_cents(-123_456),
+            extra: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn edited_amount_reads_back() {
+        let document = document(fnac());
         for lang in Lang::ALL {
             with_lang(lang, || {
                 let mut editor = Editor::edit(&document, 0, 0);
@@ -1398,6 +1479,38 @@ mod tests {
                     _ => panic!("saisie refusée en {lang:?}"),
                 }
             });
+        }
+    }
+
+    /// « Nouvelle ligne » : la ligne d'origine n'est pas visée ; la copie
+    /// n'est ni pointée ni liée à la ligne sœur d'un transfert.
+    #[test]
+    fn saves_a_copy_as_a_new_line() {
+        let mut op = fnac();
+        op.tack = Tack::Reconciled;
+        op.extra = vec![
+            (bp_core::split::SISTER_ACCOUNT_KEY.into(), "b".into()),
+            (bp_core::split::SISTER_LINE_KEY.into(), "7".into()),
+            ("note".into(), "garder".into()),
+        ];
+        let document = document(op);
+        let mut editor = Editor::edit(&document, 0, 0);
+        editor.date = "15/03/2024".into();
+        match editor.validate_as_new() {
+            EditorAction::Save(None, copy) => {
+                assert_eq!(copy.payee, "Fnac");
+                assert_eq!(copy.date.to_string(), "15/03/2024");
+                assert_eq!(copy.tack, Tack::None);
+                assert_eq!(copy.mark_date, copy.date);
+                assert_eq!(copy.extra, vec![("note".into(), "garder".into())]);
+            }
+            _ => panic!("copie refusée"),
+        }
+        // Pointage choisi dans le formulaire : gardé.
+        editor.tack = Tack::Pointed;
+        match editor.validate_as_new() {
+            EditorAction::Save(None, copy) => assert_eq!(copy.tack, Tack::Pointed),
+            _ => panic!("copie refusée"),
         }
     }
 }

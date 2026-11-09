@@ -136,6 +136,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "No transactions of this kind",
     ),
     ("Autres ({})", "Others ({})"),
+    ("< 1 %", "< 1%"),
     // Simulateur de crédit
     ("Valeur à saisir : {}", "Value required: {}"),
     ("Simulateur de crédit", "Loan calculator"),

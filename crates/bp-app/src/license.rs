@@ -86,7 +86,7 @@ struct Answer {
 /// du fil de l'interface.
 pub fn activate(key: &str) -> Result<(String, License), String> {
     let url = std::env::var("BP_LICENSE_URL").unwrap_or_else(|_| ACTIVATION_URL.into());
-    let key: String = key.split_whitespace().collect();
+    let key = clean_key(key);
     let agent: ureq::Agent = ureq::Agent::config_builder()
         .http_status_as_error(false)
         .timeout_global(Some(std::time::Duration::from_secs(20)))
@@ -119,6 +119,25 @@ pub fn activate(key: &str) -> Result<(String, License), String> {
         tr!("Le certificat reçu du serveur de licences n'est pas valide.").to_string()
     })?;
     Ok((answer.certificate, license))
+}
+
+/// Clé telle que collée depuis un courriel ou une page : sans espaces, ni
+/// retours à la ligne, ni caractères invisibles (espace insécable, espace de
+/// largeur nulle…), ni guillemets ou ponctuation autour.
+fn clean_key(key: &str) -> String {
+    let compact: String = key
+        .chars()
+        .filter(|c| {
+            !c.is_whitespace()
+                && !matches!(
+                    c,
+                    '\u{200B}'..='\u{200F}' | '\u{2060}' | '\u{FEFF}' | '\u{00AD}'
+                )
+        })
+        .collect();
+    compact
+        .trim_matches(|c: char| !c.is_alphanumeric())
+        .to_string()
 }
 
 /// Clé saisie dans l'ancienne version (Windows : `[APPLICATION] Licence` de
@@ -185,6 +204,16 @@ mod tests {
         assert!(verify_with("", &public).is_none());
         assert!(verify_with("BP1.abc", &public).is_none());
         assert!(verify_with(&format!("{good}.x"), &public).is_none());
+    }
+
+    #[test]
+    fn cleans_pasted_keys() {
+        assert_eq!(clean_key("  0A1B 2C3D\r\n4E5F  "), "0A1B2C3D4E5F");
+        assert_eq!(
+            clean_key("\u{FEFF}0a1b\u{200B}2c3d\u{00A0}4e5f"),
+            "0a1b2c3d4e5f"
+        );
+        assert_eq!(clean_key("« 0123456789ABCDEF ».\n"), "0123456789ABCDEF");
     }
 
     /// Certificat émis par check-bp-license.php (banc de test local, vraie

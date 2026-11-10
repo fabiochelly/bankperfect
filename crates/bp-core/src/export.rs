@@ -21,8 +21,10 @@ pub enum ExportField {
 }
 
 impl ExportField {
+    /// Ordre proposé. Le compte vient en dernier : un export de tous les
+    /// comptes dans un seul fichier garde les colonnes d'un export d'un
+    /// compte à la même place (programmes qui relisent le fichier).
     pub const ALL: [ExportField; 10] = [
-        Self::Account,
         Self::Date,
         Self::Mode,
         Self::Payee,
@@ -32,6 +34,7 @@ impl ExportField {
         Self::Amount,
         Self::Balance,
         Self::Tack,
+        Self::Account,
     ];
 
     pub fn label(self) -> &'static str {

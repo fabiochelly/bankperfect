@@ -153,6 +153,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("Type de fichier", "File type"),
     ("Un seul fichier", "One file"),
+    (
+        "Toujours exportée quand tous les comptes sont réunis dans un seul fichier",
+        "Always exported when all accounts are combined into one file",
+    ),
     ("Un fichier par compte", "One file per account"),
     ("{0} fichier créé dans {1}", "{0} file created in {1}"),
     ("{0} fichiers créés dans {1}", "{0} files created in {1}"),

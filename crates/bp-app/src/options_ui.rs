@@ -644,3 +644,36 @@ fn theme_card(
     }
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Chaque bouton « Choisir… » ne règle que son propre dossier.
+    #[test]
+    fn each_folder_button_sets_its_own_folder() {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        let mut form = OptionsForm::new(&Settings::default(), egui::ThemePreference::Dark);
+        form.tab = Tab::Files;
+        let frame = |form: &mut OptionsForm| {
+            let mut output = ctx.run_ui(egui::RawInput::default(), |ui| {
+                form.show(ui.ctx());
+            });
+            output.textures_delta.clear();
+        };
+        frame(&mut form);
+        for (key, dir) in [("exports", "/tmp/exports"), ("backups", "/tmp/sauvegardes")] {
+            crate::file_picker::simulate_choice(
+                &ctx,
+                egui::Id::new(("options_folder", key)),
+                dir.into(),
+            );
+            frame(&mut form);
+            frame(&mut form);
+        }
+        assert_eq!(form.draft.files_dir, None);
+        assert_eq!(form.draft.export_dir, Some("/tmp/exports".into()));
+        assert_eq!(form.draft.backup_dir, Some("/tmp/sauvegardes".into()));
+    }
+}

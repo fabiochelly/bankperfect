@@ -749,12 +749,19 @@ impl ExportForm {
         self.all_accounts && !self.one_file_per_account
     }
 
+    /// Tous les comptes dans un seul fichier : la colonne du compte est
+    /// toujours exportée (sans elle, on ne saurait plus d'où vient chaque
+    /// ligne).
+    fn account_locked(&self, field: ExportField) -> bool {
+        field == ExportField::Account && self.merged()
+    }
+
     fn options(&self) -> ExportOptions {
         ExportOptions {
             fields: self
                 .fields
                 .iter()
-                .filter(|(_, on)| *on)
+                .filter(|(f, on)| *on || self.account_locked(*f))
                 .map(|(f, _)| *f)
                 .collect(),
             separator: SEPARATORS[self.separator].0,
@@ -793,10 +800,22 @@ impl ExportForm {
                         ui_kit::section(ui, left, icon::COLUMNS, tr!("Colonnes, dans l'ordre"), |ui| {
                             let mut swap = None;
                             let count = self.fields.len();
+                            let merged = self.merged();
                             for (i, (field, on)) in self.fields.iter_mut().enumerate() {
                                 ui.horizontal(|ui| {
                                     ui.set_min_height(26.0);
-                                    crate::theme::checkbox(ui, on, field.label());
+                                    if *field == ExportField::Account && merged {
+                                        *on = true;
+                                        ui.add_enabled_ui(false, |ui| {
+                                            crate::theme::checkbox(ui, on, field.label());
+                                        })
+                                        .response
+                                        .on_disabled_hover_text(tr!(
+                                            "Toujours exportée quand tous les comptes sont réunis dans un seul fichier"
+                                        ));
+                                    } else {
+                                        crate::theme::checkbox(ui, on, field.label());
+                                    }
                                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                                         let down = egui::Button::new(RichText::new(icon::CARET_DOWN).color(pal.muted)).frame(false);
                                         if ui.add_enabled(i + 1 < count, down).on_hover_text(tr!("Descendre")).clicked() {
@@ -846,8 +865,8 @@ impl ExportForm {
                                         .color(pal.muted),
                                 );
                             }
-                            // Réunir les comptes coche leur colonne, et inversement ;
-                            // elle reste libre ensuite.
+                            // Réunir les comptes coche leur colonne (verrouillée),
+                            // les séparer la décoche.
                             if self.merged() != merged {
                                 let wanted = self.merged();
                                 for (field, on) in &mut self.fields {
@@ -1802,5 +1821,29 @@ impl CalcForm {
             }
         });
         outcome
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Tous les comptes dans un seul fichier : la colonne du compte vient en
+    /// dernier et ne peut pas être retirée.
+    #[test]
+    fn merged_export_ends_with_the_account() {
+        let mut form = ExportForm::new();
+        assert!(!form.options().fields.contains(&ExportField::Account));
+        form.all_accounts = true;
+        for (field, on) in &mut form.fields {
+            if *field == ExportField::Account {
+                *on = false;
+            }
+        }
+        let fields = form.options().fields;
+        assert_eq!(fields.first(), Some(&ExportField::Date));
+        assert_eq!(fields.last(), Some(&ExportField::Account));
+        form.one_file_per_account = true;
+        assert!(!form.options().fields.contains(&ExportField::Account));
     }
 }

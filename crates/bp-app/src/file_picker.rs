@@ -169,6 +169,18 @@ pub fn chosen(ctx: &egui::Context, id: egui::Id) -> Option<PathBuf> {
     finished(ctx, id).flatten()
 }
 
+/// Comme si l'utilisateur venait de choisir `path` dans le sélecteur `id`.
+#[cfg(test)]
+pub(crate) fn simulate_choice(ctx: &egui::Context, id: egui::Id, path: PathBuf) {
+    let slot = Slot::default();
+    *slot.result.lock().unwrap() = Some((Some(path), Instant::now()));
+    slot.closed.store(true, Ordering::Relaxed);
+    ctx.data_mut(|d| {
+        d.insert_temp(id, slot.clone());
+        d.insert_temp(current_id(), slot);
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

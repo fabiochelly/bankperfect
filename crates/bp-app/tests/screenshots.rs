@@ -605,7 +605,8 @@ fn open_export(h: &mut Harness<'_, bankperfect::BankPerfectApp>) {
     h.event(egui::Event::Text("tableur".into()));
     h.run_steps(2);
     h.key_press(egui::Key::Enter);
-    h.run_steps(3);
+    // Fin de l'ouverture de la fenêtre : avant, les clics ne portent pas.
+    h.run_steps(12);
 }
 
 #[test]
@@ -2508,6 +2509,12 @@ fn chart_edit_license_screenshots() {
         h.key_press(egui::Key::ArrowDown);
         h.run_steps(2);
         h.key_press_modifiers(egui::Modifiers::SHIFT, egui::Key::Enter);
+    });
+    render("74-export-un-seul-fichier", egui::Theme::Dark, |h| {
+        open_export(h);
+        click_at(h, egui::pos2(1055.0, 196.0));
+        h.run_steps(2);
+        h.event(egui::Event::PointerMoved(egui::pos2(240.0, 474.0)));
     });
     render_sized(
         "73-licence-coller",

@@ -3,17 +3,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() -> eframe::Result {
-    // Moteur retenu après un échec au démarrage. Avant tout autre fil.
-    if std::env::var_os("WGPU_BACKEND").is_none()
-        && let Some(backend) = bankperfect::crash::remembered_backend()
-    {
-        // SAFETY : aucun autre fil n'est encore lancé.
-        unsafe { std::env::set_var("WGPU_BACKEND", backend) };
-    }
+    // Moteur retenu après un échec ou un rendu logiciel. Avant tout autre fil.
+    bankperfect::graphics::prepare();
     bankperfect::crash::install();
     let initial_file = std::env::args_os().nth(1).map(std::path::PathBuf::from);
     let translucent = bankperfect::translucent_window_setting();
     let options = eframe::NativeOptions {
+        renderer: bankperfect::graphics::renderer(),
         viewport: egui::ViewportBuilder::default()
             .with_title("BankPerfect")
             .with_app_id("bankperfect")
@@ -38,8 +34,19 @@ fn main() -> eframe::Result {
         "BankPerfect",
         options,
         Box::new(move |cc| {
-            if let Some(render_state) = &cc.wgpu_render_state {
-                bankperfect::crash::set_gpu(&render_state.adapter.get_info());
+            if let Some(render_state) = &cc.wgpu_render_state
+                && bankperfect::graphics::set_wgpu(&render_state.adapter.get_info())
+            {
+                // Rendu logiciel (WARP) : glow saura peut-être se servir de
+                // la carte. `main` relance.
+                return Err(Box::new(bankperfect::graphics::SwitchToGlow));
+            }
+            if let Some(gl) = &cc.gl {
+                bankperfect::graphics::set_glow(gl);
+            }
+            if std::env::var_os("BP_PROFILE").is_some() {
+                let gpu = bankperfect::graphics::summary().unwrap_or_default();
+                eprintln!("BankPerfect : carte graphique {gpu}");
             }
             bankperfect::crash::step("interface et fichier");
             bankperfect::theme::set_surface_transparent(translucent);
@@ -48,11 +55,21 @@ fn main() -> eframe::Result {
             Ok(Box::new(bankperfect::BankPerfectApp::new(initial_file)))
         }),
     );
-    if matches!(result, Err(eframe::Error::Wgpu(_))) && gl_fallback() {
-        // Pas de Vulkan (ou de DirectX 12) utilisable : on relance avec
-        // OpenGL, retenu pour les lancements suivants.
+    if bankperfect::graphics::switch_requested() {
         bankperfect::crash::startup_done();
-        bankperfect::crash::fall_back_to_gl();
+        bankperfect::graphics::switch_to_glow();
+        std::process::exit(0);
+    }
+    let glow_failed = bankperfect::graphics::on_glow()
+        && result
+            .as_ref()
+            .is_err_and(bankperfect::graphics::is_glow_error);
+    if glow_failed || (matches!(result, Err(eframe::Error::Wgpu(_))) && gl_fallback()) {
+        // Moteur de secours, retenu pour les lancements suivants : sans
+        // Vulkan (ou DirectX 12), wgpu en OpenGL ; sans OpenGL 3.3, glow ;
+        // glow sans OpenGL utilisable, retour à wgpu.
+        bankperfect::crash::startup_done();
+        bankperfect::graphics::fall_back();
         std::process::exit(0);
     }
     if let Err(error) = &result {
@@ -61,12 +78,14 @@ fn main() -> eframe::Result {
     result
 }
 
-/// Relancer avec OpenGL si la carte graphique n'a pas pu servir : sous
-/// Linux (Vulkan seul par défaut) et sous Windows (machines virtuelles,
-/// bureau à distance, vieux pilotes). `WGPU_BACKEND` garde la main.
+/// Relancer avec un moteur de secours si la carte graphique n'a pas pu
+/// servir : sous Linux (Vulkan seul par défaut) et sous Windows (machines
+/// virtuelles, bureau à distance, vieux pilotes). Un `WGPU_BACKEND` autre
+/// qu'OpenGL garde la main.
 fn gl_fallback() -> bool {
     cfg!(any(target_os = "linux", target_os = "windows"))
-        && std::env::var_os("WGPU_BACKEND").is_none()
+        && (std::env::var_os("WGPU_BACKEND").is_none() || bankperfect::graphics::on_gl())
+        && bankperfect::graphics::can_fall_back()
 }
 
 /// Moteur par défaut, `WGPU_BACKEND` gardant la main. Sous Linux, Vulkan

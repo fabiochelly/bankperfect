@@ -14,7 +14,7 @@ bp-ext = { version = "9.13.0", path = "../bp-ext" }
 base64 = "0.22.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 directories = "6.0.0"
-eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "wayland", "x11", "default_fonts"] }
+eframe = { version = "0.36.2", default-features = false, features = ["wgpu", "glow", "wayland", "x11", "default_fonts"] }
 egui = "0.36"
 egui-phosphor = "0.14.0"
 egui_extras = "0.36.2"

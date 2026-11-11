@@ -48,7 +48,11 @@ impl River {
         };
         // Nouvelle échelle à chaque compte, sans transition depuis l'ancien.
         let ease = |name: &str, value: f64| {
-            f64::from(ctx.animate_value_with_time(egui::Id::new((name, key)), value as f32, 0.3))
+            f64::from(ctx.animate_value_with_time(
+                egui::Id::new((name, key)),
+                value as f32,
+                crate::graphics::duration(0.3),
+            ))
         };
         let (lo, hi) = (ease("river_lo", lo), ease("river_hi", max.max(0.0)));
         (hi - lo > 0.0).then(|| River {
@@ -189,7 +193,7 @@ fn grow(ctx: &egui::Context, key: (u64, usize)) -> f32 {
             now
         }
     };
-    let t = ((now - start) / GROW_TIME).clamp(0.0, 1.0) as f32;
+    let t = crate::graphics::progress(now - start, GROW_TIME) as f32;
     if t < 1.0 {
         ctx.request_repaint();
     }

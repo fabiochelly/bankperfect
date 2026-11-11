@@ -48,7 +48,7 @@ pub fn stroke(p: &Palette, dark: bool) -> Stroke {
 
 /// Ombre portée : en clair seulement (la vitre fumée n'a pas de relief).
 fn shadow(dark: bool) -> Shadow {
-    if dark {
+    if dark || crate::graphics::software() {
         Shadow::NONE
     } else {
         Shadow {

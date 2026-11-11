@@ -110,12 +110,12 @@ pub fn date_field(
                             .fill(pal.menu_bg)
                             .stroke(egui::Stroke::new(1.0, pal.border))
                             .corner_radius(14)
-                            .shadow(egui::Shadow {
+                            .shadow(crate::theme::shadow(egui::Shadow {
                                 offset: [0, 10],
                                 blur: 28,
                                 spread: 0,
                                 color: Color32::from_black_alpha(90),
-                            })
+                            }))
                             .inner_margin(14)
                             .show(ui, |ui| calendar(ui, id, selected))
                             .inner

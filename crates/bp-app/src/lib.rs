@@ -24,6 +24,7 @@ mod file_picker;
 mod files_ui;
 mod filters_ui;
 mod format;
+pub mod graphics;
 mod grid;
 mod help_ui;
 mod import_ui;

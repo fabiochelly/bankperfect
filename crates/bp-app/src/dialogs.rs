@@ -16,12 +16,12 @@ pub fn modal(ctx: &egui::Context, id: &str) -> Modal {
         .stroke(egui::Stroke::new(1.0, pal.border))
         .corner_radius(14)
         .inner_margin(egui::Margin::same(24))
-        .shadow(egui::Shadow {
+        .shadow(crate::theme::shadow(egui::Shadow {
             offset: [0, 12],
             blur: 40,
             spread: 0,
             color: egui::Color32::from_black_alpha(110),
-        });
+        }));
     Modal::new(Id::new(id)).frame(frame)
 }
 

@@ -2804,7 +2804,7 @@ impl BankPerfectApp {
         };
 
         // Glissement depuis la droite (150 ms, décélération).
-        let t = (((now - self.drawer_opened_at) / DRAWER_SLIDE_SECONDS) as f32).clamp(0.0, 1.0);
+        let t = crate::graphics::progress(now - self.drawer_opened_at, DRAWER_SLIDE_SECONDS) as f32;
         if t < 1.0 {
             ctx.request_repaint();
         }
@@ -2827,12 +2827,12 @@ impl BankPerfectApp {
                         ne: 0,
                         se: 0,
                     })
-                    .shadow(egui::Shadow {
+                    .shadow(crate::theme::shadow(egui::Shadow {
                         offset: [-6, 0],
                         blur: 28,
                         spread: 0,
                         color: egui::Color32::from_black_alpha(90),
-                    })
+                    }))
                     .inner_margin(egui::Margin {
                         left: 20,
                         right: 20,
@@ -3019,6 +3019,26 @@ impl BankPerfectApp {
                         "https://github.com/fabiochelly/bankperfect",
                     );
                     ui.add_space(10.0);
+                    if let Some((card, api)) = crate::graphics::about() {
+                        ui.label(
+                            RichText::new(tr!("Carte graphique : {} ({})", card, api))
+                                .size(12.0)
+                                .color(pal.muted),
+                        );
+                        if crate::graphics::software() {
+                            ui.label(
+                                RichText::new(format!(
+                                    "{}  {}",
+                                    icon::WARNING,
+                                    tr!(
+                                        "Rendu logiciel, sans la carte graphique : affichage allégé"
+                                    )
+                                ))
+                                .size(12.0)
+                                .color(pal.warning),
+                            );
+                        }
+                    }
                     if let Ok(exe) = std::env::current_exe() {
                         ui.label(
                             RichText::new(tr!("Emplacement : {}", exe.display()))
@@ -4249,12 +4269,12 @@ fn floating_add_button(ctx: &egui::Context, content: egui::Rect) -> bool {
             let radius = SIZE / 2.0;
             // Givre plat : disque sombre translucide, voile clair uniforme et
             // liseré fin, sans reflet ni relief.
-            let shadow = egui::Shadow {
+            let shadow = crate::theme::shadow(egui::Shadow {
                 offset: [0, 6],
                 blur: 22,
                 spread: 0,
                 color: egui::Color32::from_black_alpha(90),
-            };
+            });
             painter.add(shadow.as_shape(rect, egui::CornerRadius::same(radius as u8)));
             painter.circle_filled(
                 rect.center(),

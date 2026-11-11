@@ -716,9 +716,12 @@ pub fn surface_transparent() -> bool {
     SURFACE_TRANSPARENT.load(Ordering::Relaxed)
 }
 
-/// Active ou non le fond translucide, et met à jour les couleurs.
+/// Active ou non le fond translucide, et met à jour les couleurs. Jamais en
+/// rendu logiciel : un calque de plus à mélanger, trop coûteux sans carte
+/// graphique.
 pub fn set_translucent(ctx: &egui::Context, on: bool) {
-    TRANSLUCENT.store(on && surface_transparent(), Ordering::Relaxed);
+    let on = on && surface_transparent() && !crate::graphics::software();
+    TRANSLUCENT.store(on, Ordering::Relaxed);
     apply_visuals(ctx);
 }
 
@@ -732,6 +735,16 @@ pub fn backdrop(color: Color32, alpha: f32) -> Color32 {
         color.gamma_multiply(alpha)
     } else {
         color
+    }
+}
+
+/// Ombre portée, supprimée en rendu logiciel : de grandes surfaces
+/// dégradées, coûteuses sans carte graphique.
+pub fn shadow(shadow: Shadow) -> Shadow {
+    if crate::graphics::software() {
+        Shadow::NONE
+    } else {
+        shadow
     }
 }
 
@@ -862,18 +875,18 @@ fn visuals(p: &Palette, dark: bool) -> Visuals {
     v.window_fill = p.menu_bg.to_opaque();
     v.window_stroke = Stroke::new(1.0, p.border);
     v.window_corner_radius = CornerRadius::same(12);
-    v.window_shadow = Shadow {
+    v.window_shadow = shadow(Shadow {
         offset: [0, 8],
         blur: 24,
         spread: 0,
         color: Color32::from_black_alpha(if dark { 110 } else { 40 }),
-    };
-    v.popup_shadow = Shadow {
+    });
+    v.popup_shadow = shadow(Shadow {
         offset: [0, 4],
         blur: 14,
         spread: 0,
         color: Color32::from_black_alpha(if dark { 90 } else { 30 }),
-    };
+    });
     v.menu_corner_radius = CornerRadius::same(8);
     v.extreme_bg_color = p.bg_dark;
     // Bandes de la grille : un voile clair (sombre en thème clair) plutôt

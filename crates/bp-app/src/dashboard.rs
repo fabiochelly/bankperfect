@@ -93,7 +93,7 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
         now
     };
     ui.data_mut(|d| d.insert_temp(id, (doc.balance_cards, since)));
-    let t = ((now - since) / SWITCH_SECONDS).clamp(0.0, 1.0);
+    let t = crate::graphics::progress(now - since, SWITCH_SECONDS);
     if t < 1.0 {
         ui.ctx().request_repaint();
     }
@@ -410,12 +410,12 @@ enum Sign {
 
 fn badge(ui: &Ui, center: Pos2, sign: Sign, pal: &Palette, dark: bool) {
     let rect = Rect::from_center_size(center, Vec2::splat(26.0));
-    let shadow = egui::Shadow {
+    let shadow = crate::theme::shadow(egui::Shadow {
         offset: [0, 3],
         blur: 10,
         spread: 0,
         color: Color32::from_black_alpha(if dark { 90 } else { 30 }),
-    };
+    });
     ui.painter().add(shadow.as_shape(rect, 13));
     let (fill, stroke) = if dark {
         (pal.surface, Color32::from_white_alpha(20))
@@ -1076,12 +1076,12 @@ fn card(ui: &Ui, rect: Rect, lift: f32) {
     let dark = ui.visuals().dark_mode;
     let painter = ui.painter();
     if lift > 0.0 {
-        let shadow = egui::Shadow {
+        let shadow = crate::theme::shadow(egui::Shadow {
             offset: [0, 6],
             blur: 22,
             spread: 0,
             color: Color32::from_black_alpha((if dark { 90.0 } else { 40.0 } * lift) as u8),
-        };
+        });
         painter.add(shadow.as_shape(rect, RADIUS));
     }
     painter.rect(
@@ -1438,13 +1438,13 @@ fn animated(ui: &Ui, id: egui::Id, target: Amount) -> Amount {
         .unwrap_or((target.0, target.0, 0.0));
     let (from, start) = if to != target.0 {
         // Nouvelle cible : on repart de la valeur actuellement affichée.
-        let t = ((now - start) / COUNT_UP_SECONDS).clamp(0.0, 1.0);
+        let t = crate::graphics::progress(now - start, COUNT_UP_SECONDS);
         ((from as f64 + (to - from) as f64 * ease(t)) as i64, now)
     } else {
         (from, start)
     };
     ui.data_mut(|d| d.insert_temp(id, (from, target.0, start)));
-    let t = ((now - start) / COUNT_UP_SECONDS).clamp(0.0, 1.0);
+    let t = crate::graphics::progress(now - start, COUNT_UP_SECONDS);
     if t < 1.0 {
         ui.ctx().request_repaint();
     }

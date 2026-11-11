@@ -43,6 +43,10 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Restart BankPerfect with OpenGL?",
     ),
     (
+        "Relancer BankPerfect avec le moteur graphique par défaut ?",
+        "Restart BankPerfect with the default graphics engine?",
+    ),
+    (
         "Mot de passe ou clé de secours incorrect",
         "Incorrect password or recovery phrase",
     ),
@@ -169,6 +173,11 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Free software — MIT license",
     ),
     ("Emplacement : {}", "Location: {}"),
+    ("Carte graphique : {} ({})", "Graphics card: {} ({})"),
+    (
+        "Rendu logiciel, sans la carte graphique : affichage allégé",
+        "Software rendering, without the graphics card: lighter display",
+    ),
     ("Fermer", "Close"),
     (
         "Mot de passe défini — enregistrez (Ctrl+S) pour l'appliquer",

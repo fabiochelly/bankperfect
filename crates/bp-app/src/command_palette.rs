@@ -190,12 +190,12 @@ impl CommandPalette {
             .stroke(egui::Stroke::new(1.0, pal.border))
             .corner_radius(14)
             .inner_margin(egui::Margin::same(8))
-            .shadow(egui::Shadow {
+            .shadow(crate::theme::shadow(egui::Shadow {
                 offset: [0, 12],
                 blur: 40,
                 spread: 0,
                 color: Color32::from_black_alpha(120),
-            });
+            }));
         let modal = Modal::new(Id::new("command_palette"))
             .area(area)
             .frame(frame)

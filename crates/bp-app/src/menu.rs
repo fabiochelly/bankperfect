@@ -128,12 +128,12 @@ impl MenuBar {
                 egui::Frame::new()
                     .fill(pal.menu_bg)
                     .corner_radius(8)
-                    .shadow(egui::Shadow {
+                    .shadow(crate::theme::shadow(egui::Shadow {
                         offset: [0, 6],
                         blur: 18,
                         spread: 0,
                         color: egui::Color32::from_black_alpha(100),
-                    })
+                    }))
                     .inner_margin(6)
                     .show(ui, |ui| {
                         popup_style(ui.style_mut());
@@ -228,12 +228,12 @@ pub fn submenu(ui: &mut Ui, glyph: Option<&str>, label: &str, content: impl FnOn
             egui::Frame::new()
                 .fill(pal.menu_bg)
                 .corner_radius(8)
-                .shadow(egui::Shadow {
+                .shadow(crate::theme::shadow(egui::Shadow {
                     offset: [0, 6],
                     blur: 18,
                     spread: 0,
                     color: egui::Color32::from_black_alpha(100),
-                })
+                }))
                 .inner_margin(6)
                 .show(ui, |ui| {
                     popup_style(ui.style_mut());

@@ -90,7 +90,7 @@ impl SmoothCaret {
             return;
         }
 
-        let sliding = now - self.start < SLIDE_SECS;
+        let sliding = crate::graphics::progress(now - self.start, SLIDE_SECS) < 1.0;
         if sliding {
             ctx.request_repaint();
         } else {
@@ -124,7 +124,7 @@ impl SmoothCaret {
 
     /// Position du curseur à l'instant `now` (ralenti en fin de course).
     fn at(&self, now: f64) -> Rect {
-        let t = ((now - self.start) / SLIDE_SECS).clamp(0.0, 1.0) as f32;
+        let t = crate::graphics::progress(now - self.start, SLIDE_SECS) as f32;
         let eased = 1.0 - (1.0 - t).powi(3);
         Rect::from_min_max(
             self.from.min.lerp(self.to.min, eased),

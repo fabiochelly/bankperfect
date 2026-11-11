@@ -11,6 +11,12 @@
 //! avec glow, qui se contente d'OpenGL 2.1 et se sert donc de la carte. Si
 //! glow échoue à son tour, retour à wgpu sans plus essayer glow.
 //!
+//! Un moteur en échec au démarrage (wgpu en OpenGL, glow) est retenu et
+//! n'est plus essayé : la relance passe au suivant, jusqu'au moteur par
+//! défaut, qui démarre presque toujours (WARP au pire). Sans cela, wgpu en
+//! OpenGL en échec après glow ne laissait plus aucun recours, et
+//! l'application refusait de démarrer à chaque lancement.
+//!
 //! Quand le rendu reste logiciel, l'affichage est allégé ([`software`]) :
 //! ni ombres ni fond vitré, pas d'animations.
 
@@ -18,11 +24,13 @@ use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// Moteur retenu pour les lancements suivants, une indication par ligne :
-/// « gl » (wgpu en OpenGL) ou « glow » ; « sans-glow » quand glow a échoué,
-/// suivi de la raison en commentaire (« # … »). Le supprimer revient au
-/// moteur par défaut.
+/// « gl » (wgpu en OpenGL) ou « glow » ; « sans-gl » et « sans-glow » quand
+/// ces moteurs ont échoué, la raison de l'échec de glow suivant en
+/// commentaire (« # … »). Le supprimer revient au moteur par défaut.
 const MEMORY_FILE: &str = "moteur-graphique.txt";
+const GL: &str = "gl";
 const GLOW: &str = "glow";
+const NO_GL: &str = "sans-gl";
 const NO_GLOW: &str = "sans-glow";
 
 /// Moteur de rendu demandé : « glow » ou « wgpu ». Fixé par l'utilisateur ou
@@ -54,6 +62,8 @@ struct Info {
 struct Memory {
     /// « gl » ou « glow ».
     engine: Option<String>,
+    /// wgpu en OpenGL a échoué.
+    no_gl: bool,
     no_glow: bool,
     /// Raison de l'échec de glow.
     reason: Option<String>,
@@ -75,6 +85,8 @@ fn parse_memory(text: &str) -> Memory {
             memory.reason = Some(reason.trim().to_string());
         } else if line.eq_ignore_ascii_case(NO_GLOW) {
             memory.no_glow = true;
+        } else if line.eq_ignore_ascii_case(NO_GL) {
+            memory.no_gl = true;
         } else if memory.engine.is_none() {
             memory.engine = Some(line.to_lowercase());
         }
@@ -92,6 +104,10 @@ fn write_memory(memory: &Memory) {
     let mut text = String::new();
     if let Some(engine) = &memory.engine {
         text.push_str(engine);
+        text.push('\n');
+    }
+    if memory.no_gl {
+        text.push_str(NO_GL);
         text.push('\n');
     }
     if memory.no_glow {
@@ -152,7 +168,46 @@ pub fn on_glow() -> bool {
 
 /// wgpu en OpenGL (choisi ou retenu).
 pub fn on_gl() -> bool {
-    std::env::var("WGPU_BACKEND").is_ok_and(|b| b.eq_ignore_ascii_case("gl"))
+    std::env::var("WGPU_BACKEND").is_ok_and(|b| b.eq_ignore_ascii_case(GL))
+}
+
+/// Moteur de secours après un échec au démarrage.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Fallback {
+    /// wgpu par défaut (DirectX 12, Vulkan).
+    Default,
+    /// wgpu en OpenGL.
+    Gl,
+    Glow,
+}
+
+/// Moteur suivant celui en échec, d'après les échecs retenus : wgpu par
+/// défaut → wgpu en OpenGL → glow → wgpu par défaut. `None` quand tous ont
+/// échoué. Chaque échec d'OpenGL ou de glow étant retenu, la boucle se
+/// termine.
+fn next_engine(memory: &Memory, on_glow: bool, on_gl: bool) -> Option<Fallback> {
+    let no_gl = memory.no_gl || on_gl;
+    let no_glow = memory.no_glow || on_glow;
+    if on_glow || on_gl {
+        // Depuis OpenGL : glow s'il reste à essayer, sinon le moteur par
+        // défaut, qui n'a peut-être jamais échoué (WARP).
+        if !no_glow {
+            Some(Fallback::Glow)
+        } else {
+            Some(Fallback::Default)
+        }
+    } else if !no_gl {
+        Some(Fallback::Gl)
+    } else if !no_glow {
+        Some(Fallback::Glow)
+    } else {
+        None
+    }
+}
+
+/// Moteur de secours à essayer après un échec au démarrage.
+pub fn fallback_engine() -> Option<Fallback> {
+    next_engine(&read_memory(), on_glow(), on_gl())
 }
 
 /// Note la carte retenue par wgpu. Vrai si l'application doit se relancer
@@ -305,32 +360,47 @@ pub fn switch_to_glow() {
 
 /// Un moteur de secours reste à essayer après un échec au démarrage.
 pub fn can_fall_back() -> bool {
-    on_glow() || !on_gl() || !read_memory().no_glow
+    fallback_engine().is_some()
 }
 
-/// Passe au moteur de secours, retenu, et relance l'application : depuis
-/// glow, retour à wgpu sans plus essayer glow ; depuis wgpu en OpenGL
-/// (qui exige OpenGL 3.3), glow ; sinon, wgpu en OpenGL. `reason` : l'échec
-/// du moteur actuel, consigné dans `crash.log` (et retenu pour glow).
+/// Retient l'échec du moteur actuel, passe au moteur de secours et relance
+/// l'application (voir [`next_engine`]). `reason` : l'échec du moteur
+/// actuel, consigné dans `crash.log` (et retenu pour glow).
 pub fn fall_back(reason: &str) {
     let mut memory = read_memory();
-    let (from, to) = if on_glow() {
-        memory.engine = None;
+    let from = if on_glow() {
         memory.no_glow = true;
         memory.reason = Some(reason.to_string());
-        write_memory(&memory);
-        relaunch(&[(RENDERER_VAR, "wgpu")]);
-        ("glow", "wgpu, sans glow")
+        "glow"
     } else if on_gl() {
-        memory.engine = Some(GLOW.into());
-        write_memory(&memory);
-        relaunch(&[(RENDERER_VAR, GLOW)]);
-        ("wgpu en OpenGL", "glow")
+        memory.no_gl = true;
+        "wgpu en OpenGL"
     } else {
-        memory.engine = Some("gl".into());
+        "wgpu"
+    };
+    let Some(next) = next_engine(&memory, on_glow(), on_gl()) else {
         write_memory(&memory);
-        relaunch(&[("WGPU_BACKEND", "gl")]);
-        ("wgpu", "wgpu en OpenGL")
+        return;
+    };
+    let to = match next {
+        Fallback::Default => {
+            memory.engine = None;
+            write_memory(&memory);
+            relaunch(&[(RENDERER_VAR, "wgpu")]);
+            "wgpu par défaut"
+        }
+        Fallback::Gl => {
+            memory.engine = Some(GL.into());
+            write_memory(&memory);
+            relaunch(&[("WGPU_BACKEND", GL)]);
+            "wgpu en OpenGL"
+        }
+        Fallback::Glow => {
+            memory.engine = Some(GLOW.into());
+            write_memory(&memory);
+            relaunch(&[(RENDERER_VAR, GLOW)]);
+            "glow"
+        }
     };
     crate::crash::log(&format!("échec de {from} : {reason}\nrelance avec {to}"));
 }
@@ -448,6 +518,46 @@ mod tests {
         // Format de la 9.13.0-rc.10.
         let m = parse_memory("sans-glow\n");
         assert!(m.engine.is_none() && m.no_glow && m.reason.is_none());
+        let m = parse_memory("gl\nsans-gl\nsans-glow\n");
+        assert!(m.no_gl && m.no_glow);
+    }
+
+    #[test]
+    fn falls_back_without_dead_end() {
+        let memory = |no_gl, no_glow| Memory {
+            no_gl,
+            no_glow,
+            ..Memory::default()
+        };
+        // wgpu par défaut en échec : OpenGL, puis glow, puis plus rien.
+        assert_eq!(
+            next_engine(&memory(false, false), false, false),
+            Some(Fallback::Gl)
+        );
+        assert_eq!(
+            next_engine(&memory(true, false), false, false),
+            Some(Fallback::Glow)
+        );
+        assert_eq!(next_engine(&memory(true, true), false, false), None);
+        // wgpu en OpenGL en échec : glow, ou, glow déjà en échec, retour au
+        // moteur par défaut (l'impasse du client HD Graphics 3000).
+        assert_eq!(
+            next_engine(&memory(false, false), false, true),
+            Some(Fallback::Glow)
+        );
+        assert_eq!(
+            next_engine(&memory(false, true), false, true),
+            Some(Fallback::Default)
+        );
+        // glow en échec : moteur par défaut.
+        assert_eq!(
+            next_engine(&memory(false, false), true, false),
+            Some(Fallback::Default)
+        );
+        assert_eq!(
+            next_engine(&memory(true, true), true, false),
+            Some(Fallback::Default)
+        );
     }
 
     #[test]

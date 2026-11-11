@@ -113,13 +113,14 @@ fn watch_startup() {
         step
     );
     let path = write_log(&text);
-    let fallback = crate::graphics::can_fall_back();
-    let question = if !fallback {
-        tr!("Quitter BankPerfect ?")
-    } else if crate::graphics::on_glow() {
-        tr!("Relancer BankPerfect avec le moteur graphique par défaut ?")
-    } else {
-        tr!("Relancer BankPerfect avec OpenGL ?")
+    let next = crate::graphics::fallback_engine();
+    let fallback = next.is_some();
+    let question = match next {
+        None => tr!("Quitter BankPerfect ?"),
+        Some(crate::graphics::Fallback::Default) => {
+            tr!("Relancer BankPerfect avec le moteur graphique par défaut ?")
+        }
+        Some(_) => tr!("Relancer BankPerfect avec OpenGL ?"),
     };
     if ask(&text, question, path) {
         if fallback {

@@ -67,7 +67,8 @@ fn main() -> eframe::Result {
     if glow_failed || (matches!(result, Err(eframe::Error::Wgpu(_))) && gl_fallback()) {
         // Moteur de secours, retenu pour les lancements suivants : sans
         // Vulkan (ou DirectX 12), wgpu en OpenGL ; sans OpenGL 3.3, glow ;
-        // glow sans OpenGL utilisable, retour à wgpu.
+        // glow sans OpenGL utilisable, retour à wgpu. Un moteur en échec
+        // n'est plus essayé.
         bankperfect::crash::startup_done();
         let reason = result
             .as_ref()

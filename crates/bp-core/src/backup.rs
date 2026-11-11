@@ -69,12 +69,40 @@ pub fn list(file: &Path, dir: &Path) -> Vec<Backup> {
             })
         })
         .collect();
+    // Plusieurs sauvegardes dans la même seconde peuvent avoir la même date
+    // de modification (horloge grossière du noyau) : l'horodatage et le
+    // numéro du nom les départagent (`_…-HHMMSS.bp0` avant `-2`, `-2` avant
+    // `-10`), pas l'ordre alphabétique.
     backups.sort_by(|a, b| {
         b.modified
             .cmp(&a.modified)
+            .then_with(|| sequence(&b.path).cmp(&sequence(&a.path)))
             .then_with(|| b.path.cmp(&a.path))
     });
     backups
+}
+
+/// Horodatage et numéro d'une sauvegarde, d'après son nom
+/// (`<nom>_AAAAMMJJ-HHMMSS[-n].bp0`, n = 1 sans suffixe).
+fn sequence(path: &Path) -> (String, u32) {
+    let stem = path
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let Some((_, tail)) = stem.rsplit_once('_') else {
+        return (String::new(), 0);
+    };
+    // « AAAAMMJJ-HHMMSS » : 15 caractères ASCII.
+    match tail.get(..15) {
+        Some(stamp) => {
+            let n = tail[15..]
+                .strip_prefix('-')
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(1);
+            (stamp.to_string(), n)
+        }
+        None => (tail.to_string(), 0),
+    }
 }
 
 fn prune(file: &Path, dir: &Path, keep: usize) -> io::Result<()> {
@@ -115,6 +143,35 @@ mod tests {
             super::list(&other, &backups).len(),
             1,
             "les sauvegardes des autres fichiers sont intactes"
+        );
+    }
+
+    #[test]
+    fn same_second_backups_follow_their_number() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Comptes.bp");
+        let backups = dir.path().join("sauvegardes");
+        fs::create_dir_all(&backups).unwrap();
+        // Même date de modification pour toutes, comme sous une horloge
+        // grossière.
+        let when = SystemTime::now();
+        for name in ["", "-2", "-10", "-3"] {
+            let path = backups.join(format!("Comptes_20261111-191500{name}.bp0"));
+            let f = fs::File::create(&path).unwrap();
+            f.set_modified(when).unwrap();
+        }
+        let names: Vec<String> = list(&file, &backups)
+            .iter()
+            .map(|b| b.path.file_name().unwrap().to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            names,
+            [
+                "Comptes_20261111-191500-10.bp0",
+                "Comptes_20261111-191500-3.bp0",
+                "Comptes_20261111-191500-2.bp0",
+                "Comptes_20261111-191500.bp0",
+            ]
         );
     }
 

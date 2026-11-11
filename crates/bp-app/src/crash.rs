@@ -51,8 +51,7 @@ pub fn install() {
             // secours, retenu.
             let graphics = STEP.lock().is_ok_and(|step| *step == GRAPHICS);
             if graphics && !READY.load(Ordering::Relaxed) && crate::graphics::can_fall_back() {
-                write_log("relance avec le moteur graphique de secours");
-                crate::graphics::fall_back();
+                crate::graphics::fall_back(&format!("panique : {info}"));
                 std::process::exit(1);
             }
             startup_done();
@@ -74,6 +73,11 @@ pub fn step(name: &'static str) {
     if let Ok(mut step) = STEP.lock() {
         *step = name;
     }
+}
+
+/// Consigne `text` dans `crash.log` (changements de moteur graphique).
+pub fn log(text: &str) {
+    write_log(text);
 }
 
 /// Démarrage terminé (première image, ou échec déjà signalé) : le fil de
@@ -119,7 +123,7 @@ fn watch_startup() {
     };
     if ask(&text, question, path) {
         if fallback {
-            crate::graphics::fall_back();
+            crate::graphics::fall_back(&format!("démarrage bloqué (étape : {step})"));
         }
         std::process::exit(1);
     }
@@ -233,10 +237,7 @@ mod native {
             // d'Intel, par exemple) : relance immédiate avec le moteur de
             // secours, retenu pour la suite, sans message.
             if !super::READY.load(super::Ordering::Relaxed) && crate::graphics::can_fall_back() {
-                super::write_log(&format!(
-                    "{text}\nrelance avec le moteur graphique de secours"
-                ));
-                crate::graphics::fall_back();
+                crate::graphics::fall_back(&text);
                 return EXCEPTION_EXECUTE_HANDLER;
             }
             let path = super::write_log(&text);

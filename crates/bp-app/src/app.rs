@@ -3037,6 +3037,24 @@ impl BankPerfectApp {
                                 .size(12.0)
                                 .color(pal.warning),
                             );
+                            let adapters = crate::graphics::display_adapters();
+                            if !adapters.is_empty() {
+                                ui.label(
+                                    RichText::new(tr!(
+                                        "Adaptateur d'affichage de Windows : {}",
+                                        adapters.join(", ")
+                                    ))
+                                    .size(12.0)
+                                    .color(pal.muted),
+                                );
+                            }
+                            if let Some(reason) = crate::graphics::glow_failure() {
+                                ui.label(
+                                    RichText::new(tr!("OpenGL indisponible : {}", reason))
+                                        .size(12.0)
+                                        .color(pal.muted),
+                                );
+                            }
                         }
                     }
                     if let Ok(exe) = std::env::current_exe() {

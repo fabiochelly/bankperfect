@@ -178,6 +178,19 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Rendu logiciel, sans la carte graphique : affichage allégé",
         "Software rendering, without the graphics card: lighter display",
     ),
+    (
+        "Adaptateur d'affichage de Windows : {}",
+        "Windows display adapter: {}",
+    ),
+    ("OpenGL indisponible : {}", "OpenGL unavailable: {}"),
+    (
+        "aucun format d'affichage OpenGL compatible",
+        "no compatible OpenGL display format",
+    ),
+    (
+        "version inférieure à 2.0 (pilote de la carte graphique absent ?)",
+        "version below 2.0 (graphics card driver missing?)",
+    ),
     ("Fermer", "Close"),
     (
         "Mot de passe défini — enregistrez (Ctrl+S) pour l'appliquer",

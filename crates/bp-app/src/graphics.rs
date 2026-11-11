@@ -17,8 +17,9 @@
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-/// Moteur retenu pour les lancements suivants : « gl » (wgpu en OpenGL) ou
-/// « glow » ; « sans-glow » quand glow a échoué. Le supprimer revient au
+/// Moteur retenu pour les lancements suivants, une indication par ligne :
+/// « gl » (wgpu en OpenGL) ou « glow » ; « sans-glow » quand glow a échoué,
+/// suivi de la raison en commentaire (« # … »). Le supprimer revient au
 /// moteur par défaut.
 const MEMORY_FILE: &str = "moteur-graphique.txt";
 const GLOW: &str = "glow";
@@ -40,6 +41,8 @@ static SWITCH_TO_GLOW: AtomicBool = AtomicBool::new(false);
 static SOFTWARE: AtomicBool = AtomicBool::new(false);
 /// Carte graphique et moteur retenus.
 static INFO: Mutex<Option<Info>> = Mutex::new(None);
+/// Raison de l'échec de glow, lue au démarrage.
+static GLOW_FAILURE: Mutex<Option<String>> = Mutex::new(None);
 
 struct Info {
     name: String,
@@ -52,6 +55,8 @@ struct Memory {
     /// « gl » ou « glow ».
     engine: Option<String>,
     no_glow: bool,
+    /// Raison de l'échec de glow.
+    reason: Option<String>,
 }
 
 fn read_memory() -> Memory {
@@ -60,12 +65,18 @@ fn read_memory() -> Memory {
     else {
         return Memory::default();
     };
+    parse_memory(&text)
+}
+
+fn parse_memory(text: &str) -> Memory {
     let mut memory = Memory::default();
-    for word in text.split_whitespace().map(str::to_lowercase) {
-        if word == NO_GLOW {
+    for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        if let Some(reason) = line.strip_prefix('#') {
+            memory.reason = Some(reason.trim().to_string());
+        } else if line.eq_ignore_ascii_case(NO_GLOW) {
             memory.no_glow = true;
         } else if memory.engine.is_none() {
-            memory.engine = Some(word);
+            memory.engine = Some(line.to_lowercase());
         }
     }
     memory
@@ -86,6 +97,11 @@ fn write_memory(memory: &Memory) {
     if memory.no_glow {
         text.push_str(NO_GLOW);
         text.push('\n');
+        if let Some(reason) = &memory.reason {
+            // Une seule ligne : la raison peut en compter plusieurs.
+            let reason = reason.split_whitespace().collect::<Vec<_>>().join(" ");
+            text.push_str(&format!("# {reason}\n"));
+        }
     }
     if text.is_empty() {
         let _ = std::fs::remove_file(path);
@@ -108,6 +124,11 @@ pub fn prepare() {
         }
     }
     GLOW_ALLOWED.store(!user_choice && !memory.no_glow, Ordering::Relaxed);
+    if memory.no_glow
+        && let Ok(mut failure) = GLOW_FAILURE.lock()
+    {
+        *failure = memory.reason;
+    }
 }
 
 fn set_env(name: &str, value: &str) {
@@ -243,13 +264,18 @@ pub fn summary() -> Option<String> {
     let info = INFO.lock().ok()?;
     let info = info.as_ref()?;
     let engine = if on_glow() { ", glow" } else { "" };
-    Some(format!(
-        "{} ({}{engine}, pilote {}){}",
-        info.name,
-        info.api,
-        info.driver,
-        if software() { ", rendu logiciel" } else { "" }
-    ))
+    let mut text = format!(
+        "{} ({}{engine}, pilote {})",
+        info.name, info.api, info.driver
+    );
+    if software() {
+        text.push_str(", rendu logiciel");
+        let adapters = display_adapters();
+        if !adapters.is_empty() {
+            text.push_str(&format!(", adaptateurs : {}", adapters.join(", ")));
+        }
+    }
+    Some(text)
 }
 
 /// Carte et moteur, pour « À propos ».
@@ -266,6 +292,11 @@ pub fn switch_requested() -> bool {
 
 /// Retient glow et relance l'application avec lui.
 pub fn switch_to_glow() {
+    let card = about().map(|(name, api)| format!("{name} ({api})"));
+    crate::crash::log(&format!(
+        "rendu logiciel sur {} : relance avec glow",
+        card.as_deref().unwrap_or("?")
+    ));
     let mut memory = read_memory();
     memory.engine = Some(GLOW.into());
     write_memory(&memory);
@@ -279,23 +310,84 @@ pub fn can_fall_back() -> bool {
 
 /// Passe au moteur de secours, retenu, et relance l'application : depuis
 /// glow, retour à wgpu sans plus essayer glow ; depuis wgpu en OpenGL
-/// (qui exige OpenGL 3.3), glow ; sinon, wgpu en OpenGL.
-pub fn fall_back() {
+/// (qui exige OpenGL 3.3), glow ; sinon, wgpu en OpenGL. `reason` : l'échec
+/// du moteur actuel, consigné dans `crash.log` (et retenu pour glow).
+pub fn fall_back(reason: &str) {
     let mut memory = read_memory();
-    if on_glow() {
+    let (from, to) = if on_glow() {
         memory.engine = None;
         memory.no_glow = true;
+        memory.reason = Some(reason.to_string());
         write_memory(&memory);
         relaunch(&[(RENDERER_VAR, "wgpu")]);
+        ("glow", "wgpu, sans glow")
     } else if on_gl() {
         memory.engine = Some(GLOW.into());
         write_memory(&memory);
         relaunch(&[(RENDERER_VAR, GLOW)]);
+        ("wgpu en OpenGL", "glow")
     } else {
         memory.engine = Some("gl".into());
         write_memory(&memory);
         relaunch(&[("WGPU_BACKEND", "gl")]);
+        ("wgpu", "wgpu en OpenGL")
+    };
+    crate::crash::log(&format!("échec de {from} : {reason}\nrelance avec {to}"));
+}
+
+/// Raison de l'échec de glow, s'il a échoué, en clair pour « À propos ».
+pub fn glow_failure() -> Option<String> {
+    let reason = GLOW_FAILURE.lock().ok()?.clone()?;
+    // egui refuse l'OpenGL 1.1 de Windows, seul présent sans pilote de la
+    // carte graphique.
+    let text = if reason.contains("opengl 2.0+") {
+        bp_core::tr!("version inférieure à 2.0 (pilote de la carte graphique absent ?)").to_string()
+    } else if reason.contains("no glutin configs") {
+        bp_core::tr!("aucun format d'affichage OpenGL compatible").to_string()
+    } else {
+        reason
+    };
+    // Le détail complet reste dans moteur-graphique.txt et crash.log.
+    Some(match text.char_indices().nth(140) {
+        Some((cut, _)) => format!("{}…", &text[..cut]),
+        None => text,
+    })
+}
+
+/// Adaptateurs d'affichage vus par Windows (« Intel(R) HD Graphics 3000 »,
+/// « Carte graphique de base Microsoft » faute de pilote).
+#[cfg(windows)]
+pub fn display_adapters() -> Vec<String> {
+    use windows_sys::Win32::Graphics::Gdi::{DISPLAY_DEVICEW, EnumDisplayDevicesW};
+    let mut names: Vec<String> = Vec::new();
+    for index in 0..16 {
+        let mut device = DISPLAY_DEVICEW {
+            cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
+            ..Default::default()
+        };
+        // SAFETY : `device` est initialisé avec sa taille, comme l'exige
+        // l'API ; un nom de périphérique nul énumère les adaptateurs.
+        if unsafe { EnumDisplayDevicesW(std::ptr::null(), index, &mut device, 0) } == 0 {
+            break;
+        }
+        let len = device
+            .DeviceString
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(128);
+        let name = String::from_utf16_lossy(&device.DeviceString[..len])
+            .trim()
+            .to_string();
+        if !name.is_empty() && !names.contains(&name) {
+            names.push(name);
+        }
     }
+    names
+}
+
+#[cfg(not(windows))]
+pub fn display_adapters() -> Vec<String> {
+    Vec::new()
 }
 
 /// Erreur d'eframe propre à glow (contexte OpenGL introuvable ou refusé).
@@ -345,6 +437,17 @@ mod tests {
         assert!(is_software_gl("GDI Generic"));
         assert!(!is_software_gl("Intel(R) HD Graphics 3000"));
         assert!(!is_software_gl("Mesa Intel(R) Graphics (LNL)"));
+    }
+
+    #[test]
+    fn reads_memory() {
+        let m = parse_memory("gl\nsans-glow\n# egui_glow requires opengl 2.0+. \n");
+        assert_eq!(m.engine.as_deref(), Some("gl"));
+        assert!(m.no_glow);
+        assert_eq!(m.reason.as_deref(), Some("egui_glow requires opengl 2.0+."));
+        // Format de la 9.13.0-rc.10.
+        let m = parse_memory("sans-glow\n");
+        assert!(m.engine.is_none() && m.no_glow && m.reason.is_none());
     }
 
     #[test]

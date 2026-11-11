@@ -69,7 +69,12 @@ fn main() -> eframe::Result {
         // Vulkan (ou DirectX 12), wgpu en OpenGL ; sans OpenGL 3.3, glow ;
         // glow sans OpenGL utilisable, retour à wgpu.
         bankperfect::crash::startup_done();
-        bankperfect::graphics::fall_back();
+        let reason = result
+            .as_ref()
+            .err()
+            .map(ToString::to_string)
+            .unwrap_or_default();
+        bankperfect::graphics::fall_back(&reason);
         std::process::exit(0);
     }
     if let Err(error) = &result {

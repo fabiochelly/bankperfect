@@ -172,17 +172,14 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Logiciel libre — licence MIT",
         "Free software — MIT license",
     ),
-    ("Emplacement : {}", "Location: {}"),
-    ("Carte graphique : {} ({})", "Graphics card: {} ({})"),
+    ("Carte graphique", "Graphics card"),
+    ("Moteur de rendu", "Rendering engine"),
+    ("Adaptateur Windows", "Windows adapter"),
+    ("Emplacement", "Location"),
     (
         "Rendu logiciel, sans la carte graphique : affichage allégé",
         "Software rendering, without the graphics card: lighter display",
     ),
-    (
-        "Adaptateur d'affichage de Windows : {}",
-        "Windows display adapter: {}",
-    ),
-    ("OpenGL indisponible : {}", "OpenGL unavailable: {}"),
     (
         "aucun format d'affichage OpenGL compatible",
         "no compatible OpenGL display format",

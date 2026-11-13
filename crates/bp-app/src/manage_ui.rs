@@ -36,7 +36,13 @@ pub struct ManageForm {
     payee_search: String,
     confirm: Option<ConfirmDelete>,
     message: Option<String>,
+    /// Compte (`Account::uid`) pour lequel le sélecteur d'image est ouvert.
+    logo_target: Option<String>,
+    /// Logo du catalogue en cours de téléchargement, et son compte.
+    logo_download: Option<(String, LogoDownload)>,
 }
+
+type LogoDownload = std::sync::Arc<std::sync::Mutex<Option<Result<Vec<u8>, String>>>>;
 
 #[derive(Clone, Copy, PartialEq)]
 enum ConfirmDelete {
@@ -57,6 +63,24 @@ fn list_row(
     selected: bool,
     indent: f32,
     glyph: &str,
+    color: Color32,
+    title: RichText,
+    subtitle: Option<&str>,
+    right: Option<RichText>,
+) -> egui::Response {
+    list_row_with_logo(
+        ui, selected, indent, glyph, None, color, title, subtitle, right,
+    )
+}
+
+/// Comme [`list_row`], avec un logo à la place de l'icône s'il y en a un.
+#[allow(clippy::too_many_arguments)]
+fn list_row_with_logo(
+    ui: &mut egui::Ui,
+    selected: bool,
+    indent: f32,
+    glyph: &str,
+    logo: Option<&crate::bank_logo::Logo>,
     color: Color32,
     title: RichText,
     subtitle: Option<&str>,
@@ -88,13 +112,21 @@ fn list_row(
         painter.rect_filled(rect, 9.0, pal.bg_highlight.gamma_multiply(0.6));
     }
     let x = rect.left() + 14.0 + indent;
-    painter.text(
-        egui::pos2(x + 8.0, rect.center().y),
-        egui::Align2::CENTER_CENTER,
-        glyph,
-        egui::FontId::proportional(16.0),
-        color,
-    );
+    if let Some(logo) = logo {
+        let area = egui::Rect::from_center_size(
+            egui::pos2(x + 8.0, rect.center().y),
+            egui::vec2(22.0, 22.0),
+        );
+        logo.paint_centered(painter, area, 2.0, 4.0);
+    } else {
+        painter.text(
+            egui::pos2(x + 8.0, rect.center().y),
+            egui::Align2::CENTER_CENTER,
+            glyph,
+            egui::FontId::proportional(16.0),
+            color,
+        );
+    }
     let text_x = x + 28.0;
     let right_galley = right.map(|r| {
         egui::WidgetText::from(r).into_galley(
@@ -196,6 +228,8 @@ impl ManageForm {
             payee_search: String::new(),
             confirm: None,
             message: None,
+            logo_target: None,
+            logo_download: None,
         }
     }
 
@@ -207,6 +241,7 @@ impl ManageForm {
 
     pub fn show(&mut self, ctx: &egui::Context, doc: &mut OpenDoc) -> Outcome {
         let mut outcome = Outcome::Keep;
+        doc.sync_logos(ctx);
         let width = ui_kit::dialog_width(ctx, 0.8, 900.0, 1500.0);
         let height = ui_kit::dialog_height(ctx, 0.8).max(560.0);
         crate::dialogs::modal(ctx, "tool_manage").show(ctx, |ui| {
@@ -422,11 +457,12 @@ impl ManageForm {
                         icon::BANK
                     };
                     let subtitle = (!subtitle.is_empty()).then_some(subtitle);
-                    if list_row(
+                    if list_row_with_logo(
                         ui,
                         self.account == i,
                         0.0,
                         glyph,
+                        doc.account_logo(i),
                         pal.accent,
                         title,
                         subtitle.as_deref(),
@@ -643,6 +679,8 @@ impl ManageForm {
             },
         );
 
+        self.logo_section(ui, doc, width, i);
+
         ui_kit::section(ui, width, icon::BANK, tr!("Coordonnées bancaires"), |ui| {
             ui_kit::row(ui, tr!("Banque · guichet"), LABEL_WIDTH, |ui| {
                 field!(ui, "bank_code", a.bank_code, 110.0, |d, v| d.accounts[i]
@@ -747,6 +785,168 @@ impl ManageForm {
                 doc.edit_document(|d| d.accounts[i].disabled = disabled);
             }
         });
+    }
+
+    /// Carte « Logo » d'un compte : aperçu, choix d'une image, retrait.
+    fn logo_section(&mut self, ui: &mut egui::Ui, doc: &mut OpenDoc, width: f32, i: usize) {
+        let pal = palette(ui);
+        let pick = egui::Id::new("account_logo_pick");
+        let has_logo = doc.account_logo(i).is_some();
+        let legacy = doc.document.accounts[i].logo.trim().to_string();
+        let (mut choose, mut remove) = (false, false);
+        // Logo de la banque du compte, s'il est au catalogue.
+        let account = &doc.document.accounts[i];
+        let suggested = crate::bank_logo::suggestion(&[&account.bank_name, &account.name]);
+        let downloading = self.logo_download.is_some();
+        let mut download: Option<&'static crate::bank_logo::CatalogEntry> = None;
+        ui_kit::section(ui, width, icon::IMAGE, tr!("Logo"), |ui| {
+            ui.horizontal(|ui| {
+                ui.spacing_mut().item_spacing.x = 18.0;
+                let (area, _) =
+                    ui.allocate_exact_size(egui::vec2(150.0, 76.0), egui::Sense::hover());
+                match doc.account_logo(i) {
+                    Some(logo) => logo.paint_centered(ui.painter(), area, 8.0, 10.0),
+                    None => {
+                        ui.painter().rect_stroke(
+                            area,
+                            10.0,
+                            egui::Stroke::new(1.0, pal.muted.gamma_multiply(0.5)),
+                            egui::StrokeKind::Inside,
+                        );
+                        ui.painter().text(
+                            area.center(),
+                            egui::Align2::CENTER_CENTER,
+                            icon::IMAGE,
+                            egui::FontId::proportional(26.0),
+                            pal.muted.gamma_multiply(0.7),
+                        );
+                    }
+                }
+                ui.vertical(|ui| {
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        let label = if has_logo {
+                            tr!("Changer d'image…")
+                        } else {
+                            tr!("Choisir une image…")
+                        };
+                        choose = crate::dialogs::button(ui, label).clicked();
+                        if has_logo {
+                            remove = crate::dialogs::button(ui, tr!("Retirer le logo")).clicked();
+                        }
+                    });
+                    ui.add_space(8.0);
+                    ui.horizontal(|ui| {
+                        ui.spacing_mut().item_spacing.x = 10.0;
+                        ui.add_enabled_ui(!downloading, |ui| {
+                            if let Some(entry) = suggested
+                                && crate::dialogs::primary(
+                                    ui,
+                                    &format!(
+                                        "{}  {}",
+                                        icon::DOWNLOAD_SIMPLE,
+                                        tr!("Logo {}", entry.name)
+                                    ),
+                                    true,
+                                )
+                                .on_hover_text(tr!("Télécharger ce logo et le donner au compte"))
+                                .clicked()
+                            {
+                                download = Some(entry);
+                            }
+                            ui_kit::Combo::new("logo_catalog")
+                                .selected_text(tr!("Logos des banques…"))
+                                .height(360.0)
+                                .show_ui(ui, |ui| {
+                                    for entry in crate::bank_logo::CATALOG {
+                                        if ui.selectable_label(false, entry.name).clicked() {
+                                            download = Some(entry);
+                                        }
+                                    }
+                                });
+                        });
+                        if downloading {
+                            ui.add(egui::Spinner::new());
+                        }
+                    });
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(tr!(
+                            "Image PNG, JPEG ou SVG de votre choix, ou logo d'une banque téléchargé depuis chelly.net (marques de leurs propriétaires). Le logo s'affiche sur la carte du compte et dans la liste des comptes ; il est enregistré dans le fichier de comptes."
+                        ))
+                        .small()
+                        .color(pal.muted),
+                    );
+                    if !has_logo && !legacy.is_empty() && !legacy.eq_ignore_ascii_case("aucun") {
+                        ui.label(
+                            RichText::new(tr!(
+                                "Logo de l'ancienne version : {}. Son image se trouve dans le dossier « logos » de l'ancien BankPerfect.",
+                                legacy
+                            ))
+                            .small()
+                            .color(pal.muted),
+                        );
+                    }
+                });
+            });
+        });
+        if choose {
+            self.logo_target = Some(doc.document.accounts[i].uid.clone());
+            self.message = None;
+            let dialog = rfd::FileDialog::new()
+                .add_filter(tr!("Images"), &crate::bank_logo::EXTENSIONS)
+                .add_filter(tr!("Tous les fichiers"), &["*"]);
+            crate::file_picker::open(ui.ctx(), pick, crate::file_picker::Kind::File, dialog);
+        }
+        if let Some(path) = crate::file_picker::chosen(ui.ctx(), pick)
+            && let Some(uid) = self.logo_target.take()
+            && let Some(account) = doc.document.accounts.iter().position(|a| a.uid == uid)
+        {
+            let result = crate::bank_logo::import(&path)
+                .and_then(|png| self.apply_logo(doc, account, Some(png)));
+            self.message = result.err();
+        }
+        if remove {
+            self.message = self.apply_logo(doc, i, None).err();
+        }
+        if let Some(entry) = download {
+            self.message = None;
+            let job = LogoDownload::default();
+            self.logo_download = Some((doc.document.accounts[i].uid.clone(), job.clone()));
+            let ctx = ui.ctx().clone();
+            std::thread::spawn(move || {
+                let result = crate::bank_logo::download(entry);
+                if let Ok(mut slot) = job.lock() {
+                    *slot = Some(result);
+                }
+                ctx.request_repaint();
+            });
+        }
+        let finished = self
+            .logo_download
+            .as_ref()
+            .and_then(|(_, job)| job.lock().ok()?.take());
+        if let Some(result) = finished
+            && let Some((uid, _)) = self.logo_download.take()
+        {
+            let account = doc.document.accounts.iter().position(|a| a.uid == uid);
+            self.message = match (result, account) {
+                (Ok(png), Some(account)) => self.apply_logo(doc, account, Some(png)).err(),
+                (Err(e), _) => Some(e),
+                (Ok(_), None) => None,
+            };
+        }
+    }
+
+    fn apply_logo(
+        &self,
+        doc: &mut OpenDoc,
+        account: usize,
+        png: Option<Vec<u8>>,
+    ) -> Result<(), String> {
+        doc.set_account_logo(account, png)
+            .map_err(|e| e.to_string())
     }
 
     // ─────────────────────────────── Catégories ───────────────────────────────

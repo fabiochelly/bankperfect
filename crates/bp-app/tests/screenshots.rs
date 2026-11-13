@@ -2539,3 +2539,97 @@ fn chart_edit_license_screenshots() {
         },
     );
 }
+
+/// Logos fictifs (aucune marque réelle) : un logo large détouré, une icône
+/// carrée pleine et un logo rond.
+const DEMO_LOGOS: [&str; 3] = [
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 100'>\
+     <circle cx='50' cy='50' r='40' fill='#0b7a5c'/>\
+     <path d='M30 52l14 14 28-32' fill='none' stroke='#fff' stroke-width='10'/>\
+     <rect x='110' y='22' width='170' height='22' rx='6' fill='#0b7a5c'/>\
+     <rect x='110' y='56' width='120' height='22' rx='6' fill='#e0a11b'/></svg>",
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>\
+     <rect width='100' height='100' fill='#d6452f'/>\
+     <path d='M22 72V40l28-18 28 18v32H60V52H40v20z' fill='#fff'/></svg>",
+    "<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'>\
+     <circle cx='50' cy='50' r='48' fill='#1f4fbf'/>\
+     <circle cx='50' cy='50' r='22' fill='none' stroke='#fff' stroke-width='10'/></svg>",
+];
+
+/// Logos des comptes : carte du compte, liste des comptes et gestion.
+#[test]
+#[ignore]
+fn account_logo_screenshots() {
+    let file = std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE");
+    let mut document = bp_core::file::open(file.as_ref(), None).unwrap().document;
+    let order = document.account_order.clone();
+    for (&account, svg) in order.iter().zip(DEMO_LOGOS) {
+        let png = bankperfect::bank_logo::convert(svg.as_bytes()).unwrap();
+        bp_core::logos::set(&mut document, account, png).unwrap();
+    }
+    let with_logos = tempfile_dir().join("logos.bp");
+    let protection = bp_core::format_v6::Protection::none().unwrap();
+    bp_core::file::save(&with_logos, &document, &protection).unwrap();
+    let shot = |name: &str,
+                theme: egui::Theme,
+                setup: &dyn Fn(&mut Harness<'_, bankperfect::BankPerfectApp>)| {
+        render_at(
+            name,
+            theme,
+            egui::vec2(1440.0, 900.0),
+            None,
+            Default::default(),
+            with_logos.clone(),
+            20,
+            setup,
+        );
+    };
+    shot("95-logos-sombre", egui::Theme::Dark, &|_| {});
+    shot("95-logos-clair", egui::Theme::Light, &|_| {});
+    let manage = |h: &mut Harness<'_, bankperfect::BankPerfectApp>| {
+        palette_run(h, "gestion des comptes");
+    };
+    shot("96-logos-gestion", egui::Theme::Dark, &manage);
+    shot("96-logos-gestion-clair", egui::Theme::Light, &manage);
+
+    // Soldes du panneau des comptes et colonne Solde masqués (Affichage).
+    let mut settings = bankperfect::Settings::default();
+    settings.sidebar_balances = false;
+    settings.balance_column = false;
+    render_at(
+        "97-soldes-masques",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        settings,
+        with_logos.clone(),
+        20,
+        |_| {},
+    );
+
+    // Catégorie au libellé très long : les boutons de la saisie restent
+    // dans le panneau.
+    for c in &mut document.categories {
+        c.name = format!(
+            "{} et autres dépenses courantes du foyer à répartir",
+            c.name
+        );
+    }
+    let long = tempfile_dir().join("categories-longues.bp");
+    bp_core::file::save(&long, &document, &protection).unwrap();
+    render_at(
+        "98-categorie-longue",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        Default::default(),
+        long,
+        20,
+        |h| {
+            click_at(h, egui::pos2(700.0, 420.0));
+            h.run_steps(2);
+            h.key_press(egui::Key::Enter);
+            h.run_steps(6);
+        },
+    );
+}

@@ -52,10 +52,16 @@ pub struct OpenDoc {
     pub show_balance_river: bool,
     /// Colonne de pointage à droite du montant (réglages).
     pub tack_after_amount: bool,
+    /// Soldes dans le panneau des comptes (réglages).
+    pub show_sidebar_balances: bool,
+    /// Colonne Solde de la grille (réglages).
+    pub show_balance_column: bool,
     /// Niveaux d'annulation gardés.
     pub max_undo: usize,
     /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
     pub disable_reconcile: bool,
+    /// Textures des logos des comptes (voir [`Self::sync_logos`]).
+    pub logos: crate::bank_logo::Cache,
     /// Soldes calculés sur toutes les lignes, même filtrées.
     ignore_filter_totals: bool,
     /// Message à afficher (refus d'une action), repris par l'application.
@@ -271,8 +277,11 @@ impl OpenDoc {
             show_column_filters: false,
             show_balance_river: true,
             tack_after_amount: false,
+            show_sidebar_balances: true,
+            show_balance_column: true,
             max_undo: 30,
             disable_reconcile: false,
+            logos: Default::default(),
             ignore_filter_totals: false,
             notice: None,
             untack_request: None,
@@ -1301,6 +1310,38 @@ impl OpenDoc {
             last.observe = false;
         }
         self.undo_tag
+    }
+
+    /// Met à jour les textures des logos des comptes ; à appeler avant de
+    /// dessiner ce qui les montre.
+    pub fn sync_logos(&mut self, ctx: &egui::Context) {
+        self.logos.sync(ctx, &self.document, self.revision);
+    }
+
+    /// Logo du compte `account`, s'il en a un.
+    pub fn account_logo(&self, account: usize) -> Option<&crate::bank_logo::Logo> {
+        self.logos.get(&self.document.accounts.get(account)?.uid)
+    }
+
+    /// Donne un logo (image PNG) au compte `account`, ou le retire
+    /// (`None`). Annulable.
+    pub fn set_account_logo(
+        &mut self,
+        account: usize,
+        png: Option<Vec<u8>>,
+    ) -> Result<(), bp_core::feature_store::FeatureError> {
+        self.snapshot_features(tr_mark!("logo du compte"));
+        let result = match png {
+            Some(png) => bp_core::logos::set(&mut self.document, account, png),
+            None => bp_core::logos::remove(&mut self.document, account),
+        };
+        match result {
+            Ok(()) => self.touch(),
+            Err(_) => {
+                self.undo.pop();
+            }
+        }
+        result
     }
 
     /// Étiquette de la dernière étape d'annulation.

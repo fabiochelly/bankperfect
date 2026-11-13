@@ -22,6 +22,7 @@ pub mod i18n;
 pub mod import;
 pub mod json;
 pub mod legacy_pickle;
+pub mod logos;
 pub mod manage;
 pub mod model;
 pub mod portfolio;

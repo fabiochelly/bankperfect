@@ -301,7 +301,7 @@ impl Editor {
                     ui.horizontal(|ui| {
                         ui.spacing_mut().item_spacing.x = 8.0;
                         let width = ui.available_width() - WAND_WIDTH - 8.0;
-                        crate::ui_kit::category_combo(
+                        crate::ui_kit::category_combo_fixed(
                             ui,
                             "category",
                             document,
@@ -587,7 +587,7 @@ impl Editor {
             *focused |= details.has_focus();
         };
         let fields_b = |ui: &mut egui::Ui, this: &mut Self, focused: &mut bool| {
-            crate::ui_kit::category_combo(
+            crate::ui_kit::category_combo_fixed(
                 ui,
                 "bar_category",
                 document,

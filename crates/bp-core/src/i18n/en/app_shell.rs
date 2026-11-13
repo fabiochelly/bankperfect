@@ -527,6 +527,32 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "filtres colonnes recherche loupe tiers montant",
         "filters columns search magnifier payee amount",
     ),
+    (
+        "Afficher ou masquer les soldes dans le panneau des comptes, à gauche.",
+        "Show or hide the balances in the accounts panel, on the left.",
+    ),
+    (
+        "Afficher ou masquer la colonne Solde, à droite du tableau.",
+        "Show or hide the Balance column, on the right of the table.",
+    ),
+    (
+        "Masquer les soldes du panneau des comptes",
+        "Hide balances in the accounts panel",
+    ),
+    (
+        "Afficher les soldes du panneau des comptes",
+        "Show balances in the accounts panel",
+    ),
+    (
+        "soldes comptes liste gauche cacher montant",
+        "balances accounts list left hide amount",
+    ),
+    ("Masquer la colonne Solde", "Hide Balance column"),
+    ("Afficher la colonne Solde", "Show Balance column"),
+    (
+        "solde colonne droite cacher progressif",
+        "balance column right hide running",
+    ),
     ("Masquer la courbe du solde", "Hide balance curve"),
     ("Afficher la courbe du solde", "Show balance curve"),
     (

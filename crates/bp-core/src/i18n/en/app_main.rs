@@ -127,6 +127,11 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Solde prévisionnel", "Forecast balance"),
     ("Soldes en trois cartes", "Balances as three cards"),
     ("Filtres de colonnes", "Column filters"),
+    (
+        "Soldes dans le panneau des comptes",
+        "Balances in the accounts panel",
+    ),
+    ("Colonne Solde", "Balance column"),
     ("Courbe du solde", "Balance curve"),
     ("Thème", "Theme"),
     ("Sombre", "Dark"),

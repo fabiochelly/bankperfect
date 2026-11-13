@@ -15,6 +15,7 @@ use crate::theme::palette;
 /// Renvoie la commande choisie dans le menu contextuel d'un compte.
 pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
     let pal = palette(ui);
+    doc.sync_logos(ui.ctx());
     ui.add_space(2.0);
     ui.label(RichText::new(&doc.document.group_name).heading());
     ui.label(RichText::new(doc.file_name()).small().color(pal.muted));
@@ -69,8 +70,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
             .show(ui, |ui| {
                 for i in others {
                     let account = &doc.document.accounts[i];
-                    let balance = doc.account_balance(i);
-                    let (pressed, response) = account_row(ui, account, balance, false, &pal);
+                    let balance = doc.show_sidebar_balances.then(|| doc.account_balance(i));
+                    let logo = doc.account_logo(i);
+                    let (pressed, response) = account_row(ui, account, logo, balance, false, &pal);
                     if pressed || response.secondary_clicked() {
                         clicked = Some(i);
                     }
@@ -93,9 +95,10 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
                     .show(ui, |ui| {
                         for i in disabled {
                             let account = &doc.document.accounts[i];
-                            let balance = doc.account_balance(i);
+                            let balance = doc.show_sidebar_balances.then(|| doc.account_balance(i));
+                            let logo = doc.account_logo(i);
                             let (pressed, response) =
-                                account_row(ui, account, balance, i == doc.account, &pal);
+                                account_row(ui, account, logo, balance, i == doc.account, &pal);
                             if pressed || response.secondary_clicked() {
                                 clicked = Some(i);
                             }
@@ -112,6 +115,30 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
     let footer_top = ui.cursor().top();
     ui.add_space(8.0);
     ui.separator();
+    // Soldes masqués (Affichage) : pas de total non plus.
+    ui.scope(|ui| {
+        if !doc.show_sidebar_balances {
+            ui.set_invisible();
+        }
+        total_row(ui, total, doc, &pal);
+    });
+    // Pied : le total ci-dessus, un écart, puis le badge de protection.
+    let badge_h = ui.text_style_height(&egui::TextStyle::Small) + 2.0 * ui.spacing().item_spacing.y;
+    let footer = ui.cursor().top() - footer_top + 8.0 + badge_h;
+    if (footer - footer_h).abs() > 0.5 {
+        ui.data_mut(|d| d.insert_temp(footer_id, footer));
+        ui.ctx().request_repaint();
+    }
+
+    // En bas de l'île, avec la même marge qu'à gauche (celle de l'île).
+    ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
+        protection_badge(ui, doc);
+    });
+    command
+}
+
+/// Total des comptes réels, au pied du panneau.
+fn total_row(ui: &mut egui::Ui, total: Amount, doc: &OpenDoc, pal: &crate::theme::Palette) {
     ui.horizontal(|ui| {
         ui.label(RichText::new(tr!("Total")).family(crate::theme::semibold()));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
@@ -132,23 +159,11 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> Option<Command> {
             .small()
             .color(pal.muted),
     );
-    // Pied : le total ci-dessus, un écart, puis le badge de protection.
-    let badge_h = ui.text_style_height(&egui::TextStyle::Small) + 2.0 * ui.spacing().item_spacing.y;
-    let footer = ui.cursor().top() - footer_top + 8.0 + badge_h;
-    if (footer - footer_h).abs() > 0.5 {
-        ui.data_mut(|d| d.insert_temp(footer_id, footer));
-        ui.ctx().request_repaint();
-    }
-
-    // En bas de l'île, avec la même marge qu'à gauche (celle de l'île).
-    ui.with_layout(Layout::bottom_up(Align::Min), |ui| {
-        protection_badge(ui, doc);
-    });
-    command
 }
 
 /// Le compte affiché, en carte bancaire : dégradé aux couleurs du logo,
-/// banque et puce, nom, solde, fin de l'IBAN et dernier rapprochement.
+/// banque et puce (ou logo choisi pour le compte), nom, solde, fin de
+/// l'IBAN et dernier rapprochement.
 fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
     let account = doc.current_account();
     let balance = doc.account_balance(doc.account);
@@ -183,15 +198,24 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
 
     let white = |alpha: u8| Color32::from_white_alpha(alpha);
     let inner = rect.shrink2(vec2(14.0, 12.0));
-    // Puce.
-    let chip = Rect::from_min_size(pos2(inner.right() - 24.0, inner.top()), vec2(24.0, 18.0));
-    painter.rect_filled(chip, 4.0, Color32::from_rgb(0xd6, 0xc4, 0x8a));
-    painter.rect_stroke(
-        chip.shrink(4.0),
-        2.0,
-        egui::Stroke::new(1.0, Color32::from_rgb(0xb8, 0xa4, 0x6a)),
-        egui::StrokeKind::Inside,
-    );
+    // Logo du compte, en haut à droite ; sans logo, une puce.
+    let corner_width = if let Some(logo) = doc.account_logo(doc.account) {
+        // Étroit : le nom du compte garde la place d'une quinzaine de lettres.
+        let size = logo.size_in(vec2(60.0, 30.0), 4.0);
+        let plate = Rect::from_min_size(pos2(inner.right() - size.x, inner.top() - 2.0), size);
+        logo.paint(painter, plate, 4.0, 6.0);
+        size.x
+    } else {
+        let chip = Rect::from_min_size(pos2(inner.right() - 24.0, inner.top()), vec2(24.0, 18.0));
+        painter.rect_filled(chip, 4.0, Color32::from_rgb(0xd6, 0xc4, 0x8a));
+        painter.rect_stroke(
+            chip.shrink(4.0),
+            2.0,
+            egui::Stroke::new(1.0, Color32::from_rgb(0xb8, 0xa4, 0x6a)),
+            egui::StrokeKind::Inside,
+        );
+        24.0
+    };
     let text = |text: &str,
                 pos: Pos2,
                 size: f32,
@@ -224,7 +248,7 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
         16.0,
         crate::theme::semibold(),
         Color32::WHITE,
-        inner.width() - 34.0,
+        inner.width() - corner_width - 10.0,
         Align2::LEFT_TOP,
     );
     let bank = account.bank_name.trim();
@@ -240,15 +264,17 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
             Align2::LEFT_BOTTOM,
         );
     }
-    text(
-        &money(balance, &account.currency).replacen('-', "\u{2212}", 1),
-        pos2(inner.left(), inner.bottom() - 17.0),
-        21.0,
-        crate::theme::semibold(),
-        Color32::WHITE,
-        inner.width(),
-        Align2::LEFT_BOTTOM,
-    );
+    if doc.show_sidebar_balances {
+        text(
+            &money(balance, &account.currency).replacen('-', "\u{2212}", 1),
+            pos2(inner.left(), inner.bottom() - 17.0),
+            21.0,
+            crate::theme::semibold(),
+            Color32::WHITE,
+            inner.width(),
+            Align2::LEFT_BOTTOM,
+        );
+    }
     let digits: String = account
         .iban
         .chars()
@@ -335,7 +361,8 @@ fn account_menu(ui: &mut egui::Ui, doc: &OpenDoc) -> Option<Command> {
 fn account_row(
     ui: &mut egui::Ui,
     account: &bp_core::model::Account,
-    balance: Amount,
+    logo: Option<&crate::bank_logo::Logo>,
+    balance: Option<Amount>,
     selected: bool,
     pal: &crate::theme::Palette,
 ) -> (bool, egui::Response) {
@@ -355,18 +382,25 @@ fn account_row(
     // Le solde est placé en premier (à droite) pour que le nom soit tronqué
     // plutôt que de le chevaucher.
     child.with_layout(Layout::right_to_left(Align::Center), |ui| {
-        let mut text = RichText::new(money(balance, &account.currency));
-        if balance.is_negative() {
-            text = text.color(pal.negative);
+        if let Some(balance) = balance {
+            let mut text = RichText::new(money(balance, &account.currency));
+            if balance.is_negative() {
+                text = text.color(pal.negative);
+            }
+            ui.label(text);
         }
-        ui.label(text);
         ui.with_layout(Layout::left_to_right(Align::Center), |ui| {
             let glyph = if account.counts_as_virtual() {
                 icon::WALLET
             } else {
                 icon::BANK
             };
-            ui.label(RichText::new(glyph).color(pal.muted));
+            if let Some(logo) = logo {
+                let (area, _) = ui.allocate_exact_size(vec2(20.0, 20.0), Sense::hover());
+                logo.paint_centered(ui.painter(), area, 2.0, 4.0);
+            } else {
+                ui.label(RichText::new(glyph).color(pal.muted));
+            }
             let mut name = RichText::new(if account.name.is_empty() {
                 tr!("(sans nom)")
             } else {

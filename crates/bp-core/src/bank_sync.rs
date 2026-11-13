@@ -47,6 +47,11 @@ pub struct BankConnection {
     /// Fin du consentement (RFC 3339).
     pub valid_until: String,
     pub accounts: Vec<BankAccountLink>,
+    /// Identifiant de l'application Enable Banking qui a ouvert la
+    /// connexion (vide : fichiers d'avant la gestion de plusieurs
+    /// applications, l'application en cours sert alors).
+    #[serde(default)]
+    pub application: String,
 }
 
 /// Connexions enregistrées dans le fichier de comptes.
@@ -552,6 +557,7 @@ mod tests {
             country: "FR".into(),
             valid_until: "2026-10-10T12:00:00+00:00".into(),
             accounts: Vec::new(),
+            application: String::new(),
         };
         assert!(connection.expired(today));
     }

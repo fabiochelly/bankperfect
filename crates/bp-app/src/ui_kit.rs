@@ -31,9 +31,27 @@ pub fn dialog_height(ctx: &egui::Context, fraction: f32) -> f32 {
 /// dessinée juste au-dessus.
 pub struct Combo(egui::ComboBox);
 
+/// Chevron fin des listes déroulantes (à la place de la flèche pleine
+/// d'egui) ; il se retourne quand la liste est ouverte.
+fn chevron(ui: &egui::Ui, rect: egui::Rect, visuals: &egui::style::WidgetVisuals, open: bool) {
+    let half = egui::vec2(4.5, 2.5);
+    let tip = if open { -half.y } else { half.y };
+    let c = rect.center();
+    let points = vec![
+        egui::pos2(c.x - half.x, c.y - tip),
+        egui::pos2(c.x, c.y + tip),
+        egui::pos2(c.x + half.x, c.y - tip),
+    ];
+    let stroke = egui::Stroke::new(1.6, visuals.fg_stroke.color);
+    for end in [points[0], points[2]] {
+        ui.painter().circle_filled(end, 0.8, stroke.color);
+    }
+    ui.painter().add(egui::Shape::line(points, stroke));
+}
+
 impl Combo {
     pub fn new(id_salt: impl egui::AsIdSalt) -> Self {
-        Self(egui::ComboBox::from_id_salt(id_salt))
+        Self(egui::ComboBox::from_id_salt(id_salt).icon(chevron))
     }
 
     pub fn selected_text(self, text: impl Into<egui::WidgetText>) -> Self {
@@ -288,7 +306,7 @@ pub fn category_combo_fixed(
 }
 
 fn category_combo_impl(
-    ui: &mut egui::Ui,
+    parent: &mut egui::Ui,
     id: &str,
     document: &Document,
     styles: &std::collections::HashMap<u32, crate::category_icons::CategoryStyle>,
@@ -296,6 +314,7 @@ fn category_combo_impl(
     width: f32,
     fixed: bool,
 ) -> bool {
+    let ui = &mut *parent;
     let pal = palette(ui);
     let before = *category;
     let style = category.and_then(|id| styles.get(&id).copied());
@@ -314,6 +333,14 @@ fn category_combo_impl(
     if fixed {
         combo = combo.truncate();
     }
+    // Un libellé coupé prend toute la place offerte : elle est bornée à la
+    // largeur demandée, sinon la liste pousse ce qui la suit hors du cadre.
+    let pad = ui.spacing().button_padding.x;
+    let mut area = ui.new_child(egui::UiBuilder::new().layout(*ui.layout()));
+    if fixed {
+        area.set_max_width(width - 2.0 * pad);
+    }
+    let ui = &mut area;
     combo.show_ui(ui, |ui| {
         ui.selectable_value(category, None, tr!("Aucune catégorie"));
         for c in &document.categories {
@@ -330,6 +357,8 @@ fn category_combo_impl(
             ui.selectable_value(category, Some(c.id), text);
         }
     });
+    let used = area.min_rect();
+    parent.allocate_rect(used, egui::Sense::hover());
     *category != before
 }
 

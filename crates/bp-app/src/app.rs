@@ -433,6 +433,8 @@ pub struct BankPerfectApp {
     /// Une composition est en cours dans la méthode de saisie (pré-saisie
     /// non vide), voir `raw_input_hook`.
     ime_composing: bool,
+    /// Code Alt en cours de frappe (Windows).
+    alt_code: crate::alt_code::AltCode,
     caret: crate::caret::SmoothCaret,
     settings: crate::settings::Settings,
     /// Le thème des réglages reste à appliquer (première image).
@@ -525,6 +527,7 @@ impl BankPerfectApp {
             menus: menu::MenuBar::default(),
             profiler: crate::profiler::Profiler::from_env(),
             ime_composing: false,
+            alt_code: Default::default(),
             caret: crate::caret::SmoothCaret::default(),
             settings,
             theme_pending: false,
@@ -1499,6 +1502,14 @@ impl BankPerfectApp {
                 self.settings.balance_river = !self.settings.balance_river;
                 self.settings.save();
             }
+            Command::ToggleSidebarBalances => {
+                self.settings.sidebar_balances = !self.settings.sidebar_balances;
+                self.settings.save();
+            }
+            Command::ToggleBalanceColumn => {
+                self.settings.balance_column = !self.settings.balance_column;
+                self.settings.save();
+            }
             Command::ToggleTackColumn => {
                 self.settings.tack_after_amount = !self.settings.tack_after_amount;
                 self.settings.save();
@@ -2266,6 +2277,18 @@ impl BankPerfectApp {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleAccountsPanel);
                 }
+                let mut sidebar_balances = self.settings.sidebar_balances;
+                if menu::toggle(
+                    ui,
+                    &mut sidebar_balances,
+                    tr!("Soldes dans le panneau des comptes"),
+                    None,
+                )
+                .clicked()
+                {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleSidebarBalances);
+                }
                 let mut panel = self.settings.show_balance_panel;
                 if menu::toggle(ui, &mut panel, tr!("Panneau des soldes"), None).clicked() {
                     let ctx = ui.ctx().clone();
@@ -2286,6 +2309,11 @@ impl BankPerfectApp {
                 {
                     let ctx = ui.ctx().clone();
                     self.execute(&ctx, ToggleColumnFilters);
+                }
+                let mut balance_column = self.settings.balance_column;
+                if menu::toggle(ui, &mut balance_column, tr!("Colonne Solde"), None).clicked() {
+                    let ctx = ui.ctx().clone();
+                    self.execute(&ctx, ToggleBalanceColumn);
                 }
                 let mut river = self.settings.balance_river;
                 if menu::toggle(ui, &mut river, tr!("Courbe du solde"), None).clicked() {
@@ -2466,11 +2494,15 @@ impl BankPerfectApp {
                             if a.disabled {
                                 continue;
                             }
-                            let label = format!(
-                                "{}    {}",
-                                a.name,
-                                money(doc.account_balance(i), &a.currency)
-                            );
+                            let label = if doc.show_sidebar_balances {
+                                format!(
+                                    "{}    {}",
+                                    a.name,
+                                    money(doc.account_balance(i), &a.currency)
+                                )
+                            } else {
+                                a.name.clone()
+                            };
                             if ui.selectable_label(i == doc.account, label).clicked() {
                                 selected = Some(i);
                             }
@@ -3475,7 +3507,12 @@ impl eframe::App for BankPerfectApp {
     /// renvoie la zone du curseur à la méthode de saisie après toute image
     /// qui a reçu un événement, et fcitx5 y répond par une pré-saisie vide,
     /// d'où une boucle qui redessine sans arrêt tant qu'un champ a le focus.
-    fn raw_input_hook(&mut self, _ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+    fn raw_input_hook(&mut self, ctx: &egui::Context, raw_input: &mut egui::RawInput) {
+        // Codes Alt (Alt+0201 → É) : Windows seulement, dans un champ de texte.
+        if cfg!(windows) {
+            self.alt_code
+                .filter(&mut raw_input.events, ctx.egui_wants_keyboard_input());
+        }
         raw_input.events.retain(|event| match event {
             egui::Event::Ime(egui::ImeEvent::Preedit { text, .. }) => {
                 let keep = self.ime_composing || !text.is_empty();
@@ -3828,6 +3865,8 @@ impl BankPerfectApp {
         doc.show_column_filters = self.settings.show_column_filters;
         doc.show_balance_river = self.settings.balance_river;
         doc.tack_after_amount = self.settings.tack_after_amount;
+        doc.show_sidebar_balances = self.settings.sidebar_balances;
+        doc.show_balance_column = self.settings.balance_column;
         // « Cacher les lignes inutiles » est retenu d'une session à l'autre,
         // comme dans l'ancienne version, quel que soit le chemin qui l'a
         // basculé (menu, Ctrl+H, filtres).

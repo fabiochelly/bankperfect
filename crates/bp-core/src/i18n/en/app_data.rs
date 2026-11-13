@@ -98,6 +98,19 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Choose the key file (.pem)",
     ),
     ("Clé privée", "Private key"),
+    ("Ajouter une application", "Add an application"),
+    (
+        "Une autre application Enable Banking, par exemple pour les comptes d'un proche.",
+        "Another Enable Banking application, for example for a relative's accounts.",
+    ),
+    (
+        "Nom de l'application (facultatif : « Personnel », « Parents »…)",
+        "Application name (optional: “Personal”, “Parents”…)",
+    ),
+    (
+        "l'application Enable Banking de la connexion « {} » n'est pas configurée sur cet ordinateur",
+        "the Enable Banking application of the “{}” connection is not set up on this computer",
+    ),
     (
         "ce fichier ne contient pas de clé privée",
         "this file does not contain a private key",

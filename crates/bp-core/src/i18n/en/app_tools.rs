@@ -280,6 +280,44 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Compte inactif : masqué de la liste des comptes",
         "Inactive account: hidden from the account list",
     ),
+    ("Logo", "Logo"),
+    ("Changer d'image…", "Change image…"),
+    ("Choisir une image…", "Choose an image…"),
+    ("Retirer le logo", "Remove logo"),
+    (
+        "Image PNG, JPEG ou SVG de votre choix, ou logo d'une banque téléchargé depuis chelly.net (marques de leurs propriétaires). Le logo s'affiche sur la carte du compte et dans la liste des comptes ; il est enregistré dans le fichier de comptes.",
+        "A PNG, JPEG or SVG image of your choice, or a bank logo downloaded from chelly.net (trademarks of their owners). The logo is shown on the account card and in the account list; it is saved in the accounts file.",
+    ),
+    ("Logo {}", "{} logo"),
+    (
+        "Télécharger ce logo et le donner au compte",
+        "Download this logo and give it to the account",
+    ),
+    ("Logos des banques…", "Bank logos…"),
+    (
+        "Téléchargement du logo impossible : {}",
+        "Could not download the logo: {}",
+    ),
+    (
+        "Logo de l'ancienne version : {}. Son image se trouve dans le dossier « logos » de l'ancien BankPerfect.",
+        "Logo from the previous version: {}. Its image is in the “logos” folder of the old BankPerfect.",
+    ),
+    ("Images", "Images"),
+    ("Tous les fichiers", "All files"),
+    (
+        "Cette image est trop lourde (20 Mo au plus).",
+        "This image is too large (20 MB at most).",
+    ),
+    ("Image illisible : {}", "Unreadable image: {}"),
+    (
+        "Ce fichier n'est pas une image reconnue (PNG, JPEG, WebP, GIF, BMP ou SVG).",
+        "This file is not a recognised image (PNG, JPEG, WebP, GIF, BMP or SVG).",
+    ),
+    (
+        "Cette image est entièrement transparente.",
+        "This image is fully transparent.",
+    ),
+    ("logo du compte", "account logo"),
     ("Nouvelle sous-catégorie", "New subcategory"),
     ("Nouvelle catégorie", "New category"),
     (

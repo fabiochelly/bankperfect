@@ -119,6 +119,9 @@ pub struct SchedulerForm {
     message: Option<String>,
     warnings: Vec<String>,
     confirm_delete: bool,
+    /// La demande de confirmation vient d'apparaître : le volet de détail
+    /// remonte jusqu'à elle (elle est tout en haut, parfois hors de vue).
+    reveal_confirm: bool,
     /// Nombre d'échéances du tout premier échéancier, reprenables.
     oldest: usize,
     /// Occurrence de l'échéance sélectionnée dont on change le montant.
@@ -159,6 +162,7 @@ impl SchedulerForm {
             message: None,
             warnings,
             confirm_delete: false,
+            reveal_confirm: false,
             oldest: scheduler::oldest_schedules(&doc.document).map_or(0, |(s, _)| s.len()),
             occurrence: None,
             reveal_dates: false,
@@ -439,6 +443,7 @@ impl SchedulerForm {
                                 .clicked()
                             {
                                 self.confirm_delete = true;
+                                self.reveal_confirm = true;
                             }
                             if ui
                                 .add(egui::Button::new(icon::COPY).min_size(egui::vec2(34.0, 34.0)))
@@ -479,7 +484,8 @@ impl SchedulerForm {
         };
         if self.confirm_delete {
             let mut done = None;
-            egui::Frame::new()
+            let reveal = std::mem::take(&mut self.reveal_confirm);
+            let confirm = egui::Frame::new()
                 .fill(pal.negative.gamma_multiply(0.10))
                 .stroke(egui::Stroke::new(1.0, pal.negative.gamma_multiply(0.4)))
                 .corner_radius(12)
@@ -512,6 +518,9 @@ impl SchedulerForm {
                         },
                     );
                 });
+            if reveal {
+                confirm.response.scroll_to_me(Some(egui::Align::TOP));
+            }
             ui.add_space(14.0);
             match done {
                 Some(true) => {

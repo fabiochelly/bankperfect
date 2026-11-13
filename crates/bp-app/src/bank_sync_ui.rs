@@ -51,32 +51,118 @@ const COUNTRIES: [(&str, &str); 16] = [
     ("EE", tr_mark!("Estonie")),
 ];
 
-/// Application Enable Banking de l'utilisateur.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Une application Enable Banking de l'utilisateur.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 struct Config {
     application_id: String,
     redirect_url: String,
+    /// Nom donné par l'utilisateur (facultatif).
+    #[serde(default)]
+    name: String,
 }
 
-fn load_config() -> Option<(Config, Vec<u8>)> {
-    let config: Config = crate::settings::config_file(CONFIG_FILE)
-        .and_then(|p| std::fs::read(p).ok())
-        .and_then(|b| serde_json::from_slice(&b).ok())?;
-    let key = crate::settings::config_file(KEY_FILE).and_then(|p| std::fs::read(p).ok())?;
-    Some((config, key))
-}
-
-fn save_config(config: &Config, key: &[u8]) -> Result<(), String> {
-    let json = serde_json::to_vec_pretty(config).map_err(|e| e.to_string())?;
-    crate::settings::write_config_file(CONFIG_FILE, &json)?;
-    crate::settings::write_config_file(KEY_FILE, key)?;
-    // Clé privée lisible par l'utilisateur seul.
-    #[cfg(unix)]
-    if let Some(path) = crate::settings::config_file(KEY_FILE) {
-        use std::os::unix::fs::PermissionsExt;
-        let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+impl Config {
+    /// Nom affiché : celui de l'utilisateur, sinon le début de l'identifiant.
+    fn label(&self) -> String {
+        if self.name.trim().is_empty() {
+            let short: String = self.application_id.chars().take(8).collect();
+            format!("{short}…")
+        } else {
+            self.name.trim().to_string()
+        }
     }
-    Ok(())
+}
+
+/// Contenu de `banque.json` : les applications et celle en cours. Avant la
+/// gestion de plusieurs applications, le fichier ne décrivait qu'une
+/// application, à la racine, avec sa clé dans `banque-cle.pem`.
+#[derive(Default, Serialize, Deserialize)]
+struct Store {
+    #[serde(default)]
+    applications: Vec<Config>,
+    /// Identifiant de l'application en cours.
+    #[serde(default)]
+    current: String,
+    #[serde(default, skip_serializing)]
+    application_id: String,
+    #[serde(default, skip_serializing)]
+    redirect_url: String,
+}
+
+/// Applications décrites par `banque.json`, la position de celle en cours,
+/// et vrai si le fichier est à l'ancien format (une seule application).
+fn parse_store(json: &[u8]) -> (Vec<Config>, usize, bool) {
+    let store: Store = serde_json::from_slice(json).unwrap_or_default();
+    if store.applications.is_empty() && !store.application_id.trim().is_empty() {
+        let legacy = Config {
+            application_id: store.application_id,
+            redirect_url: store.redirect_url,
+            name: String::new(),
+        };
+        return (vec![legacy], 0, true);
+    }
+    let current = store
+        .applications
+        .iter()
+        .position(|c| c.application_id == store.current)
+        .unwrap_or(0);
+    (store.applications, current, false)
+}
+
+/// Fichier de la clé privée d'une application.
+fn key_file(application_id: &str) -> String {
+    let id: String = application_id
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || *c == '-')
+        .collect();
+    format!("banque-cle-{id}.pem")
+}
+
+/// Applications configurées sur cet ordinateur (avec leur clé) et position
+/// de celle en cours.
+fn load_apps() -> (Vec<(Config, Vec<u8>)>, usize) {
+    let read = |name: &str| crate::settings::config_file(name).and_then(|p| std::fs::read(p).ok());
+    let Some(json) = read(CONFIG_FILE) else {
+        return (Vec::new(), 0);
+    };
+    let (configs, current, legacy) = parse_store(&json);
+    let current_id = configs.get(current).map(|c| c.application_id.clone());
+    let apps: Vec<(Config, Vec<u8>)> = configs
+        .into_iter()
+        .filter_map(|c| {
+            let key = read(&key_file(&c.application_id))
+                .or_else(|| legacy.then(|| read(KEY_FILE)).flatten())?;
+            Some((c, key))
+        })
+        .collect();
+    let current = apps
+        .iter()
+        .position(|(c, _)| Some(&c.application_id) == current_id.as_ref())
+        .unwrap_or(0);
+    (apps, current)
+}
+
+fn save_apps(apps: &[(Config, Vec<u8>)], current: usize) -> Result<(), String> {
+    let store = Store {
+        applications: apps.iter().map(|(c, _)| c.clone()).collect(),
+        current: apps
+            .get(current)
+            .map(|(c, _)| c.application_id.clone())
+            .unwrap_or_default(),
+        ..Default::default()
+    };
+    let json = serde_json::to_vec_pretty(&store).map_err(|e| e.to_string())?;
+    for (config, key) in apps {
+        let name = key_file(&config.application_id);
+        crate::settings::write_config_file(&name, key)?;
+        // Clé privée lisible par l'utilisateur seul.
+        #[cfg(unix)]
+        if let Some(path) = crate::settings::config_file(&name) {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+    crate::settings::write_config_file(CONFIG_FILE, &json)
 }
 
 // ─────────────────────────── Client ───────────────────────────
@@ -221,8 +307,13 @@ struct PendingAuth {
 
 pub struct BankSyncForm {
     page: Page,
+    /// Client de l'application en cours.
     client: Option<Client>,
-    // Configuration.
+    /// Applications configurées sur cet ordinateur, et celle en cours.
+    apps: Vec<(Config, Vec<u8>)>,
+    current: usize,
+    // Configuration (application en cours, ou nouvelle application).
+    app_name: String,
     app_id: String,
     redirect: String,
     key: Option<Vec<u8>>,
@@ -245,7 +336,8 @@ pub struct BankSyncForm {
 
 impl BankSyncForm {
     pub fn new(doc: &OpenDoc) -> Self {
-        let loaded = load_config();
+        let (apps, current) = load_apps();
+        let loaded = apps.get(current).cloned();
         let (config, key) = match &loaded {
             Some((c, k)) => (c.clone(), Some(k.clone())),
             None => (Config::default(), None),
@@ -265,6 +357,9 @@ impl BankSyncForm {
         Self {
             page,
             client,
+            apps,
+            current,
+            app_name: config.name,
             app_id: config.application_id,
             redirect: if config.redirect_url.is_empty() {
                 DEFAULT_REDIRECT.into()
@@ -289,6 +384,87 @@ impl BankSyncForm {
             error: None,
             message: None,
         }
+    }
+
+    /// Passe à l'application `k` : elle sert aux nouvelles connexions.
+    fn select_app(&mut self, k: usize) {
+        let Some((config, key)) = self.apps.get(k).cloned() else {
+            return;
+        };
+        self.current = k;
+        self.client = Some(Client {
+            application_id: config.application_id.clone(),
+            key: Arc::new(key.clone()),
+        });
+        self.app_name = config.name;
+        self.app_id = config.application_id;
+        self.redirect = config.redirect_url;
+        self.key = Some(key);
+        self.key_name = tr!("clé enregistrée").into();
+    }
+
+    /// Client de l'application `application` d'une connexion (vide :
+    /// l'application en cours).
+    fn client_for(&self, application: &str) -> Option<Client> {
+        if application.is_empty() {
+            return self.client.clone();
+        }
+        self.apps
+            .iter()
+            .find(|(c, _)| c.application_id == application)
+            .map(|(c, k)| Client {
+                application_id: c.application_id.clone(),
+                key: Arc::new(k.clone()),
+            })
+    }
+
+    /// Choix de l'application (s'il y en a plusieurs) et ajout d'une autre.
+    fn app_bar(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui
+                .link(format!(
+                    "{}  {}",
+                    icon::GEAR,
+                    tr!("Configuration Enable Banking")
+                ))
+                .clicked()
+            {
+                self.select_app(self.current);
+                self.page = Page::Setup;
+            }
+            if self.apps.len() > 1 {
+                let mut chosen = self.current;
+                let label = self.apps[self.current].0.label();
+                ui_kit::Combo::new("bank_sync_app")
+                    .selected_text(label)
+                    .show_ui(ui, |ui| {
+                        for (k, (config, _)) in self.apps.iter().enumerate() {
+                            ui.selectable_value(&mut chosen, k, config.label());
+                        }
+                    });
+                if chosen != self.current {
+                    self.select_app(chosen);
+                    let _ = save_apps(&self.apps, self.current);
+                }
+            }
+            if ui
+                .link(format!(
+                    "{}  {}",
+                    icon::PLUS,
+                    tr!("Ajouter une application")
+                ))
+                .on_hover_text(tr!(
+                    "Une autre application Enable Banking, par exemple pour les comptes d'un proche."
+                ))
+                .clicked()
+            {
+                self.app_name.clear();
+                self.app_id.clear();
+                self.key = None;
+                self.key_name.clear();
+                self.page = Page::Setup;
+            }
+        });
     }
 
     fn save_sync(&mut self, doc: &mut OpenDoc) {
@@ -390,13 +566,31 @@ impl BankSyncForm {
                 let config = Config {
                     application_id: self.app_id.trim().to_string(),
                     redirect_url: self.redirect.trim().to_string(),
+                    name: self.app_name.trim().to_string(),
                 };
-                match self
+                let saved = self
                     .key
-                    .as_deref()
+                    .clone()
                     .ok_or(tr!("clé manquante").to_string())
-                    .and_then(|k| save_config(&config, k))
-                {
+                    .and_then(|key| {
+                        // Application déjà connue : mise à jour ; sinon ajout.
+                        let known = self
+                            .apps
+                            .iter()
+                            .position(|(c, _)| c.application_id == config.application_id);
+                        match known {
+                            Some(k) => {
+                                self.apps[k] = (config, key);
+                                self.current = k;
+                            }
+                            None => {
+                                self.apps.push((config, key));
+                                self.current = self.apps.len() - 1;
+                            }
+                        }
+                        save_apps(&self.apps, self.current)
+                    });
+                match saved {
                     Ok(()) => {
                         self.message =
                             Some(tr!("Configuration enregistrée : Enable Banking répond.").into());
@@ -445,17 +639,25 @@ impl BankSyncForm {
                     self.error = Some(tr!("la banque n'a donné accès à aucun compte (avez-vous relié vos comptes dans le panneau d'Enable Banking ?)").into());
                     return Outcome::Keep;
                 }
-                // Reconnexion : les comptes déjà associés le restent.
-                let previous =
-                    self.sync.connections.iter().position(|c| {
-                        c.bank == pending.bank.name && c.country == pending.bank.country
-                    });
+                let application = self
+                    .apps
+                    .get(self.current)
+                    .map(|(c, _)| c.application_id.clone())
+                    .unwrap_or_default();
+                // Reconnexion : les comptes déjà associés le restent. La même
+                // banque peut être reliée par deux applications.
+                let previous = self.sync.connections.iter().position(|c| {
+                    c.bank == pending.bank.name
+                        && c.country == pending.bank.country
+                        && (c.application.is_empty() || c.application == application)
+                });
                 let mut connection = BankConnection {
                     session_id,
                     bank: pending.bank.name.clone(),
                     country: pending.bank.country.clone(),
                     valid_until,
                     accounts,
+                    application: application.clone(),
                 };
                 if let Some(k) = previous {
                     for link in &mut connection.accounts {
@@ -606,6 +808,14 @@ impl BankSyncForm {
         );
         ui_kit::section(ui, width, icon::KEY, tr!("Application"), |ui| {
             ui.add(
+                crate::theme::field(&mut self.app_name)
+                    .hint_text(tr!(
+                        "Nom de l'application (facultatif : « Personnel », « Parents »…)"
+                    ))
+                    .desired_width(inner - 20.0),
+            );
+            ui.add_space(8.0);
+            ui.add(
                 crate::theme::field(&mut self.app_id)
                     .hint_text(tr!("Identifiant de l'application (aaaaaaaa-bbbb-…)"))
                     .desired_width(inner - 20.0),
@@ -709,7 +919,9 @@ impl BankSyncForm {
                     },
                 );
             }
-            if self.client.is_some() && ui.button(tr!("Annuler")).clicked() {
+            if !self.apps.is_empty() && ui.button(tr!("Annuler")).clicked() {
+                // Les champs reviennent à l'application en cours.
+                self.select_app(self.current);
                 self.page = Page::Connections;
             }
         });
@@ -734,15 +946,21 @@ impl BankSyncForm {
     }
 
     fn import(&mut self, ctx: &egui::Context, doc: &OpenDoc) {
-        let Some(client) = self.client.clone() else {
-            return;
-        };
         let today = Date::today();
-        let mut work: Vec<(BankAccountLink, usize, Date)> = Vec::new();
+        let mut work: Vec<(Client, BankAccountLink, usize, Date)> = Vec::new();
         for c in self.sync.connections.iter().filter(|c| !c.expired(today)) {
+            let client = self.client_for(&c.application);
             for link in &c.accounts {
                 if let Some(target) = bank_sync::target_index(&doc.document, link) {
+                    let Some(client) = client.clone() else {
+                        self.error = Some(tr!(
+                            "l'application Enable Banking de la connexion « {} » n'est pas configurée sur cet ordinateur",
+                            c.bank
+                        ));
+                        return;
+                    };
                     work.push((
+                        client,
                         link.clone(),
                         target,
                         bank_sync::sync_start(&doc.document, target, today),
@@ -752,7 +970,7 @@ impl BankSyncForm {
         }
         self.start(ctx, tr!("Téléchargement des opérations…"), move || {
             let mut results = Vec::new();
-            for (link, target, from) in work {
+            for (client, link, target, from) in work {
                 let mut operations = Vec::new();
                 let mut continuation: Option<String> = None;
                 loop {
@@ -814,6 +1032,14 @@ impl BankSyncForm {
             .id_salt("bank_connections")
             .max_height(ui_kit::dialog_height(ctx, 0.5))
             .show(ui, |ui| {
+                let app_labels: Vec<(String, String)> = if self.apps.len() > 1 {
+                    self.apps
+                        .iter()
+                        .map(|(c, _)| (c.application_id.clone(), c.label()))
+                        .collect()
+                } else {
+                    Vec::new()
+                };
                 for (k, connection) in self.sync.connections.iter_mut().enumerate() {
                     let expired = connection.expired(today);
                     ui_kit::card(ui, width - 16.0, |ui| {
@@ -837,6 +1063,12 @@ impl BankSyncForm {
                                     &tr!("autorisée jusqu'au {}", until),
                                     pal.positive,
                                 );
+                            }
+                            if let Some((_, label)) = app_labels
+                                .iter()
+                                .find(|(id, _)| *id == connection.application)
+                            {
+                                ui_kit::pill(ui, label, pal.accent);
                             }
                             ui.with_layout(
                                 egui::Layout::right_to_left(egui::Align::Center),
@@ -935,7 +1167,7 @@ impl BankSyncForm {
         if let Some(k) = remove {
             let connection = self.sync.connections.remove(k);
             self.save_sync(doc);
-            if let Some(client) = self.client.clone() {
+            if let Some(client) = self.client_for(&connection.application) {
                 // Révocation chez Enable Banking, sans attendre la réponse.
                 std::thread::spawn(move || {
                     let _ = client.call(
@@ -947,6 +1179,15 @@ impl BankSyncForm {
             }
         }
         if let Some(k) = reconnect {
+            // Avec l'application qui avait ouvert la connexion.
+            let application = self.sync.connections[k].application.clone();
+            if let Some(app) = self
+                .apps
+                .iter()
+                .position(|(c, _)| c.application_id == application)
+            {
+                self.select_app(app);
+            }
             let c = &self.sync.connections[k];
             let bank = Bank {
                 name: c.bank.clone(),
@@ -983,7 +1224,7 @@ impl BankSyncForm {
         let Some(client) = self.client.clone() else {
             return;
         };
-        let Some((config, _)) = load_config() else {
+        let Some((config, _)) = self.apps.get(self.current).cloned() else {
             self.page = Page::Setup;
             return;
         };
@@ -1189,16 +1430,7 @@ impl BankSyncForm {
                 }
             },
         );
-        if ui
-            .link(format!(
-                "{}  {}",
-                icon::GEAR,
-                tr!("Configuration Enable Banking")
-            ))
-            .clicked()
-        {
-            self.page = Page::Setup;
-        }
+        self.app_bar(ui);
     }
 }
 
@@ -1224,6 +1456,34 @@ mod tests {
 
     /// Clé RSA de test, sans valeur (générée pour ce test).
     const TEST_KEY: &str = include_str!("../tests/data/test-rsa.pem");
+
+    #[test]
+    fn one_or_several_applications() {
+        // Ancien fichier : une application à la racine.
+        let (apps, current, legacy) =
+            parse_store(br#"{"application_id": "aaa", "redirect_url": "https://x"}"#);
+        assert_eq!((apps.len(), current, legacy), (1, 0, true));
+        assert_eq!(apps[0].application_id, "aaa");
+        assert_eq!(apps[0].label(), "aaa…");
+
+        let store = Store {
+            applications: vec![
+                apps[0].clone(),
+                Config {
+                    application_id: "bbb".into(),
+                    redirect_url: "https://y".into(),
+                    name: "Parents".into(),
+                },
+            ],
+            current: "bbb".into(),
+            ..Default::default()
+        };
+        let json = serde_json::to_vec(&store).unwrap();
+        let (apps, current, legacy) = parse_store(&json);
+        assert_eq!((apps.len(), current, legacy), (2, 1, false));
+        assert_eq!(apps[1].label(), "Parents");
+        assert_eq!(key_file("ab-12/../x"), "banque-cle-ab-12x.pem");
+    }
 
     #[test]
     fn signs_a_token() {

@@ -461,7 +461,8 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let sort_by_date = matches!(doc.sort, SortColumn::Date | SortColumn::MarkDate);
     let show_mark = doc.show_mark_dates;
     // Courbe du solde : le solde progressif n'a de sens que trié par date.
-    let river = if sort_by_date && doc.show_balance_river {
+    let show_balance = doc.show_balance_column;
+    let river = if sort_by_date && doc.show_balance_river && show_balance {
         // Échelle des lignes à l'écran (à l'image précédente), avec de la marge.
         let (first, last) = doc.on_screen.unwrap_or((0, 30));
         let rows = visible.get(first.saturating_sub(10)..(last + 11).min(visible.len()));
@@ -484,11 +485,18 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let narrow = ui.available_width() < 760.0;
     // Largeurs réglées à la souris (poignées dessinées après le tableau).
     let widths_id = ui.id().with(("grid_widths", narrow));
-    let minima = ColumnMinima::of(ui);
+    let mut minima = ColumnMinima::of(ui);
     let mut widths = ui
         .data(|d| d.get_temp::<ColumnWidths>(widths_id))
         .unwrap_or_else(|| ColumnWidths::initial(narrow))
         .at_least(&minima);
+    // Colonne Solde masquée (Affichage) : il n'en reste que la place de la
+    // barre de défilement ; les largeurs réglées sont gardées pour son retour.
+    let kept = (widths.amount, widths.balance);
+    if !show_balance {
+        minima.balance = SCROLLBAR_GUTTER;
+        widths.balance = SCROLLBAR_GUTTER;
+    }
     // Pointage en tête de ligne, ou entre Montant et Solde (Affichage).
     let tack_right = doc.tack_after_amount;
     let layout = widths.layout(
@@ -609,7 +617,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                     let layout = Layout::right_to_left(Align::Center);
                     ui.allocate_ui_with_layout(row, layout, |ui| {
                         ui.add_space(SCROLLBAR_GUTTER);
-                        ui.label(RichText::new(tr!("Solde")).family(crate::theme::semibold()));
+                        if show_balance {
+                            ui.label(RichText::new(tr!("Solde")).family(crate::theme::semibold()));
+                        }
                     });
                     if open {
                         ui.add_space(34.0 + ui.spacing().item_spacing.y);
@@ -799,7 +809,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
                         if balance.is_negative() {
                             text = text.color(pal.negative);
                         }
-                        ui.label(text);
+                        if show_balance {
+                            ui.label(text);
+                        }
                     });
                 });
                 if river.is_some() && crate::river::wants_tooltip(&balance_cell, rows_clip) {
@@ -958,6 +970,9 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     );
     let header_y = egui::Rangef::new(table_top, table_top + header_height);
     column_handles(ui, narrow, rules_y, header_y, &layout, &minima, &mut widths);
+    if !show_balance {
+        (widths.amount, widths.balance) = kept;
+    }
     ui.data_mut(|d| d.insert_temp(widths_id, widths));
     // Lignes entièrement visibles (les rangées extrêmes sont souvent coupées).
     doc.on_screen = (first_drawn <= last_drawn).then(|| {

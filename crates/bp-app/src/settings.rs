@@ -43,6 +43,10 @@ pub struct Settings {
     pub balance_river: bool,
     /// Colonne de pointage entre Montant et Solde plutôt qu'en tête de ligne.
     pub tack_after_amount: bool,
+    /// Soldes affichés dans le panneau des comptes.
+    pub sidebar_balances: bool,
+    /// Colonne Solde de la grille.
+    pub balance_column: bool,
     /// Cacher les lignes inutiles : rapprochées et antérieures au mois
     /// courant.
     pub hide_old_lines: bool,
@@ -124,6 +128,8 @@ impl Default for Settings {
             show_column_filters: false,
             balance_river: true,
             tack_after_amount: false,
+            sidebar_balances: true,
+            balance_column: true,
             hide_old_lines: false,
             window_maximized: false,
             pinned_commands: Vec::new(),

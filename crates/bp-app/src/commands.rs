@@ -65,6 +65,8 @@ pub enum Command {
     ToggleBalanceLock,
     ToggleColumnFilters,
     ToggleBalanceRiver,
+    ToggleSidebarBalances,
+    ToggleBalanceColumn,
     ToggleTackColumn,
     ReverseCurrencies,
     Scheduler,
@@ -184,6 +186,8 @@ impl Command {
                 ToggleBalanceLock,
                 ToggleColumnFilters,
                 ToggleBalanceRiver,
+                ToggleSidebarBalances,
+                ToggleBalanceColumn,
                 ToggleTackColumn,
                 ReverseCurrencies,
                 Scheduler,
@@ -271,6 +275,8 @@ impl Command {
             | Replace
             | ToggleBalancePanel
             | ToggleAccountsPanel
+            | ToggleSidebarBalances
+            | ToggleBalanceColumn
             | ToggleBalanceCards
             | Theme(ThemePreference::System)
             | Language(_)
@@ -402,6 +408,12 @@ impl Command {
             }
             ToggleBalanceRiver => {
                 tr!("Afficher ou masquer la courbe du solde derrière la colonne Solde.")
+            }
+            ToggleSidebarBalances => {
+                tr!("Afficher ou masquer les soldes dans le panneau des comptes, à gauche.")
+            }
+            ToggleBalanceColumn => {
+                tr!("Afficher ou masquer la colonne Solde, à droite du tableau.")
             }
             ToggleTackColumn => {
                 tr!("Placer la colonne de pointage en tête de ligne ou après le montant.")
@@ -957,6 +969,34 @@ impl Command {
                     icon::WAVE_SINE,
                     None,
                     tr_mark!("courbe solde graphique colonne évolution"),
+                )
+            }
+            ToggleSidebarBalances => {
+                let label = if doc.is_none_or(|d| d.show_sidebar_balances) {
+                    tr!("Masquer les soldes du panneau des comptes")
+                } else {
+                    tr!("Afficher les soldes du panneau des comptes")
+                };
+                info(
+                    VIEW,
+                    label,
+                    icon::WALLET,
+                    None,
+                    tr_mark!("soldes comptes liste gauche cacher montant"),
+                )
+            }
+            ToggleBalanceColumn => {
+                let label = if doc.is_none_or(|d| d.show_balance_column) {
+                    tr!("Masquer la colonne Solde")
+                } else {
+                    tr!("Afficher la colonne Solde")
+                };
+                info(
+                    VIEW,
+                    label,
+                    icon::SQUARE_HALF,
+                    None,
+                    tr_mark!("solde colonne droite cacher progressif"),
                 )
             }
             ToggleTackColumn => {

@@ -167,8 +167,12 @@ fn total_row(ui: &mut egui::Ui, total: Amount, doc: &OpenDoc, pal: &crate::theme
 fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
     let account = doc.current_account();
     let balance = doc.account_balance(doc.account);
+    // Avec un logo : le logo en grand, le nom du compte en petit dessous ;
+    // la carte gagne la hauteur de cette ligne.
+    let logo = doc.account_logo(doc.account);
+    let card_height = if logo.is_some() { 138.0 } else { 118.0 };
     let (rect, response) =
-        ui.allocate_exact_size(vec2(ui.available_width(), 118.0), Sense::click());
+        ui.allocate_exact_size(vec2(ui.available_width(), card_height), Sense::click());
     let painter = ui.painter();
     let radius = 14.0;
 
@@ -198,14 +202,8 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
 
     let white = |alpha: u8| Color32::from_white_alpha(alpha);
     let inner = rect.shrink2(vec2(14.0, 12.0));
-    // Logo du compte, en haut à droite ; sans logo, une puce.
-    let corner_width = if let Some(logo) = doc.account_logo(doc.account) {
-        // Étroit : le nom du compte garde la place d'une quinzaine de lettres.
-        let size = logo.size_in(vec2(60.0, 30.0), 4.0);
-        let plate = Rect::from_min_size(pos2(inner.right() - size.x, inner.top() - 2.0), size);
-        logo.paint(painter, plate, 4.0, 6.0);
-        size.x
-    } else {
+    // Sans logo, une puce en haut à droite.
+    if logo.is_none() {
         let chip = Rect::from_min_size(pos2(inner.right() - 24.0, inner.top()), vec2(24.0, 18.0));
         painter.rect_filled(chip, 4.0, Color32::from_rgb(0xd6, 0xc4, 0x8a));
         painter.rect_stroke(
@@ -214,8 +212,7 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
             egui::Stroke::new(1.0, Color32::from_rgb(0xb8, 0xa4, 0x6a)),
             egui::StrokeKind::Inside,
         );
-        24.0
-    };
+    }
     let text = |text: &str,
                 pos: Pos2,
                 size: f32,
@@ -242,18 +239,39 @@ fn bank_card(ui: &mut egui::Ui, doc: &OpenDoc) -> egui::Response {
     } else {
         account.name.trim()
     };
-    text(
-        name,
-        pos2(inner.left(), inner.top() - 1.0),
-        16.0,
-        crate::theme::semibold(),
-        Color32::WHITE,
-        inner.width() - corner_width - 10.0,
-        Align2::LEFT_TOP,
-    );
+    if let Some(logo) = logo {
+        const LOGO_HEIGHT: f32 = 44.0;
+        let size = logo.size_in(vec2(inner.width(), LOGO_HEIGHT), 6.0);
+        let plate = Rect::from_min_size(pos2(inner.left(), inner.top() - 2.0), size);
+        logo.paint(painter, plate, 6.0, 8.0);
+        text(
+            name,
+            pos2(inner.left(), inner.top() + LOGO_HEIGHT + 3.0),
+            12.5,
+            crate::theme::medium(),
+            white(235),
+            inner.width(),
+            Align2::LEFT_TOP,
+        );
+    } else {
+        text(
+            name,
+            pos2(inner.left(), inner.top() - 1.0),
+            16.0,
+            crate::theme::semibold(),
+            Color32::WHITE,
+            inner.width() - 34.0,
+            Align2::LEFT_TOP,
+        );
+    }
     let bank = account.bank_name.trim();
     let (name_key, bank_key) = (name.to_lowercase(), bank.to_lowercase());
-    if !bank.is_empty() && !name_key.contains(&bank_key) && !bank_key.contains(&name_key) {
+    // Le logo dit déjà la banque.
+    if logo.is_none()
+        && !bank.is_empty()
+        && !name_key.contains(&bank_key)
+        && !bank_key.contains(&name_key)
+    {
         text(
             bank,
             pos2(inner.left(), inner.bottom() - 44.0),

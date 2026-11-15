@@ -61,6 +61,53 @@ pub struct BankSync {
 }
 
 impl BankSync {
+    /// Range une connexion qui vient d'être ouverte et renvoie son indice.
+    /// `reconnect` : connexion renouvelée par « Reconnecter ». Sinon, une
+    /// connexion de la même banque et de la même application qui partage un
+    /// compte est remplacée (même identifiant de banque, consentement
+    /// renouvelé) ; une banque reliée avec d'autres identifiants (le compte
+    /// d'un tiers) donne une connexion de plus. Les comptes déjà associés à un
+    /// compte BankPerfect le restent.
+    pub fn add_connection(
+        &mut self,
+        mut connection: BankConnection,
+        reconnect: Option<usize>,
+    ) -> usize {
+        let same_bank = |c: &BankConnection| {
+            c.bank == connection.bank
+                && c.country == connection.country
+                && (c.application.is_empty() || c.application == connection.application)
+        };
+        let shares_account = |c: &BankConnection| {
+            connection
+                .accounts
+                .iter()
+                .any(|l| c.accounts.iter().any(|o| o.same_account(l)))
+        };
+        let previous = reconnect
+            .filter(|&k| self.connections.get(k).is_some_and(same_bank))
+            .or_else(|| {
+                self.connections
+                    .iter()
+                    .position(|c| same_bank(c) && shares_account(c))
+            });
+        let Some(k) = previous else {
+            self.connections.push(connection);
+            return self.connections.len() - 1;
+        };
+        for link in &mut connection.accounts {
+            if let Some(old) = self.connections[k]
+                .accounts
+                .iter()
+                .find(|o| o.same_account(link))
+            {
+                link.target = old.target.clone();
+            }
+        }
+        self.connections[k] = connection;
+        k
+    }
+
     pub fn load(document: &Document) -> Self {
         crate::feature_store::get(document, FEATURE_KEY)
             .and_then(Result::ok)
@@ -69,6 +116,13 @@ impl BankSync {
 
     pub fn save(&self, document: &mut Document) -> Result<(), crate::feature_store::FeatureError> {
         crate::feature_store::set(document, FEATURE_KEY, self)
+    }
+}
+
+impl BankAccountLink {
+    /// Même compte bancaire : même identifiant, ou même IBAN.
+    pub fn same_account(&self, other: &BankAccountLink) -> bool {
+        self.uid == other.uid || (!self.iban.is_empty() && self.iban == other.iban)
     }
 }
 
@@ -560,5 +614,50 @@ mod tests {
             application: String::new(),
         };
         assert!(connection.expired(today));
+    }
+
+    /// La même banque avec d'autres identifiants (compte d'un tiers) ajoute
+    /// une connexion ; un consentement renouvelé remplace la sienne.
+    #[test]
+    fn same_bank_with_other_credentials_adds_a_connection() {
+        let link = |uid: &str, target: Option<&str>| BankAccountLink {
+            uid: uid.into(),
+            name: uid.into(),
+            iban: String::new(),
+            currency: "EUR".into(),
+            target: target.map(Into::into),
+        };
+        let connection = |session: &str, accounts: Vec<BankAccountLink>| BankConnection {
+            session_id: session.into(),
+            bank: "Boursobank".into(),
+            country: "FR".into(),
+            valid_until: String::new(),
+            accounts,
+            application: "app".into(),
+        };
+        let mut sync = BankSync::default();
+        sync.add_connection(connection("moi", vec![link("a", Some("cc"))]), None);
+        assert_eq!(
+            sync.add_connection(connection("tiers", vec![link("t", None)]), None),
+            1
+        );
+        assert_eq!(sync.connections.len(), 2);
+        // Même compte par « Ajouter une banque » : remplacement, association gardée.
+        assert_eq!(
+            sync.add_connection(connection("moi2", vec![link("a", None)]), None),
+            0
+        );
+        assert_eq!(sync.connections[0].session_id, "moi2");
+        assert_eq!(
+            sync.connections[0].accounts[0].target.as_deref(),
+            Some("cc")
+        );
+        // « Reconnecter » vise sa connexion, même si les comptes ont changé.
+        assert_eq!(
+            sync.add_connection(connection("tiers2", vec![link("t2", None)]), Some(1)),
+            1
+        );
+        assert_eq!(sync.connections.len(), 2);
+        assert_eq!(sync.connections[1].session_id, "tiers2");
     }
 }

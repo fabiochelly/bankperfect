@@ -301,6 +301,8 @@ enum Page {
 /// Connexion en cours sur le site de la banque.
 struct PendingAuth {
     bank: Bank,
+    /// Connexion renouvelée par « Reconnecter » (`None` : nouvelle banque).
+    reconnect: Option<usize>,
     state: String,
     url: String,
 }
@@ -644,14 +646,7 @@ impl BankSyncForm {
                     .get(self.current)
                     .map(|(c, _)| c.application_id.clone())
                     .unwrap_or_default();
-                // Reconnexion : les comptes déjà associés le restent. La même
-                // banque peut être reliée par deux applications.
-                let previous = self.sync.connections.iter().position(|c| {
-                    c.bank == pending.bank.name
-                        && c.country == pending.bank.country
-                        && (c.application.is_empty() || c.application == application)
-                });
-                let mut connection = BankConnection {
+                let connection = BankConnection {
                     session_id,
                     bank: pending.bank.name.clone(),
                     country: pending.bank.country.clone(),
@@ -659,18 +654,7 @@ impl BankSyncForm {
                     accounts,
                     application: application.clone(),
                 };
-                if let Some(k) = previous {
-                    for link in &mut connection.accounts {
-                        if let Some(old) = self.sync.connections[k].accounts.iter().find(|o| {
-                            o.uid == link.uid || (!o.iban.is_empty() && o.iban == link.iban)
-                        }) {
-                            link.target = old.target.clone();
-                        }
-                    }
-                    self.sync.connections[k] = connection;
-                } else {
-                    self.sync.connections.push(connection);
-                }
+                self.sync.add_connection(connection, pending.reconnect);
                 self.save_sync(doc);
                 self.pasted.clear();
                 self.page = Page::Connections;
@@ -1194,7 +1178,7 @@ impl BankSyncForm {
                 country: c.country.clone(),
                 max_consent_seconds: None,
             };
-            self.begin_auth(ctx, bank);
+            self.begin_auth(ctx, bank, Some(k));
             self.page = Page::AddBank;
         }
         let _ = ctx;
@@ -1220,7 +1204,7 @@ impl BankSyncForm {
         });
     }
 
-    fn begin_auth(&mut self, ctx: &egui::Context, bank: Bank) {
+    fn begin_auth(&mut self, ctx: &egui::Context, bank: Bank, reconnect: Option<usize>) {
         let Some(client) = self.client.clone() else {
             return;
         };
@@ -1245,6 +1229,7 @@ impl BankSyncForm {
         });
         self.pending = Some(PendingAuth {
             bank,
+            reconnect,
             state,
             url: String::new(),
         });
@@ -1426,7 +1411,7 @@ impl BankSyncForm {
                     .clicked()
                     && let Some(bank) = chosen
                 {
-                    self.begin_auth(ctx, bank);
+                    self.begin_auth(ctx, bank, None);
                 }
             },
         );

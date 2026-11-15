@@ -212,3 +212,24 @@ jobs:
             bankperfect-*
             BankPerfect-*
             SHA256SUMS.txt
+
+  # Pré-release : l'encart « dernière version de test » des README pointe
+  # vers ses binaires (c'est souvent elle que les clients doivent prendre).
+  readme:
+    needs: release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') && contains(github.ref_name, '-')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Encart de la dernière version de test
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          ./packaging/update-readme-rc.sh "$version"
+          if git diff --quiet; then exit 0; fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "README : dernière version de test $version"
+          git pull --rebase origin main
+          git push origin HEAD:main

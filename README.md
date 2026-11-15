@@ -32,6 +32,10 @@ BankPerfect 9 est la réécriture complète en Rust du logiciel BankPerfect (Del
 
 ## Installation
 
+<!-- derniere-rc:debut -->
+> **Dernière version de test : [9.13.0-rc.16](https://github.com/fabiochelly/bankperfect/releases/tag/v9.13.0-rc.16)**, à privilégier : elle contient les dernières corrections. Téléchargement direct : [Windows](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.16/bankperfect-9.13.0-rc.16-windows-x86_64.zip) · [macOS](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.16/BankPerfect-9.13.0-rc.16-macos-universal.zip) · [Linux](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.16/bankperfect-9.13.0-rc.16-linux-x86_64.tar.gz)
+<!-- derniere-rc:fin -->
+
 Les binaires sont publiés sur la page [Releases](https://github.com/fabiochelly/bankperfect/releases).
 
 | Système | Commande |

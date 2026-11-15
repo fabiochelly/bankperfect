@@ -3,6 +3,8 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() -> eframe::Result {
+    // Mode portable : avant toute lecture de réglage.
+    bankperfect::portable::init();
     // Moteur retenu après un échec ou un rendu logiciel. Avant tout autre fil.
     bankperfect::graphics::prepare();
     bankperfect::crash::install();

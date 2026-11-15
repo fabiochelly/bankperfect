@@ -464,6 +464,62 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ),
     ("Sauvegardes", "Backups"),
     ("Sauvegardes gardées par fichier", "Backups kept per file"),
+    ("Mode portable", "Portable mode"),
+    (
+        "Réglages, licence, extensions et sauvegardes sont rangés dans {}. En mode portable, ils vont dans le dossier « donnees » à côté du programme ({}) : pratique sur une clé USB, rien n'est laissé sur l'ordinateur.",
+        "Settings, license, extensions and backups are stored in {}. In portable mode, they go to the “donnees” folder next to the program ({}): handy on a USB stick, nothing is left on the computer.",
+    ),
+    (
+        "Emporter aussi les sauvegardes (.bp0)",
+        "Take the backups (.bp0) along too",
+    ),
+    ("Activer le mode portable", "Turn on portable mode"),
+    (
+        "Mode portable activé : tout est désormais rangé dans {}. Redémarrez BankPerfect pour terminer.",
+        "Portable mode on: everything is now stored in {}. Restart BankPerfect to finish.",
+    ),
+    (
+        "Mode portable actif : réglages, licence, extensions et sauvegardes sont rangés dans {}.",
+        "Portable mode is on: settings, license, extensions and backups are stored in {}.",
+    ),
+    (
+        "Effacer les traces sur cet ordinateur…",
+        "Erase traces on this computer…",
+    ),
+    ("Effacer définitivement", "Erase permanently"),
+    (
+        "Réglages et sauvegardes effacés de cet ordinateur",
+        "Settings and backups erased from this computer",
+    ),
+    ("Quitter le mode portable", "Leave portable mode"),
+    (
+        "Mode portable désactivé : réglages recopiés sur cet ordinateur. Redémarrez BankPerfect pour terminer.",
+        "Portable mode off: settings copied back to this computer. Restart BankPerfect to finish.",
+    ),
+    (
+        "Les réglages et les sauvegardes de {} seront supprimés ; ceux du dossier « donnees » restent sur la clé.",
+        "The settings and backups in {} will be deleted; those in the “donnees” folder stay on the stick.",
+    ),
+    (
+        "Après le redémarrage, vous pourrez effacer d'ici les réglages laissés sur cet ordinateur.",
+        "After restarting, you can erase from here the settings left on this computer.",
+    ),
+    (
+        "dossier du programme introuvable",
+        "program folder not found",
+    ),
+    (
+        "Le mode portable n'est pas actif",
+        "Portable mode is not on",
+    ),
+    (
+        "La version Microsoft Store ne peut pas être portable : utilisez la version .zip du site, copiée sur la clé.",
+        "The Microsoft Store version cannot be portable: use the .zip version from the website, copied to the stick.",
+    ),
+    (
+        "Impossible d'écrire à côté du programme ({}) : {}. Copiez bankperfect.exe sur la clé USB et lancez-le depuis la clé.",
+        "Cannot write next to the program ({}): {}. Copy bankperfect.exe to the USB stick and run it from there.",
+    ),
     (
         "Une copie est faite avant chaque enregistrement ; les plus anciennes sont supprimées.",
         "A copy is made before each save; the oldest ones are deleted.",

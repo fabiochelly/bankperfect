@@ -21,6 +21,18 @@ pub struct OptionsForm {
     /// Copie de travail des réglages.
     draft: Settings,
     theme: egui::ThemePreference,
+    portable: PortableState,
+}
+
+/// Section « Mode portable » : les boutons agissent tout de suite (fichiers
+/// copiés, repère créé), indépendamment de « Enregistrer ».
+struct PortableState {
+    /// Emporter les sauvegardes du dossier par défaut.
+    copy_backups: bool,
+    /// Effacement des traces demandé, à confirmer.
+    confirm_wipe: bool,
+    /// Résultat de la dernière action (texte, erreur ?).
+    message: Option<(String, bool)>,
 }
 
 pub enum OptionsOutcome {
@@ -37,6 +49,11 @@ impl OptionsForm {
             tab: Tab::Entry,
             draft: settings.clone(),
             theme,
+            portable: PortableState {
+                copy_backups: true,
+                confirm_wipe: false,
+                message: None,
+            },
         }
     }
 
@@ -348,6 +365,10 @@ impl OptionsForm {
             );
             },
         );
+        if crate::portable::AVAILABLE {
+            let default_backups = d.backup_dir.is_none();
+            portable_section(ui, width, &mut self.portable, default_backups);
+        }
     }
 
     fn display(&mut self, ui: &mut egui::Ui, width: f32) {
@@ -475,6 +496,139 @@ impl OptionsForm {
 }
 
 /// Vignettes des thèmes sombres ou clairs ; renvoie le thème cliqué.
+/// Mode portable : tout ranger à côté du programme (clé USB).
+fn portable_section(
+    ui: &mut egui::Ui,
+    width: f32,
+    state: &mut PortableState,
+    default_backups: bool,
+) {
+    use crate::portable;
+    let pal = palette(ui);
+    let muted = |ui: &mut egui::Ui, text: String| {
+        ui.label(RichText::new(text).color(pal.muted).size(12.5));
+    };
+    let shown =
+        |p: Option<std::path::PathBuf>| p.map(|p| p.display().to_string()).unwrap_or_default();
+    ui_kit::section(ui, width, icon::USB, tr!("Mode portable"), |ui| {
+        if !portable::is_active() {
+            muted(
+                ui,
+                tr!(
+                    "Réglages, licence, extensions et sauvegardes sont rangés dans {}. En mode portable, ils vont dans le dossier « donnees » à côté du programme ({}) : pratique sur une clé USB, rien n'est laissé sur l'ordinateur.",
+                    shown(portable::system_config_dir()),
+                    shown(portable::app_dir())
+                ),
+            );
+            ui.add_space(8.0);
+            if default_backups {
+                crate::theme::checkbox(
+                    ui,
+                    &mut state.copy_backups,
+                    tr!("Emporter aussi les sauvegardes (.bp0)"),
+                );
+                ui.add_space(8.0);
+            }
+            if ui
+                .button(format!(
+                    "{}  {}",
+                    icon::USB,
+                    tr!("Activer le mode portable")
+                ))
+                .clicked()
+            {
+                state.message = Some(
+                    match portable::enable(default_backups && state.copy_backups) {
+                        Ok(dir) => (
+                            tr!(
+                                "Mode portable activé : tout est désormais rangé dans {}. Redémarrez BankPerfect pour terminer.",
+                                dir.display()
+                            ),
+                            false,
+                        ),
+                        Err(e) => (e, true),
+                    },
+                );
+            }
+        } else {
+            muted(
+                ui,
+                tr!(
+                    "Mode portable actif : réglages, licence, extensions et sauvegardes sont rangés dans {}.",
+                    shown(portable::data_dir())
+                ),
+            );
+            ui.add_space(8.0);
+            ui.horizontal_wrapped(|ui| {
+                let can_wipe = portable::active_at_start() && portable::system_traces();
+                if can_wipe
+                    && !state.confirm_wipe
+                    && ui
+                        .button(format!(
+                            "{}  {}",
+                            icon::BROOM,
+                            tr!("Effacer les traces sur cet ordinateur…")
+                        ))
+                        .on_hover_text(shown(portable::system_config_dir()))
+                        .clicked()
+                {
+                    state.confirm_wipe = true;
+                }
+                if state.confirm_wipe {
+                    if crate::dialogs::danger(ui, tr!("Effacer définitivement")).clicked() {
+                        state.confirm_wipe = false;
+                        state.message = Some(match portable::wipe_system() {
+                            Ok(()) => (
+                                tr!("Réglages et sauvegardes effacés de cet ordinateur").into(),
+                                false,
+                            ),
+                            Err(e) => (e, true),
+                        });
+                    }
+                    if ui.button(tr!("Annuler")).clicked() {
+                        state.confirm_wipe = false;
+                    }
+                } else if ui
+                    .button(format!("{}  {}", icon::DESKTOP, tr!("Quitter le mode portable")))
+                    .clicked()
+                {
+                    state.message = Some(match portable::disable() {
+                        Ok(()) => (
+                            tr!(
+                                "Mode portable désactivé : réglages recopiés sur cet ordinateur. Redémarrez BankPerfect pour terminer."
+                            )
+                            .into(),
+                            false,
+                        ),
+                        Err(e) => (e, true),
+                    });
+                }
+            });
+            if state.confirm_wipe {
+                ui.add_space(6.0);
+                muted(
+                    ui,
+                    tr!(
+                        "Les réglages et les sauvegardes de {} seront supprimés ; ceux du dossier « donnees » restent sur la clé.",
+                        shown(portable::system_config_dir())
+                    ),
+                );
+            } else if !portable::active_at_start() {
+                ui.add_space(6.0);
+                muted(
+                    ui,
+                    tr!("Après le redémarrage, vous pourrez effacer d'ici les réglages laissés sur cet ordinateur.").into(),
+                );
+            }
+        }
+        if let Some((text, error)) = &state.message {
+            ui.add_space(8.0);
+            let color = if *error { pal.negative } else { pal.positive };
+            ui.label(RichText::new(text).color(color));
+        }
+    });
+}
+
 fn theme_gallery(ui: &mut egui::Ui, d: &Settings, dark: bool) -> Option<&'static str> {
     const GAP: f32 = 12.0;
     const MIN_WIDTH: f32 = 168.0;

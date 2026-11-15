@@ -40,6 +40,7 @@ mod manage_ui;
 mod menu;
 mod notes;
 mod options_ui;
+pub mod portable;
 mod profiler;
 mod protection_ui;
 mod quotes_ui;

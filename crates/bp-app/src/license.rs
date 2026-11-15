@@ -141,12 +141,21 @@ fn clean_key(key: &str) -> String {
 }
 
 /// Clé saisie dans l'ancienne version (Windows : `[APPLICATION] Licence` de
-/// `%APPDATA%\BankPerfect\bankperfect.ini`), pour préremplir l'activation.
+/// `%APPDATA%\BankPerfect\bankperfect.ini`, ou à côté du programme en mode
+/// portable), pour préremplir l'activation.
 pub fn legacy_key() -> Option<String> {
-    let path = std::path::Path::new(&std::env::var_os("APPDATA")?)
-        .join("BankPerfect")
-        .join("bankperfect.ini");
-    let bytes = std::fs::read(path).ok()?;
+    let portable = crate::portable::app_dir()
+        .filter(|_| crate::portable::is_active())
+        .map(|d| d.join("bankperfect.ini"));
+    let system = std::env::var_os("APPDATA").map(|appdata| {
+        std::path::Path::new(&appdata)
+            .join("BankPerfect")
+            .join("bankperfect.ini")
+    });
+    let bytes = [portable, system]
+        .into_iter()
+        .flatten()
+        .find_map(|path| std::fs::read(path).ok())?;
     let text = String::from_utf8_lossy(&bytes);
     let mut in_application = false;
     for line in text.lines() {

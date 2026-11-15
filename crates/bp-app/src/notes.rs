@@ -14,8 +14,7 @@ pub struct Note {
 }
 
 fn path() -> Option<PathBuf> {
-    directories::ProjectDirs::from("net", "chelly", "bankperfect")
-        .map(|d| d.config_dir().join("notes.json"))
+    crate::settings::config_file("notes.json")
 }
 
 pub fn load() -> Vec<Note> {

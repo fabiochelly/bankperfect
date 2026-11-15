@@ -217,7 +217,7 @@ fn open_statement(
     options: crate::statement_pdf::StatementOptions,
 ) -> Result<String, String> {
     let bytes = crate::statement_pdf::build(doc, options)?;
-    let dir = std::env::temp_dir().join("bankperfect");
+    let dir = crate::settings::temp_dir();
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let path = dir.join(statement_name(doc));
     std::fs::write(&path, bytes).map_err(|e| e.to_string())?;

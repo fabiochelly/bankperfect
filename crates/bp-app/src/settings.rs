@@ -1,5 +1,6 @@
 //! Réglages de l'application, enregistrés en JSON dans le dossier de
-//! configuration du système (`~/.config/bankperfect/reglages.json` sous Linux).
+//! configuration du système (`~/.config/bankperfect/reglages.json` sous Linux),
+//! ou à côté du programme en mode portable ([`crate::portable`]).
 
 use std::path::PathBuf;
 
@@ -160,14 +161,29 @@ impl Default for Settings {
     }
 }
 
-fn project_dirs() -> Option<directories::ProjectDirs> {
+/// Dossiers de l'application dans le système (hors mode portable).
+pub fn system_dirs() -> Option<directories::ProjectDirs> {
     directories::ProjectDirs::from("net", "chelly", "bankperfect")
+}
+
+/// Dossier de configuration : `donnees` à côté du programme en mode
+/// portable, sinon celui du système.
+pub fn config_dir() -> Option<PathBuf> {
+    crate::portable::data_dir().or_else(|| system_dirs().map(|d| d.config_dir().to_path_buf()))
 }
 
 /// Fichier `name` du dossier de configuration de l'application (profils
 /// de crédit, devises…).
 pub fn config_file(name: &str) -> Option<PathBuf> {
-    project_dirs().map(|d| d.config_dir().join(name))
+    config_dir().map(|d| d.join(name))
+}
+
+/// Dossier des fichiers temporaires (relevé PDF ouvert dans la visionneuse) :
+/// en mode portable, sur la clé plutôt que dans celui du système.
+pub fn temp_dir() -> PathBuf {
+    crate::portable::data_dir()
+        .map(|d| d.join("temporaire"))
+        .unwrap_or_else(|| std::env::temp_dir().join("bankperfect"))
 }
 
 /// Écrit `json` dans le fichier de configuration `name`.
@@ -180,7 +196,7 @@ pub fn write_config_file(name: &str, json: &[u8]) -> Result<(), String> {
 }
 
 fn settings_path() -> Option<PathBuf> {
-    project_dirs().map(|d| d.config_dir().join("reglages.json"))
+    config_file("reglages.json")
 }
 
 impl Settings {
@@ -188,7 +204,7 @@ impl Settings {
         settings_path()
             .and_then(|p| std::fs::read(p).ok())
             .and_then(|bytes| serde_json::from_slice::<Settings>(&bytes).ok())
-            .map(|s| Settings { persist: true, ..s })
+            .map(|s| Settings { persist: true, ..s }.map_paths(crate::portable::loaded_path))
             .unwrap_or_else(|| Settings {
                 persist: true,
                 ..Default::default()
@@ -204,7 +220,8 @@ impl Settings {
         if let Some(dir) = path.parent() {
             let _ = std::fs::create_dir_all(dir);
         }
-        if let Ok(json) = serde_json::to_vec_pretty(self) {
+        let stored = self.clone().map_paths(crate::portable::stored_path);
+        if let Ok(json) = serde_json::to_vec_pretty(&stored) {
             let _ = bp_core::format_v6::write_replace(&path, &json);
         }
     }
@@ -212,8 +229,29 @@ impl Settings {
     pub fn backup_dir(&self) -> PathBuf {
         self.backup_dir
             .clone()
-            .or_else(|| project_dirs().map(|d| d.data_dir().join("sauvegardes")))
+            .or_else(|| {
+                crate::portable::data_dir()
+                    .or_else(|| system_dirs().map(|d| d.data_dir().to_path_buf()))
+                    .map(|d| d.join(crate::portable::BACKUPS))
+            })
             .unwrap_or_else(|| PathBuf::from("sauvegardes"))
+    }
+
+    /// Chemins de fichiers et de dossiers des réglages passés par `f`
+    /// (relatifs au programme en mode portable, voir [`crate::portable`]).
+    fn map_paths(mut self, f: fn(&std::path::Path) -> PathBuf) -> Self {
+        let dirs = [
+            &mut self.backup_dir,
+            &mut self.files_dir,
+            &mut self.export_dir,
+        ];
+        for dir in dirs.into_iter().flatten() {
+            *dir = f(dir);
+        }
+        for file in &mut self.recent_files {
+            *file = f(file);
+        }
+        self
     }
 
     pub fn remember(&mut self, file: &std::path::Path) {

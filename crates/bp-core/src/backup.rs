@@ -37,11 +37,31 @@ pub fn backup_before_save(file: &Path, dir: &Path, keep: usize) -> io::Result<Op
     fs::create_dir_all(dir)?;
     let stamp = chrono::Local::now().format("%Y%m%d-%H%M%S");
     let stem = stem_of(file);
-    let mut target = dir.join(format!("{stem}_{stamp}.{EXTENSION}"));
-    let mut n = 1;
+    // Numéro au-delà du plus grand de la même seconde : un nom libéré par
+    // l'élagage (le premier, sans numéro) ne doit pas être repris, il
+    // passerait pour le plus ancien (et sous Windows, la copie garde la date
+    // du fichier source, à la résolution de l'horloge : rien d'autre ne
+    // départage les sauvegardes rapprochées).
+    let stamp = stamp.to_string();
+    let last = list(file, dir)
+        .iter()
+        .map(|b| sequence(&b.path))
+        .filter(|(s, _)| *s == stamp)
+        .map(|(_, n)| n)
+        .max()
+        .unwrap_or(0);
+    let mut n = last + 1;
+    let name = |n: u32| {
+        if n == 1 {
+            dir.join(format!("{stem}_{stamp}.{EXTENSION}"))
+        } else {
+            dir.join(format!("{stem}_{stamp}-{n}.{EXTENSION}"))
+        }
+    };
+    let mut target = name(n);
     while target.exists() {
         n += 1;
-        target = dir.join(format!("{stem}_{stamp}-{n}.{EXTENSION}"));
+        target = name(n);
     }
     fs::copy(file, &target)?;
     prune(file, dir, keep.max(1))?;
@@ -144,6 +164,30 @@ mod tests {
             1,
             "les sauvegardes des autres fichiers sont intactes"
         );
+    }
+
+    /// Sous Windows, une copie garde la date du fichier source, à la
+    /// résolution de l'horloge : des sauvegardes rapprochées ont la même
+    /// date. Le nom libéré par l'élagage ne doit pas être repris.
+    #[test]
+    fn pruned_name_is_not_reused_when_dates_are_equal() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("Comptes.bp");
+        let backups = dir.path().join("sauvegardes");
+        let when = SystemTime::now();
+        for i in 0..5 {
+            fs::write(&file, format!("version {i}")).unwrap();
+            backup_before_save(&file, &backups, 3).unwrap();
+            for b in list(&file, &backups) {
+                let f = fs::OpenOptions::new().write(true).open(&b.path).unwrap();
+                f.set_modified(when).unwrap();
+            }
+        }
+        let list = list(&file, &backups);
+        assert_eq!(list.len(), 3);
+        // Toutes dans la même seconde, sauf passage d'une seconde à l'autre
+        // pendant le test : la plus récente reste en tête.
+        assert_eq!(fs::read_to_string(&list[0].path).unwrap(), "version 4");
     }
 
     #[test]

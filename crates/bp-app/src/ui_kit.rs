@@ -318,7 +318,8 @@ fn category_combo_impl(
     let pal = palette(ui);
     let before = *category;
     let style = category.and_then(|id| styles.get(&id).copied());
-    let selected = match category.and_then(|id| document.category_label(id)) {
+    let full_label = category.and_then(|id| document.category_label(id));
+    let selected = match full_label.clone() {
         Some(label) => {
             let color = style.map_or(pal.fg, |s| crate::theme::category_color(&pal, s.color));
             let glyph = style.map_or(icon::TAG, |s| s.icon);
@@ -341,7 +342,7 @@ fn category_combo_impl(
         area.set_max_width(width - 2.0 * pad);
     }
     let ui = &mut area;
-    combo.show_ui(ui, |ui| {
+    let shown = combo.show_ui(ui, |ui| {
         ui.selectable_value(category, None, tr!("Aucune catégorie"));
         for c in &document.categories {
             let style = styles.get(&c.id).copied();
@@ -357,6 +358,13 @@ fn category_combo_impl(
             ui.selectable_value(category, Some(c.id), text);
         }
     });
+    // Libellé coupé (catégorie et sous-catégorie longues) : en entier au survol.
+    if fixed
+        && shown.inner.is_none()
+        && let Some(label) = full_label
+    {
+        shown.response.on_hover_text(label.to_string());
+    }
     let used = area.min_rect();
     parent.allocate_rect(used, egui::Sense::hover());
     *category != before

@@ -360,6 +360,18 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Save as a new transaction, leaving the original one unchanged (Ctrl+Shift+Enter)",
     ),
     ("Fermer (Échap)", "Close (Esc)"),
+    (
+        "Tirer pour élargir le panneau (double-clic : largeur d'origine)",
+        "Drag to widen the panel (double-click: original width)",
+    ),
+    (
+        "Recette avec le mode « {} », d'ordinaire une dépense : vérifiez le sens",
+        "Income with the “{}” method, usually an expense: check the direction",
+    ),
+    (
+        "Dépense avec le mode « {} », d'ordinaire une recette : vérifiez le sens",
+        "Expense with the “{}” method, usually income: check the direction",
+    ),
     ("Quand et comment", "When and how"),
     (
         "{up}/{down} : ±1 jour   Ctrl+{up}/{down} : ±1 mois",

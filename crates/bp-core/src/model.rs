@@ -299,6 +299,17 @@ impl StandardMode {
         self.index() < 6
     }
 
+    /// Sens imposé par le mode (`Some(true)` : toujours une dépense), `None`
+    /// quand les deux se rencontrent (remboursement par carte, prélèvement
+    /// rejeté, achat ou vente de titres).
+    pub fn strict_debit(self) -> Option<bool> {
+        match self {
+            Self::RetraitDab | Self::ChequeEmis | Self::VirementEmis | Self::Tip => Some(true),
+            Self::Versement | Self::DepotCheque | Self::VirementRecu => Some(false),
+            Self::Carte | Self::Prelevement | Self::Titre => None,
+        }
+    }
+
     /// Mode d'après son nom enregistré (français) seulement, sans distinction
     /// de casse : pour relire les fichiers.
     pub fn from_name(name: &str) -> Option<Self> {

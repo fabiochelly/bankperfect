@@ -465,7 +465,9 @@ pub struct BankPerfectApp {
 /// Suite d'une commande, appelée avec le fichier choisi.
 type PickThen = Box<dyn FnOnce(&mut BankPerfectApp, PathBuf)>;
 
-const DRAWER_WIDTH: f32 = 460.0;
+/// Largeur la plus étroite du panneau de saisie (celle par défaut est dans
+/// les réglages, `entry_width`).
+const DRAWER_MIN_WIDTH: f32 = 420.0;
 const DRAWER_SLIDE_SECONDS: f64 = 0.15;
 
 impl BankPerfectApp {
@@ -2841,7 +2843,14 @@ impl BankPerfectApp {
             ctx.request_repaint();
         }
         let eased = 1.0 - (1.0 - t).powi(3);
-        let width = DRAWER_WIDTH.min(content.width() - 40.0);
+        // Largeur réglable (libellés longs : catégories, tiers, chemins),
+        // jusqu'aux trois quarts de la zone.
+        let max_width = (content.width() * 0.75).max(DRAWER_MIN_WIDTH);
+        let width = self
+            .settings
+            .entry_width
+            .clamp(DRAWER_MIN_WIDTH, max_width)
+            .min(content.width() - 40.0);
         let x = content.right() - width + (1.0 - eased) * width;
 
         let pal = crate::theme::palette_of(ctx);
@@ -2880,6 +2889,45 @@ impl BankPerfectApp {
                     .inner
             })
             .inner;
+        // Poignée sur le bord gauche : tirer élargit le panneau, un double-clic
+        // revient à la largeur d'origine.
+        let edge = egui::Rect::from_min_max(
+            egui::pos2(x - 4.0, content.top() + 16.0),
+            egui::pos2(x + 4.0, content.bottom() - 16.0),
+        );
+        let handle = egui::Area::new(egui::Id::new("editor_drawer_edge"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(edge.min)
+            .constrain(false)
+            .show(ctx, |ui| {
+                let (rect, response) = ui.allocate_exact_size(edge.size(), egui::Sense::drag());
+                let response = response.on_hover_text(tr!(
+                    "Tirer pour élargir le panneau (double-clic : largeur d'origine)"
+                ));
+                if response.hovered() || response.dragged() {
+                    ctx.set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+                    ui.painter().vline(
+                        rect.center().x,
+                        rect.y_range().shrink(rect.height() * 0.35),
+                        egui::Stroke::new(3.0, pal.accent),
+                    );
+                }
+                response
+            })
+            .inner;
+        if handle.dragged()
+            && let Some(pointer) = ctx.pointer_interact_pos()
+        {
+            self.settings.entry_width =
+                (content.right() - pointer.x).clamp(DRAWER_MIN_WIDTH, max_width);
+        }
+        if handle.double_clicked() {
+            self.settings.entry_width = crate::settings::Settings::default().entry_width;
+            self.settings.save();
+        }
+        if handle.drag_stopped() {
+            self.settings.save();
+        }
         self.apply_editor_action(action, now);
     }
 

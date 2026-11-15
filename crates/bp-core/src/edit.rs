@@ -70,6 +70,26 @@ pub fn mode_is_debit(document: &Document, mode: &Mode) -> bool {
     }
 }
 
+/// Le sens du montant contredit-il le mode ? Les modes standard à double
+/// sens (carte, prélèvement, titre) ne sont jamais en cause ; un mode
+/// personnel suit le sens qui lui a été donné. Un montant nul ne contredit
+/// rien.
+pub fn amount_contradicts_mode(document: &Document, mode: &Mode, amount: Amount) -> bool {
+    let debit = match mode {
+        Mode::Standard(m) => m.strict_debit(),
+        Mode::Custom(name) => document
+            .custom_modes
+            .iter()
+            .find(|m| &m.name == name)
+            .map(|m| m.debit),
+    };
+    match debit {
+        Some(true) => amount.0 > 0,
+        Some(false) => amount.0 < 0,
+        None => false,
+    }
+}
+
 /// Applique `edit` aux `lines` ; renvoie le nombre de lignes modifiées.
 pub fn apply_group_edit(
     document: &Document,
@@ -291,5 +311,28 @@ mod tests {
         assert_eq!(ops[1].uid, before);
         assert_eq!(ops[2].uid, before + 1);
         assert!(ops[1].category.is_none());
+    }
+
+    #[test]
+    fn amount_sign_against_mode() {
+        let mut document = Document::default();
+        document.custom_modes.push(CustomMode {
+            name: "Espèces collectées".into(),
+            debit: false,
+        });
+        let check = |mode: Mode, cents: i64| {
+            amount_contradicts_mode(&document, &mode, Amount::from_cents(cents))
+        };
+        let std = Mode::Standard;
+        assert!(check(std(StandardMode::ChequeEmis), 5_000));
+        assert!(!check(std(StandardMode::ChequeEmis), -5_000));
+        assert!(check(std(StandardMode::DepotCheque), -5_000));
+        assert!(
+            !check(std(StandardMode::Carte), 5_000),
+            "remboursement par carte"
+        );
+        assert!(!check(std(StandardMode::ChequeEmis), 0));
+        assert!(check(Mode::Custom("Espèces collectées".into()), -5_000));
+        assert!(!check(Mode::Custom("Inconnu".into()), 5_000));
     }
 }

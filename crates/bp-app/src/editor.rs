@@ -218,6 +218,12 @@ impl Editor {
             .show(ui, |ui| {
                 ui.set_max_width(card_width);
                 self.amount_card(ui, doc, card_width);
+                if let Some(warning) = self.mode_warning(doc) {
+                    ui.add_space(8.0);
+                    ui.label(
+                        RichText::new(format!("{}  {warning}", icon::WARNING)).color(pal.warning),
+                    );
+                }
                 ui.add_space(12.0);
 
                 section(
@@ -286,15 +292,17 @@ impl Editor {
                             .hint_text(tr!("Commerçant, organisme, personne…"))
                             .desired_width(f32::INFINITY),
                     );
+                    let response = whole_text_on_hover(ui, response, &self.payee);
                     if self.payee_list_shown(ui, &response) {
                         self.payee_suggestions(ui, document, None);
                     }
                     ui.add_space(14.0);
-                    ui.add(
+                    let details = ui.add(
                         crate::theme::field(&mut self.details)
                             .hint_text(tr!("Note, référence, n° de chèque…"))
                             .desired_width(f32::INFINITY),
                     );
+                    whole_text_on_hover(ui, details, &self.details);
                 });
 
                 section(ui, card_width, icon::TAG, tr!("Classement"), |ui| {
@@ -495,6 +503,9 @@ impl Editor {
             if let Some(error) = &self.error {
                 ui.add_space(12.0);
                 ui.label(RichText::new(format!("{}  {error}", icon::WARNING)).color(pal.negative));
+            } else if let Some(warning) = self.mode_warning(doc) {
+                ui.add_space(12.0);
+                ui.label(RichText::new(format!("{}  {warning}", icon::WARNING)).color(pal.warning));
             }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 let label = if self.target.is_some() {
@@ -532,9 +543,18 @@ impl Editor {
         });
         ui.add_space(6.0);
         let width = ui.available_width();
-        let wide = width >= 1250.0;
-        let (date_w, mode_w, cat_w, sign_w, amount_w, tack_w) =
-            (150.0, 175.0, 210.0, 34.0, 130.0, 112.0);
+        // Une seule ligne sur un très grand écran seulement : sinon tiers et
+        // détail ont la première ligne, et la catégorie (avec sa
+        // sous-catégorie, souvent longue) toute la place de la seconde.
+        let wide = width >= 1700.0;
+        let (date_w, mode_w, sign_w, amount_w, tack_w) = (150.0, 175.0, 34.0, 130.0, 112.0);
+        let others = WAND_WIDTH + sign_w + amount_w + tack_w;
+        let cat_w = if wide {
+            let free = width - date_w - mode_w - others - 8.0 * GAP;
+            (free * 0.4).max(210.0)
+        } else {
+            (width - others - 4.0 * GAP - 2.0).max(210.0)
+        };
         let mut payee_rect = None;
         let mut payee_list = false;
         let color = if self.credit {
@@ -576,6 +596,7 @@ impl Editor {
                     .hint_text(tr!("Tiers"))
                     .desired_width(text_w),
             );
+            let payee = whole_text_on_hover(ui, payee, &this.payee);
             *focused |= payee.has_focus();
             payee_list = this.payee_list_shown(ui, &payee);
             payee_rect = Some(payee.rect);
@@ -584,6 +605,7 @@ impl Editor {
                     .hint_text(tr!("Détail"))
                     .desired_width(text_w),
             );
+            let details = whole_text_on_hover(ui, details, &this.details);
             *focused |= details.has_focus();
         };
         let fields_b = |ui: &mut egui::Ui, this: &mut Self, focused: &mut bool| {
@@ -1048,6 +1070,27 @@ impl Editor {
         self.payee_refocus = true;
     }
 
+    /// Avertissement (sans blocage) quand le sens du montant saisi contredit
+    /// le mode : chèque émis en recette, dépôt de chèque en dépense…
+    fn mode_warning(&self, doc: &OpenDoc) -> Option<String> {
+        let amount = self.typed_amount();
+        if !bp_core::edit::amount_contradicts_mode(&doc.document, &self.mode, amount) {
+            return None;
+        }
+        let mode = self.mode.label();
+        Some(if amount.0 > 0 {
+            tr!(
+                "Recette avec le mode « {} », d'ordinaire une dépense : vérifiez le sens",
+                mode
+            )
+        } else {
+            tr!(
+                "Dépense avec le mode « {} », d'ordinaire une recette : vérifiez le sens",
+                mode
+            )
+        })
+    }
+
     /// Montant signé saisi (zéro s'il est vide ou illisible).
     fn typed_amount(&self) -> Amount {
         let amount = parse_amount(self.amount.trim())
@@ -1290,6 +1333,22 @@ impl Editor {
                 extra: self.extra.clone(),
             },
         )
+    }
+}
+
+/// Texte long d'un champ (tiers, détail) en entier au survol, hors saisie :
+/// le champ n'en montre que le début.
+fn whole_text_on_hover(ui: &egui::Ui, response: egui::Response, text: &str) -> egui::Response {
+    let font = egui::TextStyle::Body.resolve(ui.style());
+    let width = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font, egui::Color32::PLACEHOLDER)
+        .size()
+        .x;
+    if !response.has_focus() && width > response.rect.width() - 16.0 {
+        response.on_hover_text(text.to_string())
+    } else {
+        response
     }
 }
 

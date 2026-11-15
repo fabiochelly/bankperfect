@@ -172,8 +172,8 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "bp.add_account: name is required",
     ),
     (
-        "bp.filter : tack « {} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\" ou \"all\")",
-        "bp.filter: unknown tack “{}” (\"none\", \"pointed\", \"reconciled\", \"marked\" or \"all\")",
+        "bp.filter : tack « {} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\", \"unreconciled\", \"none_or_reconciled\" ou \"all\")",
+        "bp.filter: unknown tack “{}” (\"none\", \"pointed\", \"reconciled\", \"marked\", \"unreconciled\", \"none_or_reconciled\" or \"all\")",
     ),
     ("{0}, {1} ou {2}", "{0}, {1} or {2}"),
     ("catégorie mère inconnue", "unknown parent category"),

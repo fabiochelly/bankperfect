@@ -144,22 +144,23 @@ pub fn eval_dynamic_date(expr: &str, today: Date) -> Result<Option<Date>, AutoFi
 /// rapprochées, 2 = rapprochées, 1 = pointées, 0 = non pointées.
 pub fn tack_from_legacy(code: i64) -> TackFilter {
     match code {
-        0 => TackFilter::NotPointed,
-        1 => TackFilter::Pointed,
-        2 => TackFilter::Reconciled,
-        3 => TackFilter::PointedOrReconciled,
-        _ => TackFilter::All,
+        0 => TackFilter::NOT_POINTED,
+        1 => TackFilter::POINTED,
+        2 => TackFilter::RECONCILED,
+        3 => TackFilter::POINTED_OR_RECONCILED,
+        _ => TackFilter::ALL,
     }
 }
 
-/// Inverse de [`tack_from_legacy`].
+/// Inverse de [`tack_from_legacy`] ; les combinaisons inconnues des anciens
+/// scripts (non pointées avec pointées ou rapprochées) deviennent « toutes ».
 pub fn tack_to_legacy(tack: TackFilter) -> i64 {
     match tack {
-        TackFilter::NotPointed => 0,
-        TackFilter::Pointed => 1,
-        TackFilter::Reconciled => 2,
-        TackFilter::PointedOrReconciled => 3,
-        TackFilter::All => 4,
+        TackFilter::NOT_POINTED => 0,
+        TackFilter::POINTED => 1,
+        TackFilter::RECONCILED => 2,
+        TackFilter::POINTED_OR_RECONCILED => 3,
+        _ => 4,
     }
 }
 
@@ -197,7 +198,7 @@ impl AutoFilter {
             payee: String::new(),
             category: String::new(),
             amount: String::new(),
-            tack: TackFilter::All,
+            tack: TackFilter::ALL,
         }
     }
 
@@ -242,11 +243,8 @@ impl AutoFilter {
     pub fn description(&self, today: Date) -> String {
         let (from, to) = self.date_range(today);
         let tack = match self.tack {
-            TackFilter::All => String::new(),
-            TackFilter::PointedOrReconciled => tr!("pointées et rapprochées").into(),
-            TackFilter::Reconciled => tr!("rapprochées").into(),
-            TackFilter::Pointed => tr!("pointées").into(),
-            TackFilter::NotPointed => tr!("non pointées").into(),
+            TackFilter::ALL => String::new(),
+            t => t.label(false).to_lowercase(),
         };
         let dates = match (from, to) {
             (Some(a), Some(b)) => tr!("du {a} au {b}", a = a, b = b),
@@ -578,7 +576,7 @@ mod tests {
         let filters = filter.to_filters(today);
         assert_eq!(filters.date_from, Some(ymd(2025, 12, 1)));
         assert_eq!(filters.date_to, Some(ymd(2025, 12, 31)));
-        assert_eq!(filters.tack, TackFilter::PointedOrReconciled);
+        assert_eq!(filters.tack, TackFilter::POINTED_OR_RECONCILED);
         assert_eq!(filters.payee, "edf");
         assert!(filters.is_active());
         assert_eq!(
@@ -592,7 +590,7 @@ mod tests {
         for code in 0..=4 {
             assert_eq!(tack_to_legacy(tack_from_legacy(code)), code);
         }
-        assert_eq!(tack_from_legacy(17), TackFilter::All);
+        assert_eq!(tack_from_legacy(17), TackFilter::ALL);
     }
 
     #[test]
@@ -634,8 +632,8 @@ mod tests {
         assert_eq!(courses.date_from, "j-30/m/a");
         assert_eq!(courses.mode, "carte");
         assert_eq!(courses.payee, "super|hyper");
-        assert_eq!(courses.tack, TackFilter::Pointed);
-        assert_eq!(filters.get("A").map(|f| f.tack), Some(TackFilter::All));
+        assert_eq!(courses.tack, TackFilter::POINTED);
+        assert_eq!(filters.get("A").map(|f| f.tack), Some(TackFilter::ALL));
 
         // Dictionnaire vide (cas d'Exemple.bp) : filtres par défaut.
         assert_eq!(

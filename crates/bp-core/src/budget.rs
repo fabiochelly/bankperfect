@@ -356,6 +356,9 @@ pub struct BudgetOptions {
     /// « Sous-catégories » : afficher les sous-catégories séparément ; sinon
     /// leurs montants sont agrégés à la catégorie parente.
     pub show_subcategories: bool,
+    /// Pointage simple, sans rapprochement : le pointage des filtres
+    /// prédéfinis se lit comme dans la grille ([`crate::filter::TackFilter::simplified`]).
+    pub simple_tack: bool,
 }
 
 impl BudgetOptions {
@@ -368,6 +371,7 @@ impl BudgetOptions {
             show_unbudgeted: true,
             show_zero: true,
             show_subcategories: true,
+            simple_tack: false,
         }
     }
 }
@@ -491,7 +495,7 @@ impl MonthlyBudget {
         };
         match &options.period {
             BudgetPeriod::Filter(filter) => {
-                let compiled = filter.to_filters(today).compile(today);
+                let compiled = filter.to_filters(today).compile(today, options.simple_tack);
                 for &a in &accounts {
                     let account = &document.accounts[a];
                     let index = SearchIndex::build(document, account);
@@ -1606,7 +1610,7 @@ mod tests {
         );
 
         let pointed = AutoFilter {
-            tack: crate::filter::TackFilter::Pointed,
+            tack: crate::filter::TackFilter::POINTED,
             ..AutoFilter::new("Pointées")
         };
         let options = BudgetOptions {

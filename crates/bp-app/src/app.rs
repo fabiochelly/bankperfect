@@ -3838,7 +3838,7 @@ impl BankPerfectApp {
         // Réglages d'affichage, de verrou et de calcul repris à chaque image.
         doc.locked = self.settings.lock_reconciled;
         doc.max_undo = self.settings.max_undo;
-        doc.disable_reconcile = self.settings.disable_reconcile;
+        doc.set_disable_reconcile(self.settings.disable_reconcile);
         doc.set_ignore_filter_totals(self.settings.ignore_filter_totals);
         if self.settings.remember_sort
             && self
@@ -4130,9 +4130,10 @@ fn filter_chips(ui: &mut egui::Ui, doc: &mut OpenDoc) {
     if !f.amount.is_empty() {
         chips.push((tr!("Montant : {}", f.amount), |f| f.amount.clear()));
     }
-    if f.tack != bp_core::filter::TackFilter::All {
-        chips.push((tr!("Pointage : {}", f.tack.label().to_lowercase()), |f| {
-            f.tack = bp_core::filter::TackFilter::All
+    if !f.tack.is_all(doc.disable_reconcile) {
+        let label = f.tack.label(doc.disable_reconcile).to_lowercase();
+        chips.push((tr!("Pointage : {}", label), |f| {
+            f.tack = bp_core::filter::TackFilter::ALL
         }));
     }
     let period = match (f.date_from, f.date_to) {

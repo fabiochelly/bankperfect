@@ -237,7 +237,7 @@ type GridFilter = {
 	mode: string?,
 	category: string?,
 	amount: string?,
-	tack: ("none" | "pointed" | "reconciled" | "marked" | "all")?,
+	tack: ("none" | "pointed" | "reconciled" | "marked" | "unreconciled" | "none_or_reconciled" | "all")?,
 	from: DateLike?,
 	to: DateLike?,
 }

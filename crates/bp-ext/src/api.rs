@@ -513,11 +513,13 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
         lua.create_function(|lua, spec: Value| {
             use bp_core::filter::{Filters, TackFilter};
             let tack_name = |t: TackFilter| match t {
-                TackFilter::NotPointed => "none",
-                TackFilter::Pointed => "pointed",
-                TackFilter::Reconciled => "reconciled",
-                TackFilter::PointedOrReconciled => "marked",
-                TackFilter::All => "all",
+                TackFilter::NOT_POINTED => "none",
+                TackFilter::POINTED => "pointed",
+                TackFilter::RECONCILED => "reconciled",
+                TackFilter::POINTED_OR_RECONCILED => "marked",
+                TackFilter::NOT_RECONCILED => "unreconciled",
+                TackFilter::NOT_POINTED_OR_RECONCILED => "none_or_reconciled",
+                _ => "all",
             };
             match spec {
                 // bp.filter() : filtres actuels.
@@ -557,14 +559,16 @@ pub(crate) fn install(lua: &Lua, ctx: ApiContext) -> mlua::Result<()> {
                         }
                     };
                     let tack = match t.get::<Option<String>>("tack")?.as_deref() {
-                        None | Some("all") => TackFilter::All,
-                        Some("none") => TackFilter::NotPointed,
-                        Some("pointed") => TackFilter::Pointed,
-                        Some("reconciled") => TackFilter::Reconciled,
-                        Some("marked") => TackFilter::PointedOrReconciled,
+                        None | Some("all") => TackFilter::ALL,
+                        Some("none") => TackFilter::NOT_POINTED,
+                        Some("pointed") => TackFilter::POINTED,
+                        Some("reconciled") => TackFilter::RECONCILED,
+                        Some("marked") => TackFilter::POINTED_OR_RECONCILED,
+                        Some("unreconciled") => TackFilter::NOT_RECONCILED,
+                        Some("none_or_reconciled") => TackFilter::NOT_POINTED_OR_RECONCILED,
                         Some(other) => {
                             return Err(runtime(tr!(
-                                "bp.filter : tack « {} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\" ou \"all\")",
+                                "bp.filter : tack « {} » inconnu (\"none\", \"pointed\", \"reconciled\", \"marked\", \"unreconciled\", \"none_or_reconciled\" ou \"all\")",
                                 other
                             )));
                         }

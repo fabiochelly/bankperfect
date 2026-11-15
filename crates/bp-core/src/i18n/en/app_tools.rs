@@ -423,6 +423,14 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "{} row changed (Ctrl+Z to undo)",
     ),
     (
+        "{} ligne rapprochée (Ctrl+Z pour annuler)",
+        "{} row reconciled (Ctrl+Z to undo)",
+    ),
+    (
+        "{} lignes rapprochées (Ctrl+Z pour annuler)",
+        "{} rows reconciled (Ctrl+Z to undo)",
+    ),
+    (
         "{} lignes modifiées (Ctrl+Z pour annuler)",
         "{} rows changed (Ctrl+Z to undo)",
     ),

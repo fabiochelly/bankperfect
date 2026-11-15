@@ -1505,7 +1505,7 @@ fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
             || !f.amount.is_empty()
             || f.date_from.is_some()
             || f.date_to.is_some()
-            || f.tack != TackFilter::All);
+            || !f.tack.is_all(doc.disable_reconcile));
     let mut clicked = false;
     // Haut de la ligne des champs de filtre (voir `filter_header`).
     let fields_top =
@@ -1561,19 +1561,51 @@ fn loupe_header(ui: &mut egui::Ui, doc: &mut OpenDoc) -> bool {
 }
 
 fn tack_filter_button(ui: &mut egui::Ui, doc: &mut OpenDoc) {
-    let active = doc.filters.tack != TackFilter::All;
+    let simple = doc.disable_reconcile;
+    let active = !doc.filters.tack.is_all(simple);
     let glyph = if active { icon::FUNNEL } else { icon::CHECKS };
     let response = ui
         .add(egui::Button::new(glyph).selected(active).frame(active))
         .on_hover_text(tr!("Filtrer par pointage"));
-    egui::Popup::menu(&response).show(|ui| {
-        crate::menu::popup_style(ui.style_mut());
-        crate::menu::begin(ui);
-        crate::menu::heading(ui, tr!("Afficher les lignes"));
-        for filter in TackFilter::ALL {
-            if crate::menu::choice(ui, doc.filters.tack == filter, filter.label()).clicked() {
-                doc.filters.tack = filter;
+    // Les cases se cochent l'une après l'autre : le menu reste ouvert, sous
+    // un identifiant fixe (le bandeau des filtres, qui apparaît au premier
+    // filtre, décale les identifiants automatiques et le refermerait).
+    egui::Popup::menu(&response)
+        .id(egui::Id::new("tack_filter_menu"))
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            crate::menu::popup_style(ui.style_mut());
+            crate::menu::begin(ui);
+            crate::menu::heading(ui, tr!("Afficher les lignes"));
+            tack_filter_checks(ui, &mut doc.filters.tack, simple);
+            crate::menu::separator(ui);
+            if crate::menu::item(ui, None, tr!("Tout afficher"), None).clicked() {
+                doc.filters.tack = TackFilter::ALL;
+                ui.close();
             }
+        });
+}
+
+/// Cases du filtre de pointage : non pointées, pointées, rapprochées (deux
+/// cases en pointage simple). La dernière case cochée ne se décoche pas.
+pub fn tack_filter_checks(ui: &mut egui::Ui, filter: &mut TackFilter, simple: bool) {
+    let mut not_pointed = filter.not_pointed;
+    if crate::menu::check(ui, &mut not_pointed, tr!("Non pointées")).clicked() {
+        filter.set(Tack::None, not_pointed);
+    }
+    if simple {
+        let mut pointed = filter.simple_pointed();
+        if crate::menu::check(ui, &mut pointed, tr!("Pointées")).clicked() {
+            filter.set_simple_pointed(pointed);
         }
-    });
+        return;
+    }
+    let mut pointed = filter.pointed;
+    if crate::menu::check(ui, &mut pointed, tr!("Pointées")).clicked() {
+        filter.set(Tack::Pointed, pointed);
+    }
+    let mut reconciled = filter.reconciled;
+    if crate::menu::check(ui, &mut reconciled, tr!("Rapprochées")).clicked() {
+        filter.set(Tack::Reconciled, reconciled);
+    }
 }

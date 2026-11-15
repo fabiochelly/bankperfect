@@ -263,6 +263,16 @@ pub fn toggle(ui: &mut Ui, value: &mut bool, label: &str, shortcut: Option<&str>
     response
 }
 
+/// Case à cocher qui laisse le menu ouvert (plusieurs cases à régler de
+/// suite, comme le filtre de pointage).
+pub fn check(ui: &mut Ui, value: &mut bool, label: &str) -> Response {
+    let response = row_with(ui, Gutter::Check(*value), label, None, true, false);
+    if response.clicked() {
+        *value = !*value;
+    }
+    response
+}
+
 /// Entrée exclusive (choix parmi plusieurs) : coche si sélectionnée.
 pub fn choice(ui: &mut Ui, selected: bool, label: &str) -> Response {
     row(ui, Gutter::Check(selected), label, None, true)
@@ -302,6 +312,18 @@ fn row(
     label: &str,
     shortcut: Option<&str>,
     enabled: bool,
+) -> Response {
+    row_with(ui, gutter, label, shortcut, enabled, true)
+}
+
+/// `close` : un clic ferme le menu.
+fn row_with(
+    ui: &mut Ui,
+    gutter: Gutter<'_>,
+    label: &str,
+    shortcut: Option<&str>,
+    enabled: bool,
+    close: bool,
 ) -> Response {
     let pal = palette(ui);
     let width = ui.available_width();
@@ -361,7 +383,7 @@ fn row(
             pal.muted,
         );
     }
-    if response.clicked() {
+    if close && response.clicked() {
         ui.close();
         ui.ctx()
             .data_mut(|d| d.insert_temp(egui::Id::new(CLOSE_REQUEST), true));

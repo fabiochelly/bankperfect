@@ -262,13 +262,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Tiers : {}", "Payee: {}"),
     ("Catégorie : {}", "Category: {}"),
     ("Montant : {}", "Amount: {}"),
-    ("Opérations non pointées", "Uncleared transactions"),
     ("Opérations pointées", "Cleared transactions"),
-    ("Opérations rapprochées", "Reconciled transactions"),
-    (
-        "Opérations pointées ou rapprochées",
-        "Cleared or reconciled transactions",
-    ),
     ("Du {} au {}", "From {} to {}"),
     ("Depuis le {}", "Since {}"),
     ("Jusqu'au {}", "Until {}"),

@@ -863,7 +863,7 @@ fn grid_filter() {
     assert!(fx.errors.is_empty(), "{:?}", fx.errors);
     let filters = fx.filters.expect("filtres");
     assert_eq!(filters.payee, "edf");
-    assert_eq!(filters.tack, bp_core::filter::TackFilter::NotPointed);
+    assert_eq!(filters.tack, bp_core::filter::TackFilter::NOT_POINTED);
     assert!(filters.date_from.is_some());
     let fx = f.run(1);
     assert_eq!(fx.filters.map(|f| f.is_active()), Some(false));

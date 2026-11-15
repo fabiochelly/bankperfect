@@ -3,7 +3,6 @@
 //! actifs, tableau des lignes affichées, pages numérotées. Le PDF s'ouvre
 //! dans la visionneuse du système, qui sert d'aperçu et imprime.
 
-use bp_core::filter::TackFilter;
 use bp_core::model::{Amount, Tack};
 use bp_core::{tr, trn};
 use printpdf::{
@@ -183,14 +182,9 @@ fn filter_lines(doc: &OpenDoc) -> Vec<String> {
     if !f.amount.is_empty() {
         lines.push(tr!("Montant : {}", f.amount));
     }
-    match f.tack {
-        TackFilter::All => {}
-        TackFilter::NotPointed => lines.push(tr!("Opérations non pointées").into()),
-        TackFilter::Pointed => lines.push(tr!("Opérations pointées").into()),
-        TackFilter::Reconciled => lines.push(tr!("Opérations rapprochées").into()),
-        TackFilter::PointedOrReconciled => {
-            lines.push(tr!("Opérations pointées ou rapprochées").into())
-        }
+    if !f.tack.is_all(doc.disable_reconcile) {
+        let label = f.tack.label(doc.disable_reconcile).to_lowercase();
+        lines.push(tr!("Pointage : {}", label));
     }
     match (f.date_from, f.date_to) {
         (Some(a), Some(b)) => lines.push(tr!("Du {} au {}", a, b)),

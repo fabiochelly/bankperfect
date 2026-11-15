@@ -184,7 +184,7 @@ fn main() {
             "montant -50>50 + non pointées",
             Filters {
                 amount: "-50>50".into(),
-                tack: bp_core::filter::TackFilter::NotPointed,
+                tack: bp_core::filter::TackFilter::NOT_POINTED,
                 ..Default::default()
             },
         ),
@@ -197,7 +197,9 @@ fn main() {
         ),
     ] {
         let t = Instant::now();
-        let visible = filters.compile(Date::today()).apply(acc, &index, &order);
+        let visible = filters
+            .compile(Date::today(), false)
+            .apply(acc, &index, &order);
         println!(
             "filtre {label:<30}: {:>7.2?} → {} lignes",
             t.elapsed(),

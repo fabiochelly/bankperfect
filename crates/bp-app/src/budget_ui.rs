@@ -399,9 +399,14 @@ impl BudgetForm {
         pal: &Palette,
     ) -> Option<(String, Vec<Vec<Cell>>)> {
         self.period_bar(ui, doc, pal);
-        let report = self
-            .budget
-            .report(&doc.document, &self.options, Date::today());
+        let report = self.budget.report(
+            &doc.document,
+            &BudgetOptions {
+                simple_tack: doc.disable_reconcile,
+                ..self.options.clone()
+            },
+            Date::today(),
+        );
         ui.add_space(12.0);
         // Synthèse.
         let gap = 16.0;

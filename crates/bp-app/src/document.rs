@@ -9,7 +9,7 @@ use bp_core::filter::{Filters, SearchIndex};
 use bp_core::format_v6::Protection;
 use bp_core::model::{Amount, Date, Document, Operation, Tack};
 use bp_core::view::{SortColumn, running_balances, sorted_order};
-use bp_core::{tr, tr_mark};
+use bp_core::{tr, tr_mark, trn};
 
 pub struct OpenDoc {
     pub path: PathBuf,
@@ -361,7 +361,7 @@ impl OpenDoc {
         }
         if self.view.filters.as_ref() != Some(&(self.filters.clone(), today)) {
             let account = &self.document.accounts[self.account];
-            let compiled = self.filters.compile(today);
+            let compiled = self.filters.compile(today, self.disable_reconcile);
             // Index de recherche construit au premier filtre de texte : sans
             // lui, l'ouverture d'un gros fichier est plus rapide.
             if compiled.needs_index() && self.view.indexed_account != Some(self.account) {
@@ -518,7 +518,7 @@ impl OpenDoc {
         } else if self.filters.hide_old_lines {
             let mut filters = self.filters.clone();
             filters.hide_old_lines = false;
-            unhidden = filters.compile(today).apply(
+            unhidden = filters.compile(today, self.disable_reconcile).apply(
                 self.current_account(),
                 &self.view.index,
                 &self.view.order,
@@ -712,11 +712,23 @@ impl OpenDoc {
             (Tack::Reconciled, false) => Tack::None,
         };
         let today = Date::today();
+        let mut changed = 0;
         for &i in &self.selection {
             if ops[i].tack == from {
                 ops[i].tack = to;
                 ops[i].mark_date = today;
+                changed += 1;
             }
+        }
+        // Un second clic sur une ligne pointée la rapproche : on le dit, le
+        // passage d'une coche à deux pouvant passer inaperçu.
+        if (from, to) == (Tack::Pointed, Tack::Reconciled) {
+            self.notice = Some(trn!(
+                changed,
+                "{} ligne rapprochée (Ctrl+Z pour annuler)",
+                "{} lignes rapprochées (Ctrl+Z pour annuler)",
+                changed
+            ));
         }
         self.touch_tacks();
         true
@@ -1572,6 +1584,15 @@ impl OpenDoc {
     }
 
     /// Soldes sur toutes les lignes (option), recalculés si le réglage change.
+    /// Pointage simple (sans rapprochement) : change la lecture du filtre de
+    /// pointage, d'où un nouveau filtrage.
+    pub fn set_disable_reconcile(&mut self, on: bool) {
+        if self.disable_reconcile != on {
+            self.disable_reconcile = on;
+            self.view.filters = None;
+        }
+    }
+
     pub fn set_ignore_filter_totals(&mut self, on: bool) {
         if self.ignore_filter_totals != on {
             self.ignore_filter_totals = on;
@@ -1891,7 +1912,7 @@ mod tests {
         assert_eq!((ops[1].tack, ops[2].tack), (Tack::Pointed, Tack::Pointed));
         assert_eq!(ops[1].mark_date, Date::today());
         assert!(d.dirty);
-        d.filters.tack = bp_core::filter::TackFilter::NotPointed;
+        d.filters.tack = bp_core::filter::TackFilter::NOT_POINTED;
         d.refresh();
         assert_eq!(
             *d.visible(),
@@ -1915,6 +1936,27 @@ mod tests {
         assert_eq!(d.untack_request, None);
     }
 
+    /// Pointage simple : les lignes pointées sont enregistrées rapprochées,
+    /// le filtre « Pointées » les montre quand même.
+    #[test]
+    fn simple_tack_filter_shows_pointed_lines() {
+        let mut d = doc();
+        d.set_disable_reconcile(true);
+        d.click_row(1, false, false);
+        d.cycle_tack();
+        assert_eq!(d.current_account().operations[1].tack, Tack::Reconciled);
+        d.filters.tack = bp_core::filter::TackFilter::POINTED;
+        d.refresh();
+        assert_eq!(*d.visible(), [2, 1, 0]);
+        d.set_disable_reconcile(false);
+        d.refresh();
+        assert_eq!(
+            *d.visible(),
+            [2],
+            "sans pointage simple, 0 et 1 sont rapprochées"
+        );
+    }
+
     #[test]
     fn untacking_reconciled_lines_asks_first() {
         let mut d = doc();
@@ -1927,6 +1969,12 @@ mod tests {
             (ops[1].tack, ops[2].tack)
         };
         assert_eq!(tacks(&d), (Tack::Reconciled, Tack::Reconciled));
+        assert!(
+            d.notice
+                .as_deref()
+                .is_some_and(|n| n.starts_with("2 lignes rapprochées")),
+            "le rapprochement par un second clic est signalé"
+        );
         assert!(!d.cycle_tack());
         assert_eq!(d.untack_request, Some(2));
         assert_eq!(tacks(&d), (Tack::Reconciled, Tack::Reconciled));

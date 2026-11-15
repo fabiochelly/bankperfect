@@ -2,8 +2,7 @@
 //! dates éventuellement dynamiques (`1/m/a`, `dj/m-1/a`…).
 
 use bp_core::autofilters::{AutoFilter, AutoFilters};
-use bp_core::filter::TackFilter;
-use bp_core::model::Date;
+use bp_core::model::{Date, Tack};
 use bp_core::tr;
 use egui::{Key, RichText};
 use egui_phosphor::regular as icon;
@@ -106,7 +105,7 @@ impl FiltersForm {
                         .auto_shrink([false, true])
                         .show(ui, |ui| {
                             ui.set_max_width(detail_width - 16.0);
-                            self.detail(ui, detail_width - 16.0);
+                            self.detail(ui, detail_width - 16.0, doc.disable_reconcile);
                         });
                 });
             });
@@ -218,7 +217,7 @@ impl FiltersForm {
         }
     }
 
-    fn detail(&mut self, ui: &mut egui::Ui, width: f32) {
+    fn detail(&mut self, ui: &mut egui::Ui, width: f32, simple_tack: bool) {
         let pal = palette(ui);
         let full = width - 2.0 * ui_kit::CARD_PADDING - 2.0 - LABEL_WIDTH - 8.0;
         let d = &mut self.draft;
@@ -285,14 +284,27 @@ impl FiltersForm {
                 ui.add_space(6.0);
             }
             ui_kit::row(ui, tr!("Pointage"), LABEL_WIDTH, |ui| {
-                crate::ui_kit::Combo::new("filter_tack")
-                    .selected_text(d.tack.label())
-                    .width(240.0)
-                    .show_ui(ui, |ui| {
-                        for t in TackFilter::ALL {
-                            ui.selectable_value(&mut d.tack, t, t.label());
-                        }
-                    });
+                ui.spacing_mut().item_spacing.x = 18.0;
+                let t = &mut d.tack;
+                let mut not_pointed = t.not_pointed;
+                if crate::theme::checkbox(ui, &mut not_pointed, tr!("Non pointées")).changed() {
+                    t.set(Tack::None, not_pointed);
+                }
+                if simple_tack {
+                    let mut pointed = t.simple_pointed();
+                    if crate::theme::checkbox(ui, &mut pointed, tr!("Pointées")).changed() {
+                        t.set_simple_pointed(pointed);
+                    }
+                } else {
+                    let mut pointed = t.pointed;
+                    if crate::theme::checkbox(ui, &mut pointed, tr!("Pointées")).changed() {
+                        t.set(Tack::Pointed, pointed);
+                    }
+                    let mut reconciled = t.reconciled;
+                    if crate::theme::checkbox(ui, &mut reconciled, tr!("Rapprochées")).changed() {
+                        t.set(Tack::Reconciled, reconciled);
+                    }
+                }
             });
         });
         let description = d.description(Date::today());

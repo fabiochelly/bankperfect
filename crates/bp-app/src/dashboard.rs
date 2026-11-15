@@ -1518,7 +1518,7 @@ fn pending_timeline(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, currency: &str, 
         let sunday = Date(monday.0 + 6);
         let column = column_rect(i);
         let response = ui.interact(column, ui.id().with(("pending_week", i)), Sense::click());
-        let active = doc.filters.tack == TackFilter::NotPointed
+        let active = doc.filters.tack == TackFilter::NOT_POINTED
             && doc.filters.date_from == Some(*monday)
             && doc.filters.date_to == Some(sunday);
         if active {
@@ -1530,11 +1530,11 @@ fn pending_timeline(ui: &mut Ui, rect: Rect, doc: &mut OpenDoc, currency: &str, 
         }
         if response.clicked() {
             if active {
-                doc.filters.tack = TackFilter::All;
+                doc.filters.tack = TackFilter::ALL;
                 doc.filters.date_from = None;
                 doc.filters.date_to = None;
             } else {
-                doc.filters.tack = TackFilter::NotPointed;
+                doc.filters.tack = TackFilter::NOT_POINTED;
                 doc.filters.date_from = Some(*monday);
                 doc.filters.date_to = Some(sunday);
             }

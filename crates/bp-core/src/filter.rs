@@ -132,43 +132,157 @@ fn index_operation(document: &Document, op: &Operation) -> IndexedOperation {
     }
 }
 
-/// Filtre de pointage (panneau de la colonne P).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
-pub enum TackFilter {
+/// Filtre de pointage (panneau de la colonne P) : les états de pointage
+/// affichés, cochés indépendamment (au moins un).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(from = "TackFilterRepr", into = "TackFilterRepr")]
+pub struct TackFilter {
+    pub not_pointed: bool,
+    pub pointed: bool,
+    pub reconciled: bool,
+}
+
+impl Default for TackFilter {
+    fn default() -> Self {
+        Self::ALL
+    }
+}
+
+impl TackFilter {
+    pub const NOT_POINTED: Self = Self::new(true, false, false);
+    pub const POINTED: Self = Self::new(false, true, false);
+    pub const RECONCILED: Self = Self::new(false, false, true);
+    pub const POINTED_OR_RECONCILED: Self = Self::new(false, true, true);
+    /// Non pointées et pointées : tout sauf les rapprochées.
+    pub const NOT_RECONCILED: Self = Self::new(true, true, false);
+    pub const NOT_POINTED_OR_RECONCILED: Self = Self::new(true, false, true);
+    pub const ALL: Self = Self::new(true, true, true);
+
+    pub const fn new(not_pointed: bool, pointed: bool, reconciled: bool) -> Self {
+        Self {
+            not_pointed,
+            pointed,
+            reconciled,
+        }
+    }
+
+    /// L'état `tack` est-il coché ?
+    pub fn shows(self, tack: Tack) -> bool {
+        match tack {
+            Tack::None => self.not_pointed,
+            Tack::Pointed => self.pointed,
+            Tack::Reconciled => self.reconciled,
+        }
+    }
+
+    /// Coche ou décoche l'état `tack`. Décocher le dernier état coché est
+    /// refusé (faux) : aucune ligne ne serait plus affichée.
+    pub fn set(&mut self, tack: Tack, on: bool) -> bool {
+        let mut next = *self;
+        match tack {
+            Tack::None => next.not_pointed = on,
+            Tack::Pointed => next.pointed = on,
+            Tack::Reconciled => next.reconciled = on,
+        }
+        if !(next.not_pointed || next.pointed || next.reconciled) {
+            return false;
+        }
+        *self = next;
+        true
+    }
+
+    /// Pointage simple (sans rapprochement) : une ligne est pointée ou non,
+    /// qu'elle soit enregistrée « pointée » ou « rapprochée ».
+    pub fn simple_pointed(self) -> bool {
+        self.pointed || self.reconciled
+    }
+
+    /// Pointage simple : « Pointées » vaut pour les lignes enregistrées
+    /// pointées comme rapprochées (un filtre « Pointées » seul ne garderait
+    /// sinon presque rien, les lignes pointées y étant rapprochées).
+    pub fn simplified(self) -> Self {
+        let pointed = self.simple_pointed();
+        Self::new(self.not_pointed, pointed, pointed)
+    }
+
+    /// Aucun état n'est écarté (pour le mode de pointage indiqué).
+    pub fn is_all(self, simple: bool) -> bool {
+        if simple {
+            self.not_pointed && self.simple_pointed()
+        } else {
+            self == Self::ALL
+        }
+    }
+
+    /// Pointage simple : coche ou décoche « Pointées » (pointées et
+    /// rapprochées ensemble) ; refusé si plus rien ne serait affiché.
+    pub fn set_simple_pointed(&mut self, on: bool) -> bool {
+        if !on && !self.not_pointed {
+            return false;
+        }
+        self.pointed = on;
+        self.reconciled = on;
+        true
+    }
+
+    /// Libellé du filtre ; `simple` : pointage simple, sans rapprochement.
+    pub fn label(self, simple: bool) -> &'static str {
+        if simple {
+            return match (self.not_pointed, self.simple_pointed()) {
+                (true, true) => tr!("Toutes"),
+                (true, false) => tr!("Non pointées"),
+                _ => tr!("Pointées"),
+            };
+        }
+        match (self.not_pointed, self.pointed, self.reconciled) {
+            (true, false, false) => tr!("Non pointées"),
+            (false, true, false) => tr!("Pointées"),
+            (false, false, true) => tr!("Rapprochées"),
+            (false, true, true) => tr!("Pointées et rapprochées"),
+            (true, true, false) => tr!("Non rapprochées"),
+            (true, false, true) => tr!("Non pointées et rapprochées"),
+            _ => tr!("Toutes"),
+        }
+    }
+}
+
+/// Forme enregistrée (filtres prédéfinis du document) : les noms des
+/// anciennes versions, que celles-ci relisent, et deux nouveaux.
+#[derive(serde::Serialize, serde::Deserialize)]
+enum TackFilterRepr {
     NotPointed,
     Pointed,
     Reconciled,
     PointedOrReconciled,
-    #[default]
+    NotReconciled,
+    NotPointedOrReconciled,
     All,
 }
 
-impl TackFilter {
-    pub const ALL: [TackFilter; 5] = [
-        Self::NotPointed,
-        Self::Pointed,
-        Self::Reconciled,
-        Self::PointedOrReconciled,
-        Self::All,
-    ];
-
-    pub fn label(self) -> &'static str {
-        match self {
-            Self::NotPointed => tr!("Non pointées"),
-            Self::Pointed => tr!("Pointées"),
-            Self::Reconciled => tr!("Rapprochées"),
-            Self::PointedOrReconciled => tr!("Pointées et rapprochées"),
-            Self::All => tr!("Toutes"),
+impl From<TackFilterRepr> for TackFilter {
+    fn from(repr: TackFilterRepr) -> Self {
+        match repr {
+            TackFilterRepr::NotPointed => Self::NOT_POINTED,
+            TackFilterRepr::Pointed => Self::POINTED,
+            TackFilterRepr::Reconciled => Self::RECONCILED,
+            TackFilterRepr::PointedOrReconciled => Self::POINTED_OR_RECONCILED,
+            TackFilterRepr::NotReconciled => Self::NOT_RECONCILED,
+            TackFilterRepr::NotPointedOrReconciled => Self::NOT_POINTED_OR_RECONCILED,
+            TackFilterRepr::All => Self::ALL,
         }
     }
+}
 
-    fn accepts(self, tack: Tack) -> bool {
-        match self {
-            Self::NotPointed => tack == Tack::None,
-            Self::Pointed => tack == Tack::Pointed,
-            Self::Reconciled => tack == Tack::Reconciled,
-            Self::PointedOrReconciled => tack != Tack::None,
-            Self::All => true,
+impl From<TackFilter> for TackFilterRepr {
+    fn from(filter: TackFilter) -> Self {
+        match (filter.not_pointed, filter.pointed, filter.reconciled) {
+            (true, false, false) => Self::NotPointed,
+            (false, true, false) => Self::Pointed,
+            (false, false, true) => Self::Reconciled,
+            (false, true, true) => Self::PointedOrReconciled,
+            (true, true, false) => Self::NotReconciled,
+            (true, false, true) => Self::NotPointedOrReconciled,
+            _ => Self::All,
         }
     }
 }
@@ -193,12 +307,14 @@ impl Filters {
             || !self.payee.is_empty()
             || !self.category.is_empty()
             || !self.amount.is_empty()
-            || self.tack != TackFilter::All
+            || self.tack != TackFilter::ALL
             || self.date_from.is_some()
             || self.date_to.is_some()
     }
 
-    pub fn compile(&self, today: Date) -> CompiledFilters {
+    /// `simple_tack` : pointage simple, sans rapprochement (voir
+    /// [`TackFilter::simplified`]).
+    pub fn compile(&self, today: Date, simple_tack: bool) -> CompiledFilters {
         let first_of_month = {
             let d = today.to_naive();
             Date::from_ymd(chrono::Datelike::year(&d), chrono::Datelike::month(&d), 1)
@@ -209,7 +325,11 @@ impl Filters {
             payee: TextQuery::parse(&self.payee),
             category: TextQuery::parse(&self.category),
             amount: AmountQuery::parse(&self.amount),
-            tack: self.tack,
+            tack: if simple_tack {
+                self.tack.simplified()
+            } else {
+                self.tack
+            },
             date_from: self.date_from,
             date_to: self.date_to,
             hide_before: self.hide_old_lines.then_some(first_of_month),
@@ -237,7 +357,7 @@ impl CompiledFilters {
 
     /// Critères sur le pointage, les dates et le montant.
     fn matches_values(&self, op: &Operation) -> bool {
-        self.tack.accepts(op.tack)
+        self.tack.shows(op.tack)
             && self.date_from.is_none_or(|d| op.date >= d)
             && self.date_to.is_none_or(|d| op.date <= d)
             && self
@@ -585,5 +705,55 @@ mod tests {
         assert!(m("45.99", -4_599));
         assert!(m("45,9", 4_599));
         assert!(!m("46", 4_599));
+    }
+
+    /// Les cases se combinent ; la dernière cochée ne se décoche pas.
+    #[test]
+    fn tack_filter_combines_states() {
+        let mut f = TackFilter::ALL;
+        assert!(f.set(Tack::Reconciled, false));
+        assert_eq!(f, TackFilter::NOT_RECONCILED);
+        assert!(f.shows(Tack::None) && f.shows(Tack::Pointed) && !f.shows(Tack::Reconciled));
+        assert!(f.set(Tack::Pointed, false));
+        assert!(!f.set(Tack::None, false), "plus rien ne serait affiché");
+        assert_eq!(f, TackFilter::NOT_POINTED);
+        let mut p = TackFilter::POINTED_OR_RECONCILED;
+        assert!(!p.set_simple_pointed(false));
+        assert_eq!(p, TackFilter::POINTED_OR_RECONCILED);
+    }
+
+    /// Pointage simple : « Pointées » retient aussi les lignes enregistrées
+    /// rapprochées (c'est ainsi qu'elles sont pointées dans ce mode).
+    #[test]
+    fn simple_tack_reads_reconciled_as_pointed() {
+        assert_eq!(
+            TackFilter::POINTED.simplified(),
+            TackFilter::POINTED_OR_RECONCILED
+        );
+        assert_eq!(TackFilter::NOT_RECONCILED.simplified(), TackFilter::ALL);
+        assert_eq!(TackFilter::POINTED.label(true), "Pointées");
+        assert!(TackFilter::NOT_RECONCILED.is_all(true));
+        assert!(!TackFilter::NOT_RECONCILED.is_all(false));
+    }
+
+    /// Enregistrés sous les noms des versions précédentes, qui les relisent.
+    #[test]
+    fn tack_filter_keeps_its_stored_names() {
+        for (filter, name) in [
+            (TackFilter::NOT_POINTED, "NotPointed"),
+            (TackFilter::POINTED, "Pointed"),
+            (TackFilter::RECONCILED, "Reconciled"),
+            (TackFilter::POINTED_OR_RECONCILED, "PointedOrReconciled"),
+            (TackFilter::ALL, "All"),
+            (TackFilter::NOT_RECONCILED, "NotReconciled"),
+            (
+                TackFilter::NOT_POINTED_OR_RECONCILED,
+                "NotPointedOrReconciled",
+            ),
+        ] {
+            let json = serde_json::to_string(&filter).unwrap();
+            assert_eq!(json, format!("\"{name}\""));
+            assert_eq!(serde_json::from_str::<TackFilter>(&json).unwrap(), filter);
+        }
     }
 }

@@ -58,16 +58,21 @@ pub struct ReportsForm {
 /// en cache tant que ni le document ni les filtres ne changent.
 #[derive(Default)]
 pub struct VisibleLines {
-    key: Option<(u64, bp_core::filter::Filters, bp_core::model::Date)>,
+    key: Option<(u64, bp_core::filter::Filters, bp_core::model::Date, bool)>,
     lines: Vec<HashSet<usize>>,
 }
 
 impl VisibleLines {
     pub fn get(&mut self, doc: &OpenDoc) -> &[HashSet<usize>] {
         let today = bp_core::model::Date::today();
-        let key = (doc.revision(), doc.filters.clone(), today);
+        let key = (
+            doc.revision(),
+            doc.filters.clone(),
+            today,
+            doc.disable_reconcile,
+        );
         if self.key.as_ref() != Some(&key) {
-            let compiled = doc.filters.compile(today);
+            let compiled = doc.filters.compile(today, doc.disable_reconcile);
             self.lines = doc
                 .document
                 .accounts

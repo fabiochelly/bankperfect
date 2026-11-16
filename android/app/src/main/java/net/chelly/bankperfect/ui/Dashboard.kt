@@ -38,6 +38,7 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 import net.chelly.bankperfect.Model
 import net.chelly.bankperfect.Tab
+import net.chelly.bankperfect.Page
 import net.chelly.bankperfect.core.AccountSummary
 import net.chelly.bankperfect.core.Dashboard
 import net.chelly.bankperfect.core.RecentItem
@@ -62,19 +63,25 @@ fun Home(model: Model, padding: PaddingValues) {
             ),
             verticalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            item { Greeting(model.title, model.saving) }
+            item { Greeting(model) }
             item { Hero(dash) }
             item { AccountStrip(model.accounts) { model.tab = Tab.ACCOUNTS; model.openAccount(it) } }
             item { MonthCard(dash) }
+            model.budget?.let { budget -> item { BudgetCard(budget) } }
             if (dash.categories.isNotEmpty()) item { CategoriesCard(dash) { model.tab = Tab.ANALYSIS } }
-            if (dash.upcoming.isNotEmpty()) item { UpcomingCard(dash.upcoming) }
+            if (dash.upcoming.isNotEmpty()) {
+                item { UpcomingCard(dash.upcoming, model.schedules.isNotEmpty()) { model.page = Page.SCHEDULES } }
+            } else if (model.schedules.isNotEmpty()) {
+                item { ScheduleLink(model) }
+            }
             if (dash.recent.isNotEmpty()) item { RecentCard(dash.recent, model::editRecent) }
         }
     }
 }
 
 @Composable
-private fun Greeting(title: String, saving: Boolean) {
+private fun Greeting(model: Model) {
+    val title = model.title
     val t = LocalTokyo.current
     val today = LocalDate.now().format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.FRENCH))
     Row(Modifier.padding(top = 8.dp, bottom = 2.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -82,7 +89,8 @@ private fun Greeting(title: String, saving: Boolean) {
             Text(today.replaceFirstChar { it.uppercase() }, color = t.faint, style = MaterialTheme.typography.labelLarge)
             Text(title, style = MaterialTheme.typography.headlineMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
-        SavingIndicator(saving)
+        SavingIndicator(model.saving)
+        HideButton(model)
     }
 }
 
@@ -112,7 +120,7 @@ private fun Hero(dash: Dashboard) {
         Column(Modifier.padding(22.dp)) {
             Text("Patrimoine", color = on.copy(alpha = 0.75f), style = MaterialTheme.typography.labelLarge)
             Text(
-                dash.total,
+                masked(dash.total),
                 color = on,
                 style = MaterialTheme.typography.displaySmall.merge(Figures),
                 fontWeight = FontWeight.Bold,
@@ -132,7 +140,7 @@ private fun Hero(dash: Dashboard) {
                             modifier = Modifier.size(16.dp),
                         )
                         Spacer(Modifier.width(4.dp))
-                        Text(dash.change30Days, color = on, style = MaterialTheme.typography.labelLarge.merge(Figures))
+                        Text(masked(dash.change30Days), color = on, style = MaterialTheme.typography.labelLarge.merge(Figures))
                     }
                 }
                 Spacer(Modifier.width(8.dp))
@@ -151,7 +159,7 @@ private fun Hero(dash: Dashboard) {
 private fun HeroFigure(label: String, value: String, color: Color, modifier: Modifier) {
     Column(modifier) {
         Text(label, color = color.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-        Text(value, color = color, style = MaterialTheme.typography.titleMedium.merge(Figures))
+        Text(masked(value), color = color, style = MaterialTheme.typography.titleMedium.merge(Figures))
     }
 }
 
@@ -190,7 +198,7 @@ private fun AccountStrip(accounts: List<AccountSummary>, onOpen: (Int) -> Unit) 
                 }
                 Spacer(Modifier.height(10.dp))
                 Text(
-                    account.balance,
+                    masked(account.balance),
                     style = MaterialTheme.typography.titleMedium.merge(Figures),
                     color = if (account.negative) t.red else t.text,
                     maxLines = 1,
@@ -237,7 +245,7 @@ private fun MonthCard(dash: Dashboard) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Solde du mois", color = t.muted, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
             Text(
-                (if (!dash.netNegative) "+" else "") + dash.net,
+                masked((if (!dash.netNegative) "+" else "") + dash.net),
                 color = if (dash.netNegative) t.red else t.green,
                 style = MaterialTheme.typography.titleMedium.merge(Figures),
             )
@@ -262,7 +270,7 @@ private fun MonthCard(dash: Dashboard) {
         if (dash.pendingCount > 0u) {
             Spacer(Modifier.height(4.dp))
             Text(
-                "${dash.pendingCount} opérations à pointer (${dash.pending})",
+                "${dash.pendingCount} opérations à pointer (${masked(dash.pending)})",
                 color = t.faint,
                 style = MaterialTheme.typography.bodySmall,
             )
@@ -284,7 +292,7 @@ private fun Flow(label: String, value: String, color: Color, modifier: Modifier)
             Spacer(Modifier.width(6.dp))
             Text(label, color = t.muted, style = MaterialTheme.typography.labelLarge)
         }
-        Text(value, style = MaterialTheme.typography.titleLarge.merge(Figures), color = t.text)
+        Text(masked(value), style = MaterialTheme.typography.titleLarge.merge(Figures), color = t.text)
     }
 }
 
@@ -307,7 +315,7 @@ private fun CategoriesCard(dash: Dashboard, onMore: () -> Unit) {
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text("Total", color = t.faint, style = MaterialTheme.typography.labelSmall)
-                    Text(dash.expenses, style = MaterialTheme.typography.labelLarge.merge(Figures), color = t.text)
+                    Text(masked(dash.expenses), style = MaterialTheme.typography.labelLarge.merge(Figures), color = t.text)
                 }
             }
             Spacer(Modifier.width(16.dp))
@@ -342,10 +350,12 @@ private fun CategoriesCard(dash: Dashboard, onMore: () -> Unit) {
 }
 
 @Composable
-private fun UpcomingCard(items: List<UpcomingItem>) {
+private fun UpcomingCard(items: List<UpcomingItem>, hasSchedules: Boolean, onSchedules: () -> Unit) {
     val t = LocalTokyo.current
-    TnCard {
-        SectionTitle("À venir")
+    TnCard(if (hasSchedules) Modifier.clickable(onClick = onSchedules) else Modifier) {
+        SectionTitle("À venir") {
+            if (hasSchedules) Text("Échéancier ›", color = t.blue, style = MaterialTheme.typography.labelLarge)
+        }
         Spacer(Modifier.height(8.dp))
         items.forEach { item ->
             Row(Modifier.padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -368,7 +378,7 @@ private fun UpcomingCard(items: List<UpcomingItem>) {
                     Text(item.account, style = MaterialTheme.typography.bodySmall, color = t.faint, maxLines = 1)
                 }
                 Text(
-                    item.amount,
+                    masked(item.amount),
                     style = MaterialTheme.typography.bodyLarge.merge(Figures),
                     fontWeight = FontWeight.SemiBold,
                     color = if (item.negative) t.text else t.green,
@@ -437,7 +447,7 @@ private fun RecentCard(items: List<RecentItem>, onOpen: (RecentItem) -> Unit) {
                     )
                 }
                 Text(
-                    item.amount,
+                    masked(item.amount),
                     style = MaterialTheme.typography.bodyLarge.merge(Figures),
                     fontWeight = FontWeight.SemiBold,
                     color = if (item.negative) t.text else t.green,

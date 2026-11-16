@@ -16,6 +16,10 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import net.chelly.bankperfect.core.AccountSummary
 import net.chelly.bankperfect.core.AccountView
+import net.chelly.bankperfect.core.BudgetStatus
+import net.chelly.bankperfect.core.ScheduleItem
+import net.chelly.bankperfect.core.TransferDraft
+import net.chelly.bankperfect.core.TackState
 import net.chelly.bankperfect.core.BpException
 import net.chelly.bankperfect.core.CategoryGuess
 import net.chelly.bankperfect.core.CategoryItem
@@ -54,6 +58,9 @@ sealed interface Screen {
 /** Onglets de l'application, fichier ouvert. */
 enum class Tab { HOME, ACCOUNTS, ANALYSIS }
 
+/** Écran ouvert par-dessus les onglets. */
+enum class Page { SCHEDULES, TRANSFER }
+
 /** Opération en cours de saisie ou de modification. */
 data class Editing(val account: Int, val uid: ULong?, val draft: Draft)
 
@@ -71,6 +78,7 @@ fun interface Prompter {
 class Model(application: Application) : AndroidViewModel(application) {
     private val file = CloudFile(application)
     private val vault = KeyVault(application)
+    private val prefs = application.getSharedPreferences("bankperfect", android.content.Context.MODE_PRIVATE)
 
     var screen by mutableStateOf<Screen>(if (file.uri == null) Screen.Welcome else Screen.Loading(""))
         private set
@@ -91,6 +99,21 @@ class Model(application: Application) : AndroidViewModel(application) {
     var reportOffset by mutableStateOf(0)
         private set
     var report by mutableStateOf<MonthReport?>(null)
+        private set
+
+    /** Budget du mois en cours (accueil) et du mois analysé. */
+    var budget by mutableStateOf<BudgetStatus?>(null)
+        private set
+    var reportBudget by mutableStateOf<BudgetStatus?>(null)
+        private set
+
+    var schedules by mutableStateOf<List<ScheduleItem>>(emptyList())
+        private set
+
+    var page by mutableStateOf<Page?>(null)
+
+    /** Montants masqués (consultation en public), retenu d'une fois sur l'autre. */
+    var hidden by mutableStateOf(prefs.getBoolean("hidden", false))
         private set
 
     /** Actualisation demandée par l'utilisateur (geste « tirer »). */
@@ -178,6 +201,10 @@ class Model(application: Application) : AndroidViewModel(application) {
         dashboard = null
         report = null
         reportOffset = 0
+        budget = null
+        reportBudget = null
+        schedules = emptyList()
+        page = null
         account = null
         view = null
         editing = null
@@ -330,7 +357,19 @@ class Model(application: Application) : AndroidViewModel(application) {
         title = name.ifEmpty { file.name() ?: "BankPerfect" }
         accounts = list
         dashboard = dash
-        report = withContext(Dispatchers.Default) { runCatching { session.monthReport(offset) }.getOrNull() }
+        withContext(Dispatchers.Default) {
+            budget = session.budget(0)
+            schedules = session.schedules()
+        }
+        loadReport(session, offset)
+    }
+
+    private suspend fun loadReport(session: Session, offset: Int) {
+        val (month, plan) = withContext(Dispatchers.Default) {
+            runCatching { session.monthReport(offset) }.getOrNull() to session.budget(offset)
+        }
+        report = month
+        reportBudget = plan
     }
 
     fun changeReportOffset(delta: Int) {
@@ -338,9 +377,88 @@ class Model(application: Application) : AndroidViewModel(application) {
         val offset = (reportOffset + delta).coerceAtMost(0)
         if (offset == reportOffset) return
         reportOffset = offset
-        viewModelScope.launch {
-            report = withContext(Dispatchers.Default) { runCatching { current.monthReport(offset) }.getOrNull() }
+        viewModelScope.launch { loadReport(current, offset) }
+    }
+
+    fun toggleHidden() {
+        hidden = !hidden
+        prefs.edit().putBoolean("hidden", hidden).apply()
+    }
+
+    // ── Verrouillage ─────────────────────────────────────────────────────
+
+    private var leftAt = 0L
+
+    /** L'application passe en arrière-plan. */
+    fun paused() {
+        leftAt = android.os.SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * Retour dans l'application : après [LOCK_AFTER_MS] d'absence, un fichier
+     * protégé se referme et redemande mot de passe ou empreinte. Jamais avec
+     * une saisie pas encore écrite (hors ligne) : elle serait perdue.
+     */
+    fun resumed() {
+        val current = session
+        val away = android.os.SystemClock.elapsedRealtime() - leftAt
+        if (current != null && leftAt > 0 && away > LOCK_AFTER_MS &&
+            current.dataKey() != null && !current.isDirty() && !saving
+        ) {
+            close()
+            load()
+        } else {
+            refresh()
         }
+    }
+
+    /** Referme le fichier protégé tout de suite (menu). */
+    fun lockNow() {
+        val current = session ?: return
+        if (current.isDirty() || saving) {
+            notice = "Enregistrement en attente : réessayez une fois le fichier écrit"
+            return
+        }
+        close()
+        load()
+    }
+
+    fun canLock(): Boolean = session?.dataKey() != null
+
+    // ── Échéancier et virements ──────────────────────────────────────────
+
+    fun insertSchedule(item: ScheduleItem) {
+        val current = session ?: return
+        viewModelScope.launch {
+            val result = withContext(Dispatchers.Default) { runCatching { current.insertSchedule(item.index) } }
+            result.onSuccess {
+                notice = it
+                changed(current)
+            }.onFailure { notice = it.message }
+        }
+    }
+
+    /** Nouveau virement, du compte par défaut vers un autre. */
+    fun newTransfer(): TransferDraft {
+        val from = session?.defaultAccount() ?: 0u
+        val to = accounts.firstOrNull { it.index != from && !it.disabled }?.index ?: from
+        val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        return TransferDraft(from, to, today, "", "")
+    }
+
+    /** Enregistre le virement ; renvoie le message d'erreur à afficher, ou `null`. */
+    suspend fun commitTransfer(draft: TransferDraft): String? {
+        val current = session ?: return "Fichier fermé"
+        val result = withContext(Dispatchers.Default) { runCatching { current.transfer(draft) } }
+        return result.fold(
+            onSuccess = {
+                page = null
+                notice = "Virement enregistré"
+                changed(current)
+                null
+            },
+            onFailure = { it.message },
+        )
     }
 
     // ── Consultation ─────────────────────────────────────────────────────
@@ -432,6 +550,13 @@ class Model(application: Application) : AndroidViewModel(application) {
         editing = null
     }
 
+    /** Recopie l'opération ouverte en une nouvelle, datée d'aujourd'hui. */
+    fun duplicate(draft: Draft) {
+        val edit = editing ?: return
+        val today = java.time.LocalDate.now().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy"))
+        editing = Editing(edit.account, null, draft.copy(date = today, tack = TackState.NONE))
+    }
+
     /** Enregistre la saisie ; renvoie le message d'erreur à afficher, ou `null`. */
     suspend fun commit(draft: Draft): String? {
         val current = session ?: return "Fichier fermé"
@@ -485,3 +610,6 @@ class Model(application: Application) : AndroidViewModel(application) {
         return withContext(Dispatchers.Default) { current.modeWarning(draft) }
     }
 }
+
+/** Absence au-delà de laquelle un fichier protégé se verrouille. */
+private const val LOCK_AFTER_MS = 5 * 60 * 1000L

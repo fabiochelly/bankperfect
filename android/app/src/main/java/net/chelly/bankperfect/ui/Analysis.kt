@@ -59,6 +59,7 @@ fun Analysis(model: Model, padding: PaddingValues) {
             MonthSwitcher(report.label, canGoForward = model.reportOffset < 0) { model.changeReportOffset(it) }
         }
         item { Summary(report) }
+        model.reportBudget?.let { budget -> item { BudgetCard(budget, title = "Budget", limit = 6) } }
         item { SixMonths(report) }
         if (report.cumulative.size > 1) item { Rhythm(report) }
         item {
@@ -113,7 +114,7 @@ private fun Summary(report: MonthReport) = Column {
             Column(Modifier.weight(1f)) {
                 Text("Épargne du mois", color = t.muted, style = MaterialTheme.typography.labelLarge)
                 Text(
-                    (if (!report.netNegative) "+" else "") + report.net,
+                    masked((if (!report.netNegative) "+" else "") + report.net),
                     style = MaterialTheme.typography.headlineSmall.merge(Figures),
                     color = if (report.netNegative) t.red else t.text,
                 )
@@ -146,7 +147,7 @@ private fun Tile(label: String, value: String, color: Color, modifier: Modifier)
             Text(label, color = t.muted, style = MaterialTheme.typography.labelLarge)
         }
         Spacer(Modifier.height(4.dp))
-        Text(value, style = MaterialTheme.typography.titleLarge.merge(Figures), maxLines = 1)
+        Text(masked(value), style = MaterialTheme.typography.titleLarge.merge(Figures), maxLines = 1)
     }
 }
 
@@ -238,7 +239,7 @@ private fun CategoryRow(category: CategoryShare, color: Color) {
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f),
                     )
-                    Text(category.amount, style = MaterialTheme.typography.bodyLarge.merge(Figures), fontWeight = FontWeight.SemiBold)
+                    Text(masked(category.amount), style = MaterialTheme.typography.bodyLarge.merge(Figures), fontWeight = FontWeight.SemiBold)
                 }
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -272,7 +273,7 @@ private fun CategoryRow(category: CategoryShare, color: Color) {
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f),
                         )
-                        Text(child.amount, style = MaterialTheme.typography.bodyMedium.merge(Figures))
+                        Text(masked(child.amount), style = MaterialTheme.typography.bodyMedium.merge(Figures))
                     }
                     ShareBar(child.share, color.copy(alpha = 0.6f), t.cardHigh, Modifier.fillMaxWidth().height(3.dp))
                 }

@@ -35,7 +35,12 @@ class MainActivity : FragmentActivity() {
 
     override fun onRestart() {
         super.onRestart()
-        model.refresh()
+        model.resumed()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        model.paused()
     }
 
     override fun onDestroy() {

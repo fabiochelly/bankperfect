@@ -158,7 +158,7 @@ fn value(amount: Amount) -> f64 {
 }
 
 /// Monnaie des totaux : celle du compte par défaut.
-fn currency(document: &Document) -> String {
+pub(crate) fn currency(document: &Document) -> String {
     document
         .accounts
         .get(document.default_account)

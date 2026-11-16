@@ -70,6 +70,16 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import net.chelly.bankperfect.Model
 import net.chelly.bankperfect.Screen
+import net.chelly.bankperfect.Page
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.material3.ExtendedFloatingActionButton
+import androidx.compose.ui.draw.rotate
 import net.chelly.bankperfect.core.AccountSummary
 
 @Composable
@@ -90,10 +100,12 @@ fun Root(model: Model, onPick: () -> Unit) {
             onOther = onPick,
         )
         is Screen.Failure -> Failure(screen.message, onRetry = model::retry, onOther = onPick)
-        Screen.Ready -> {
+        Screen.Ready -> CompositionLocalProvider(LocalHidden provides model.hidden) {
             val editing = model.editing
             when {
                 editing != null -> Editor(model, editing)
+                model.page == Page.TRANSFER -> TransferScreen(model)
+                model.page == Page.SCHEDULES -> Schedules(model, snackbar)
                 model.account != null -> Operations(model, snackbar)
                 else -> MainTabs(model, snackbar, onPick)
             }
@@ -250,14 +262,7 @@ private fun MainTabs(model: Model, snackbar: SnackbarHostState, onPick: () -> Un
             }
         },
         floatingActionButton = {
-            if (model.tab != Tab.ANALYSIS) {
-                FloatingActionButton(
-                    onClick = model::quickAdd,
-                    containerColor = t.blue,
-                    contentColor = t.page,
-                    shape = RoundedCornerShape(20.dp),
-                ) { Icon(Icons.Add, contentDescription = "Nouvelle opération") }
-            }
+            if (model.tab != Tab.ANALYSIS) AddMenu(model)
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
@@ -275,6 +280,59 @@ private fun MainTabs(model: Model, snackbar: SnackbarHostState, onPick: () -> Un
                     .background(t.page.copy(alpha = 0.94f)),
             )
         }
+    }
+}
+
+/** Bouton « + » : un appui ouvre le choix opération ou virement. */
+@Composable
+private fun AddMenu(model: Model) {
+    val t = LocalTokyo.current
+    var open by rememberSaveable { mutableStateOf(false) }
+    val turn by animateFloatAsState(if (open) 45f else 0f, label = "plus")
+    BackHandler(enabled = open) { open = false }
+    Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        AnimatedVisibility(
+            open,
+            enter = fadeIn() + slideInVertically { it / 2 },
+            exit = fadeOut() + slideOutVertically { it / 2 },
+        ) {
+            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (model.accounts.count { !it.disabled } > 1) {
+                    ExtendedFloatingActionButton(
+                        onClick = { open = false; model.page = Page.TRANSFER },
+                        icon = { Icon(Icons.Swap, contentDescription = null) },
+                        text = { Text("Virement") },
+                        containerColor = t.cardHigh,
+                        contentColor = t.purple,
+                    )
+                }
+                ExtendedFloatingActionButton(
+                    onClick = { open = false; model.quickAdd() },
+                    icon = { Icon(Icons.Add, contentDescription = null) },
+                    text = { Text("Opération") },
+                    containerColor = t.cardHigh,
+                    contentColor = t.blue,
+                )
+            }
+        }
+        FloatingActionButton(
+            onClick = { open = !open },
+            containerColor = t.blue,
+            contentColor = t.page,
+            shape = RoundedCornerShape(20.dp),
+        ) { Icon(Icons.Add, contentDescription = "Ajouter", modifier = Modifier.rotate(turn)) }
+    }
+}
+
+/** Bouton « œil » : masque ou montre les montants. */
+@Composable
+fun HideButton(model: Model) {
+    IconButton(onClick = model::toggleHidden) {
+        Icon(
+            if (model.hidden) Icons.EyeOff else Icons.Eye,
+            contentDescription = if (model.hidden) "Montrer les montants" else "Masquer les montants",
+            tint = LocalTokyo.current.muted,
+        )
     }
 }
 
@@ -296,14 +354,22 @@ private fun AccountsTab(model: Model, padding: PaddingValues, onPick: () -> Unit
                 Column(Modifier.weight(1f)) {
                     Text("Comptes", style = MaterialTheme.typography.headlineMedium)
                     model.dashboard?.let {
-                        Text("Total ${it.total}", color = t.muted, style = MaterialTheme.typography.bodyMedium.merge(Figures))
+                        Text("Total ${masked(it.total)}", color = t.muted, style = MaterialTheme.typography.bodyMedium.merge(Figures))
                     }
                 }
                 SavingIndicator(model.saving)
+                HideButton(model)
                 IconButton(onClick = model::refresh) { Icon(Icons.Refresh, contentDescription = "Actualiser", tint = t.muted) }
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.More, contentDescription = "Menu", tint = t.muted) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (model.canLock()) {
+                            DropdownMenuItem(
+                                text = { Text("Verrouiller") },
+                                leadingIcon = { Icon(Icons.Lock, contentDescription = null) },
+                                onClick = { menu = false; model.lockNow() },
+                            )
+                        }
                         if (model.biometricEnabled()) {
                             DropdownMenuItem(
                                 text = { Text("Ne plus ouvrir par empreinte") },
@@ -369,12 +435,12 @@ private fun AccountCard(account: AccountSummary, onClick: () -> Unit) {
             Spacer(Modifier.width(12.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text(
-                    account.balance,
+                    masked(account.balance),
                     style = MaterialTheme.typography.titleMedium.merge(Figures),
                     color = if (account.negative) t.red else t.text,
                 )
                 Text(
-                    "en banque ${account.pointed}",
+                    "en banque ${masked(account.pointed)}",
                     style = MaterialTheme.typography.bodySmall.merge(Figures),
                     color = t.faint,
                 )

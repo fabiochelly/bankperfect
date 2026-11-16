@@ -284,6 +284,11 @@ fun Editor(model: Model, editing: Editing) {
 
             if (!isNew) {
                 Spacer(Modifier.width(0.dp))
+                OutlinedButton(onClick = { model.duplicate(current()) }, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Copy, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Dupliquer à la date du jour")
+                }
                 OutlinedButton(onClick = { confirmDelete = true }, modifier = Modifier.fillMaxWidth()) {
                     Icon(Icons.Delete, contentDescription = null)
                     Spacer(Modifier.width(8.dp))
@@ -327,6 +332,11 @@ fun Editor(model: Model, editing: Editing) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("Supprimer cette opération ?") },
+            text = if (draft.payee.startsWith("Transfert ")) {
+                { Text("C'est un virement : sa ligne dans l'autre compte sera supprimée aussi.") }
+            } else {
+                null
+            },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false

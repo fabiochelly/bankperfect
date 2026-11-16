@@ -23,12 +23,14 @@ use bp_core::model::{Amount, Document, Tack};
 
 mod dashboard;
 mod entry;
+mod plans;
 mod view;
 
 pub use dashboard::{
     CategoryShare, ChartPoint, Dashboard, MonthBar, MonthReport, RecentItem, UpcomingItem,
 };
 pub use entry::{CategoryGuess, CategoryItem, Draft, ModeItem, PayeeChoice};
+pub use plans::{BudgetLine, BudgetStatus, ScheduleItem, TransferDraft};
 pub use view::{AccountView, OperationRow, TackState, TackView};
 
 uniffi::setup_scaffolding!();

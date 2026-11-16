@@ -5,6 +5,7 @@ use bp_core::autofields::AutoFieldRules;
 use bp_core::categorize::{AUTO_THRESHOLD, Categorizer, Query};
 use bp_core::filter::normalize;
 use bp_core::model::{Amount, Date, Document, Mode, Operation, StandardMode, Tack};
+use bp_core::split;
 
 use crate::view::TackState;
 use crate::{BpError, Inner, Session};
@@ -339,6 +340,9 @@ impl Session {
         let saved = match uid {
             Some(uid) => {
                 let (a, i) = inner.find(uid)?;
+                // Ligne d'un virement : la ligne sœur suit (date, détail,
+                // catégorie, montant), comme « Les 2 lignes » sur ordinateur.
+                let sister = split::find_sister(&inner.document, a, i);
                 let op = &mut inner.document.accounts[a].operations[i];
                 if op.tack != tack {
                     op.mark_date = today;
@@ -350,6 +354,9 @@ impl Session {
                 op.details = details;
                 op.category = draft.category;
                 op.amount = amount;
+                if let Some(sister) = sister {
+                    split::copy_to_sister(&mut inner.document, (a, i), sister);
+                }
                 uid
             }
             None => {
@@ -380,7 +387,13 @@ impl Session {
     pub fn delete_operation(&self, uid: u64) -> Result<(), BpError> {
         let mut inner = self.lock();
         let (a, i) = inner.find(uid)?;
-        inner.document.accounts[a].operations.remove(i);
+        // Un virement se supprime entier : ses deux lignes.
+        let mut lines = vec![(a, i)];
+        lines.extend(split::find_sister(&inner.document, a, i));
+        lines.sort_unstable_by(|x, y| y.cmp(x));
+        for (account, line) in lines {
+            inner.document.accounts[account].operations.remove(line);
+        }
         inner.changed();
         Ok(())
     }

@@ -15,19 +15,33 @@
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use bp_core::FileFormat;
-use bp_core::file;
+use bp_core::categorize::Categorizer;
+use bp_core::file::{self, OpenedFile};
 use bp_core::format_v6::{Protection, Unlock};
 use bp_core::merge;
 use bp_core::model::{Amount, Document, Tack};
 
+mod entry;
+mod view;
+
+pub use entry::{CategoryGuess, CategoryItem, Draft, ModeItem, PayeeChoice};
+pub use view::{AccountView, OperationRow, TackState, TackView};
+
 uniffi::setup_scaffolding!();
 
+/// Erreur transmise à Kotlin avec son message (`flat_error` : le texte
+/// affiché est celui de `Display`).
 #[derive(Debug, thiserror::Error, uniffi::Error)]
+#[uniffi(flat_error)]
 pub enum BpError {
     #[error("Mot de passe requis")]
     PasswordRequired,
     #[error("Mot de passe incorrect")]
     WrongPassword,
+    /// La clé gardée pour l'empreinte digitale n'ouvre plus le fichier (mot
+    /// de passe changé depuis) : il faut le mot de passe.
+    #[error("Le mot de passe de ce fichier a changé : saisissez-le")]
+    KeyRejected,
     /// Fichier de BankPerfect 8 ou antérieur : à convertir sur ordinateur.
     #[error(
         "Ce fichier est au format de BankPerfect 8. Ouvrez-le et enregistrez-le une fois avec BankPerfect 9 sur ordinateur."
@@ -39,8 +53,19 @@ pub enum BpError {
         "Ce fichier a été enregistré sur un autre appareil avec un autre mot de passe : fermez-le et rouvrez-le."
     )]
     PasswordChangedElsewhere,
+    /// Saisie refusée (date, montant…) : le message dit quoi corriger.
+    #[error("{reason}")]
+    Invalid { reason: String },
     #[error("{reason}")]
     Failed { reason: String },
+}
+
+impl BpError {
+    pub(crate) fn invalid(reason: impl Into<String>) -> Self {
+        Self::Invalid {
+            reason: reason.into(),
+        }
+    }
 }
 
 impl From<bp_core::Error> for BpError {
@@ -81,6 +106,8 @@ pub struct AccountSummary {
     pub negative: bool,
     /// Solde des opérations pointées ou rapprochées (« en banque »).
     pub pointed: String,
+    /// Opérations à pointer.
+    pub pending: u32,
     pub disabled: bool,
 }
 
@@ -106,19 +133,47 @@ pub struct Session {
     inner: Mutex<Inner>,
 }
 
-struct Inner {
-    document: Document,
+pub(crate) struct Inner {
+    pub(crate) document: Document,
     /// Version du fichier lue ou écrite en dernier (ancêtre commun).
     base: Document,
     base_hash: [u8; 32],
     protection: Protection,
     dirty: bool,
+    /// Incrémenté à chaque modification du document (caches).
+    pub(crate) revision: u64,
+    /// Catégorisation automatique, construite à la première proposition.
+    pub(crate) categorizer: Option<(u64, Categorizer)>,
+    /// Textes de recherche d'un compte : (compte, révision, texte normalisé
+    /// de chaque opération).
+    pub(crate) search: Option<(usize, u64, Vec<String>)>,
     /// Enregistrement préparé par [`Session::save`], en attente de
     /// [`Session::saved`] : document écrit et empreinte des octets.
     pending: Option<(Document, [u8; 32])>,
 }
 
 impl Inner {
+    fn new(opened: OpenedFile, data: &[u8]) -> Result<Self, BpError> {
+        let protection = opened.protection.ok_or(BpError::OldFormat)?;
+        Ok(Self {
+            base: opened.document.clone(),
+            document: opened.document,
+            base_hash: file::fingerprint(data),
+            protection,
+            dirty: false,
+            revision: 0,
+            categorizer: None,
+            search: None,
+            pending: None,
+        })
+    }
+
+    /// Le document vient d'être modifié ici.
+    pub(crate) fn changed(&mut self) {
+        self.dirty = true;
+        self.revision += 1;
+    }
+
     /// Intègre la version distante `remote` si elle a changé.
     fn integrate(&mut self, remote: &[u8]) -> Result<SyncReport, BpError> {
         let hash = file::fingerprint(remote);
@@ -132,13 +187,42 @@ impl Inner {
             .ok_or(BpError::PasswordChangedElsewhere)?;
         let merged = merge::merge(&self.base, &self.document, &theirs)?;
         self.dirty = merged.document != theirs;
-        self.document = merged.document;
+        if merged.document != self.document {
+            self.document = merged.document;
+            self.revision += 1;
+        }
         self.base = theirs;
         self.base_hash = hash;
         Ok(SyncReport {
             incoming: true,
             conflicts: merged.conflicts.iter().map(|c| c.describe()).collect(),
         })
+    }
+
+    /// Index réel d'un compte, vérifié.
+    pub(crate) fn account(&self, index: u32) -> Result<usize, BpError> {
+        let index = index as usize;
+        if index < self.document.accounts.len() {
+            Ok(index)
+        } else {
+            Err(BpError::invalid("Compte introuvable"))
+        }
+    }
+
+    /// Compte et position d'une opération, par son identifiant.
+    pub(crate) fn find(&self, uid: u64) -> Result<(usize, usize), BpError> {
+        self.document
+            .accounts
+            .iter()
+            .enumerate()
+            .find_map(|(a, account)| {
+                account
+                    .operations
+                    .iter()
+                    .position(|op| op.uid == uid)
+                    .map(|i| (a, i))
+            })
+            .ok_or_else(|| BpError::invalid("Opération introuvable (supprimée ailleurs ?)"))
     }
 }
 
@@ -152,17 +236,32 @@ impl Session {
         }
         let unlock = password.as_deref().map_or(Unlock::None, Unlock::Password);
         let opened = file::open_bytes(&data, unlock)?;
-        let protection = opened.protection.ok_or(BpError::OldFormat)?;
         Ok(Arc::new(Self {
-            inner: Mutex::new(Inner {
-                base: opened.document.clone(),
-                document: opened.document,
-                base_hash: file::fingerprint(&data),
-                protection,
-                dirty: false,
-                pending: None,
-            }),
+            inner: Mutex::new(Inner::new(opened, &data)?),
         }))
+    }
+
+    /// Ouvre un fichier avec la clé gardée par le coffre-fort du téléphone
+    /// ([`Session::data_key`]), sans dériver le mot de passe.
+    #[uniffi::constructor]
+    pub fn open_with_key(data: Vec<u8>, key: Vec<u8>) -> Result<Arc<Self>, BpError> {
+        if bp_core::detect_format(&data)? == FileFormat::V5 {
+            return Err(BpError::OldFormat);
+        }
+        let opened = file::open_with_data_key(&data, &key)?.ok_or(BpError::KeyRejected)?;
+        Ok(Arc::new(Self {
+            inner: Mutex::new(Inner::new(opened, &data)?),
+        }))
+    }
+
+    /// Clé du fichier à confier au coffre-fort du téléphone (déverrouillage
+    /// par empreinte digitale). `None` pour un fichier sans mot de passe.
+    pub fn data_key(&self) -> Option<Vec<u8>> {
+        let inner = self.lock();
+        inner
+            .protection
+            .is_password_protected()
+            .then(|| inner.protection.data_key().to_vec())
     }
 
     /// Nom du groupe de comptes.
@@ -203,6 +302,11 @@ impl Session {
                     balance: money(balance, &account.currency),
                     negative: balance.is_negative(),
                     pointed: money(pointed, &account.currency),
+                    pending: account
+                        .operations
+                        .iter()
+                        .filter(|op| op.tack == Tack::None)
+                        .count() as u32,
                     disabled: account.disabled,
                 }
             })
@@ -250,7 +354,7 @@ impl Session {
 }
 
 impl Session {
-    fn lock(&self) -> MutexGuard<'_, Inner> {
+    pub(crate) fn lock(&self) -> MutexGuard<'_, Inner> {
         // Une panique pendant une opération ne doit pas rendre le fichier
         // inaccessible : l'état reste cohérent (chaque étape le remplace d'un
         // bloc).
@@ -259,7 +363,7 @@ impl Session {
 }
 
 /// Montant avec séparateur de milliers et monnaie : `-1 234,56 €`.
-fn money(amount: Amount, currency: &str) -> String {
+pub(crate) fn money(amount: Amount, currency: &str) -> String {
     let text = amount.format(2, ',');
     let (sign, digits) = match text.strip_prefix('-') {
         Some(rest) => ("-", rest),
@@ -281,21 +385,21 @@ fn money(amount: Amount, currency: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use bp_core::model::Operation;
 
-    fn file(document: &Document, protection: &Protection) -> Vec<u8> {
+    pub(crate) fn file(document: &Document, protection: &Protection) -> Vec<u8> {
         file::to_bytes(document, protection).unwrap()
     }
 
-    fn sample() -> (Document, Protection) {
+    pub(crate) fn sample() -> (Document, Protection) {
         let mut document = bp_core::manage::new_document("Comptes", Amount::from_cents(10_000));
         document.guid = "{TEST}".into();
         (document, Protection::none().unwrap())
     }
 
-    fn add(document: &mut Document, payee: &str, cents: i64) {
+    pub(crate) fn add(document: &mut Document, payee: &str, cents: i64) {
         let mut op: Operation = document.accounts[0].operations[0].clone();
         op.uid = document.next_operation_uid();
         op.payee = payee.into();
@@ -325,10 +429,11 @@ mod tests {
         assert_eq!(accounts.len(), 1);
         assert_eq!(accounts[0].balance, "100,00\u{A0}€");
         assert!(!session.is_dirty());
+        assert!(session.data_key().is_none(), "pas de mot de passe");
     }
 
     #[test]
-    fn password_is_checked() {
+    fn password_and_data_key() {
         let (document, _) = sample();
         let (protection, _) = Protection::with_password("motdepasse").unwrap();
         let data = file(&document, &protection);
@@ -341,7 +446,14 @@ mod tests {
             Session::open(data.clone(), Some("autre".into())),
             Err(BpError::WrongPassword)
         ));
-        assert!(Session::open(data, Some("motdepasse".into())).is_ok());
+        let session = Session::open(data.clone(), Some("motdepasse".into())).unwrap();
+        let key = session.data_key().expect("fichier protégé");
+        let again = Session::open_with_key(data.clone(), key).unwrap();
+        assert_eq!(again.accounts().len(), 1);
+        assert!(matches!(
+            Session::open_with_key(data, vec![7; 32]),
+            Err(BpError::KeyRejected)
+        ));
     }
 
     #[test]
@@ -350,7 +462,7 @@ mod tests {
         let session = Session::open(file(&document, &protection), None).unwrap();
         // Saisie sur le téléphone.
         add(&mut session.lock().document, "Boulangerie", -350);
-        session.lock().dirty = true;
+        session.lock().changed();
         // Pendant ce temps, l'ordinateur a enregistré une autre opération.
         let mut remote = document.clone();
         add(&mut remote, "Pharmacie", -1290);

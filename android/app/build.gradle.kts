@@ -84,5 +84,6 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
+    implementation("androidx.biometric:biometric:1.1.0")
     implementation("net.java.dev.jna:jna:5.19.1@aar")
 }

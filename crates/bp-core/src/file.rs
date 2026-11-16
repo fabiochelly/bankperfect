@@ -98,6 +98,25 @@ pub fn open_bytes(data: &[u8], unlock: Unlock<'_>) -> Result<OpenedFile> {
     }
 }
 
+/// Ouvre un fichier v6 avec sa clé de données (voir
+/// [`Protection::data_key`]). `Ok(None)` si la clé ne l'ouvre plus.
+pub fn open_with_data_key(data: &[u8], key: &[u8]) -> Result<Option<OpenedFile>> {
+    let Some((plaintext, protection)) = Protection::open_with_data_key(data, key)? else {
+        return Ok(None);
+    };
+    let payload: Payload = rmp_serde::from_slice(&plaintext).map_err(|_| Error::Corrupted)?;
+    if payload.revision > PAYLOAD_REVISION {
+        return Err(Error::UnsupportedVersion(payload.revision as u8));
+    }
+    Ok(Some(OpenedFile {
+        document: payload.document,
+        format: FileFormat::V6,
+        protection: Some(protection),
+        legacy_password: None,
+        warnings: Vec::new(),
+    }))
+}
+
 /// Relit une autre version (v6) d'un fichier déjà ouvert, avec la clé en
 /// mémoire : voir [`Protection::reopen`]. `Ok(None)` si le mot de passe a été
 /// changé ailleurs.
@@ -158,6 +177,17 @@ mod tests {
         let (other, _) = Protection::with_password_for_tests("secret");
         let bytes = to_bytes(&document, &other).unwrap();
         assert!(reopen_bytes(&bytes, &protection).unwrap().is_none());
+
+        // Clé de données confiée au coffre-fort : ouvre sans mot de passe,
+        // et les enregistrements suivants gardent les mêmes emplacements.
+        let key = protection.data_key();
+        let bytes = to_bytes(&document, &protection).unwrap();
+        let opened = open_with_data_key(&bytes, &key).unwrap().unwrap();
+        let again = to_bytes(&opened.document, opened.protection.as_ref().unwrap()).unwrap();
+        // En-tête : magic, version, protection, sel, paramètres, deux emplacements.
+        let header = 8 + 1 + 1 + 16 + 12 + 2 * 72;
+        assert_eq!(again[..header], bytes[..header], "même en-tête");
+        assert!(open_with_data_key(&bytes, &[0; 32]).unwrap().is_none());
 
         // Fichier sans mot de passe : sa clé est dans l'en-tête.
         let bytes = to_bytes(&document, &Protection::none().unwrap()).unwrap();

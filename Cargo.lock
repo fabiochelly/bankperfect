@@ -707,6 +707,7 @@ name = "bp-mobile"
 version = "9.13.0"
 dependencies = [
  "bp-core",
+ "chrono",
  "thiserror 2.0.21",
  "uniffi",
 ]

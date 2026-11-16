@@ -1,0 +1,282 @@
+package net.chelly.bankperfect.ui
+
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import net.chelly.bankperfect.Model
+import net.chelly.bankperfect.core.OperationRow
+import net.chelly.bankperfect.core.TackState
+import net.chelly.bankperfect.core.TackView
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+@Composable
+fun Operations(model: Model, snackbar: SnackbarHostState) {
+    BackHandler { model.closeAccount() }
+    val view = model.view
+    val list = rememberLazyListState()
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                navigationIcon = {
+                    IconButton(onClick = model::closeAccount) { Icon(Icons.Back, contentDescription = "Comptes") }
+                },
+                title = {
+                    Column {
+                        Text(view?.name ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (view != null) {
+                            Text(
+                                "${view.balance} · en banque ${view.pointed}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (view.balanceNegative) {
+                                    LocalMoney.current.negative
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
+                },
+                actions = { SavingIndicator(model.saving) },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+            )
+        },
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = model::startNew,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+            ) { Icon(Icons.Add, contentDescription = "Nouvelle opération") }
+        },
+        snackbarHost = { SnackbarHost(snackbar) },
+    ) { padding ->
+        Column(
+            Modifier
+                .padding(top = padding.calculateTopPadding())
+                .fillMaxSize(),
+        ) {
+            OutlinedTextField(
+                value = model.search,
+                onValueChange = model::changeSearch,
+                placeholder = { Text("Rechercher", maxLines = 1) },
+                leadingIcon = { Icon(Icons.Search, contentDescription = null) },
+                trailingIcon = {
+                    if (model.search.isNotEmpty()) {
+                        IconButton(onClick = { model.changeSearch("") }) {
+                            Icon(Icons.Close, contentDescription = "Effacer")
+                        }
+                    }
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+            )
+            Row(
+                Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                for ((value, label) in listOf(
+                    TackView.ALL to "Toutes",
+                    TackView.PENDING to "À pointer",
+                    TackView.TACKED to "Pointées",
+                )) {
+                    FilterChip(
+                        selected = model.tackView == value,
+                        onClick = { model.changeTackView(value) },
+                        label = { Text(label) },
+                    )
+                }
+            }
+            if (view != null && view.rows.isEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxSize()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.TopCenter,
+                ) {
+                    Text(
+                        if (view.total == 0u) "Aucune opération" else "Aucune opération ne correspond",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+            val rows = view?.rows ?: emptyList()
+            LazyColumn(
+                state = list,
+                contentPadding = PaddingValues(bottom = padding.calculateBottomPadding() + 88.dp),
+            ) {
+                var month: String? = null
+                for ((i, row) in rows.withIndex()) {
+                    if (row.month != month) {
+                        month = row.month
+                        stickyHeader(key = "m$i") { MonthHeader(row.month) }
+                    }
+                    item(key = row.uid.toLong()) {
+                        OperationLine(
+                            row,
+                            onTack = { model.toggleTack(row.uid) },
+                            onOpen = { model.startEdit(row.uid) },
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MonthHeader(month: String) {
+    Text(
+        month.replaceFirstChar { it.uppercase() },
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 16.dp, vertical = 6.dp),
+    )
+}
+
+@Composable
+private fun OperationLine(row: OperationRow, onTack: () -> Unit, onOpen: () -> Unit) {
+    val money = LocalMoney.current
+    Column(Modifier.alpha(if (row.future) 0.6f else 1f)) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClick = onOpen)
+                .padding(start = 8.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            TackButton(row.tack, onTack)
+            Spacer(Modifier.width(4.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    row.payee.ifEmpty { row.mode },
+                    style = MaterialTheme.typography.bodyLarge,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+                val sub = listOf(row.date.substring(0, 5), row.category, row.details)
+                    .filter { it.isNotEmpty() }
+                    .joinToString(" · ")
+                Text(
+                    sub,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Column(horizontalAlignment = Alignment.End) {
+                Text(
+                    row.amount,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = if (row.negative) MaterialTheme.colorScheme.onSurface else money.positive,
+                )
+                Text(
+                    row.balance,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (row.balanceNegative) money.negative else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+        HorizontalDivider(
+            Modifier.padding(start = 56.dp),
+            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+        )
+    }
+}
+
+/** Pastille de pointage : vide, cochée (pointée) ou pleine (rapprochée). Zone d'appui de 48 dp. */
+@Composable
+private fun TackButton(tack: TackState, onClick: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
+        Modifier
+            .size(48.dp)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        when (tack) {
+            TackState.NONE -> Box(
+                Modifier
+                    .size(22.dp)
+                    .border(2.dp, MaterialTheme.colorScheme.outline, CircleShape),
+            )
+            TackState.POINTED -> Box(
+                Modifier
+                    .size(22.dp)
+                    .background(primary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(
+                    Icons.Check,
+                    contentDescription = "Pointée",
+                    tint = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.size(16.dp),
+                )
+            }
+            TackState.RECONCILED -> Box(
+                Modifier
+                    .size(22.dp)
+                    .background(MaterialTheme.colorScheme.secondary, CircleShape),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "R",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.background,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+    Spacer(Modifier.height(0.dp))
+}

@@ -22,5 +22,6 @@ bindgen = ["uniffi/cli"]
 
 [dependencies]
 bp-core = { version = "9.13.0", path = "../bp-core" }
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
 thiserror = "2.0.21"
 uniffi = "0.32.2"

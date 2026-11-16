@@ -235,6 +235,42 @@ impl Protection {
         Ok((plaintext, Self { dek, header }))
     }
 
+    /// Clé de données du fichier, pour la confier au coffre-fort du système
+    /// (déverrouillage par empreinte digitale sur téléphone) : elle ouvre le
+    /// fichier sans mot de passe tant que celui-ci n'est pas changé. Ne doit
+    /// jamais être écrite en clair.
+    pub fn data_key(&self) -> Zeroizing<Vec<u8>> {
+        Zeroizing::new(self.dek.to_vec())
+    }
+
+    /// Ouvre un fichier avec sa clé de données ([`Protection::data_key`]),
+    /// sans dérivation du mot de passe. `Ok(None)` si la clé ne l'ouvre pas
+    /// (mot de passe changé depuis).
+    pub fn open_with_data_key(data: &[u8], key: &[u8]) -> Result<Option<(Vec<u8>, Self)>> {
+        if key.len() != KEY_LEN {
+            return Ok(None);
+        }
+        let mut dek = Zeroizing::new([0u8; KEY_LEN]);
+        dek.copy_from_slice(key);
+        let candidate = Self {
+            dek,
+            header: Vec::new(),
+        };
+        let Some(plaintext) = candidate.reopen(data)? else {
+            return Ok(None);
+        };
+        // En-tête du fichier lu : mêmes emplacements de clé, réutilisés aux
+        // enregistrements suivants.
+        let header_len = header_len(data)?;
+        Ok(Some((
+            plaintext,
+            Self {
+                dek: candidate.dek,
+                header: data[..header_len].to_vec(),
+            },
+        )))
+    }
+
     /// Ouvre une autre version du même fichier (modifiée ailleurs, par
     /// exemple sur un autre appareil) avec la clé déjà en mémoire, sans
     /// redemander le mot de passe. `Ok(None)` si cette version est chiffrée
@@ -265,6 +301,21 @@ impl Protection {
             _ => Err(Error::Corrupted),
         }
     }
+}
+
+/// Longueur de l'en-tête (jusqu'aux emplacements de clé compris).
+fn header_len(data: &[u8]) -> Result<usize> {
+    let mut reader = Reader::new(data);
+    if reader.take(MAGIC.len())? != MAGIC {
+        return Err(Error::UnknownFormat);
+    }
+    reader.u8()?;
+    match reader.u8()? {
+        PROTECTION_NONE => reader.take(KEY_LEN)?,
+        PROTECTION_PASSWORD => reader.take(SALT_LEN + 12 + 2 * SLOT_LEN)?,
+        _ => return Err(Error::Corrupted),
+    };
+    Ok(reader.pos)
 }
 
 /// Déchiffre et décompresse le contenu qui suit l'en-tête (`reader` placé

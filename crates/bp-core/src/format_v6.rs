@@ -94,6 +94,7 @@ pub enum Unlock<'a> {
 
 /// Protection d'un document ouvert : la DEK et l'en-tête prêts à être réutilisés
 /// à chaque sauvegarde.
+#[derive(Clone)]
 pub struct Protection {
     dek: Key,
     /// En-tête de `magic` jusqu'à la fin des slots (sans codec ni nonce).
@@ -145,6 +146,12 @@ impl Protection {
         header.extend_from_slice(&wrap_key(&recovery_kek, &dek, AAD_RECOVERY_SLOT, &salt)?);
 
         Ok((Self { dek, header }, RecoveryKey(mnemonic)))
+    }
+
+    /// Comme [`Protection::with_password`], avec une dérivation rapide.
+    #[cfg(test)]
+    pub(crate) fn with_password_for_tests(password: &str) -> (Self, RecoveryKey) {
+        Self::with_password_params(password, 8, 1, 1).expect("protection")
     }
 
     pub fn is_password_protected(&self) -> bool {
@@ -223,26 +230,62 @@ impl Protection {
         };
 
         let header_len = reader.pos;
-        let codec = reader.u8()?;
-        if codec != CODEC_ZSTD {
-            return Err(Error::Corrupted);
-        }
-        let nonce: [u8; NONCE_LEN] = reader.array()?;
-        let aad = &data[..reader.pos];
-        let compressed = cipher(&dek)
-            .decrypt(
-                &XNonce::from(nonce),
-                Payload {
-                    msg: &data[reader.pos..],
-                    aad,
-                },
-            )
-            .map_err(|_| Error::Corrupted)?;
-        let plaintext = decompress_limited(&compressed, MAX_CONTENT_LEN)?;
-
+        let plaintext = decrypt_body(data, reader, &dek)?;
         let header = data[..header_len].to_vec();
         Ok((plaintext, Self { dek, header }))
     }
+
+    /// Ouvre une autre version du même fichier (modifiée ailleurs, par
+    /// exemple sur un autre appareil) avec la clé déjà en mémoire, sans
+    /// redemander le mot de passe. `Ok(None)` si cette version est chiffrée
+    /// avec une autre clé : le mot de passe a été changé ailleurs.
+    pub fn reopen(&self, data: &[u8]) -> Result<Option<Vec<u8>>> {
+        let mut reader = Reader::new(data);
+        if reader.take(MAGIC.len())? != MAGIC {
+            return Err(Error::UnknownFormat);
+        }
+        let version = reader.u8()?;
+        if version != VERSION {
+            return Err(Error::UnsupportedVersion(version));
+        }
+        match reader.u8()? {
+            PROTECTION_NONE => {
+                let mut dek = Zeroizing::new([0u8; KEY_LEN]);
+                dek.copy_from_slice(reader.take(KEY_LEN)?);
+                decrypt_body(data, reader, &dek).map(Some)
+            }
+            PROTECTION_PASSWORD => {
+                reader.take(SALT_LEN + 12 + 2 * SLOT_LEN)?;
+                match decrypt_body(data, reader, &self.dek) {
+                    Ok(plaintext) => Ok(Some(plaintext)),
+                    Err(Error::Corrupted) => Ok(None),
+                    Err(e) => Err(e),
+                }
+            }
+            _ => Err(Error::Corrupted),
+        }
+    }
+}
+
+/// Déchiffre et décompresse le contenu qui suit l'en-tête (`reader` placé
+/// sur l'octet du codec).
+fn decrypt_body(data: &[u8], mut reader: Reader<'_>, dek: &Key) -> Result<Vec<u8>> {
+    let codec = reader.u8()?;
+    if codec != CODEC_ZSTD {
+        return Err(Error::Corrupted);
+    }
+    let nonce: [u8; NONCE_LEN] = reader.array()?;
+    let aad = &data[..reader.pos];
+    let compressed = cipher(dek)
+        .decrypt(
+            &XNonce::from(nonce),
+            Payload {
+                msg: &data[reader.pos..],
+                aad,
+            },
+        )
+        .map_err(|_| Error::Corrupted)?;
+    decompress_limited(&compressed, MAX_CONTENT_LEN)
 }
 
 /// Indique si un fichier v6 demande un mot de passe pour s'ouvrir.

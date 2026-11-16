@@ -24,6 +24,7 @@ pub mod json;
 pub mod legacy_pickle;
 pub mod logos;
 pub mod manage;
+pub mod merge;
 pub mod model;
 pub mod portfolio;
 pub mod pyvalue;

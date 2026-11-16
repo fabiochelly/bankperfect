@@ -458,6 +458,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sys-locale",
+ "tempfile",
  "trash",
  "ttf-parser 0.25.1",
  "ureq",

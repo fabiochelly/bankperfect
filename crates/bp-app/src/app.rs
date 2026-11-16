@@ -411,6 +411,10 @@ pub struct BankPerfectApp {
     confirm_json_export: bool,
     /// Résumé des échéances insérées automatiquement à l'ouverture.
     scheduler_notice: Option<String>,
+    /// Conflits d'une fusion avec une version modifiée ailleurs.
+    merge_notice: Option<String>,
+    /// Prochaine vérification du fichier sur disque (horloge d'egui).
+    disk_check_at: f64,
     options: Option<crate::options_ui::OptionsForm>,
     about: bool,
     /// Licence active (certificat des réglages, vérifié au démarrage).
@@ -510,6 +514,8 @@ impl BankPerfectApp {
             confirm_reverse: false,
             confirm_json_export: false,
             scheduler_notice: None,
+            merge_notice: None,
+            disk_check_at: 0.0,
             options: None,
             about: false,
             license: settings.license.as_deref().and_then(crate::license::verify),
@@ -822,6 +828,15 @@ impl BankPerfectApp {
     fn finish_open(&mut self, path: PathBuf, data: &[u8], unlock: Unlock<'_>) {
         match file::open_bytes(data, unlock) {
             Ok(mut opened) => {
+                // Version du disque, avant les insertions automatiques : la
+                // base des fusions avec les modifications faites ailleurs.
+                let disk = opened
+                    .protection
+                    .as_ref()
+                    .filter(|_| opened.format == FileFormat::V6)
+                    .map(|p| {
+                        crate::disk_sync::DiskState::new(&path, opened.document.clone(), data, p)
+                    });
                 // Échéances à insertion automatique arrivées à terme.
                 let inserted = bp_core::scheduler::auto_insert(
                     &mut opened.document,
@@ -840,6 +855,7 @@ impl BankPerfectApp {
                 self.show_warnings = !opened.warnings.is_empty();
                 self.settings.remember(&path);
                 let mut doc = OpenDoc::new(path, opened);
+                doc.disk = disk;
                 doc.filters.hide_old_lines = self.settings.hide_old_lines;
                 if self.settings.remember_sort
                     && let Some((column, ascending)) = &self.settings.last_sort
@@ -897,9 +913,68 @@ impl BankPerfectApp {
         }
     }
 
+    /// Surveille le fichier ouvert : modifié ailleurs (synchronisation par
+    /// Dropbox, Google Drive…), il est relu et fusionné tant que rien n'est en
+    /// cours (saisie, outil, question) ; sinon à la prochaine occasion, ou au
+    /// plus tard à l'enregistrement.
+    fn watch_disk(&mut self, ctx: &egui::Context) {
+        const PERIOD: f64 = 2.0;
+        if self.doc.as_ref().is_none_or(|d| d.disk.is_none()) {
+            return;
+        }
+        ctx.request_repaint_after(std::time::Duration::from_secs_f64(PERIOD));
+        let now = ctx.input(|i| i.time);
+        if now < self.disk_check_at {
+            return;
+        }
+        self.disk_check_at = now + PERIOD;
+        let busy = self.editor.is_some()
+            || self.tool.is_some()
+            || self.prompt.is_some()
+            || self.pending.is_some()
+            || self.options.is_some()
+            || self.error.is_some()
+            || self.merge_notice.is_some();
+        let Some(doc) = &mut self.doc else { return };
+        if busy || !crate::disk_sync::looks_changed(doc) {
+            return;
+        }
+        // Modifications locales en cours : la fusion attend l'enregistrement
+        // (elle abandonne l'historique d'annulation).
+        if doc.dirty {
+            crate::disk_sync::mark_seen(doc);
+            self.toast = Some((
+                tr!("Ce fichier a été modifié sur un autre appareil : ses modifications seront intégrées à l'enregistrement").into(),
+                now + 6.0,
+            ));
+            return;
+        }
+        match crate::disk_sync::integrate(doc) {
+            Ok(Some(incoming)) => {
+                self.toast = Some((
+                    tr!("Modifications faites sur un autre appareil intégrées").into(),
+                    now + 4.0,
+                ));
+                self.merge_notice = incoming.conflict_report();
+            }
+            Ok(None) => {}
+            // Réessayé à l'enregistrement, qui affichera l'erreur.
+            Err(_) => {}
+        }
+    }
+
     fn save(&mut self, now: f64) {
         self.fire_extensions(bp_ext::Event::BeforeSave, &[], false, now);
         let Some(doc) = &mut self.doc else { return };
+        // Modifications faites ailleurs depuis l'ouverture ou le dernier
+        // enregistrement : intégrées d'abord, pour ne pas les écraser.
+        let incoming = match crate::disk_sync::integrate(doc) {
+            Ok(incoming) => incoming,
+            Err(e) => {
+                self.error = Some(e);
+                return;
+            }
+        };
         if let Err(e) = bp_core::backup::backup_before_save(
             &doc.path,
             &self.settings.backup_dir(),
@@ -914,7 +989,18 @@ impl BankPerfectApp {
         match save_document(doc) {
             Ok(recovery) => {
                 self.recovery_phrase = recovery;
-                self.toast = Some((tr!("{} enregistré", doc.file_name()), now + 3.0));
+                let message = if incoming.is_some() {
+                    tr!(
+                        "{} enregistré, avec les modifications faites sur un autre appareil",
+                        doc.file_name()
+                    )
+                } else {
+                    tr!("{} enregistré", doc.file_name())
+                };
+                self.toast = Some((message, now + 4.0));
+                if let Some(report) = incoming.as_ref().and_then(|i| i.conflict_report()) {
+                    self.merge_notice = Some(report);
+                }
                 doc.ext_events
                     .push((bp_ext::Event::AfterSave, Vec::new(), false));
             }
@@ -3015,6 +3101,11 @@ impl BankPerfectApp {
                 }
             }
         }
+        if let Some(report) = &self.merge_notice
+            && dialogs::alert(ctx, tr!("Modifications faites ailleurs"), report)
+        {
+            self.merge_notice = None;
+        }
         if let Some(summary) = self.scheduler_notice.clone() {
             let mut close = false;
             dialogs::modal(ctx, "scheduler_notice").show(ctx, |ui| {
@@ -3693,6 +3784,7 @@ impl BankPerfectApp {
     fn frame_ui(&mut self, ui: &mut egui::Ui) {
         self.egui_ctx = ui.ctx().clone();
         self.poll_pick();
+        self.watch_disk(ui.ctx());
         if crate::file_picker::take_failure() {
             self.error = Some(tr!("La fenêtre de choix de fichier n'a pas pu s'ouvrir.").into());
         }
@@ -4380,20 +4472,30 @@ fn save_document(doc: &mut OpenDoc) -> bp_core::Result<Option<String>> {
             backup_v5_original(&doc.path)
                 .map_err(|e| bp_core::Error::from(e).on_write(&doc.path))?;
         }
-        file::save(
-            &doc.path,
+        let bytes = file::to_bytes(
             &doc.document,
             doc.protection.as_ref().expect("protection choisie"),
-        )
+        )?;
+        bp_core::format_v6::write_atomic(&doc.path, &bytes)?;
+        Ok(bytes)
     })();
-    if let Err(e) = written {
-        // La clé de secours n'a pas été montrée : la prochaine tentative
-        // doit en créer une autre plutôt que la perdre.
-        if new_protection {
-            doc.protection = None;
+    let bytes = match written {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            // La clé de secours n'a pas été montrée : la prochaine tentative
+            // doit en créer une autre plutôt que la perdre.
+            if new_protection {
+                doc.protection = None;
+            }
+            return Err(e);
         }
-        return Err(e);
-    }
+    };
+    doc.disk = Some(crate::disk_sync::DiskState::new(
+        &doc.path,
+        doc.document.clone(),
+        &bytes,
+        doc.protection.as_ref().expect("protection choisie"),
+    ));
     doc.format = FileFormat::V6;
     doc.dirty = false;
     Ok(recovery)

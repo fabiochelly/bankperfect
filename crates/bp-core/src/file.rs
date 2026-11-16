@@ -98,6 +98,26 @@ pub fn open_bytes(data: &[u8], unlock: Unlock<'_>) -> Result<OpenedFile> {
     }
 }
 
+/// Relit une autre version (v6) d'un fichier déjà ouvert, avec la clé en
+/// mémoire : voir [`Protection::reopen`]. `Ok(None)` si le mot de passe a été
+/// changé ailleurs.
+pub fn reopen_bytes(data: &[u8], protection: &Protection) -> Result<Option<Document>> {
+    let Some(plaintext) = protection.reopen(data)? else {
+        return Ok(None);
+    };
+    let payload: Payload = rmp_serde::from_slice(&plaintext).map_err(|_| Error::Corrupted)?;
+    if payload.revision > PAYLOAD_REVISION {
+        return Err(Error::UnsupportedVersion(payload.revision as u8));
+    }
+    Ok(Some(payload.document))
+}
+
+/// Empreinte du contenu d'un fichier, pour savoir s'il a changé sur disque.
+pub fn fingerprint(data: &[u8]) -> [u8; 32] {
+    use sha2::Digest;
+    sha2::Sha256::digest(data).into()
+}
+
 /// Sérialise et chiffre un document au format v6.
 pub fn to_bytes(document: &Document, protection: &Protection) -> Result<Vec<u8>> {
     let payload = PayloadRef {
@@ -117,4 +137,30 @@ pub fn save(path: &Path, document: &Document, protection: &Protection) -> Result
 struct PayloadRef<'a> {
     revision: u32,
     document: &'a Document,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn reopen_with_the_key_in_memory() {
+        let (protection, _) = Protection::with_password_for_tests("secret");
+        let document = Document {
+            group_name: "ailleurs".into(),
+            ..Default::default()
+        };
+        let bytes = to_bytes(&document, &protection).unwrap();
+        let reopened = reopen_bytes(&bytes, &protection).unwrap().unwrap();
+        assert_eq!(reopened.group_name, "ailleurs");
+
+        // Mot de passe changé ailleurs : nouvelle clé.
+        let (other, _) = Protection::with_password_for_tests("secret");
+        let bytes = to_bytes(&document, &other).unwrap();
+        assert!(reopen_bytes(&bytes, &protection).unwrap().is_none());
+
+        // Fichier sans mot de passe : sa clé est dans l'en-tête.
+        let bytes = to_bytes(&document, &Protection::none().unwrap()).unwrap();
+        assert!(reopen_bytes(&bytes, &protection).unwrap().is_some());
+    }
 }

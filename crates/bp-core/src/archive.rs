@@ -42,7 +42,7 @@ impl Archives {
         feature_store::get(document, KEY).unwrap_or(Ok(Self::default()))
     }
 
-    fn save(&self, document: &mut Document) -> Result<(), FeatureError> {
+    pub(crate) fn save(&self, document: &mut Document) -> Result<(), FeatureError> {
         if self.entries.is_empty() {
             feature_store::remove(document, KEY);
             Ok(())

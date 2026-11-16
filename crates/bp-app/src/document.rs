@@ -21,6 +21,10 @@ pub struct OpenDoc {
     pub legacy_password: Option<String>,
     pub dirty: bool,
     pub warnings: Vec<String>,
+    /// Version commune avec le fichier sur disque, pour fusionner les
+    /// modifications faites ailleurs (`None` pour un fichier v5 pas encore
+    /// enregistré).
+    pub disk: Option<crate::disk_sync::DiskState>,
 
     /// Compte affiché (index réel dans `document.accounts`).
     pub account: usize,
@@ -261,6 +265,7 @@ impl OpenDoc {
             warnings: opened.warnings,
             document: opened.document,
             dirty: false,
+            disk: None,
             account,
             filters: Filters::default(),
             sort: SortColumn::Date,
@@ -1571,6 +1576,34 @@ impl OpenDoc {
             tag: entry.tag,
             observe: false,
         }
+    }
+
+    /// Remplace le document par sa fusion avec une version modifiée ailleurs.
+    /// La vue est recalculée ; la sélection et l'historique d'annulation, qui
+    /// désignent les lignes par leur position, sont abandonnés.
+    pub fn replace_document(&mut self, document: Document) {
+        let shown = self
+            .document
+            .accounts
+            .get(self.account)
+            .map(|a| a.uid.clone());
+        self.document = document;
+        self.account = shown
+            .and_then(|uid| self.document.accounts.iter().position(|a| a.uid == uid))
+            .unwrap_or(self.document.default_account)
+            .min(self.document.accounts.len().saturating_sub(1));
+        self.selection.clear();
+        self.anchor = None;
+        self.cursor = None;
+        self.scroll_to = None;
+        self.on_screen = None;
+        self.undo.clear();
+        self.redo.clear();
+        self.bank_balances.clear();
+        self.view = View::default();
+        self.category_styles = crate::category_icons::styles(&self.document);
+        self.revision += 1;
+        self.refresh();
     }
 
     /// Modification qui change le tri ou les soldes : tout est recalculé.

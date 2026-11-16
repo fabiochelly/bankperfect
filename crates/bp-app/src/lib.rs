@@ -19,6 +19,7 @@ mod currency_ui;
 mod dashboard;
 mod datepicker;
 mod dialogs;
+mod disk_sync;
 mod document;
 mod editor;
 mod ext_ui;

@@ -818,4 +818,47 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("{} opération du {} au {}", "{} transaction from {} to {}"),
     ("{} opérations du {} au {}", "{} transactions from {} to {}"),
     ("Archive", "Archive"),
+    (
+        "{account} : opération du {date} « {payee} » modifiée des deux côtés, version de cet appareil gardée",
+        "{account}: transaction of {date} “{payee}” changed on both sides, this device's version kept",
+    ),
+    (
+        "{account} : opération du {date} « {payee} » supprimée d'un côté et modifiée de l'autre, gardée",
+        "{account}: transaction of {date} “{payee}” deleted on one side and changed on the other, kept",
+    ),
+    (
+        "compte « {} » modifié des deux côtés, version de cet appareil gardée",
+        "account “{}” changed on both sides, this device's version kept",
+    ),
+    (
+        "compte « {} » supprimé d'un côté et modifié de l'autre, gardé",
+        "account “{}” deleted on one side and changed on the other, kept",
+    ),
+    (
+        "catégorie « {} » modifiée des deux côtés, version de cet appareil gardée",
+        "category “{}” changed on both sides, this device's version kept",
+    ),
+    (
+        "tiers mémorisé « {} » modifié des deux côtés, version de cet appareil gardée",
+        "saved payee “{}” changed on both sides, this device's version kept",
+    ),
+    (
+        "mode « {} » modifié des deux côtés, version de cet appareil gardée",
+        "payment method “{}” changed on both sides, this device's version kept",
+    ),
+    (
+        "données « {} » modifiées des deux côtés, version de cet appareil gardée",
+        "data “{}” changed on both sides, this device's version kept",
+    ),
+    (
+        "réglage « {} » modifié des deux côtés, version de cet appareil gardé",
+        "setting “{}” changed on both sides, this device's version kept",
+    ),
+    (
+        "le fichier sur disque a été remplacé par un autre fichier de comptes",
+        "the file on disk was replaced by another accounts file",
+    ),
+    ("compte par défaut", "default account"),
+    ("nom du groupe de comptes", "account group name"),
+    ("nom de l'utilisateur", "user name"),
 ];

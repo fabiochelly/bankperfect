@@ -670,4 +670,34 @@ pub const ENTRIES: &[(&str, &str)] = &[
         "Low point: {amount} on {date}",
     ),
     ("{} opération", "{} transaction"),
+    (
+        "Ce fichier a été modifié sur un autre appareil : ses modifications seront intégrées à l'enregistrement",
+        "This file was changed on another device: those changes will be merged when you save",
+    ),
+    (
+        "Modifications faites sur un autre appareil intégrées",
+        "Changes made on another device merged",
+    ),
+    (
+        "{} enregistré, avec les modifications faites sur un autre appareil",
+        "{} saved, including the changes made on another device",
+    ),
+    ("Modifications faites ailleurs", "Changes made elsewhere"),
+    (
+        "Ce fichier a été modifié sur un autre appareil. Ses modifications ont été intégrées ; ces points ont été modifiés des deux côtés :",
+        "This file was changed on another device. Those changes have been merged; these items were changed on both sides:",
+    ),
+    ("Impossible de relire {} : {}", "Cannot read {} again: {}"),
+    (
+        "Ce fichier a été enregistré sur un autre appareil avec un autre mot de passe. Pour ne rien écraser, il n'a pas été enregistré : fermez-le et rouvrez-le, ou gardez vos modifications avec Fichier > Enregistrer sous.",
+        "This file was saved on another device with a different password. To avoid overwriting anything, it was not saved: close and reopen it, or keep your changes with File > Save As.",
+    ),
+    (
+        "Ce fichier a été modifié sur un autre appareil mais cette version est illisible ({}). Il n'a pas été enregistré : gardez vos modifications avec Fichier > Enregistrer sous.",
+        "This file was changed on another device but that version cannot be read ({}). It was not saved: keep your changes with File > Save As.",
+    ),
+    (
+        "Impossible d'intégrer les modifications faites ailleurs : {}. Gardez vos modifications avec Fichier > Enregistrer sous.",
+        "Cannot merge the changes made elsewhere: {}. Keep your changes with File > Save As.",
+    ),
 ];

@@ -823,7 +823,10 @@ impl ImportForm {
                 });
             if Some(target) != self.targets.get(shown).copied() {
                 self.targets[shown] = target;
-                self.recheck = true;
+                // Tout de suite : les doublons trouvés dans l'ancien compte
+                // désignent des lignes qui n'existent pas dans le nouveau
+                // (plantage au survol de leur info-bulle).
+                self.check_duplicates(doc);
             }
             if let (Some(a), Some(b)) = (account.min_date(), account.max_date()) {
                 ui.label(RichText::new(tr!("du {} au {}", a, b)).color(pal.muted));
@@ -953,8 +956,11 @@ impl ImportForm {
                                     tr!("Doublon probable")
                                 };
                                 ui_kit::pill(ui, label, pal.warning);
-                                if let Some(t) = self.targets.get(shown).copied().flatten() {
-                                    let e = &doc.document.accounts[t].operations[existing];
+                                if let Some(e) =
+                                    self.targets.get(shown).copied().flatten().and_then(|t| {
+                                        doc.document.accounts[t].operations.get(existing)
+                                    })
+                                {
                                     ui.label(RichText::new(icon::INFO).color(pal.muted))
                                         .on_hover_text(tr!(
                                             "Ressemble à : {} · {} · {}",

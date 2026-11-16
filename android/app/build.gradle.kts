@@ -85,5 +85,8 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.13.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.biometric:biometric:1.1.0")
+    // biometric 1.1.0 tire fragment 1.2.5, dont FragmentActivity refuse les
+    // codes de requête du sélecteur de fichiers (plantage au premier choix).
+    implementation("androidx.fragment:fragment-ktx:1.8.9")
     implementation("net.java.dev.jna:jna:5.19.1@aar")
 }

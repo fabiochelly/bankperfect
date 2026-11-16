@@ -206,7 +206,7 @@ jobs:
       - name: Outils Android
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370" "platforms;android-37" "build-tools;37.0.0"
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370" "platforms;android-37.0" "build-tools;37.0.0"
           cargo install cargo-ndk --locked
       - name: Clé de signature
         if: env.KEYSTORE_B64 != ''

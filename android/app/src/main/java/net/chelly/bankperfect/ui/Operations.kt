@@ -21,6 +21,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -45,6 +47,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import net.chelly.bankperfect.Model
+import net.chelly.bankperfect.core.AccountView
 import net.chelly.bankperfect.core.OperationRow
 import net.chelly.bankperfect.core.TackState
 import net.chelly.bankperfect.core.TackView
@@ -61,24 +64,7 @@ fun Operations(model: Model, snackbar: SnackbarHostState) {
                 navigationIcon = {
                     IconButton(onClick = model::closeAccount) { Icon(Icons.Back, contentDescription = "Comptes") }
                 },
-                title = {
-                    Column {
-                        Text(view?.name ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        if (view != null) {
-                            Text(
-                                "${view.balance} · en banque ${view.pointed}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = if (view.balanceNegative) {
-                                    LocalMoney.current.negative
-                                } else {
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                                },
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                        }
-                    }
-                },
+                title = { Text(view?.name ?: "", maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 actions = { SavingIndicator(model.saving) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -97,6 +83,7 @@ fun Operations(model: Model, snackbar: SnackbarHostState) {
                 .padding(top = padding.calculateTopPadding())
                 .fillMaxSize(),
         ) {
+            if (view != null) AccountHeader(view)
             OutlinedTextField(
                 value = model.search,
                 onValueChange = model::changeSearch,
@@ -168,6 +155,37 @@ fun Operations(model: Model, snackbar: SnackbarHostState) {
     }
 }
 
+/** Solde du compte sur le dégradé de l'accueil. */
+@Composable
+private fun AccountHeader(view: AccountView) {
+    val t = LocalTokyo.current
+    val on = t.onHero
+    Row(
+        Modifier
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(24.dp))
+            .background(t.hero)
+            .padding(horizontal = 20.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text("Solde", color = on.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+            Text(
+                view.balance,
+                color = on,
+                style = MaterialTheme.typography.headlineMedium.merge(Figures),
+                fontWeight = FontWeight.Bold,
+            )
+        }
+        Column(horizontalAlignment = Alignment.End) {
+            Text("En banque", color = on.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
+            Text(view.pointed, color = on, style = MaterialTheme.typography.titleSmall.merge(Figures))
+        }
+    }
+    Spacer(Modifier.height(8.dp))
+}
+
 @Composable
 private fun MonthHeader(month: String) {
     Text(
@@ -216,13 +234,13 @@ private fun OperationLine(row: OperationRow, onTack: () -> Unit, onOpen: () -> U
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     row.amount,
-                    style = MaterialTheme.typography.bodyLarge,
+                    style = MaterialTheme.typography.bodyLarge.merge(Figures),
                     fontWeight = FontWeight.SemiBold,
                     color = if (row.negative) MaterialTheme.colorScheme.onSurface else money.positive,
                 )
                 Text(
                     row.balance,
-                    style = MaterialTheme.typography.bodySmall,
+                    style = MaterialTheme.typography.bodySmall.merge(Figures),
                     color = if (row.balanceNegative) money.negative else MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }

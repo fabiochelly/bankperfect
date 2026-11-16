@@ -82,7 +82,7 @@ pub struct AccountView {
     pub total: u32,
 }
 
-const MONTHS: [&str; 12] = [
+pub(crate) const MONTHS: [&str; 12] = [
     "janvier",
     "février",
     "mars",

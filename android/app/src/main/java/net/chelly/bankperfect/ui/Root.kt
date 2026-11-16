@@ -2,6 +2,10 @@ package net.chelly.bankperfect.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.windowInsetsTopHeight
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +33,12 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import net.chelly.bankperfect.Tab
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.NavigationBarItemDefaults
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -85,7 +95,7 @@ fun Root(model: Model, onPick: () -> Unit) {
             when {
                 editing != null -> Editor(model, editing)
                 model.account != null -> Operations(model, snackbar)
-                else -> Accounts(model, snackbar, onPick)
+                else -> MainTabs(model, snackbar, onPick)
             }
             if (model.offerBiometric) {
                 AlertDialog(
@@ -210,54 +220,110 @@ private fun Failure(message: String, onRetry: () -> Unit, onOther: () -> Unit) =
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+/** Onglets Accueil, Comptes et Analyse, avec la barre de navigation. */
 @Composable
-private fun Accounts(model: Model, snackbar: SnackbarHostState, onPick: () -> Unit) {
-    var menu by remember { mutableStateOf(false) }
+private fun MainTabs(model: Model, snackbar: SnackbarHostState, onPick: () -> Unit) {
+    val t = LocalTokyo.current
     Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { Text(model.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
-                actions = {
-                    SavingIndicator(model.saving)
-                    IconButton(onClick = model::refresh) { Icon(Icons.Refresh, contentDescription = "Actualiser") }
-                    Box {
-                        IconButton(onClick = { menu = true }) { Icon(Icons.More, contentDescription = "Menu") }
-                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                            if (model.biometricEnabled()) {
-                                DropdownMenuItem(
-                                    text = { Text("Ne plus ouvrir par empreinte") },
-                                    onClick = { menu = false; model.disableBiometric() },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("Choisir un autre fichier") },
-                                onClick = { menu = false; onPick() },
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Oublier ce fichier") },
-                                onClick = { menu = false; model.forget() },
-                            )
-                        }
-                    }
-                },
-            )
+        containerColor = t.page,
+        bottomBar = {
+            NavigationBar(containerColor = t.card, tonalElevation = 0.dp) {
+                for ((tab, label, icon) in listOf(
+                    Triple(Tab.HOME, "Accueil", Icons.Home),
+                    Triple(Tab.ACCOUNTS, "Comptes", Icons.Wallet),
+                    Triple(Tab.ANALYSIS, "Analyse", Icons.Pie),
+                )) {
+                    NavigationBarItem(
+                        selected = model.tab == tab,
+                        onClick = { model.tab = tab },
+                        icon = { Icon(icon, contentDescription = null) },
+                        label = { Text(label) },
+                        colors = NavigationBarItemDefaults.colors(
+                            selectedIconColor = t.blue,
+                            selectedTextColor = t.blue,
+                            indicatorColor = t.blue.copy(alpha = 0.16f),
+                            unselectedIconColor = t.faint,
+                            unselectedTextColor = t.faint,
+                        ),
+                    )
+                }
+            }
+        },
+        floatingActionButton = {
+            if (model.tab != Tab.ANALYSIS) {
+                FloatingActionButton(
+                    onClick = model::quickAdd,
+                    containerColor = t.blue,
+                    contentColor = t.page,
+                    shape = RoundedCornerShape(20.dp),
+                ) { Icon(Icons.Add, contentDescription = "Nouvelle opération") }
+            }
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        LazyColumn(
-            contentPadding = PaddingValues(
-                start = 16.dp,
-                end = 16.dp,
-                top = padding.calculateTopPadding() + 8.dp,
-                bottom = padding.calculateBottomPadding() + 16.dp,
-            ),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            items(model.accounts, key = { it.index.toInt() }) { account ->
-                AccountCard(account) { model.openAccount(account.index.toInt()) }
+        Box {
+            when (model.tab) {
+                Tab.HOME -> Home(model, padding)
+                Tab.ACCOUNTS -> AccountsTab(model, padding, onPick)
+                Tab.ANALYSIS -> Analysis(model, padding)
             }
+            // Fond sous la barre d'état : le contenu y défile sans s'y mêler.
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .windowInsetsTopHeight(WindowInsets.statusBars)
+                    .background(t.page.copy(alpha = 0.94f)),
+            )
+        }
+    }
+}
+
+@Composable
+private fun AccountsTab(model: Model, padding: PaddingValues, onPick: () -> Unit) {
+    val t = LocalTokyo.current
+    var menu by remember { mutableStateOf(false) }
+    LazyColumn(
+        contentPadding = PaddingValues(
+            start = 16.dp,
+            end = 16.dp,
+            top = padding.calculateTopPadding() + 8.dp,
+            bottom = padding.calculateBottomPadding() + 96.dp,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Row(Modifier.padding(top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Comptes", style = MaterialTheme.typography.headlineMedium)
+                    model.dashboard?.let {
+                        Text("Total ${it.total}", color = t.muted, style = MaterialTheme.typography.bodyMedium.merge(Figures))
+                    }
+                }
+                SavingIndicator(model.saving)
+                IconButton(onClick = model::refresh) { Icon(Icons.Refresh, contentDescription = "Actualiser", tint = t.muted) }
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.More, contentDescription = "Menu", tint = t.muted) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (model.biometricEnabled()) {
+                            DropdownMenuItem(
+                                text = { Text("Ne plus ouvrir par empreinte") },
+                                onClick = { menu = false; model.disableBiometric() },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text("Choisir un autre fichier") },
+                            onClick = { menu = false; onPick() },
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Oublier ce fichier") },
+                            onClick = { menu = false; model.forget() },
+                        )
+                    }
+                }
+            }
+        }
+        items(model.accounts, key = { it.index.toInt() }) { account ->
+            AccountCard(account) { model.openAccount(account.index.toInt()) }
         }
     }
 }
@@ -277,28 +343,19 @@ fun SavingIndicator(saving: Boolean) {
 
 @Composable
 private fun AccountCard(account: AccountSummary, onClick: () -> Unit) {
-    val money = LocalMoney.current
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-    ) {
-        Row(
-            Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+    val t = LocalTokyo.current
+    val accent = colorFor(account.name)
+    TnCard(Modifier.clickable(onClick = onClick), padding = 16.dp) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Avatar(account.name, accent, size = 44.dp)
+            Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     account.name,
                     style = MaterialTheme.typography.titleMedium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    color = if (account.disabled) {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.onSurface
-                    },
+                    color = if (account.disabled) t.faint else t.text,
                 )
                 val pending = account.pending.toInt()
                 val sub = listOfNotNull(
@@ -306,27 +363,20 @@ private fun AccountCard(account: AccountSummary, onClick: () -> Unit) {
                     if (pending > 0) "$pending à pointer" else null,
                 ).joinToString(" · ")
                 if (sub.isNotEmpty()) {
-                    Text(
-                        sub,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Text(sub, style = MaterialTheme.typography.bodySmall, color = t.faint, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
             Spacer(Modifier.width(12.dp))
             Column(horizontalAlignment = Alignment.End) {
                 Text(
                     account.balance,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = if (account.negative) money.negative else MaterialTheme.colorScheme.onSurface,
+                    style = MaterialTheme.typography.titleMedium.merge(Figures),
+                    color = if (account.negative) t.red else t.text,
                 )
                 Text(
-                    "En banque : ${account.pointed}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    "en banque ${account.pointed}",
+                    style = MaterialTheme.typography.bodySmall.merge(Figures),
+                    color = t.faint,
                 )
             }
         }

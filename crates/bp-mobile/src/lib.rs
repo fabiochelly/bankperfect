@@ -21,9 +21,13 @@ use bp_core::format_v6::{Protection, Unlock};
 use bp_core::merge;
 use bp_core::model::{Amount, Document, Tack};
 
+mod dashboard;
 mod entry;
 mod view;
 
+pub use dashboard::{
+    CategoryShare, ChartPoint, Dashboard, MonthBar, MonthReport, RecentItem, UpcomingItem,
+};
 pub use entry::{CategoryGuess, CategoryItem, Draft, ModeItem, PayeeChoice};
 pub use view::{AccountView, OperationRow, TackState, TackView};
 

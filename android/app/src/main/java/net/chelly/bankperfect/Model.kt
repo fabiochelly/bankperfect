@@ -19,6 +19,9 @@ import net.chelly.bankperfect.core.AccountView
 import net.chelly.bankperfect.core.BpException
 import net.chelly.bankperfect.core.CategoryGuess
 import net.chelly.bankperfect.core.CategoryItem
+import net.chelly.bankperfect.core.Dashboard
+import net.chelly.bankperfect.core.MonthReport
+import net.chelly.bankperfect.core.RecentItem
 import net.chelly.bankperfect.core.Draft
 import net.chelly.bankperfect.core.ModeItem
 import net.chelly.bankperfect.core.PayeeChoice
@@ -48,6 +51,9 @@ sealed interface Screen {
     data class Failure(val message: String) : Screen
 }
 
+/** Onglets de l'application, fichier ouvert. */
+enum class Tab { HOME, ACCOUNTS, ANALYSIS }
+
 /** Opération en cours de saisie ou de modification. */
 data class Editing(val account: Int, val uid: ULong?, val draft: Draft)
 
@@ -75,6 +81,20 @@ class Model(application: Application) : AndroidViewModel(application) {
     var title by mutableStateOf("")
         private set
     var accounts by mutableStateOf<List<AccountSummary>>(emptyList())
+        private set
+
+    var tab by mutableStateOf(Tab.HOME)
+    var dashboard by mutableStateOf<Dashboard?>(null)
+        private set
+
+    /** Analyse : mois affiché (0 = mois en cours, -1 = précédent…). */
+    var reportOffset by mutableStateOf(0)
+        private set
+    var report by mutableStateOf<MonthReport?>(null)
+        private set
+
+    /** Actualisation demandée par l'utilisateur (geste « tirer »). */
+    var refreshing by mutableStateOf(false)
         private set
 
     /** Compte ouvert (index réel) et ses opérations. */
@@ -154,6 +174,10 @@ class Model(application: Application) : AndroidViewModel(application) {
 
     private fun close() {
         session = null
+        tab = Tab.HOME
+        dashboard = null
+        report = null
+        reportOffset = 0
         account = null
         view = null
         editing = null
@@ -247,16 +271,21 @@ class Model(application: Application) : AndroidViewModel(application) {
     /** Au retour dans l'application : intègre ce qui a changé ailleurs. */
     fun refresh() {
         val current = session ?: return
+        refreshing = true
         work(opening = false) {
-            val bytes = withContext(Dispatchers.IO) { file.read() }
-            val report = withContext(Dispatchers.Default) { current.refresh(bytes) }
-            announce(report)
-            if (report.incoming) {
-                showAccounts(current)
-                reloadView()
+            try {
+                val bytes = withContext(Dispatchers.IO) { file.read() }
+                val report = withContext(Dispatchers.Default) { current.refresh(bytes) }
+                announce(report)
+                if (report.incoming) {
+                    showAccounts(current)
+                    reloadView()
+                }
+                // Saisie faite hors ligne, pas encore écrite.
+                if (current.isDirty()) save()
+            } finally {
+                refreshing = false
             }
-            // Saisie faite hors ligne, pas encore écrite.
-            if (current.isDirty()) save()
         }
     }
 
@@ -292,10 +321,26 @@ class Model(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Comptes, tableau de bord et analyse à jour. */
     private suspend fun showAccounts(session: Session) {
-        val (name, list) = withContext(Dispatchers.Default) { session.title() to session.accounts() }
+        val offset = reportOffset
+        val (name, list, dash) = withContext(Dispatchers.Default) {
+            Triple(session.title(), session.accounts(), session.dashboard())
+        }
         title = name.ifEmpty { file.name() ?: "BankPerfect" }
         accounts = list
+        dashboard = dash
+        report = withContext(Dispatchers.Default) { runCatching { session.monthReport(offset) }.getOrNull() }
+    }
+
+    fun changeReportOffset(delta: Int) {
+        val current = session ?: return
+        val offset = (reportOffset + delta).coerceAtMost(0)
+        if (offset == reportOffset) return
+        reportOffset = offset
+        viewModelScope.launch {
+            report = withContext(Dispatchers.Default) { runCatching { current.monthReport(offset) }.getOrNull() }
+        }
     }
 
     // ── Consultation ─────────────────────────────────────────────────────
@@ -359,6 +404,20 @@ class Model(application: Application) : AndroidViewModel(application) {
         val current = session ?: return
         val index = account ?: return
         editing = Editing(index, null, current.newDraft())
+    }
+
+    /** Saisie rapide depuis le tableau de bord, dans le compte par défaut. */
+    fun quickAdd() {
+        val current = session ?: return
+        editing = Editing(current.defaultAccount().toInt(), null, current.newDraft())
+    }
+
+    /** Opération du tableau de bord, ouverte directement. */
+    fun editRecent(item: RecentItem) {
+        val current = session ?: return
+        runCatching { current.draftOf(item.uid) }
+            .onSuccess { editing = Editing(item.accountIndex.toInt(), item.uid, it) }
+            .onFailure { notice = it.message }
     }
 
     fun startEdit(uid: ULong) {

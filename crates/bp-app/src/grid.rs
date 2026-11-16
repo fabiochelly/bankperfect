@@ -96,13 +96,49 @@ const TACK_WIDTH: f32 = 28.0;
 
 /// Largeurs des colonnes réglables. Tiers et Catégorie se partagent la place
 /// restante (`payee_share` : part des tiers).
-#[derive(Clone, Copy, PartialEq)]
-struct ColumnWidths {
+#[derive(Debug, Clone, Copy, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct ColumnWidths {
     date: f32,
     mode: f32,
     payee_share: f32,
     amount: f32,
     balance: f32,
+}
+
+/// Largeurs réglées à la souris, retenues d'une session à l'autre (réglages) :
+/// une disposition pour les fenêtres larges, une pour les étroites.
+#[derive(Debug, Clone, Copy, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(default)]
+pub struct SavedColumns {
+    pub wide: Option<ColumnWidths>,
+    pub narrow: Option<ColumnWidths>,
+}
+
+impl SavedColumns {
+    fn get(&self, narrow: bool) -> Option<ColumnWidths> {
+        if narrow { self.narrow } else { self.wide }
+    }
+
+    fn set(&mut self, narrow: bool, widths: ColumnWidths) {
+        let slot = if narrow {
+            &mut self.narrow
+        } else {
+            &mut self.wide
+        };
+        *slot = Some(widths);
+    }
+
+    /// Largeurs illisibles (fichier de réglages modifié à la main) : ignorées.
+    fn sane(widths: ColumnWidths) -> Option<ColumnWidths> {
+        let ok = |w: f32| w.is_finite() && (0.0..=4000.0).contains(&w);
+        (ok(widths.date)
+            && ok(widths.mode)
+            && ok(widths.amount)
+            && ok(widths.balance)
+            && widths.payee_share.is_finite()
+            && (0.0..=1.0).contains(&widths.payee_share))
+        .then_some(widths)
+    }
 }
 
 /// Largeurs minimales, d'après le contenu de chaque colonne.
@@ -248,7 +284,8 @@ fn column_handles(
     layout: &ColumnLayout,
     m: &ColumnMinima,
     w: &mut ColumnWidths,
-) {
+) -> bool {
+    let mut settled = false;
     let initial = ColumnWidths::initial(narrow);
     // Place que Tiers et Catégorie peuvent encore céder.
     let spare = (layout.flex - m.payee - m.category).max(0.0);
@@ -266,6 +303,7 @@ fn column_handles(
             if response.dragged() {
                 stroke = ui.visuals().widgets.active.bg_stroke;
             }
+            settled |= response.drag_stopped() || response.double_clicked();
             match handle {
                 Handle::Date if response.double_clicked() => w.date = initial.date,
                 Handle::Date => w.date = (w.date + dx).clamp(m.date, w.date + spare),
@@ -289,6 +327,7 @@ fn column_handles(
         }
         ui.painter().vline(x, rules_y, stroke);
     }
+    settled
 }
 
 /// Saisie de la barre de défilement en cours.
@@ -488,6 +527,7 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
     let mut minima = ColumnMinima::of(ui);
     let mut widths = ui
         .data(|d| d.get_temp::<ColumnWidths>(widths_id))
+        .or_else(|| doc.grid_columns.get(narrow).and_then(SavedColumns::sane))
         .unwrap_or_else(|| ColumnWidths::initial(narrow))
         .at_least(&minima);
     // Colonne Solde masquée (Affichage) : il n'en reste que la place de la
@@ -969,9 +1009,14 @@ pub fn show(ui: &mut egui::Ui, doc: &mut OpenDoc) -> GridAction {
         ui.min_rect().bottom() + f32::from(ISLAND_MARGIN.bottom) - 1.0,
     );
     let header_y = egui::Rangef::new(table_top, table_top + header_height);
-    column_handles(ui, narrow, rules_y, header_y, &layout, &minima, &mut widths);
+    let settled = column_handles(ui, narrow, rules_y, header_y, &layout, &minima, &mut widths);
     if !show_balance {
         (widths.amount, widths.balance) = kept;
+    }
+    // Fin d'un réglage à la souris : largeurs à enregistrer (réglages).
+    if settled {
+        doc.grid_columns.set(narrow, widths);
+        doc.grid_columns_changed = true;
     }
     ui.data_mut(|d| d.insert_temp(widths_id, widths));
     // Lignes entièrement visibles (les rangées extrêmes sont souvent coupées).

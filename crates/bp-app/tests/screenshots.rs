@@ -2633,3 +2633,60 @@ fn account_logo_screenshots() {
         },
     );
 }
+
+/// Largeurs des colonnes réglées à la souris : retenues dans les réglages,
+/// puis reprises au lancement suivant.
+#[test]
+#[ignore]
+fn column_widths_are_remembered() {
+    let file = PathBuf::from(std::env::var("BP_SCREENSHOT_FILE").expect("BP_SCREENSHOT_FILE"));
+    let mut saved = None;
+    render_at(
+        "c1-colonnes-reglees",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        Default::default(),
+        file.clone(),
+        4,
+        |h| {
+            let press = |pos: egui::Pos2, pressed: bool| egui::Event::PointerButton {
+                pos,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            // Trait entre Date et Mode, dans l'en-tête.
+            let mode = h.get_by_label("Mode").rect();
+            let from = egui::pos2(mode.left() - 5.0, mode.center().y);
+            h.event(egui::Event::PointerMoved(from));
+            h.run_steps(1);
+            h.event(press(from, true));
+            h.run_steps(1);
+            for k in 1..=10 {
+                h.event(egui::Event::PointerMoved(
+                    from + egui::vec2(6.0 * k as f32, 0.0),
+                ));
+                h.run_steps(1);
+            }
+            h.event(press(from + egui::vec2(60.0, 0.0), false));
+            h.run_steps(2);
+            let columns = h.state().settings_for_tests().grid_columns;
+            let wide = columns.wide.expect("largeurs retenues à la fin du glisser");
+            eprintln!("largeurs retenues : {wide:?}");
+            saved = Some(columns);
+        },
+    );
+    let mut settings = bankperfect::Settings::default();
+    settings.grid_columns = saved.unwrap();
+    render_at(
+        "c2-colonnes-relance",
+        egui::Theme::Dark,
+        egui::vec2(1440.0, 900.0),
+        None,
+        settings,
+        file,
+        4,
+        |_| {},
+    );
+}

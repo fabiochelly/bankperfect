@@ -60,6 +60,10 @@ pub struct OpenDoc {
     pub show_sidebar_balances: bool,
     /// Colonne Solde de la grille (réglages).
     pub show_balance_column: bool,
+    /// Largeurs des colonnes de la grille (réglages) ; `grid_columns_changed`
+    /// : réglées à la souris, à enregistrer.
+    pub grid_columns: crate::grid::SavedColumns,
+    pub grid_columns_changed: bool,
     /// Niveaux d'annulation gardés.
     pub max_undo: usize,
     /// Pointage simple : non pointé ↔ pointé, sans rapprochement.
@@ -284,6 +288,8 @@ impl OpenDoc {
             tack_after_amount: false,
             show_sidebar_balances: true,
             show_balance_column: true,
+            grid_columns: Default::default(),
+            grid_columns_changed: false,
             max_undo: 30,
             disable_reconcile: false,
             logos: Default::default(),

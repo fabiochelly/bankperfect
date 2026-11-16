@@ -80,6 +80,8 @@ pub struct Settings {
     pub entry_at_bottom: bool,
     /// Largeur du panneau de saisie, réglée en tirant son bord gauche.
     pub entry_width: f32,
+    /// Largeurs des colonnes de la grille, réglées à la souris.
+    pub grid_columns: crate::grid::SavedColumns,
     /// Mémoriser la colonne de tri entre deux sessions.
     pub remember_sort: bool,
     pub last_sort: Option<(String, bool)>,
@@ -146,6 +148,7 @@ impl Default for Settings {
             keep_entry_open: false,
             entry_at_bottom: false,
             entry_width: 460.0,
+            grid_columns: Default::default(),
             remember_sort: false,
             last_sort: None,
             autosave_on_close: false,
@@ -439,5 +442,17 @@ mod tests {
         );
         let chosen: Settings = serde_json::from_str(r#"{"animated_caret": true}"#).unwrap();
         assert!(chosen.animated_caret);
+    }
+
+    #[test]
+    fn grid_columns_survive_a_restart() {
+        let old: Settings = serde_json::from_str("{}").unwrap();
+        assert_eq!(old.grid_columns, Default::default(), "anciens réglages");
+        let json = r#"{"grid_columns": {"wide": {"date": 150.0, "mode": 90.0,
+            "payee_share": 0.6, "amount": 120.0, "balance": 140.0}}}"#;
+        let saved: Settings = serde_json::from_str(json).unwrap();
+        let again: Settings = serde_json::from_slice(&serde_json::to_vec(&saved).unwrap()).unwrap();
+        assert_eq!(again.grid_columns, saved.grid_columns);
+        assert!(saved.grid_columns.wide.is_some() && saved.grid_columns.narrow.is_none());
     }
 }

@@ -4007,6 +4007,7 @@ impl BankPerfectApp {
         doc.tack_after_amount = self.settings.tack_after_amount;
         doc.show_sidebar_balances = self.settings.sidebar_balances;
         doc.show_balance_column = self.settings.balance_column;
+        doc.grid_columns = self.settings.grid_columns;
         // « Cacher les lignes inutiles » est retenu d'une session à l'autre,
         // comme dans l'ancienne version, quel que soit le chemin qui l'a
         // basculé (menu, Ctrl+H, filtres).
@@ -4087,6 +4088,10 @@ impl BankPerfectApp {
                         let action = ui.scope(|ui| grid::show(ui, doc)).inner;
                         if !matches!(action, GridAction::None) {
                             grid_action = action;
+                        }
+                        if std::mem::take(&mut doc.grid_columns_changed) {
+                            self.settings.grid_columns = doc.grid_columns;
+                            self.settings.save();
                         }
                     });
             });

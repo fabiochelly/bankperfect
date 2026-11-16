@@ -1,0 +1,5 @@
+.gradle/
+build/
+app/build/
+# Chemin du SDK propre à chaque machine.
+local.properties

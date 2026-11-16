@@ -1,0 +1,26 @@
+[package]
+name = "bp-mobile"
+description = "Pont entre le cœur de BankPerfect et l'application Android"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "bp_mobile"
+crate-type = ["cdylib", "lib"]
+
+# Génère le code Kotlin à partir de la bibliothèque compilée.
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
+
+[features]
+bindgen = ["uniffi/cli"]
+
+[dependencies]
+bp-core = { version = "9.13.0", path = "../bp-core" }
+thiserror = "2.0.21"
+uniffi = "0.32.2"

@@ -181,10 +181,65 @@ jobs:
           name: macos
           path: BankPerfect-*-macos-universal.zip
 
-  release:
-    needs: [linux, windows, macos]
+  # Application Android : publiée seulement si la clé de signature est dans
+  # les secrets (ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, voir
+  # android/make-keystore.sh). Sans elle, chaque APK aurait une signature
+  # différente et ne pourrait pas mettre à jour le précédent.
+  android:
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    env:
+      KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+      KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # versionCode = nombre de commits.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Outils Android
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "ndk;30.0.16248370" "platforms;android-37" "build-tools;37.0.0"
+          cargo install cargo-ndk --locked
+      - name: Clé de signature
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          mkdir -p ~/.config/bankperfect
+          echo "$KEYSTORE_B64" | base64 -d > ~/.config/bankperfect/android-release.jks
+          cat > ~/.config/bankperfect/android-signing.properties <<PROPS
+          storeFile=$HOME/.config/bankperfect/android-release.jks
+          password=$KEYSTORE_PASSWORD
+          keyAlias=bankperfect
+          PROPS
+      - name: Construction
+        working-directory: android
+        run: |
+          echo "sdk.dir=$ANDROID_HOME" > local.properties
+          ./gradlew --no-daemon --console=plain assembleRelease
+          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION="${VERSION//\//-}"
+          cp app/build/outputs/apk/release/app-release.apk "../bankperfect-${VERSION}-android.apk"
+      - uses: actions/upload-artifact@v4
+        if: env.KEYSTORE_B64 != ''
+        with:
+          name: android
+          path: bankperfect-*-android.apk
+
+  release:
+    needs: [linux, windows, macos, android]
+    runs-on: ubuntu-latest
+    # L'APK est un plus : son échec ne bloque pas la publication.
+    if: >-
+      startsWith(github.ref, 'refs/tags/v') && !cancelled()
+      && needs.linux.result == 'success' && needs.windows.result == 'success'
+      && needs.macos.result == 'success'
     steps:
       - uses: actions/download-artifact@v4
         with:

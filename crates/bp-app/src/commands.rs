@@ -80,8 +80,6 @@ pub enum Command {
     AddToScheduler,
     ToggleHideOld,
     ToggleTranslucent,
-    /// Barre d'outils sous les menus.
-    ToggleToolbar,
     /// Taille du texte : plus grand, plus petit, normale.
     ZoomIn,
     ZoomOut,
@@ -257,7 +255,6 @@ impl Command {
         list.extend([ManageExtensions, ExtensionsFolder, ExtensionsDocs]);
         list.extend([
             ToggleTranslucent,
-            ToggleToolbar,
             ZoomIn,
             ZoomOut,
             ZoomReset,
@@ -322,7 +319,6 @@ impl Command {
             | Undo
             | Redo
             | ToggleTranslucent
-            | ToggleToolbar
             | ZoomIn
             | ZoomOut
             | ZoomReset
@@ -458,9 +454,6 @@ impl Command {
                 "Masquer les lignes rapprochées d'avant le mois en cours ; les soldes ne changent pas."
             ),
             ToggleTranslucent => tr!("Fond de fenêtre translucide."),
-            ToggleToolbar => {
-                tr!("Commandes épinglées sur leur propre ligne sous les menus, avec leur libellé.")
-            }
             ZoomIn => tr!("Agrandir le texte et toute l'interface."),
             ZoomOut => tr!("Réduire le texte et toute l'interface."),
             ZoomReset => tr!("Revenir à la taille de texte normale."),
@@ -1260,20 +1253,6 @@ impl Command {
                     tr_mark!("transparent vitré verre flou"),
                 )
             }
-            ToggleToolbar => {
-                let label = if crate::settings::shared::toolbar() {
-                    tr!("Masquer la barre d'outils")
-                } else {
-                    tr!("Afficher la barre d'outils")
-                };
-                info(
-                    VIEW,
-                    label,
-                    icon::TOOLBOX,
-                    None,
-                    tr_mark!("barre outils icônes boutons épingler raccourcis"),
-                )
-            }
             ZoomIn => info(
                 VIEW,
                 tr!("Agrandir le texte"),
@@ -1559,7 +1538,6 @@ impl Command {
                     | UseTheme(_)
                     | Language(_)
                     | ToggleTranslucent
-                    | ToggleToolbar
                     | ZoomIn
                     | ZoomOut
                     | ZoomReset
@@ -1582,29 +1560,6 @@ impl Command {
 
 /// Fichiers récents (copie des réglages, tenue à jour par l'application).
 static RECENT: std::sync::Mutex<Vec<std::path::PathBuf>> = std::sync::Mutex::new(Vec::new());
-
-/// Barre d'outils proposée à sa première ouverture, sur le modèle de celle
-/// de la version 8 : panneau des comptes, enregistrement, annulation,
-/// verrou des lignes pointées, listes, échéancier et rapports.
-pub fn default_toolbar() -> Vec<String> {
-    use Command::*;
-    [
-        ToggleAccountsPanel,
-        Save,
-        Undo,
-        Redo,
-        ToggleLock,
-        Manage(Tab::Accounts),
-        Manage(Tab::Categories),
-        Manage(Tab::Payees),
-        Scheduler,
-        Report(ReportTab::Accounts),
-        Charts,
-    ]
-    .iter()
-    .filter_map(|c| c.pin_id())
-    .collect()
-}
 
 pub fn set_recent(files: &[std::path::PathBuf]) {
     if let Ok(mut recent) = RECENT.lock()

@@ -2692,7 +2692,7 @@ fn column_widths_are_remembered() {
 }
 
 /// Retours client : panneau des comptes masqué (compte en tuile à gauche
-/// des soldes), barre d'outils, flèches de défilement, saisie en bas, et
+/// des soldes), commandes épinglées, flèches de défilement, saisie en bas, et
 /// menu Affichage regroupé.
 #[test]
 #[ignore]
@@ -2702,7 +2702,6 @@ fn client_options_screenshots() {
         .into();
     let mut settings = bankperfect::Settings::default();
     settings.show_accounts_panel = false;
-    settings.toolbar = true;
     settings.pinned_commands = [
         "ToggleAccountsPanel",
         "Save",

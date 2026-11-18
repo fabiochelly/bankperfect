@@ -435,18 +435,6 @@ impl OptionsForm {
                 .on_hover_text(tr!("Aussi au clavier : Ctrl+Plus, Ctrl+Moins, Ctrl+0"));
             });
             ui.add_space(8.0);
-            if crate::theme::checkbox(ui, &mut d.toolbar, tr!("Barre d'outils sous les menus"))
-                .on_hover_text(tr!(
-                    "Les commandes épinglées sur leur propre ligne, avec leur libellé. \
-                     Ajoutez-en depuis la palette de commandes (Ctrl+K), avec l'épingle."
-                ))
-                .changed()
-                && d.toolbar
-                && d.pinned_commands.is_empty()
-            {
-                d.pinned_commands = crate::commands::default_toolbar();
-            }
-            ui.add_space(8.0);
             crate::theme::checkbox(
                 ui,
                 &mut d.scrollbar_arrows,

@@ -59,9 +59,6 @@ pub struct Settings {
     /// Commandes épinglées depuis la palette (`Command::pin_id`), affichées
     /// en icônes dans la barre de menus.
     pub pinned_commands: Vec<String>,
-    /// Barre d'outils : les commandes épinglées toujours sur leur propre
-    /// ligne sous les menus, avec leur libellé (comme la version 8).
-    pub toolbar: bool,
     /// Flèches haut et bas aux extrémités de la barre de défilement de la
     /// liste des opérations, barre toujours visible.
     pub scrollbar_arrows: bool,
@@ -149,7 +146,6 @@ impl Default for Settings {
             hide_old_lines: false,
             window_maximized: false,
             pinned_commands: Vec::new(),
-            toolbar: false,
             scrollbar_arrows: false,
             full_path_in_title: false,
             license: None,
@@ -389,7 +385,6 @@ pub mod shared {
     static CATEGORIZE_IMPORT: AtomicBool = AtomicBool::new(true);
     static CATEGORIZE_ENTRY: AtomicBool = AtomicBool::new(true);
     static SCROLL_ARROWS: AtomicBool = AtomicBool::new(false);
-    static TOOLBAR: AtomicBool = AtomicBool::new(false);
 
     pub fn set(settings: &super::Settings) {
         bp_core::i18n::set_lang(settings.language());
@@ -404,17 +399,11 @@ pub mod shared {
         CATEGORIZE_IMPORT.store(settings.categorize_on_import, Ordering::Relaxed);
         CATEGORIZE_ENTRY.store(settings.categorize_in_entry, Ordering::Relaxed);
         SCROLL_ARROWS.store(settings.scrollbar_arrows, Ordering::Relaxed);
-        TOOLBAR.store(settings.toolbar, Ordering::Relaxed);
     }
 
     /// Flèches aux extrémités de la barre de défilement de la grille.
     pub fn scrollbar_arrows() -> bool {
         SCROLL_ARROWS.load(Ordering::Relaxed)
-    }
-
-    /// Barre d'outils sous les menus.
-    pub fn toolbar() -> bool {
-        TOOLBAR.load(Ordering::Relaxed)
     }
 
     /// Catégoriser les opérations importées.

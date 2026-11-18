@@ -897,23 +897,7 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Fichier non protégé", "Unprotected file"),
     // Listes déroulantes.
     ("Aucune catégorie", "No category"),
-    // Barre d'outils, taille du texte, titre, défilement, saisie en bas.
-    ("Masquer la barre d'outils", "Hide toolbar"),
-    ("Afficher la barre d'outils", "Show toolbar"),
-    ("Barre d'outils", "Toolbar"),
-    (
-        "barre outils icônes boutons épingler raccourcis",
-        "toolbar icons buttons pin shortcuts",
-    ),
-    (
-        "Commandes épinglées sur leur propre ligne sous les menus, avec leur libellé.",
-        "Pinned commands on their own row below the menus, with their labels.",
-    ),
-    ("Barre d'outils sous les menus", "Toolbar below the menus"),
-    (
-        "Les commandes épinglées sur leur propre ligne, avec leur libellé. Ajoutez-en depuis la palette de commandes (Ctrl+K), avec l'épingle.",
-        "Pinned commands on their own row, with their labels. Add more from the command palette (Ctrl+K) with the pin.",
-    ),
+    // Taille du texte, titre, défilement, saisie en bas.
     ("Agrandir le texte", "Larger text"),
     ("Réduire le texte", "Smaller text"),
     ("Taille de texte normale", "Normal text size"),

@@ -1354,13 +1354,6 @@ impl BankPerfectApp {
                 self.settings.save();
                 return self.language_changed();
             }
-            Command::ToggleToolbar => {
-                self.settings.toolbar = !self.settings.toolbar;
-                if self.settings.toolbar && self.settings.pinned_commands.is_empty() {
-                    self.settings.pinned_commands = crate::commands::default_toolbar();
-                }
-                return self.settings.save();
-            }
             Command::ZoomIn | Command::ZoomOut | Command::ZoomReset => {
                 let scale = match command {
                     Command::ZoomIn => self.settings.text_scale + 0.1,
@@ -1761,7 +1754,6 @@ impl BankPerfectApp {
             | Command::UseTheme(_)
             | Command::Language(_)
             | Command::ToggleTranslucent
-            | Command::ToggleToolbar
             | Command::ZoomIn
             | Command::ZoomOut
             | Command::ZoomReset
@@ -1786,7 +1778,7 @@ impl BankPerfectApp {
     }
 
     /// Entrée de menu tirée du registre des commandes.
-    /// Affichage › Fenêtre : panneaux, barre d'outils, saisie, titre.
+    /// Affichage › Fenêtre : panneaux, saisie, titre.
     fn window_menu(&mut self, ui: &mut egui::Ui) -> Option<Command> {
         use Command::*;
         let s = &self.settings;
@@ -1813,11 +1805,7 @@ impl BankPerfectApp {
                 tr!("Soldes en trois cartes"),
                 ToggleBalanceCards,
             ),
-            (s.toolbar, tr!("Barre d'outils"), ToggleToolbar),
         ] {
-            if toggle == ToggleToolbar {
-                menu::separator(ui);
-            }
             if menu::toggle(ui, &mut { on }, label, None).clicked() {
                 command = Some(toggle);
             }
@@ -2303,8 +2291,7 @@ impl BankPerfectApp {
                     // si elles y tiennent ; sinon, barre dédiée en dessous.
                     if !pinned.is_empty() {
                         let needed = pinned.len() as f32 * (PINNED_ICON + 2.0) + 40.0;
-                        // Barre d'outils (option) : toujours sur sa ligne.
-                        overflow = self.settings.toolbar || needed > ui.available_width();
+                        overflow = needed > ui.available_width();
                         if !overflow {
                             if self.doc.is_some() {
                                 ui.add_space(6.0);

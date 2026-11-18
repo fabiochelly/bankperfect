@@ -33,7 +33,7 @@ BankPerfect 9 is a complete Rust rewrite of BankPerfect (originally written in D
 ## Installation
 
 <!-- derniere-rc:debut -->
-> **Latest test version: [9.13.0-rc.18](https://github.com/fabiochelly/bankperfect/releases/tag/v9.13.0-rc.18)**, recommended: it has the latest fixes. Direct download: [Windows](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.18/bankperfect-9.13.0-rc.18-windows-x86_64.zip) · [macOS](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.18/BankPerfect-9.13.0-rc.18-macos-universal.zip) · [Linux](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.18/bankperfect-9.13.0-rc.18-linux-x86_64.tar.gz)
+> **Latest test version: [9.13.0-rc.20](https://github.com/fabiochelly/bankperfect/releases/tag/v9.13.0-rc.20)**, recommended: it has the latest fixes. Direct download: [Windows](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.20/bankperfect-9.13.0-rc.20-windows-x86_64.zip) · [macOS](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.20/BankPerfect-9.13.0-rc.20-macos-universal.zip) · [Linux](https://github.com/fabiochelly/bankperfect/releases/download/v9.13.0-rc.20/bankperfect-9.13.0-rc.20-linux-x86_64.tar.gz)
 <!-- derniere-rc:fin -->
 
 Binaries are published on the [Releases](https://github.com/fabiochelly/bankperfect/releases) page.

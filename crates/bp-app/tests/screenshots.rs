@@ -2690,3 +2690,76 @@ fn column_widths_are_remembered() {
         |_| {},
     );
 }
+
+/// Retours client : panneau des comptes masqué (compte en tuile à gauche
+/// des soldes), barre d'outils, flèches de défilement, saisie en bas, et
+/// menu Affichage regroupé.
+#[test]
+#[ignore]
+fn client_options_screenshots() {
+    let file: PathBuf = std::env::var("BP_SCREENSHOT_FILE")
+        .expect("BP_SCREENSHOT_FILE")
+        .into();
+    let mut settings = bankperfect::Settings::default();
+    settings.show_accounts_panel = false;
+    settings.toolbar = true;
+    settings.pinned_commands = [
+        "ToggleAccountsPanel",
+        "Save",
+        "Undo",
+        "Redo",
+        "ToggleLock",
+        "Manage(Accounts)",
+        "Manage(Categories)",
+        "Manage(Payees)",
+        "Scheduler",
+        "Report(Accounts)",
+        "Charts",
+    ]
+    .map(String::from)
+    .to_vec();
+    settings.scrollbar_arrows = true;
+    settings.entry_at_bottom = true;
+    for (name, size, cards) in [
+        ("d1-compte-tuile", egui::vec2(1440.0, 900.0), false),
+        ("d2-compte-tuile-cartes", egui::vec2(1440.0, 900.0), true),
+        ("d3-compte-tuile-1100", egui::vec2(1100.0, 800.0), false),
+        ("d4-compte-etroit", egui::vec2(850.0, 800.0), false),
+    ] {
+        let mut s = settings.clone();
+        s.balance_cards = cards;
+        render_at(
+            name,
+            egui::Theme::Dark,
+            size,
+            None,
+            s,
+            file.clone(),
+            20,
+            |_| {},
+        );
+    }
+    for (name, submenu) in [
+        ("d5-menu-affichage", None),
+        ("d6-menu-theme", Some("Thème")),
+        ("d7-menu-fenetre", Some("Fenêtre")),
+    ] {
+        render_at(
+            name,
+            egui::Theme::Dark,
+            egui::vec2(1440.0, 900.0),
+            None,
+            settings.clone(),
+            file.clone(),
+            4,
+            |h| {
+                h.get_by_label("Affichage").click();
+                h.run_steps(3);
+                if let Some(label) = submenu {
+                    h.query_all_by_label(label).last().unwrap().hover();
+                    h.run_steps(3);
+                }
+            },
+        );
+    }
+}

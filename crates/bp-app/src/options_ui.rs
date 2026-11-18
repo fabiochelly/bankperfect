@@ -428,11 +428,36 @@ impl OptionsForm {
             ui.add_space(8.0);
             ui_kit::row(ui, tr!("Taille du texte"), LABEL_WIDTH, |ui| {
                 ui.add(
-                    egui::Slider::new(&mut d.text_scale, 0.8..=1.5)
+                    egui::Slider::new(&mut d.text_scale, crate::settings::TEXT_SCALE)
                         .custom_formatter(|v, _| tr!("{} %", format!("{:.0}", v * 100.0)))
                         .step_by(0.05),
-                );
+                )
+                .on_hover_text(tr!("Aussi au clavier : Ctrl+Plus, Ctrl+Moins, Ctrl+0"));
             });
+            ui.add_space(8.0);
+            if crate::theme::checkbox(ui, &mut d.toolbar, tr!("Barre d'outils sous les menus"))
+                .on_hover_text(tr!(
+                    "Les commandes épinglées sur leur propre ligne, avec leur libellé. \
+                     Ajoutez-en depuis la palette de commandes (Ctrl+K), avec l'épingle."
+                ))
+                .changed()
+                && d.toolbar
+                && d.pinned_commands.is_empty()
+            {
+                d.pinned_commands = crate::commands::default_toolbar();
+            }
+            ui.add_space(8.0);
+            crate::theme::checkbox(
+                ui,
+                &mut d.scrollbar_arrows,
+                tr!("Flèches à la barre de défilement des opérations"),
+            );
+            ui.add_space(8.0);
+            crate::theme::checkbox(
+                ui,
+                &mut d.full_path_in_title,
+                tr!("Chemin complet du fichier dans le titre de la fenêtre"),
+            );
             ui.add_space(8.0);
             crate::theme::checkbox(ui, &mut d.animated_caret, tr!("Curseur de texte animé"));
             ui.add_space(8.0);

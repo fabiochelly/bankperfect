@@ -181,6 +181,19 @@ pub fn segmented<T: PartialEq + Copy>(
     height: f32,
     width: Option<f32>,
 ) -> bool {
+    segmented_with_tips(ui, value, options, &[], height, width)
+}
+
+/// [`segmented`] avec une infobulle par choix (utile aux choix en icône
+/// seule).
+pub fn segmented_with_tips<T: PartialEq + Copy>(
+    ui: &mut egui::Ui,
+    value: &mut T,
+    options: &[(T, &str, &str, Color32)],
+    tips: &[&str],
+    height: f32,
+    width: Option<f32>,
+) -> bool {
     let pal = palette(ui);
     let width = width.unwrap_or_else(|| ui.available_width());
     let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
@@ -196,6 +209,10 @@ pub fn segmented<T: PartialEq + Copy>(
         let response = ui
             .interact(r, ui.id().with(("segment", k, label)), egui::Sense::click())
             .on_hover_cursor(egui::CursorIcon::PointingHand);
+        let response = match tips.get(k) {
+            Some(tip) if !tip.is_empty() => response.on_hover_text(*tip),
+            _ => response,
+        };
         let active = *value == option;
         response.widget_info(|| {
             egui::WidgetInfo::selected(egui::WidgetType::Button, ui.is_enabled(), active, label)

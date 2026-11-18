@@ -9,6 +9,9 @@ use serde::{Deserialize, Serialize};
 
 const MAX_RECENT: usize = 10;
 
+/// Bornes de la taille du texte (zoom de l'interface).
+pub const TEXT_SCALE: std::ops::RangeInclusive<f32> = 0.7..=2.0;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -56,6 +59,14 @@ pub struct Settings {
     /// Commandes épinglées depuis la palette (`Command::pin_id`), affichées
     /// en icônes dans la barre de menus.
     pub pinned_commands: Vec<String>,
+    /// Barre d'outils : les commandes épinglées toujours sur leur propre
+    /// ligne sous les menus, avec leur libellé (comme la version 8).
+    pub toolbar: bool,
+    /// Flèches haut et bas aux extrémités de la barre de défilement de la
+    /// liste des opérations, barre toujours visible.
+    pub scrollbar_arrows: bool,
+    /// Chemin complet du fichier dans le titre de la fenêtre.
+    pub full_path_in_title: bool,
     /// Certificat de licence signé par le serveur (voir `license`).
     pub license: Option<String>,
     /// Niveaux d'annulation.
@@ -138,6 +149,9 @@ impl Default for Settings {
             hide_old_lines: false,
             window_maximized: false,
             pinned_commands: Vec::new(),
+            toolbar: false,
+            scrollbar_arrows: false,
+            full_path_in_title: false,
             license: None,
             max_undo: 30,
             disable_reconcile: false,
@@ -374,6 +388,8 @@ pub mod shared {
     static CENTS: AtomicBool = AtomicBool::new(false);
     static CATEGORIZE_IMPORT: AtomicBool = AtomicBool::new(true);
     static CATEGORIZE_ENTRY: AtomicBool = AtomicBool::new(true);
+    static SCROLL_ARROWS: AtomicBool = AtomicBool::new(false);
+    static TOOLBAR: AtomicBool = AtomicBool::new(false);
 
     pub fn set(settings: &super::Settings) {
         bp_core::i18n::set_lang(settings.language());
@@ -387,6 +403,18 @@ pub mod shared {
         CENTS.store(settings.amounts_in_cents, Ordering::Relaxed);
         CATEGORIZE_IMPORT.store(settings.categorize_on_import, Ordering::Relaxed);
         CATEGORIZE_ENTRY.store(settings.categorize_in_entry, Ordering::Relaxed);
+        SCROLL_ARROWS.store(settings.scrollbar_arrows, Ordering::Relaxed);
+        TOOLBAR.store(settings.toolbar, Ordering::Relaxed);
+    }
+
+    /// Flèches aux extrémités de la barre de défilement de la grille.
+    pub fn scrollbar_arrows() -> bool {
+        SCROLL_ARROWS.load(Ordering::Relaxed)
+    }
+
+    /// Barre d'outils sous les menus.
+    pub fn toolbar() -> bool {
+        TOOLBAR.load(Ordering::Relaxed)
     }
 
     /// Catégoriser les opérations importées.

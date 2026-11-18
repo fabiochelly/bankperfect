@@ -513,13 +513,26 @@ impl Editor {
                 } else {
                     tr!("Ajouter")
                 };
-                let save = crate::theme::primary_button(ui, format!("{}  {label}", icon::CHECK))
+                // « + » pour ajouter : la coche se confondait avec celle du
+                // pointage, juste à côté.
+                let (glyph, tip) = if self.target.is_some() {
+                    (
+                        icon::CHECK,
+                        tr!(
+                            "Enregistrer les modifications (Entrée dans le montant, ou Ctrl+Entrée)"
+                        ),
+                    )
+                } else {
+                    (
+                        icon::PLUS,
+                        tr!(
+                            "Ajouter l'opération au compte (Entrée dans le montant, ou Ctrl+Entrée)"
+                        ),
+                    )
+                };
+                let save = crate::theme::primary_button(ui, format!("{glyph}  {label}"))
                     .min_size(egui::vec2(120.0, 30.0));
-                if ui
-                    .add(save)
-                    .on_hover_text(tr!("Entrée (dans le montant) ou Ctrl+Entrée"))
-                    .clicked()
-                {
+                if ui.add(save).on_hover_text(tip).clicked() {
                     action = self.validate();
                 }
                 if self.target.is_some()
@@ -527,14 +540,14 @@ impl Editor {
                 {
                     action = saved;
                 }
-                let reset = if self.target.is_some() {
-                    tr!("Annuler")
+                let (reset, reset_tip) = if self.target.is_some() {
+                    (tr!("Annuler"), tr!("Abandonner la modification (Échap)"))
                 } else {
-                    tr!("Effacer")
+                    (tr!("Effacer"), tr!("Vider les champs (Échap)"))
                 };
                 if ui
                     .add(egui::Button::new(reset).min_size(egui::vec2(80.0, 30.0)))
-                    .on_hover_text(tr!("Échap"))
+                    .on_hover_text(reset_tip)
                     .clicked()
                 {
                     action = EditorAction::Close;
@@ -665,7 +678,24 @@ impl Editor {
             } else {
                 &full
             };
-            crate::ui_kit::segmented(ui, &mut this.tack, options, 32.0, Some(tack_w));
+            // Icônes seules : une infobulle dit ce que chacune signifie.
+            let tips: &[&str] = if doc.disable_reconcile {
+                &[tr!("Non pointée"), tr!("Pointée")]
+            } else {
+                &[
+                    tr!("Non pointée"),
+                    tr!("Pointée : vue sur le relevé de la banque"),
+                    tr!("Rapprochée : pointage validé, relevé clos"),
+                ]
+            };
+            crate::ui_kit::segmented_with_tips(
+                ui,
+                &mut this.tack,
+                options,
+                tips,
+                32.0,
+                Some(tack_w),
+            );
         };
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = GAP;

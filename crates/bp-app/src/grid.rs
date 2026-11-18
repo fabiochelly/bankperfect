@@ -19,6 +19,8 @@ use crate::theme::palette;
 const TRANSFER_TO: &str = "Transfert vers le compte ";
 const TRANSFER_FROM: &str = "Transfert depuis le compte ";
 const AUTO_PREFIX: &str = "[auto] ";
+/// Hauteur des flèches de la barre de défilement (option).
+const ARROW_HEIGHT: f32 = 16.0;
 const SCROLLBAR_GUTTER: f32 = crate::theme::SCROLLBAR_WIDTH + 10.0;
 
 /// Hauteur de la pastille du mois, à cheval sur deux lignes.
@@ -360,10 +362,15 @@ fn scrollbar(
     let pal = palette(ui);
     let ctx = ui.ctx().clone();
     let id = output.id.with("grid_scrollbar");
-    let track = egui::Rect::from_x_y_ranges(
+    // Option : flèches haut et bas aux extrémités, barre toujours large.
+    let arrows = crate::settings::shared::scrollbar_arrows();
+    let arrow_h = if arrows { ARROW_HEIGHT } else { 0.0 };
+    let bar = egui::Rect::from_x_y_ranges(
         view.right() - 13.0..=view.right() - 3.0,
         view.top() + 3.0..=view.bottom() - 3.0,
     );
+    let track =
+        egui::Rect::from_x_y_ranges(bar.x_range(), bar.top() + arrow_h..=bar.bottom() - arrow_h);
     let response = ui.interact(track, id, Sense::click_and_drag());
     let offset = output.state.offset.y.clamp(0.0, max_offset);
     let thumb_h = (track.height() * view.height() / content).clamp(36.0, track.height());
@@ -386,6 +393,56 @@ fn scrollbar(
     let mut grab: Option<ScrollGrab> = ctx.data(|d| d.get_temp(grab_id));
     let page = view.height() - pitch;
     let mut new_offset = None;
+    // Flèches : une ligne par clic, puis en continu tant qu'on appuie.
+    let mut arrow_hovered = false;
+    if arrows {
+        let up = egui::Rect::from_x_y_ranges(bar.x_range(), bar.top()..=track.top());
+        let down = egui::Rect::from_x_y_ranges(bar.x_range(), track.bottom()..=bar.bottom());
+        for (rect, step, key, tip) in [
+            (up, -pitch, "up", tr!("Ligne précédente")),
+            (down, pitch, "down", tr!("Ligne suivante")),
+        ] {
+            let arrow = ui
+                .interact(rect, id.with(key), Sense::click_and_drag())
+                .on_hover_text(tip);
+            arrow_hovered |= arrow.hovered();
+            let repeat_id = id.with(key).with("repeat");
+            if arrow.is_pointer_button_down_on() {
+                let next: Option<f64> = ctx.data(|d| d.get_temp(repeat_id));
+                let due = match next {
+                    None => Some(now + 0.4),
+                    Some(at) if now >= at => Some(now + 0.05),
+                    Some(_) => None,
+                };
+                if let Some(at) = due {
+                    new_offset = Some(offset + step);
+                    ctx.data_mut(|d| d.insert_temp(repeat_id, at));
+                }
+                ctx.request_repaint();
+            } else {
+                ctx.data_mut(|d| d.remove::<f64>(repeat_id));
+            }
+            let alpha = if arrow.is_pointer_button_down_on() {
+                0.9
+            } else if arrow.hovered() {
+                0.7
+            } else {
+                0.45
+            };
+            let c = rect.center();
+            let (w, h) = (4.0, 3.0);
+            let dir = step.signum();
+            ui.painter().add(egui::Shape::convex_polygon(
+                vec![
+                    egui::pos2(c.x - w, c.y - dir * h),
+                    egui::pos2(c.x + w, c.y - dir * h),
+                    egui::pos2(c.x, c.y + dir * h),
+                ],
+                pal.fg.gamma_multiply(alpha),
+                Stroke::NONE,
+            ));
+        }
+    }
     if pressed
         && response.hovered()
         && let Some(p) = pointer
@@ -432,12 +489,12 @@ fn scrollbar(
     }
 
     // Dessin : barre fine au repos, plus large au survol ou tenue.
-    let active = response.hovered() || grab.is_some();
+    let active = response.hovered() || grab.is_some() || arrow_hovered;
     let thumb = thumb_at(shown);
-    let width = if active { 10.0 } else { 6.0 };
+    let width = if active || arrows { 10.0 } else { 6.0 };
     let painter = ui.painter();
-    if active {
-        painter.rect_filled(track, 5.0, pal.fg.gamma_multiply(0.06));
+    if active || arrows {
+        painter.rect_filled(bar, 5.0, pal.fg.gamma_multiply(0.06));
     }
     let thumb = egui::Rect::from_x_y_ranges(track.right() - width..=track.right(), thumb.y_range());
     let alpha = match grab {

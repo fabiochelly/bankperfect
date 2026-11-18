@@ -394,11 +394,6 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Ctrl+Entrée", "Ctrl+Enter"),
     ("Annuler", "Cancel"),
     ("Ajouter", "Add"),
-    (
-        "Entrée (dans le montant) ou Ctrl+Entrée",
-        "Enter (in the amount) or Ctrl+Enter",
-    ),
-    ("Échap", "Esc"),
     ("Détail", "Memo"),
     (
         "Dépense ou recette (ou tapez - ou + dans le montant)",

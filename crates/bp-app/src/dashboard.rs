@@ -19,8 +19,8 @@ use bp_core::model::{Amount, Date};
 use bp_core::{tr, tr_mark, trn};
 use egui::text::{LayoutJob, TextFormat, TextWrapping};
 use egui::{
-    Align2, Color32, FontId, Galley, Painter, Pos2, Rect, Sense, Stroke, StrokeKind, Ui, Vec2,
-    pos2, vec2,
+    Align2, Color32, FontId, Galley, Painter, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, Ui,
+    Vec2, pos2, vec2,
 };
 use egui_phosphor::regular as icon;
 
@@ -80,7 +80,7 @@ fn figures(doc: &OpenDoc) -> Figures {
 
 /// Dessine le bandeau ; renvoie la commande de bascule si son bouton a été
 /// cliqué.
-pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
+pub fn cards(ui: &mut Ui, doc: &mut OpenDoc, with_account: bool) -> Option<Command> {
     // Fondu à l'apparition d'une présentation.
     let id = ui.id().with("balance_layout");
     let now = ui.input(|i| i.time);
@@ -100,17 +100,178 @@ pub fn cards(ui: &mut Ui, doc: &mut OpenDoc) -> Option<Command> {
     let command = ui
         .scope(|ui| {
             ui.set_opacity(ease(t) as f32);
-            if doc.balance_cards {
-                three_cards(ui, doc)
-            } else {
-                equation(ui, doc)
+            let present = |ui: &mut Ui, doc: &mut OpenDoc| {
+                if doc.balance_cards {
+                    three_cards(ui, doc)
+                } else {
+                    equation(ui, doc)
+                }
+            };
+            if !with_account {
+                return present(ui, doc);
             }
+            // Tuile du compte à gauche, soldes dans le reste de la ligne.
+            let height = if doc.balance_cards {
+                CARDS_HEIGHT
+            } else {
+                TILES_HEIGHT
+            };
+            let full = ui.available_rect_before_wrap();
+            let width = (full.width() * 0.2).clamp(210.0, 280.0);
+            let tile = Rect::from_min_size(full.min, vec2(width, height));
+            account_tile(ui, tile, doc);
+            let rest = Rect::from_min_max(
+                pos2(tile.right() + crate::islands::GAP, full.top()),
+                pos2(full.right(), full.top() + height),
+            );
+            ui.scope_builder(egui::UiBuilder::new().max_rect(rest), |ui| present(ui, doc))
+                .inner
         })
         .inner;
     // Même écart sous les tuiles qu'entre elles : l'espacement entre
     // éléments, déjà ajouté après les tuiles, compte dans cet écart.
     ui.add_space(crate::islands::GAP - ui.spacing().item_spacing.y);
     command
+}
+
+/// Largeur de fenêtre à partir de laquelle le compte prend place à gauche
+/// des soldes quand le panneau des comptes est masqué.
+pub const ACCOUNT_TILE_MIN_WIDTH: f32 = 900.0;
+
+/// Sélecteur du compte affiché : son nom, qui déroule la liste des comptes
+/// actifs (avec leur solde si les soldes du panneau sont affichés).
+pub fn account_switcher(ui: &mut Ui, doc: &mut OpenDoc, width: Option<f32>) {
+    let title = RichText::new(&doc.current_account().name)
+        .size(18.0)
+        .family(semibold());
+    let mut combo = crate::ui_kit::Combo::new("account_switcher")
+        .selected_text(title)
+        .height(420.0);
+    if let Some(width) = width {
+        combo = combo.width(width);
+    }
+    let mut selected = None;
+    combo.show_ui(ui, |ui| {
+        for &i in &doc.document.account_order {
+            let a = &doc.document.accounts[i];
+            if a.disabled {
+                continue;
+            }
+            let label = if doc.show_sidebar_balances {
+                format!(
+                    "{}    {}",
+                    a.name,
+                    money(doc.account_balance(i), &a.currency)
+                )
+            } else {
+                a.name.clone()
+            };
+            if ui.selectable_label(i == doc.account, label).clicked() {
+                selected = Some(i);
+            }
+        }
+    });
+    if let Some(i) = selected {
+        doc.select_account(i);
+    }
+}
+
+/// Banque et IBAN du compte affiché, séparés d'un point médian.
+pub fn account_subtitle(doc: &OpenDoc) -> String {
+    let account = doc.current_account();
+    let bank = account.bank_name.trim();
+    let iban = account.iban.trim();
+    match (bank.is_empty(), iban.is_empty()) {
+        (false, false) => format!("{bank}  ·  {iban}"),
+        (false, true) => bank.to_string(),
+        _ => iban.to_string(),
+    }
+}
+
+/// Tuile du compte, à gauche des soldes quand le panneau des comptes est
+/// masqué : la banque (ou son logo), le sélecteur du compte, l'IBAN.
+fn account_tile(ui: &mut Ui, tile: Rect, doc: &mut OpenDoc) {
+    let pal = palette(ui);
+    let dark = ui.visuals().dark_mode;
+    doc.sync_logos(ui.ctx());
+    crate::islands::paint(ui.painter(), tile, &pal, dark);
+    let inner = tile.shrink2(vec2(16.0, 14.0));
+    let bank = doc.current_account().bank_name.trim().to_string();
+    let head_text = if bank.is_empty() {
+        tr!("Compte").to_string()
+    } else {
+        bank
+    };
+    // Logo de la banque en haut à droite, s'il y en a un.
+    let logo_w = if let Some(logo) = doc.account_logo(doc.account) {
+        let area = Rect::from_min_max(
+            pos2(inner.right() - 72.0, inner.top()),
+            pos2(inner.right(), inner.top() + 26.0),
+        );
+        logo.paint_centered(ui.painter(), area, 0.0, 4.0);
+        80.0
+    } else {
+        0.0
+    };
+    let head = tile_head(
+        ui,
+        inner.min,
+        icon::BANK,
+        &head_text,
+        pal.accent,
+        inner.width() - logo_w,
+    );
+    let body = Rect::from_min_max(pos2(inner.left(), head.bottom() + 10.0), inner.max);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(body), |ui| {
+        account_switcher(ui, doc, Some(body.width()));
+        let iban = doc.current_account().iban.trim().to_string();
+        if !iban.is_empty() && body.height() > 70.0 {
+            ui.add_space(2.0);
+            ui.add(egui::Label::new(RichText::new(iban).small().color(pal.muted)).truncate());
+        }
+    });
+    // En bas : compte précédent et suivant, rang parmi les comptes actifs.
+    let active: Vec<usize> = doc
+        .document
+        .account_order
+        .iter()
+        .copied()
+        .filter(|&i| !doc.document.accounts[i].disabled)
+        .collect();
+    let Some(rank) = active.iter().position(|&i| i == doc.account) else {
+        return;
+    };
+    if active.len() < 2 || tile.height() < TILES_HEIGHT {
+        return;
+    }
+    let row = Rect::from_min_max(pos2(inner.left() - 4.0, inner.bottom() - 24.0), inner.max);
+    ui.scope_builder(egui::UiBuilder::new().max_rect(row), |ui| {
+        ui.horizontal_centered(|ui| {
+            ui.spacing_mut().item_spacing.x = 2.0;
+            let step = |ui: &mut Ui, glyph: &str, tip: &str| {
+                ui.add(
+                    egui::Button::new(RichText::new(glyph).size(14.0))
+                        .frame(false)
+                        .min_size(vec2(24.0, 22.0)),
+                )
+                .on_hover_text(tip)
+                .clicked()
+            };
+            let n = active.len();
+            if step(ui, icon::CARET_LEFT, tr!("Compte précédent")) {
+                doc.select_account(active[(rank + n - 1) % n]);
+            }
+            if step(ui, icon::CARET_RIGHT, tr!("Compte suivant")) {
+                doc.select_account(active[(rank + 1) % n]);
+            }
+            ui.add_space(4.0);
+            ui.label(
+                RichText::new(tr!("{} sur {}", rank + 1, n))
+                    .small()
+                    .color(pal.muted),
+            );
+        });
+    });
 }
 
 /// Boutons en haut à droite de la tuile du solde : le cadenas des soldes,

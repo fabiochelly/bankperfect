@@ -452,6 +452,9 @@ pub struct BankPerfectApp {
     /// Les commandes épinglées ne tiennent pas entre les menus et les
     /// filtres : elles passent dans une barre sous les menus.
     pinned_overflow: bool,
+    /// Zoom demandé à egui à l'image précédente (`None` avant la première) :
+    /// un autre zoom vient des raccourcis clavier.
+    applied_zoom: Option<f32>,
     /// Extensions Luau chargées.
     extensions: bp_ext::Engine,
     ext_manager: Option<crate::extensions::Manager>,
@@ -543,6 +546,7 @@ impl BankPerfectApp {
             first_frame: true,
             window_fitted: false,
             pinned_overflow: false,
+            applied_zoom: None,
             extensions: crate::extensions::engine(None, &[]),
             ext_manager: None,
             ext_errors: Vec::new(),
@@ -1350,6 +1354,22 @@ impl BankPerfectApp {
                 self.settings.save();
                 return self.language_changed();
             }
+            Command::ToggleToolbar => {
+                self.settings.toolbar = !self.settings.toolbar;
+                if self.settings.toolbar && self.settings.pinned_commands.is_empty() {
+                    self.settings.pinned_commands = crate::commands::default_toolbar();
+                }
+                return self.settings.save();
+            }
+            Command::ZoomIn | Command::ZoomOut | Command::ZoomReset => {
+                let scale = match command {
+                    Command::ZoomIn => self.settings.text_scale + 0.1,
+                    Command::ZoomOut => self.settings.text_scale - 0.1,
+                    _ => 1.0,
+                };
+                self.set_text_scale(scale);
+                return;
+            }
             Command::ToggleTranslucent => {
                 let on = !self.settings.translucent();
                 self.settings.translucent = Some(on);
@@ -1741,6 +1761,10 @@ impl BankPerfectApp {
             | Command::UseTheme(_)
             | Command::Language(_)
             | Command::ToggleTranslucent
+            | Command::ToggleToolbar
+            | Command::ZoomIn
+            | Command::ZoomOut
+            | Command::ZoomReset
             | Command::OpenRecent(_)
             | Command::Options
             | Command::License
@@ -1762,6 +1786,151 @@ impl BankPerfectApp {
     }
 
     /// Entrée de menu tirée du registre des commandes.
+    /// Affichage › Fenêtre : panneaux, barre d'outils, saisie, titre.
+    fn window_menu(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        use Command::*;
+        let s = &self.settings;
+        let mut command = None;
+        for (on, label, toggle) in [
+            (
+                s.show_accounts_panel,
+                tr!("Panneau des comptes"),
+                ToggleAccountsPanel,
+            ),
+            (
+                s.sidebar_balances,
+                tr!("Soldes dans le panneau des comptes"),
+                ToggleSidebarBalances,
+            ),
+            (
+                s.show_balance_panel,
+                tr!("Panneau des soldes"),
+                ToggleBalancePanel,
+            ),
+            (s.show_forecast, tr!("Solde prévisionnel"), ToggleForecast),
+            (
+                s.balance_cards,
+                tr!("Soldes en trois cartes"),
+                ToggleBalanceCards,
+            ),
+            (s.toolbar, tr!("Barre d'outils"), ToggleToolbar),
+        ] {
+            if toggle == ToggleToolbar {
+                menu::separator(ui);
+            }
+            if menu::toggle(ui, &mut { on }, label, None).clicked() {
+                command = Some(toggle);
+            }
+        }
+        if menu::toggle(
+            ui,
+            &mut self.settings.entry_at_bottom,
+            tr!("Saisie en bas de la fenêtre"),
+            None,
+        )
+        .clicked()
+        {
+            self.editor = None;
+            self.settings.save();
+        }
+        if menu::toggle(
+            ui,
+            &mut self.settings.full_path_in_title,
+            tr!("Chemin complet dans le titre"),
+            None,
+        )
+        .clicked()
+        {
+            self.settings.save();
+        }
+        command
+    }
+
+    /// Affichage › Tableau des opérations : colonnes et défilement.
+    fn table_menu(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        use Command::*;
+        let s = &self.settings;
+        let mut command = None;
+        for (on, label, toggle) in [
+            (
+                s.show_column_filters,
+                tr!("Filtres de colonnes"),
+                ToggleColumnFilters,
+            ),
+            (s.balance_column, tr!("Colonne Solde"), ToggleBalanceColumn),
+            (s.balance_river, tr!("Courbe du solde"), ToggleBalanceRiver),
+            (
+                s.tack_after_amount,
+                tr!("Pointage à droite du montant"),
+                ToggleTackColumn,
+            ),
+        ] {
+            if menu::toggle(ui, &mut { on }, label, None).clicked() {
+                command = Some(toggle);
+            }
+        }
+        if menu::toggle(
+            ui,
+            &mut self.settings.scrollbar_arrows,
+            tr!("Flèches à la barre de défilement"),
+            None,
+        )
+        .clicked()
+        {
+            self.settings.save();
+        }
+        command
+    }
+
+    /// Affichage › Thème, en trois colonnes : le mode et le fond, les
+    /// thèmes sombres, les thèmes clairs.
+    fn theme_menu(&mut self, ui: &mut egui::Ui) -> Option<Command> {
+        use Command::*;
+        const COLUMN: f32 = 210.0;
+        let mut command = None;
+        ui.set_max_width(3.0 * COLUMN + 16.0);
+        ui.horizontal_top(|ui| {
+            ui.vertical(|ui| {
+                menu::begin_with_width(ui, COLUMN);
+                menu::heading(ui, tr!("Mode"));
+                let current = ui.ctx().options(|o| o.theme_preference);
+                for (preference, label) in [
+                    (egui::ThemePreference::Dark, tr!("Sombre")),
+                    (egui::ThemePreference::Light, tr!("Clair")),
+                    (egui::ThemePreference::System, tr!("Suivre le système")),
+                ] {
+                    if menu::choice(ui, current == preference, label).clicked() {
+                        command = Some(Theme(preference));
+                    }
+                }
+                menu::separator(ui);
+                let mut translucent = self.settings.translucent();
+                if menu::toggle(ui, &mut translucent, tr!("Fond translucide"), None).clicked() {
+                    command = Some(ToggleTranslucent);
+                }
+            });
+            for (dark, label) in [(true, tr!("Thèmes sombres")), (false, tr!("Thèmes clairs"))] {
+                let selected = if dark {
+                    &self.settings.dark_theme
+                } else {
+                    &self.settings.light_theme
+                };
+                let selected = crate::theme::find(selected, dark).id;
+                ui.vertical(|ui| {
+                    menu::begin_with_width(ui, COLUMN);
+                    menu::heading(ui, label);
+                    for theme in crate::theme::THEMES.iter().filter(|t| t.dark == dark) {
+                        let name = bp_core::i18n::tr(theme.name);
+                        if menu::choice(ui, selected == theme.id, name).clicked() {
+                            command = Some(UseTheme(theme.id));
+                        }
+                    }
+                });
+            }
+        });
+        command
+    }
+
     fn menu_command(&mut self, ui: &mut egui::Ui, command: Command) {
         let info = command.info(self.doc.as_ref());
         if menu::item_enabled(
@@ -1988,11 +2157,26 @@ impl BankPerfectApp {
         self.confirm_trash = Some(path);
     }
 
+    /// Taille du texte, arrondie au pas de 5 % et gardée dans ses bornes.
+    fn set_text_scale(&mut self, scale: f32) {
+        let range = crate::settings::TEXT_SCALE;
+        let scale = ((scale * 20.0).round() / 20.0).clamp(*range.start(), *range.end());
+        if (scale - self.settings.text_scale).abs() > 0.001 {
+            self.settings.text_scale = scale;
+            self.settings.save();
+        }
+    }
+
     fn update_title(&mut self, ctx: &egui::Context) {
         let title = match &self.doc {
+            // Option : chemin complet, comme dans la version 8.
             Some(doc) => format!(
                 "{}{} — BankPerfect",
-                doc.file_name(),
+                if self.settings.full_path_in_title {
+                    doc.path.display().to_string()
+                } else {
+                    doc.file_name()
+                },
                 if doc.dirty { " •" } else { "" }
             ),
             None => "BankPerfect".to_string(),
@@ -2119,7 +2303,8 @@ impl BankPerfectApp {
                     // si elles y tiennent ; sinon, barre dédiée en dessous.
                     if !pinned.is_empty() {
                         let needed = pinned.len() as f32 * (PINNED_ICON + 2.0) + 40.0;
-                        overflow = needed > ui.available_width();
+                        // Barre d'outils (option) : toujours sur sa ligne.
+                        overflow = self.settings.toolbar || needed > ui.available_width();
                         if !overflow {
                             if self.doc.is_some() {
                                 ui.add_space(6.0);
@@ -2344,147 +2529,43 @@ impl BankPerfectApp {
                         doc.set_show_mark_dates(marks);
                     }
                 }
-                if menu::toggle(
-                    ui,
-                    &mut self.settings.entry_at_bottom,
-                    tr!("Saisie en bas de la fenêtre"),
-                    None,
-                )
-                .clicked()
-                {
-                    self.editor = None;
-                    self.settings.save();
-                }
                 menu::separator(ui);
                 self.menu_command(ui, AutoFilters);
                 self.menu_command(ui, SaveFilter);
                 self.menu_command(ui, ClearFilters);
                 menu::separator(ui);
-                let mut accounts = self.settings.show_accounts_panel;
-                if menu::toggle(ui, &mut accounts, tr!("Panneau des comptes"), None).clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleAccountsPanel);
-                }
-                let mut sidebar_balances = self.settings.sidebar_balances;
-                if menu::toggle(
-                    ui,
-                    &mut sidebar_balances,
-                    tr!("Soldes dans le panneau des comptes"),
-                    None,
-                )
-                .clicked()
-                {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleSidebarBalances);
-                }
-                let mut panel = self.settings.show_balance_panel;
-                if menu::toggle(ui, &mut panel, tr!("Panneau des soldes"), None).clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleBalancePanel);
-                }
-                let mut forecast = self.settings.show_forecast;
-                if menu::toggle(ui, &mut forecast, tr!("Solde prévisionnel"), None).clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleForecast);
-                }
-                let mut split = self.settings.balance_cards;
-                if menu::toggle(ui, &mut split, tr!("Soldes en trois cartes"), None).clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleBalanceCards);
-                }
-                let mut column_filters = self.settings.show_column_filters;
-                if menu::toggle(ui, &mut column_filters, tr!("Filtres de colonnes"), None).clicked()
-                {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleColumnFilters);
-                }
-                let mut balance_column = self.settings.balance_column;
-                if menu::toggle(ui, &mut balance_column, tr!("Colonne Solde"), None).clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleBalanceColumn);
-                }
-                let mut river = self.settings.balance_river;
-                if menu::toggle(ui, &mut river, tr!("Courbe du solde"), None).clicked() {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleBalanceRiver);
-                }
-                let mut tack_right = self.settings.tack_after_amount;
-                if menu::toggle(
-                    ui,
-                    &mut tack_right,
-                    tr!("Pointage à droite du montant"),
-                    None,
-                )
-                .clicked()
-                {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleTackColumn);
-                }
+                // Réglages d'affichage regroupés en sous-menus : la fenêtre
+                // et ses panneaux, le tableau, le thème, le texte, la langue.
+                let mut command = None;
+                menu::submenu(ui, Some(icon::SIDEBAR), tr!("Fenêtre"), |ui| {
+                    command = self.window_menu(ui);
+                });
+                menu::submenu(ui, Some(icon::TABLE), tr!("Tableau des opérations"), |ui| {
+                    command = self.table_menu(ui).or(command);
+                });
                 menu::separator(ui);
-                menu::heading(ui, tr!("Thème"));
-                let current = ui.ctx().options(|o| o.theme_preference);
-                for (preference, label) in [
-                    (egui::ThemePreference::Dark, tr!("Sombre")),
-                    (egui::ThemePreference::Light, tr!("Clair")),
-                    (egui::ThemePreference::System, tr!("Suivre le système")),
-                ] {
-                    if menu::choice(ui, current == preference, label).clicked() {
-                        let ctx = ui.ctx().clone();
-                        self.execute(&ctx, Theme(preference));
-                    }
-                }
-                for (dark, label) in [(true, tr!("Thèmes sombres")), (false, tr!("Thèmes clairs"))]
-                {
-                    let selected = if dark {
-                        self.settings.dark_theme.clone()
-                    } else {
-                        self.settings.light_theme.clone()
-                    };
-                    let glyph = if dark { icon::MOON } else { icon::SUN };
-                    let mut chosen = None;
-                    menu::submenu(ui, Some(glyph), label, |ui| {
-                        for theme in crate::theme::THEMES.iter().filter(|t| t.dark == dark) {
-                            if menu::choice(
-                                ui,
-                                crate::theme::find(&selected, dark).id == theme.id,
-                                bp_core::i18n::tr(theme.name),
-                            )
-                            .clicked()
-                            {
-                                chosen = Some(theme.id);
-                            }
-                        }
-                    });
-                    if let Some(id) = chosen {
-                        let ctx = ui.ctx().clone();
-                        self.execute(&ctx, UseTheme(id));
-                    }
-                }
-                menu::separator(ui);
-                let mut translucent = self.settings.translucent();
-                if menu::toggle(
-                    ui,
-                    &mut translucent,
-                    tr!("Fond translucide (flou du bureau)"),
-                    None,
-                )
-                .clicked()
-                {
-                    let ctx = ui.ctx().clone();
-                    self.execute(&ctx, ToggleTranslucent);
-                }
-                let current = self.settings.language();
-                let mut chosen = None;
-                menu::submenu(ui, Some(icon::TRANSLATE), tr!("Langue"), |ui| {
-                    for lang in bp_core::i18n::Lang::ALL {
-                        if menu::choice(ui, current == lang, lang.native_name()).clicked() {
-                            chosen = Some(lang);
+                menu::submenu(ui, Some(icon::PALETTE), tr!("Thème"), |ui| {
+                    command = self.theme_menu(ui).or(command);
+                });
+                menu::submenu(ui, Some(icon::TEXT_AA), tr!("Taille du texte"), |ui| {
+                    for zoom in [ZoomIn, ZoomOut, ZoomReset] {
+                        let info = zoom.info(None);
+                        if menu::item(ui, Some(info.icon), &info.label, info.shortcut).clicked() {
+                            command = Some(zoom);
                         }
                     }
                 });
-                if let Some(lang) = chosen {
+                let current = self.settings.language();
+                menu::submenu(ui, Some(icon::TRANSLATE), tr!("Langue"), |ui| {
+                    for lang in bp_core::i18n::Lang::ALL {
+                        if menu::choice(ui, current == lang, lang.native_name()).clicked() {
+                            command = Some(Command::Language(lang));
+                        }
+                    }
+                });
+                if let Some(command) = command {
                     let ctx = ui.ctx().clone();
-                    self.execute(&ctx, Command::Language(lang));
+                    self.execute(&ctx, command);
                 }
                 self.extension_items(ui, "view");
             }
@@ -2563,57 +2644,25 @@ impl BankPerfectApp {
 
     fn balance_strip(ui: &mut egui::Ui, doc: &mut OpenDoc, compact: bool) -> Option<Command> {
         let mut command = None;
-        if compact {
+        // Panneau des comptes masqué, fenêtre assez large : le compte
+        // devient une tuile à gauche des soldes, sur la même ligne.
+        let account_tile = compact
+            && doc.show_balance_panel
+            && ui.available_width() >= crate::dashboard::ACCOUNT_TILE_MIN_WIDTH;
+        if compact && !account_tile {
             // Sans panneau des comptes : le nom du compte sert de sélecteur,
             // avec la banque et l'IBAN à côté.
             let pal = palette(ui);
             ui.add_space(8.0);
             ui.horizontal(|ui| {
-                let title = RichText::new(&doc.current_account().name)
-                    .size(18.0)
-                    .family(crate::theme::semibold());
-                let mut selected = None;
-                crate::ui_kit::Combo::new("account_switcher")
-                    .selected_text(title)
-                    .height(420.0)
-                    .show_ui(ui, |ui| {
-                        for &i in &doc.document.account_order {
-                            let a = &doc.document.accounts[i];
-                            if a.disabled {
-                                continue;
-                            }
-                            let label = if doc.show_sidebar_balances {
-                                format!(
-                                    "{}    {}",
-                                    a.name,
-                                    money(doc.account_balance(i), &a.currency)
-                                )
-                            } else {
-                                a.name.clone()
-                            };
-                            if ui.selectable_label(i == doc.account, label).clicked() {
-                                selected = Some(i);
-                            }
-                        }
-                    });
-                if let Some(i) = selected {
-                    doc.select_account(i);
-                }
-                let account = doc.current_account();
-                let mut sub = account.bank_name.clone();
-                if !account.iban.trim().is_empty() {
-                    sub = if sub.is_empty() {
-                        account.iban.trim().to_string()
-                    } else {
-                        format!("{sub}  ·  {}", account.iban.trim())
-                    };
-                }
+                crate::dashboard::account_switcher(ui, doc, None);
+                let sub = crate::dashboard::account_subtitle(doc);
                 ui.add(egui::Label::new(RichText::new(sub).small().color(pal.muted)).truncate());
             });
         }
         // Le nom du compte est déjà dans le panneau latéral (la banque et
         // l'IBAN en infobulle) : les soldes remontent juste sous les menus.
-        if compact {
+        if compact && !account_tile {
             ui.add_space(8.0);
         } else {
             // Le symbole déborde sous la barre de menus : les tuiles
@@ -2621,7 +2670,7 @@ impl BankPerfectApp {
             ui.add_space((islands_top(ui.ctx()) - ui.cursor().top()).max(8.0));
         }
         if doc.show_balance_panel
-            && let Some(toggle) = crate::dashboard::cards(ui, doc)
+            && let Some(toggle) = crate::dashboard::cards(ui, doc, account_tile)
         {
             command = Some(toggle);
         }
@@ -3882,9 +3931,18 @@ impl BankPerfectApp {
         }
         crate::commands::set_recent(&self.settings.recent_files);
         crate::settings::shared::set(&self.settings);
-        if (ctx.zoom_factor() - self.settings.text_scale).abs() > 0.001 {
+        // Ctrl+Plus, Ctrl+Moins et Ctrl+0, traités par egui en fin d'image,
+        // changent le zoom : il est repris dans la taille du texte.
+        let zoom = ctx.zoom_factor();
+        if let Some(applied) = self.applied_zoom
+            && (zoom - applied).abs() > 0.001
+        {
+            self.set_text_scale(zoom);
+        }
+        if (zoom - self.settings.text_scale).abs() > 0.001 {
             ctx.set_zoom_factor(self.settings.text_scale);
         }
+        self.applied_zoom = Some(self.settings.text_scale);
         let now = ctx.input(|i| i.time);
         self.extension_events(now);
         if self.toast.as_ref().is_some_and(|(_, until)| now > *until) {

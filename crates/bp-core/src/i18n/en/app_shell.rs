@@ -897,4 +897,91 @@ pub const ENTRIES: &[(&str, &str)] = &[
     ("Fichier non protégé", "Unprotected file"),
     // Listes déroulantes.
     ("Aucune catégorie", "No category"),
+    // Barre d'outils, taille du texte, titre, défilement, saisie en bas.
+    ("Masquer la barre d'outils", "Hide toolbar"),
+    ("Afficher la barre d'outils", "Show toolbar"),
+    ("Barre d'outils", "Toolbar"),
+    (
+        "barre outils icônes boutons épingler raccourcis",
+        "toolbar icons buttons pin shortcuts",
+    ),
+    (
+        "Commandes épinglées sur leur propre ligne sous les menus, avec leur libellé.",
+        "Pinned commands on their own row below the menus, with their labels.",
+    ),
+    ("Barre d'outils sous les menus", "Toolbar below the menus"),
+    (
+        "Les commandes épinglées sur leur propre ligne, avec leur libellé. Ajoutez-en depuis la palette de commandes (Ctrl+K), avec l'épingle.",
+        "Pinned commands on their own row, with their labels. Add more from the command palette (Ctrl+K) with the pin.",
+    ),
+    ("Agrandir le texte", "Larger text"),
+    ("Réduire le texte", "Smaller text"),
+    ("Taille de texte normale", "Normal text size"),
+    (
+        "Agrandir le texte et toute l'interface.",
+        "Enlarge the text and the whole interface.",
+    ),
+    (
+        "Réduire le texte et toute l'interface.",
+        "Shrink the text and the whole interface.",
+    ),
+    (
+        "Revenir à la taille de texte normale.",
+        "Go back to the normal text size.",
+    ),
+    (
+        "zoom taille police caractères plus grand loupe",
+        "zoom size font characters larger bigger magnify",
+    ),
+    (
+        "zoom taille police caractères plus petit",
+        "zoom size font characters smaller",
+    ),
+    (
+        "zoom taille police caractères normale 100",
+        "zoom size font characters normal reset 100",
+    ),
+    (
+        "Aussi au clavier : Ctrl+Plus, Ctrl+Moins, Ctrl+0",
+        "Also from the keyboard: Ctrl+Plus, Ctrl+Minus, Ctrl+0",
+    ),
+    ("Flèches à la barre de défilement", "Scroll bar arrows"),
+    (
+        "Flèches à la barre de défilement des opérations",
+        "Arrows on the transactions scroll bar",
+    ),
+    ("Chemin complet dans le titre", "Full path in the title"),
+    (
+        "Chemin complet du fichier dans le titre de la fenêtre",
+        "Full file path in the window title",
+    ),
+    ("Ligne précédente", "Previous line"),
+    ("Ligne suivante", "Next line"),
+    ("Non pointée", "Not cleared"),
+    (
+        "Pointée : vue sur le relevé de la banque",
+        "Cleared: seen on the bank statement",
+    ),
+    (
+        "Rapprochée : pointage validé, relevé clos",
+        "Reconciled: clearing confirmed, statement closed",
+    ),
+    (
+        "Enregistrer les modifications (Entrée dans le montant, ou Ctrl+Entrée)",
+        "Save the changes (Enter in the amount, or Ctrl+Enter)",
+    ),
+    (
+        "Ajouter l'opération au compte (Entrée dans le montant, ou Ctrl+Entrée)",
+        "Add the transaction to the account (Enter in the amount, or Ctrl+Enter)",
+    ),
+    (
+        "Abandonner la modification (Échap)",
+        "Discard the changes (Esc)",
+    ),
+    ("Vider les champs (Échap)", "Clear the fields (Esc)"),
+    // Menu Affichage regroupé.
+    ("Fenêtre", "Window"),
+    ("Tableau des opérations", "Transactions table"),
+    ("Fond translucide", "Translucent background"),
+    ("{} sur {}", "{} of {}"),
 ];
